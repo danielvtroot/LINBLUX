@@ -1,0 +1,94 @@
+#pragma once
+
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "objects/Baseplate.h"
+#include "objects/Instance.h"
+#include "objects/Lighting.h"
+#include "objects/Part.h"
+#include "objects/SpawnLocation.h"
+#include "objects/Workspace.h"
+
+namespace loblox {
+
+// Dona de todos os objetos da cena e da hierarquia. Nao conhece ImGui, OpenGL
+// nem Bullet: a fisica se registra como listener de remocao.
+class Scene {
+public:
+    using RemovalListener = std::function<void(Instance*)>;
+
+    Scene();
+    ~Scene() = default;
+
+    Scene(const Scene&) = delete;
+    Scene& operator=(const Scene&) = delete;
+
+    // Cria a cena inicial: Baseplate + SpawnLocation dentro do Workspace.
+    void buildDefaultScene();
+
+    Workspace* workspace() const { return workspace_; }
+    Lighting* lighting() const { return lighting_; }
+
+    Part* createPart(PartShape shape, Vector3 position,
+                     Vector3 size = Vector3{4.0f, 4.0f, 4.0f},
+                     const std::string& name = "",
+                     InstanceId forcedId = kInvalidInstanceId);
+    Baseplate* createBaseplate(Vector3 position = Vector3{0.0f, -0.5f, 0.0f},
+                               Vector3 size = Vector3{160.0f, 1.0f, 160.0f},
+                               const std::string& name = "",
+                               InstanceId forcedId = kInvalidInstanceId);
+    SpawnLocation* createSpawnLocation(
+        Vector3 position = Vector3{0.0f, 0.5f, 0.0f},
+        Vector3 size = Vector3{12.0f, 1.0f, 12.0f},
+        const std::string& name = "",
+        InstanceId forcedId = kInvalidInstanceId);
+
+    // Remove a subarvore. Recusa objetos protegidos (Baseplate/servicos).
+    bool remove(Instance* object);
+    bool removeById(InstanceId id);
+
+    // Remove tudo que esta dentro dos servicos, inclusive a Baseplate.
+    // Usado apenas ao carregar um projeto.
+    void clearObjects();
+
+    Instance* find(InstanceId id) const;
+    Part* findPart(InstanceId id) const;
+
+    const std::vector<std::unique_ptr<Instance>>& objects() const { return objects_; }
+    const std::vector<Part*>& parts() const { return parts_; }
+
+    Instance* selection() const { return selection_; }
+    void select(Instance* object);
+
+    InstanceId nextId() const { return nextId_; }
+    void setNextId(InstanceId id);
+    InstanceId allocateId();
+
+    std::string makeUniqueName(const std::string& base) const;
+
+    void addRemovalListener(RemovalListener listener);
+
+private:
+    bool adopt(std::unique_ptr<Instance> object, Instance* parent);
+    void notifyRemoval(Instance* object);
+    bool isService(const Instance* object) const;
+    bool canDeleteSubtree(const Instance* object) const;
+    void removeSubtree(Instance* object);
+    void rebuildParts();
+
+    std::vector<std::unique_ptr<Instance>> objects_;
+    std::vector<Part*> parts_;
+    std::unordered_map<InstanceId, Instance*> byId_;
+    std::vector<RemovalListener> removalListeners_;
+    Workspace* workspace_ = nullptr;
+    Lighting* lighting_ = nullptr;
+    Instance* selection_ = nullptr;
+    InstanceId nextId_ = 1;
+};
+
+}  // namespace loblox
