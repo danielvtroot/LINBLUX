@@ -394,6 +394,22 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         }
     }
 
+    // Ids de servico da cena atual sao reservados: rejeitar antes de limpar
+    // qualquer objeto, para nao deixar a cena parcialmente reconstruida.
+    const InstanceId serviceIds[2] = {scene.workspace() != nullptr ? scene.workspace()->id() : 0,
+                                      scene.lighting() != nullptr ? scene.lighting()->id() : 0};
+    for (const ParsedObject& object : parsed) {
+        if (object.instanceClass == InstanceClass::Workspace ||
+            object.instanceClass == InstanceClass::Lighting) {
+            continue;
+        }
+        if (object.id == serviceIds[0] || object.id == serviceIds[1]) {
+            error = "id " + std::to_string(object.id) +
+                    " reservado por um servico da cena atual (objeto '" + object.name + "')";
+            return false;
+        }
+    }
+
     // --- Validacao concluida: agora reconstroi a cena. ---
     scene.clearObjects();
     scene.workspace()->setName(

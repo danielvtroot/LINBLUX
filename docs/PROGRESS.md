@@ -83,7 +83,7 @@ arquivo histórico.
 
 - `CMakeLists.txt` com `loblox_core`, `loblox_imgui`, executável `loblox`,
   executável `loblox_tests` e CTest.
-- Suíte headless com 147 checagens.
+- Suíte headless com 149 checagens.
 - Documentação completa em `docs/` e README reescrito.
 - `.gitignore` para `build/`, projetos salvos e temporários.
 
@@ -143,7 +143,7 @@ Testes:
 ctest --test-dir build --output-on-failure
 # 1/1 Test #1: loblox_tests ... Passed
 ./build/loblox_tests
-# 147 checagens, 0 falhas
+# 149 checagens, 0 falhas
 ```
 
 Smoke test gráfico em Xvfb + llvmpipe (software), janela 1280×720:

@@ -45,7 +45,7 @@ Executando o binário diretamente:
 Saída real (final):
 
 ```
-147 checagens, 0 falhas
+149 checagens, 0 falhas
 RESULTADO: OK
 ```
 

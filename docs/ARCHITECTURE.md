@@ -219,7 +219,7 @@ Antes de tocar na cena, o loader valida:
 
 - `format` e `version` (1; versões maiores são rejeitadas);
 - cada objeto é um objeto JSON com `id` positivo, `class` conhecida e nome;
-- ids únicos; exatamente um Workspace e um Lighting;
+- ids únicos (inclusive contra os ids de serviço da cena atual); exatamente um Workspace e um Lighting;
 - pais coerentes (serviços na raiz, Parts no Workspace);
 - `shape` e `material` conhecidos; booleanos presentes;
 - posições/rotações finitas, tamanho ≥ 0.2, canais de cor 0..255.

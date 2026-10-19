@@ -497,6 +497,20 @@ void TestProjectValidation() {
          "color":[1,2,3,255],"material":"Plastic","anchored":false,"canCollide":true}]})";
     CHECK(!loblox::projectio::fromJson(scene, badParent, error));
 
+    // Id de Part conflitando com um servico da cena atual: rejeitar antes de
+    // limpar a cena (o arquivo tem ids unicos, mas usa Workspace/Lighting 7/8).
+    const std::string serviceConflict =
+        R"({"format":"loblox-project","version":1,"objects":[
+        {"id":7,"class":"Workspace","name":"Workspace","parent":0},
+        {"id":8,"class":"Lighting","name":"Lighting","parent":0,
+         "skyColor":[1,2,3,255],"ambientColor":[1,2,3,255],
+         "sunDirection":[0,-1,0],"sunIntensity":1,"brightness":1},
+        {"id":1,"class":"Part","name":"Conflito","parent":7,"shape":"Block",
+         "position":[0,4,0],"rotation":[0,0,0],"size":[4,4,4],
+         "color":[1,2,3,255],"material":"Plastic","anchored":false,"canCollide":true}]})";
+    CHECK(!loblox::projectio::fromJson(scene, serviceConflict, error));
+    CHECK(error.find("servico") != std::string::npos);
+
     // Falha nao deve deixar a cena vazia nem corpos orfaos.
     CHECK(scene.parts().size() == originalParts);
     CHECK(physics.bodyCount() == originalParts);
