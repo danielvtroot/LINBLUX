@@ -652,11 +652,16 @@ void EditorUI::drawViewport() {
     }
 
     if (!status_.empty() && ImGui::GetTime() < statusUntil_) {
-        std::string display = status_;
-        if (display.size() > 88) {
-            display = display.substr(0, 85) + "...";
+        // Buffer fixo: evita alocacao no loop de render.
+        char statusText[96];
+        std::snprintf(statusText, sizeof(statusText), "%.88s", status_.c_str());
+        if (status_.size() > 88) {
+            statusText[85] = '.';
+            statusText[86] = '.';
+            statusText[87] = '.';
+            statusText[88] = '\0';
         }
-        const ImVec2 textSize = ImGui::CalcTextSize(display.c_str());
+        const ImVec2 textSize = ImGui::CalcTextSize(statusText);
         const ImVec2 statusPosition(imagePosition.x + viewportRect.width - textSize.x - 12.0f,
                                     imagePosition.y + viewportRect.height - 25.0f);
         drawList->AddRectFilled(
@@ -666,7 +671,7 @@ void EditorUI::drawViewport() {
             IM_COL32(16, 16, 19, 190), 3.0f);
         const ImU32 color = statusIsError_ ? IM_COL32(255, 130, 120, 255)
                                            : IM_COL32(150, 230, 160, 255);
-        drawList->AddText(statusPosition, color, display.c_str());
+        drawList->AddText(statusPosition, color, statusText);
     }
 
     ImGui::End();
