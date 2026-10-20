@@ -303,11 +303,11 @@ void EditorUI::buildDockLayout() {
 
     ImGuiID center = dockId;
     const ImGuiID top =
-        ImGui::DockBuilderSplitNode(center, ImGuiDir_Up, 0.085f, nullptr, &center);
+        ImGui::DockBuilderSplitNode(center, ImGuiDir_Up, 0.15f, nullptr, &center);
     const ImGuiID left =
-        ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.17f, nullptr, &center);
+        ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.19f, nullptr, &center);
     ImGuiID right =
-        ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.28f, nullptr, &center);
+        ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.25f, nullptr, &center);
     const ImGuiID rightTop =
         ImGui::DockBuilderSplitNode(right, ImGuiDir_Up, 0.42f, nullptr, &right);
 
@@ -379,156 +379,121 @@ void EditorUI::draw() {
 void EditorUI::drawToolbar() {
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar |
                                    ImGuiWindowFlags_NoScrollWithMouse;
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 5.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 4.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 7.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(7.0f, 6.0f));
     ImGui::Begin("##Toolbar", nullptr, flags);
+    ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(120, 185, 255, 255));
+    ImGui::TextUnformatted("LOBLOX STUDIO");
+    ImGui::PopStyleColor();
+    ImGui::SameLine(0.0f, 18.0f);
+    ImGui::BeginTabBar("##RibbonTabs", ImGuiTabBarFlags_FittingPolicyScroll);
 
-    if (IconButton("select", Icon::Select, "Select", tool_ == ToolMode::Select,
-                   "Selecionar objetos (clique na viewport)")) {
-        tool_ = ToolMode::Select;
-        gizmo_.cancel();
-    }
-    ImGui::SameLine();
-    if (IconButton("move", Icon::Move, "Move", tool_ == ToolMode::Move,
-                   "Mover nos eixos X/Y/Z (arraste o gizmo)")) {
-        tool_ = ToolMode::Move;
-    }
-    ImGui::SameLine();
-    if (IconButton("scale", Icon::Scale, "Scale", tool_ == ToolMode::Scale,
-                   "Redimensionar pelo gizmo")) {
-        tool_ = ToolMode::Scale;
-    }
-    ImGui::SameLine();
-    if (IconButton("rotate", Icon::Rotate, "Rotate", tool_ == ToolMode::Rotate,
-                   "Girar pelo gizmo")) {
-        tool_ = ToolMode::Rotate;
-    }
-
-    ToolbarSeparator();
-
-    if (IconButton("part", Icon::Part, "Part", false, "Criar um Block no Workspace")) {
-        insertPart(PartShape::Block);
-    }
-    ImGui::SameLine();
-    if (IconButton("sphere", Icon::Sphere, "Sphere", false, "Criar uma Sphere no Workspace")) {
-        insertPart(PartShape::Sphere);
-    }
-    ImGui::SameLine();
-    if (IconButton("spawnloc", Icon::Spawn, "Spawn", false, "Criar uma SpawnLocation")) {
-        insertSpawnLocation();
+    if (ImGui::BeginTabItem("Home")) {
+        ImGui::Spacing();
+        if (IconButton("select", Icon::Select, "Select", tool_ == ToolMode::Select,
+                       "Selecionar objetos (1)")) {
+            tool_ = ToolMode::Select;
+            gizmo_.cancel();
+        }
+        ImGui::SameLine();
+        if (IconButton("move", Icon::Move, "Move", tool_ == ToolMode::Move,
+                       "Mover nos eixos X/Y/Z e planos (2)")) tool_ = ToolMode::Move;
+        ImGui::SameLine();
+        if (IconButton("scale", Icon::Scale, "Scale", tool_ == ToolMode::Scale,
+                       "Redimensionar pelo gizmo (3)")) tool_ = ToolMode::Scale;
+        ImGui::SameLine();
+        if (IconButton("rotate", Icon::Rotate, "Rotate", tool_ == ToolMode::Rotate,
+                       "Girar pelo gizmo (4)")) tool_ = ToolMode::Rotate;
+        ToolbarSeparator();
+        if (IconButton("part", Icon::Part, "Part", false, "Criar um Block")) insertPart(PartShape::Block);
+        ImGui::SameLine();
+        if (IconButton("sphere", Icon::Sphere, "Sphere", false, "Criar uma Sphere")) insertPart(PartShape::Sphere);
+        ImGui::SameLine();
+        if (IconButton("spawnloc", Icon::Spawn, "Spawn", false, "Criar SpawnLocation")) insertSpawnLocation();
+        ImGui::EndTabItem();
     }
 
-    ToolbarSeparator();
-
-    if (IconButton("color", Icon::Color, "Color", false, "Paleta de cores da peca selecionada")) {
-        ImGui::OpenPopup("##color_palette");
-    }
-    if (ImGui::BeginPopup("##color_palette")) {
+    if (ImGui::BeginTabItem("Model")) {
+        ImGui::Spacing();
         Instance* selection = scene_.selection();
-        Part* part = selection != nullptr && selection->isPart() ? static_cast<Part*>(selection)
-                                                                 : nullptr;
-        if (part == nullptr) {
-            ImGui::TextDisabled("Selecione uma peca primeiro.");
-        } else {
-            ImGui::TextUnformatted("Cor da peca");
-            for (int i = 0; i < static_cast<int>(sizeof(kPalette) / sizeof(kPalette[0])); ++i) {
-                if (i % 4 != 0) {
-                    ImGui::SameLine();
-                }
+        Part* part = selection != nullptr && selection->isPart() ? static_cast<Part*>(selection) : nullptr;
+        const bool canToggleAnchor = part != nullptr &&
+                                     part->instanceClass() != InstanceClass::Baseplate;
+        ImGui::BeginDisabled(!canToggleAnchor);
+        if (ImGui::Button(part != nullptr && part->anchored() ? "Unanchor" : "Anchor",
+                          ImVec2(105.0f, 0.0f))) {
+            part->setAnchored(!part->anchored());
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Color")) {
+            ImGui::OpenPopup("##color_palette");
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Material")) {
+            ImGui::OpenPopup("##material_menu");
+        }
+        if (ImGui::BeginPopup("##color_palette")) {
+            if (part == nullptr) ImGui::TextDisabled("Selecione uma peca primeiro.");
+            else for (int i = 0; i < static_cast<int>(sizeof(kPalette) / sizeof(kPalette[0])); ++i) {
                 ImGui::PushID(i);
-                const ImVec4 color(kPalette[i].r / 255.0f, kPalette[i].g / 255.0f,
-                                   kPalette[i].b / 255.0f, 1.0f);
-                if (ImGui::ColorButton("##swatch", color,
-                                       ImGuiColorEditFlags_NoTooltip |
-                                           ImGuiColorEditFlags_NoBorder,
-                                       ImVec2(30.0f, 24.0f))) {
+                const ImVec4 c(kPalette[i].r / 255.0f, kPalette[i].g / 255.0f,
+                               kPalette[i].b / 255.0f, 1.0f);
+                if (ImGui::ColorButton("##swatch", c, ImGuiColorEditFlags_NoTooltip,
+                                       ImVec2(26.0f, 22.0f))) {
                     applyColorToSelection(kPalette[i]);
                     ImGui::CloseCurrentPopup();
                 }
+                if (i % 6 != 5) ImGui::SameLine();
                 ImGui::PopID();
             }
-            ImGui::Separator();
-            float custom[4] = {part->color().r / 255.0f, part->color().g / 255.0f,
-                               part->color().b / 255.0f, part->color().a / 255.0f};
-            if (ImGui::ColorPicker4("##custom", custom,
-                                    ImGuiColorEditFlags_AlphaBar |
-                                        ImGuiColorEditFlags_NoSidePreview)) {
-                applyColorToSelection(Color{
-                    static_cast<unsigned char>(std::lround(custom[0] * 255.0f)),
-                    static_cast<unsigned char>(std::lround(custom[1] * 255.0f)),
-                    static_cast<unsigned char>(std::lround(custom[2] * 255.0f)),
-                    static_cast<unsigned char>(std::lround(custom[3] * 255.0f))});
-            }
+            ImGui::EndPopup();
         }
-        ImGui::EndPopup();
-    }
-
-    ImGui::SameLine();
-    if (IconButton("material", Icon::Material, "Material", false,
-                   "Material da peca selecionada")) {
-        ImGui::OpenPopup("##material_menu");
-    }
-    if (ImGui::BeginPopup("##material_menu")) {
-        Instance* selection = scene_.selection();
-        Part* part = selection != nullptr && selection->isPart() ? static_cast<Part*>(selection)
-                                                                 : nullptr;
-        if (part == nullptr) {
-            ImGui::TextDisabled("Selecione uma peca primeiro.");
-        } else {
-            ImGui::TextUnformatted("Material");
-            ImGui::Separator();
-            for (int i = 0; i < PartMaterialCount(); ++i) {
-                const bool selected = static_cast<int>(part->material()) == i;
-                if (ImGui::Selectable(PartMaterialName(PartMaterialFromIndex(i)), selected)) {
+        if (ImGui::BeginPopup("##material_menu")) {
+            if (part == nullptr) ImGui::TextDisabled("Selecione uma peca primeiro.");
+            else for (int i = 0; i < PartMaterialCount(); ++i) {
+                if (ImGui::Selectable(PartMaterialName(PartMaterialFromIndex(i)), static_cast<int>(part->material()) == i)) {
                     applyMaterialToSelection(i);
                     ImGui::CloseCurrentPopup();
                 }
             }
+            ImGui::EndPopup();
         }
-        ImGui::EndPopup();
+        ImGui::EndTabItem();
     }
 
-    ImGui::SameLine();
-    {
-        Instance* selection = scene_.selection();
-        Part* part = selection != nullptr && selection->isPart() ? static_cast<Part*>(selection)
-                                                                 : nullptr;
-        const bool anchored = part != nullptr && part->anchored();
-        const bool anchorLocked =
-            part != nullptr && part->instanceClass() == InstanceClass::Baseplate;
-        if (IconButton("anchor", Icon::Anchor, "Anchor", anchored,
-                       "Ancorar/desancorar a peca selecionada",
-                       part != nullptr && !anchorLocked)) {
-            part->setAnchored(!part->anchored());
-            setStatus(part->anchored() ? "Peca ancorada." : "Peca solta: a fisica assume.");
+    if (ImGui::BeginTabItem("View")) {
+        ImGui::Spacing();
+        if (IconButton("explorer_toggle", Icon::Explorer, "Explorer", showExplorer_,
+                       "Mostrar/ocultar Explorer")) {
+            showExplorer_ = !showExplorer_;
         }
+        ImGui::SameLine();
+        if (IconButton("properties_toggle", Icon::Properties, "Properties", showProperties_,
+                       "Mostrar/ocultar Properties")) {
+            showProperties_ = !showProperties_;
+        }
+        ImGui::EndTabItem();
     }
 
-    ToolbarSeparator();
-
-    if (IconButton("explorer_toggle", Icon::Explorer, "Explorer", showExplorer_,
-                   "Mostrar/ocultar o Explorer")) {
-        showExplorer_ = !showExplorer_;
+    if (ImGui::BeginTabItem("File")) {
+        ImGui::Spacing();
+        if (IconButton("save", Icon::Save, "Save", false, "Salvar projeto (Ctrl+S)")) {
+            requestSavePopup_ = true;
+            std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
+            dialogError_.clear();
+        }
+        ImGui::SameLine();
+        if (IconButton("open", Icon::Open, "Open", false, "Abrir projeto (Ctrl+O)")) {
+            requestOpenPopup_ = true;
+            std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
+            dialogError_.clear();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", projectPath_.c_str());
+        ImGui::EndTabItem();
     }
-    ImGui::SameLine();
-    if (IconButton("properties_toggle", Icon::Properties, "Properties", showProperties_,
-                   "Mostrar/ocultar Properties")) {
-        showProperties_ = !showProperties_;
-    }
-
-    ToolbarSeparator();
-
-    if (IconButton("save", Icon::Save, "Save", false, "Salvar projeto (Ctrl+S)")) {
-        requestSavePopup_ = true;
-        std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
-        dialogError_.clear();
-    }
-    ImGui::SameLine();
-    if (IconButton("open", Icon::Open, "Open", false, "Abrir projeto (Ctrl+O)")) {
-        requestOpenPopup_ = true;
-        std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
-        dialogError_.clear();
-    }
+    ImGui::EndTabBar();
 
     ImGui::End();
     ImGui::PopStyleVar(2);
@@ -641,7 +606,7 @@ void EditorUI::drawViewport() {
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     char overlay[192];
-    std::snprintf(overlay, sizeof(overlay), "%s  |  %.0f FPS  |  RMB + WASD: camera livre",
+    std::snprintf(overlay, sizeof(overlay), "%s  |  %.0f FPS  |  RMB + WASD | Q desce, E sobe",
                   ToolModeName(tool_), ImGui::GetIO().Framerate);
     drawList->AddText(ImVec2(imagePosition.x + 10.0f, imagePosition.y + 8.0f),
                       IM_COL32(0, 0, 0, 170), overlay);
@@ -1025,10 +990,11 @@ void EditorUI::insertPart(PartShape shape) {
         setStatus("Falha ao criar a peca.", true);
         return;
     }
-    part->setAnchored(false);
+    // In edit mode inserted parts must stay where the user places them.
+    part->setAnchored(true);
     scene_.select(part);
-    setStatus(shape == PartShape::Sphere ? "Sphere criada (dinamica)."
-                                         : "Block criado (dinamico).");
+    setStatus(shape == PartShape::Sphere ? "Sphere criada e ancorada."
+                                         : "Block criado e ancorado.");
 }
 
 void EditorUI::insertSpawnLocation() {

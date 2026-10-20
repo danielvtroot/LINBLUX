@@ -26,6 +26,8 @@ carregamento remoto e sem assets pesados.
 - Properties com Name, ClassName, Position, Size, Rotation, Color, Material,
   Anchored e CanCollide; alterações aplicam no objeto real.
 - Gizmos de mover, redimensionar e girar nos eixos X/Y/Z.
+- Peças novas começam ancoradas para permanecerem no lugar durante a edição;
+  desative `Anchored` para simular gravidade e colisões.
 - Salvar/abrir projeto JSON versionado, com validação, escrita atômica e
   tratamento de erros.
 - Testes automatizados headless via CTest.
@@ -80,7 +82,7 @@ cmake --build build -j2
 | Selecionar objeto | clique esquerdo na viewport |
 | Mover / redimensionar / girar | escolha a ferramenta e arraste o eixo na viewport |
 | Orbitar câmera | arrastar com o botão direito |
-| Câmera livre | segurar botão direito + `W`, `A`, `S`, `D`; `Q`/`E` descem/sobem |
+| Câmera livre | segurar botão direito + `W`, `A`, `S`, `D`; `Q` desce e `E` sobe |
 | Acelerar câmera livre | `Alt` enquanto move |
 | Deslocar câmera | botão do meio (ou Shift + botão direito) |
 | Zoom | roda do mouse |

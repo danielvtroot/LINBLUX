@@ -25,6 +25,11 @@ const AxisDef kAxes[3] = {
 };
 
 const Color kActiveColor{255, 215, 60, 255};
+const Vector3 kPlaneAxisA[3] = {{1, 0, 0}, {1, 0, 0}, {0, 1, 0}};
+const Vector3 kPlaneAxisB[3] = {{0, 1, 0}, {0, 0, 1}, {0, 0, 1}};
+const Vector3 kPlaneNormal[3] = {{0, 0, 1}, {0, 1, 0}, {1, 0, 0}};
+const Color kPlaneColor[3] = {
+    {90, 150, 255, 150}, {90, 220, 110, 150}, {235, 80, 80, 150}};
 constexpr float kGizmoPixelRadius = 11.0f;
 
 float AxisLength(const Part& part) {
@@ -133,6 +138,7 @@ float WrapAngle(float angle) {
 void Gizmo::cancel() {
     dragging_ = false;
     activeAxis_ = -1;
+    activePlane_ = -1;
 }
 
 bool Gizmo::update(ToolMode mode, Part* part, const EditorCamera& camera, Rectangle viewport,
@@ -190,6 +196,33 @@ bool Gizmo::update(ToolMode mode, Part* part, const EditorCamera& camera, Rectan
         }
 
         const float length = AxisLength(*part);
+        if (mode == ToolMode::Move) {
+            int bestPlane = -1;
+            float bestDistance = 10.0f;
+            for (int i = 0; i < 3; ++i) {
+                const Vector3 planeCenter = Vector3Add(
+                    center, Vector3Scale(Vector3Add(kPlaneAxisA[i], kPlaneAxisB[i]),
+                                         length * 0.24f));
+                const Vector2 screen = WorldToScreenGlobal(camera, viewport, planeCenter);
+                const float dx = mouse.x - screen.x;
+                const float dy = mouse.y - screen.y;
+                const float distance = std::sqrt(dx * dx + dy * dy);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestPlane = i;
+                }
+            }
+            if (bestPlane >= 0 && RayPlane(ray.position, ray.direction, center,
+                                           kPlaneNormal[bestPlane], startPlaneHit_)) {
+                activePlane_ = bestPlane;
+                activeAxis_ = -1;
+                dragging_ = true;
+                startPosition_ = part->position();
+                startSize_ = part->size();
+                startRotation_ = part->rotation();
+                return true;
+            }
+        }
         int bestAxis = -1;
         float bestDistance = kGizmoPixelRadius;
         for (int i = 0; i < 3; ++i) {
@@ -213,6 +246,7 @@ bool Gizmo::update(ToolMode mode, Part* part, const EditorCamera& camera, Rectan
         }
 
         activeAxis_ = bestAxis;
+        activePlane_ = -1;
         dragging_ = true;
         startPosition_ = part->position();
         startSize_ = part->size();
@@ -234,6 +268,18 @@ bool Gizmo::update(ToolMode mode, Part* part, const EditorCamera& camera, Rectan
 
     const Ray ray = camera.rayFromScreen(localMouse, Vector2{viewport.width, viewport.height});
     const Vector3 center = startPosition_;
+    if (mode == ToolMode::Move && activePlane_ >= 0) {
+        Vector3 hit;
+        if (!RayPlane(ray.position, ray.direction, center, kPlaneNormal[activePlane_], hit)) {
+            return true;
+        }
+        Vector3 delta = Vector3Subtract(hit, startPlaneHit_);
+        delta = Vector3Subtract(
+            delta, Vector3Scale(kPlaneNormal[activePlane_],
+                                Vector3DotProduct(delta, kPlaneNormal[activePlane_])));
+        part->setPosition(Vector3Add(startPosition_, delta));
+        return true;
+    }
     const Vector3 axis = kAxes[activeAxis_].direction;
 
     if (mode == ToolMode::Rotate) {
@@ -310,6 +356,28 @@ void Gizmo::draw(const Part& part, ToolMode mode) const {
         }
         rlEnableDepthTest();
         return;
+    }
+
+    if (mode == ToolMode::Move) {
+        const float offset = length * 0.24f;
+        const float half = length * 0.075f;
+        for (int i = 0; i < 3; ++i) {
+            const Vector3 c = Vector3Add(
+                center, Vector3Scale(Vector3Add(kPlaneAxisA[i], kPlaneAxisB[i]), offset));
+            const Vector3 a = Vector3Scale(kPlaneAxisA[i], half);
+            const Vector3 b = Vector3Scale(kPlaneAxisB[i], half);
+            const Vector3 p0 = Vector3Subtract(Vector3Subtract(c, a), b);
+            const Vector3 p1 = Vector3Add(Vector3Subtract(c, b), a);
+            const Vector3 p2 = Vector3Add(Vector3Add(c, a), b);
+            const Vector3 p3 = Vector3Add(Vector3Subtract(c, a), b);
+            const Color color = activePlane_ == i ? kActiveColor : kPlaneColor[i];
+            DrawTriangle3D(p0, p1, p2, color);
+            DrawTriangle3D(p0, p2, p3, color);
+            DrawLine3D(p0, p1, Color{235, 238, 245, 230});
+            DrawLine3D(p1, p2, Color{235, 238, 245, 230});
+            DrawLine3D(p2, p3, Color{235, 238, 245, 230});
+            DrawLine3D(p3, p0, Color{235, 238, 245, 230});
+        }
     }
 
     const float thickness = mode == ToolMode::Scale ? 0.11f : 0.08f;

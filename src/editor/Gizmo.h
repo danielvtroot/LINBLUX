@@ -24,11 +24,13 @@ public:
 
 private:
     int activeAxis_ = -1;
+    int activePlane_ = -1;
     bool dragging_ = false;
     Vector3 startPosition_{0.0f, 0.0f, 0.0f};
     Vector3 startSize_{1.0f, 1.0f, 1.0f};
     Quaternion startRotation_{0.0f, 0.0f, 0.0f, 1.0f};
     float startParam_ = 0.0f;
+    Vector3 startPlaneHit_{0.0f, 0.0f, 0.0f};
     float startAngle_ = 0.0f;
 };
 
