@@ -49,17 +49,21 @@ void Triangle(Vector3 a, Vector3 b, Vector3 c) {
 }
 
 // Caixa com sombreamento por face (Lambert simples, custo quase zero).
-void DrawShadedBox(Vector3 center, Vector3 size, Color color, Vector3 lightDirection,
-                   float sunIntensity, float brightness) {
+// A rotacao e aplicada na CPU: os vertices e as normais passam pelo mesmo
+// quaternion, portanto desenho, selecao e collider compartilham a orientacao.
+void DrawShadedBox(Vector3 center, Vector3 size, Quaternion rotation, Color color,
+                   Vector3 lightDirection, float sunIntensity, float brightness) {
     const Vector3 half = Vector3Scale(size, 0.5f);
-    const Vector3 min = Vector3Subtract(center, half);
-    const Vector3 max = Vector3Add(center, half);
-
-    const Vector3 corners[8] = {
-        {min.x, min.y, min.z}, {max.x, min.y, min.z}, {max.x, min.y, max.z},
-        {min.x, min.y, max.z}, {min.x, max.y, min.z}, {max.x, max.y, min.z},
-        {max.x, max.y, max.z}, {min.x, max.y, max.z},
+    const Vector3 localCorners[8] = {
+        {-half.x, -half.y, -half.z}, {half.x, -half.y, -half.z},
+        {half.x, -half.y, half.z},   {-half.x, -half.y, half.z},
+        {-half.x, half.y, -half.z},  {half.x, half.y, -half.z},
+        {half.x, half.y, half.z},    {-half.x, half.y, half.z},
     };
+    Vector3 corners[8];
+    for (int i = 0; i < 8; ++i) {
+        corners[i] = Vector3Add(center, Vector3RotateByQuaternion(localCorners[i], rotation));
+    }
 
     struct Face {
         int indices[4];
@@ -76,7 +80,8 @@ void DrawShadedBox(Vector3 center, Vector3 size, Color color, Vector3 lightDirec
 
     rlBegin(RL_TRIANGLES);
     for (const Face& face : faces) {
-        const float lambert = std::max(0.0f, Vector3DotProduct(face.normal, lightDirection));
+        const Vector3 normal = Vector3RotateByQuaternion(face.normal, rotation);
+        const float lambert = std::max(0.0f, Vector3DotProduct(normal, lightDirection));
         const float factor =
             std::clamp((0.5f + 0.5f * sunIntensity * lambert) * brightness, 0.2f, 1.6f);
         SetColor4(Shade(color, factor));
@@ -88,6 +93,25 @@ void DrawShadedBox(Vector3 center, Vector3 size, Color color, Vector3 lightDirec
         Triangle(a, c, d);
     }
     rlEnd();
+}
+
+void DrawRotatedBoxWires(Vector3 center, Vector3 size, Quaternion rotation, Color color) {
+    const Vector3 half = Vector3Scale(size, 0.5f);
+    const Vector3 local[8] = {
+        {-half.x, -half.y, -half.z}, {half.x, -half.y, -half.z},
+        {half.x, -half.y, half.z},   {-half.x, -half.y, half.z},
+        {-half.x, half.y, -half.z},  {half.x, half.y, -half.z},
+        {half.x, half.y, half.z},    {-half.x, half.y, half.z},
+    };
+    Vector3 world[8];
+    for (int i = 0; i < 8; ++i) {
+        world[i] = Vector3Add(center, Vector3RotateByQuaternion(local[i], rotation));
+    }
+    static const int edges[12][2] = {{0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}, {5, 6},
+                                     {6, 7}, {7, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
+    for (const auto& edge : edges) {
+        DrawLine3D(world[edge[0]], world[edge[1]], color);
+    }
 }
 
 // Esfera facetada com sombreamento por quad. Suficiente para o estilo classico.
@@ -306,38 +330,46 @@ void SceneRenderer::unloadStudMeshes() {
 
 void SceneRenderer::drawBaseplate(const Part& baseplate, Vector3 lightDirection,
                                   float sunIntensity, float brightness) {
-    DrawShadedBox(baseplate.position(), baseplate.size(), MaterialColor(baseplate),
+    const Quaternion rotation = baseplate.rotation();
+    DrawShadedBox(baseplate.position(), baseplate.size(), rotation, MaterialColor(baseplate),
                   lightDirection, sunIntensity, brightness);
 
     ensureStudMesh(baseplate);
     const StudMeshEntry& entry = studMeshes_[baseplate.id()];
     if (entry.valid) {
         studMaterial_.maps[MATERIAL_MAP_DIFFUSE].color = MaterialColor(baseplate);
-        const Matrix transform =
+        const Matrix transform = MatrixMultiply(
             MatrixTranslate(baseplate.position().x, baseplate.position().y,
-                            baseplate.position().z);
+                            baseplate.position().z),
+            QuaternionToMatrix(rotation));
         DrawMesh(entry.mesh, studMaterial_, transform);
         studMaterial_.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
     }
 
     // Grade discreta por cima do piso (referencia espacial para construcao).
+    // Os pontos sao locais a Baseplate: se ela for rotacionada, grade e studs
+    // acompanham a mesma orientacao.
     const Vector3 half = Vector3Scale(baseplate.size(), 0.5f);
-    const float top = baseplate.position().y + half.y + 0.02f;
-    const float minX = baseplate.position().x - half.x;
-    const float maxX = baseplate.position().x + half.x;
-    const float minZ = baseplate.position().z - half.z;
-    const float maxZ = baseplate.position().z + half.z;
+    const float top = half.y + 0.02f;
+    const float minX = -half.x;
+    const float maxX = half.x;
+    const float minZ = -half.z;
+    const float maxZ = half.z;
     const Color gridColor{132, 132, 138, 255};
     const float spacing = 16.0f;
     const int stepsX = static_cast<int>((maxX - minX) / spacing);
     const int stepsZ = static_cast<int>((maxZ - minZ) / spacing);
+    const auto worldPoint = [&](float x, float z) {
+        return Vector3Add(baseplate.position(),
+                          Vector3RotateByQuaternion(Vector3{x, top, z}, rotation));
+    };
     for (int i = 0; i <= stepsX; ++i) {
         const float x = minX + static_cast<float>(i) * spacing;
-        DrawLine3D(Vector3{x, top, minZ}, Vector3{x, top, maxZ}, gridColor);
+        DrawLine3D(worldPoint(x, minZ), worldPoint(x, maxZ), gridColor);
     }
     for (int i = 0; i <= stepsZ; ++i) {
         const float z = minZ + static_cast<float>(i) * spacing;
-        DrawLine3D(Vector3{minX, top, z}, Vector3{maxX, top, z}, gridColor);
+        DrawLine3D(worldPoint(minX, z), worldPoint(maxX, z), gridColor);
     }
 }
 
@@ -346,7 +378,8 @@ void SceneRenderer::drawSelection(const Part& part) const {
     if (part.shape() == PartShape::Sphere) {
         DrawSphereWires(part.position(), part.sphereRadius() * 1.04f, 8, 12, selection);
     } else {
-        DrawCubeWiresV(part.position(), Vector3Scale(part.size(), 1.02f), selection);
+        DrawRotatedBoxWires(part.position(), Vector3Scale(part.size(), 1.02f), part.rotation(),
+                            selection);
     }
 }
 
@@ -373,26 +406,27 @@ void SceneRenderer::drawScene(const Scene& scene, const EditorCamera& camera, in
         if (part->instanceClass() == InstanceClass::Baseplate) {
             drawBaseplate(*part, lightDirection, sunIntensity, brightness);
         } else if (part->instanceClass() == InstanceClass::SpawnLocation) {
-            DrawShadedBox(part->position(), part->size(), MaterialColor(*part), lightDirection,
-                          sunIntensity, brightness);
-            const Vector3 top = Vector3Add(
-                part->position(), Vector3{0.0f, part->size().y * 0.5f, 0.0f});
+            const Quaternion rotation = part->rotation();
+            const auto localBox = [&](Vector3 localCenter, Vector3 size, Color color) {
+                const Vector3 world = Vector3Add(
+                    part->position(), Vector3RotateByQuaternion(localCenter, rotation));
+                DrawShadedBox(world, size, rotation, color, lightDirection, sunIntensity,
+                              brightness);
+            };
+            localBox(Vector3{0.0f, 0.0f, 0.0f}, part->size(), MaterialColor(*part));
+            const float top = part->size().y * 0.5f;
             const Color marker = Color{235, 248, 255, 255};
-            DrawShadedBox(Vector3Add(top, Vector3{0.0f, 0.08f, 0.0f}),
-                          Vector3{part->size().x * 0.55f, 0.12f, part->size().z * 0.55f}, marker,
-                          lightDirection, sunIntensity, brightness);
-            DrawShadedBox(Vector3Add(top, Vector3{0.0f, 2.2f, 0.0f}),
-                          Vector3{0.35f, 4.2f, 0.35f}, marker, lightDirection, sunIntensity,
-                          brightness);
-            DrawShadedBox(Vector3Add(top, Vector3{0.95f, 3.6f, 0.0f}),
-                          Vector3{1.8f, 1.1f, 0.12f}, Color{0, 120, 255, 255}, lightDirection,
-                          sunIntensity, brightness);
+            localBox(Vector3{0.0f, top + 0.08f, 0.0f},
+                     Vector3{part->size().x * 0.55f, 0.12f, part->size().z * 0.55f}, marker);
+            localBox(Vector3{0.0f, top + 2.2f, 0.0f}, Vector3{0.35f, 4.2f, 0.35f}, marker);
+            localBox(Vector3{0.95f, top + 3.6f, 0.0f}, Vector3{1.8f, 1.1f, 0.12f},
+                     Color{0, 120, 255, 255});
         } else if (part->shape() == PartShape::Sphere) {
             DrawShadedSphere(part->position(), part->sphereRadius(), MaterialColor(*part),
                              lightDirection, sunIntensity, brightness);
         } else {
-            DrawShadedBox(part->position(), part->size(), MaterialColor(*part), lightDirection,
-                          sunIntensity, brightness);
+            DrawShadedBox(part->position(), part->size(), part->rotation(),
+                          MaterialColor(*part), lightDirection, sunIntensity, brightness);
         }
 
         if (part->id() == selectedId) {

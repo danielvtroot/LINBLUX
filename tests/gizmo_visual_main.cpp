@@ -17,6 +17,7 @@
 #include "editor/Gizmo.h"
 #include "editor/GizmoLayout.h"
 #include "editor/GizmoMath.h"
+#include "physics/PhysicsWorld.h"
 #include "rendering/EditorCamera.h"
 #include "rendering/SceneRenderer.h"
 #include "scene/Scene.h"
@@ -354,6 +355,149 @@ Image RenderCase(RenderTexture2D target, SceneRenderer& renderer, Scene& scene, 
     return image;
 }
 
+struct PixelBounds {
+    bool found = false;
+    int minX = 0;
+    int minY = 0;
+    int maxX = 0;
+    int maxY = 0;
+
+    int width() const { return found ? maxX - minX + 1 : 0; }
+    int height() const { return found ? maxY - minY + 1 : 0; }
+};
+
+template <typename Predicate>
+PixelBounds FindBounds(const Image& image, Predicate predicate) {
+    PixelBounds bounds;
+    for (int y = 0; y < image.height; ++y) {
+        for (int x = 0; x < image.width; ++x) {
+            if (!predicate(GetImageColor(image, x, y))) continue;
+            if (!bounds.found) {
+                bounds.found = true;
+                bounds.minX = bounds.maxX = x;
+                bounds.minY = bounds.maxY = y;
+            } else {
+                bounds.minX = std::min(bounds.minX, x);
+                bounds.minY = std::min(bounds.minY, y);
+                bounds.maxX = std::max(bounds.maxX, x);
+                bounds.maxY = std::max(bounds.maxY, y);
+            }
+        }
+    }
+    return bounds;
+}
+
+struct ProjectedBounds {
+    bool valid = true;
+    float minX = 1e9f;
+    float minY = 1e9f;
+    float maxX = -1e9f;
+    float maxY = -1e9f;
+};
+
+ProjectedBounds ProjectRotatedBox(const Part& part, const EditorCamera& camera, int width,
+                                  int height) {
+    const Vector3 half = Vector3Scale(part.size(), 0.5f);
+    const Vector3 localCorners[8] = {
+        {-half.x, -half.y, -half.z}, {half.x, -half.y, -half.z},
+        {half.x, -half.y, half.z},   {-half.x, -half.y, half.z},
+        {-half.x, half.y, -half.z},  {half.x, half.y, -half.z},
+        {half.x, half.y, half.z},    {-half.x, half.y, half.z},
+    };
+    ProjectedBounds bounds;
+    for (const Vector3& local : localCorners) {
+        const Vector3 world = Vector3Add(
+            part.position(), Vector3RotateByQuaternion(local, part.rotation()));
+        Vector2 projected{};
+        if (!camera.projectChecked(world, Vector2{static_cast<float>(width),
+                                                  static_cast<float>(height)}, projected)) {
+            bounds.valid = false;
+            continue;
+        }
+        bounds.minX = std::min(bounds.minX, projected.x);
+        bounds.minY = std::min(bounds.minY, projected.y);
+        bounds.maxX = std::max(bounds.maxX, projected.x);
+        bounds.maxY = std::max(bounds.maxY, projected.y);
+    }
+    return bounds;
+}
+
+bool BoundsNear(const PixelBounds& actual, const ProjectedBounds& expected, int tolerance) {
+    if (!actual.found || !expected.valid) return false;
+    return std::fabs(static_cast<float>(actual.minX) - expected.minX) <= tolerance &&
+           std::fabs(static_cast<float>(actual.minY) - expected.minY) <= tolerance &&
+           std::fabs(static_cast<float>(actual.maxX) - expected.maxX) <= tolerance &&
+           std::fabs(static_cast<float>(actual.maxY) - expected.maxY) <= tolerance;
+}
+
+void VerifyRotatedPartRendering(RenderTexture2D target, SceneRenderer& renderer,
+                                EditorCamera& camera) {
+    const int width = target.texture.width;
+    const int height = target.texture.height;
+    Scene scene;
+    Part* part = scene.createPart(PartShape::Block, Vector3{0.0f, 5.0f, 0.0f},
+                                  Vector3{8.0f, 2.0f, 4.0f}, "RotationRegression");
+    part->setAnchored(true);
+    part->setColor(Color{8, 8, 8, 255});
+
+    PhysicsWorld physics;
+    physics.attach(scene);
+
+    const Vector3 rotations[4] = {{0.0f, 0.0f, 0.0f},
+                                  {0.0f, 90.0f, 0.0f},
+                                  {0.0f, 45.0f, 0.0f},
+                                  {25.0f, 37.0f, -16.0f}};
+    for (const Vector3& degrees : rotations) {
+        part->setRotationEulerDegrees(degrees);
+        physics.simulate(scene, 0.0f);
+        gCase = "rotation/render/" + std::to_string(static_cast<int>(degrees.y)) + "deg";
+        gCaseFailures = 0;
+        camera.setOrbit(part->position(), 20.0f, 0.75f, 0.35f);
+        BeginTextureMode(target);
+        renderer.drawScene(scene, camera, width, height, part->id());
+        EndTextureMode();
+        Image image = LoadImageFromTexture(target.texture);
+        ImageFlipVertical(&image);
+
+        const ProjectedBounds expected = ProjectRotatedBox(*part, camera, width, height);
+        CHECK(expected.valid);
+        const PixelBounds silhouette =
+            FindBounds(image, [](Color color) {
+                return color.a > 200 && color.r < 45 && color.g < 45 && color.b < 45;
+            });
+        ++gChecks;
+        if (!BoundsNear(silhouette, expected, 4)) {
+            ++gFailures; ++gCaseFailures;
+            std::printf("  FAIL [%s] silhueta (%d,%d)-(%d,%d) != projetada "
+                        "(%.1f,%.1f)-(%.1f,%.1f)\n",
+                        gCase.c_str(), silhouette.minX, silhouette.minY, silhouette.maxX,
+                        silhouette.maxY, expected.minX, expected.minY, expected.maxX,
+                        expected.maxY);
+        }
+
+        const PixelBounds selection =
+            FindBounds(image, [](Color color) {
+                return color.a > 200 && color.r > 180 && color.g > 135 && color.b < 135;
+            });
+        ++gChecks;
+        if (!BoundsNear(selection, expected, 5)) {
+            ++gFailures; ++gCaseFailures;
+            std::printf("  FAIL [%s] wireframe de selecao (%d,%d)-(%d,%d) != projetada "
+                        "(%.1f,%.1f)-(%.1f,%.1f)\n",
+                        gCase.c_str(), selection.minX, selection.minY, selection.maxX,
+                        selection.maxY, expected.minX, expected.minY, expected.maxX,
+                        expected.maxY);
+        }
+
+        ++gChecks;
+        if (!NearlyEqual(physics.bodyRotation(part->id()), part->rotation(), 0.002f)) {
+            ++gFailures; ++gCaseFailures;
+            std::printf("  FAIL [%s] collider diverge da Part\n", gCase.c_str());
+        }
+        UnloadImage(image);
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -386,6 +530,8 @@ int main() {
     SceneRenderer renderer;
     Gizmo gizmo;
     EditorCamera camera;
+
+    VerifyRotatedPartRendering(target, renderer, camera);
 
     const ToolMode modes[3] = {ToolMode::Move, ToolMode::Scale, ToolMode::Rotate};
     const char* modeNames[3] = {"Move", "Scale", "Rotate"};
@@ -469,6 +615,9 @@ int main() {
     {
         gCase = "depth/cena";
         gCaseFailures = 0;
+        nearPart->setTransform(loblox::Transform{Vector3{0.0f, 4.0f, 0.0f},
+                                         Quaternion{0.0f, 0.0f, 0.0f, 1.0f},
+                                         Vector3{4.0f, 4.0f, 4.0f}});
         camera.setOrbit(Vector3{0.0f, 4.0f, 0.0f}, 20.0f, 0.0f, 0.0f);
         BeginTextureMode(target);
         renderer.drawScene(scene, camera, kWidth, kHeight, kInvalidInstanceId);
