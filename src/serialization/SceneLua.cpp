@@ -284,25 +284,11 @@ bool fromLua(Scene& scene, const std::string& text, std::string& error) {
 
 bool save(const Scene& scene, const std::string& path, std::string& error) {
     error.clear();
-    if (path.empty()) { error = "caminho de exportacao vazio"; return false; }
-    const std::filesystem::path target(path);
-    std::error_code ec;
-    if (!target.parent_path().empty()) std::filesystem::create_directories(target.parent_path(), ec);
-    if (ec) { error = "nao foi possivel criar diretorio: " + ec.message(); return false; }
-    const std::filesystem::path temporary = target.string() + ".tmp";
-    const std::string text = toLua(scene);
-    {
-        std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
-        if (!out) { error = "nao foi possivel criar arquivo declarativo"; return false; }
-        out.write(text.data(), static_cast<std::streamsize>(text.size()));
-        out.flush();
-        if (!out) { error = "falha ao escrever arquivo declarativo"; out.close();
-            std::filesystem::remove(temporary, ec); return false; }
+    if (path.empty()) {
+        error = "caminho de exportacao vazio";
+        return false;
     }
-    std::filesystem::rename(temporary, target, ec);
-    if (ec) { error = "falha ao concluir exportacao: " + ec.message();
-        std::filesystem::remove(temporary, ec); return false; }
-    return true;
+    return projectio::writeFileAtomically(path, toLua(scene), error);
 }
 
 bool load(Scene& scene, const std::string& path, std::string& error) {

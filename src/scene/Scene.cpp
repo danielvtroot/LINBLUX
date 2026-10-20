@@ -212,6 +212,26 @@ void Scene::clearObjects() {
     rebuildParts();
 }
 
+void Scene::replaceContentsFrom(Scene& source) {
+    if (&source == this) {
+        return;
+    }
+    // A cena antiga ainda esta intacta e a nova ja foi validada. Avisar a
+    // fisica antes da troca evita que ela mantenha corpos apontando para
+    // objetos que serao destruidos junto com `source`.
+    for (Part* part : parts_) {
+        notifyRemoval(part);
+    }
+    selection_ = nullptr;
+    source.selection_ = nullptr;
+    objects_.swap(source.objects_);
+    parts_.swap(source.parts_);
+    byId_.swap(source.byId_);
+    std::swap(workspace_, source.workspace_);
+    std::swap(lighting_, source.lighting_);
+    std::swap(nextId_, source.nextId_);
+}
+
 Instance* Scene::find(InstanceId id) const {
     const auto it = byId_.find(id);
     return it == byId_.end() ? nullptr : it->second;

@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <filesystem>
+#include <utility>
 
 #include "imgui.h"
 #include "raylib.h"
@@ -9,10 +10,11 @@
 
 #include "editor/EditorUI.h"
 #include "rendering/SceneRenderer.h"
+#include "serialization/ProjectIO.h"
 
 namespace loblox {
 
-Application::Application() = default;
+Application::Application(AppConfig config) : config_(std::move(config)) {}
 
 Application::~Application() {
     shutdown();
@@ -25,6 +27,12 @@ bool Application::initialize() {
     }
     SetConfigFlags(flags);
     InitWindow(config_.windowWidth, config_.windowHeight, "Loblox Studio");
+    if (!IsWindowReady()) {
+        std::fprintf(stderr,
+                     "Falha ao criar a janela grafica. Verifique DISPLAY/WAYLAND_DISPLAY "
+                     "e o driver OpenGL.\n");
+        return false;
+    }
     windowReady_ = true;
     SetWindowMinSize(900, 560);
     SetExitKey(KEY_NULL);
@@ -85,6 +93,27 @@ bool Application::initialize() {
     for (int i = 0; i < IM_ARRAYSIZE(slots); ++i) style.Colors[slots[i]] = colors[i];
 
     scene_.buildDefaultScene();
+
+    // Politica de inicializacao:
+    //   1. `--project PATH` e sempre tentado e nunca e sobrescrito;
+    //   2. sem flag, o caminho padrao (ultimo projeto salvo por Ctrl+S) e
+    //      carregado somente se existir;
+    //   3. qualquer falha mantem a cena padrao intacta e aparece na UI/stderr.
+    const std::string startupPath = config_.startupProjectPath.empty()
+                                        ? config_.defaultProjectPath
+                                        : config_.startupProjectPath;
+    const bool shouldLoad = !config_.startupProjectPath.empty() ||
+                            std::filesystem::is_regular_file(startupPath);
+    bool projectLoaded = false;
+    std::string projectLoadError;
+    if (shouldLoad) {
+        projectLoaded = projectio::load(scene_, startupPath, projectLoadError);
+        if (!projectLoaded) {
+            std::fprintf(stderr, "Falha ao carregar '%s': %s. Cena padrao preservada.\n",
+                         startupPath.c_str(), projectLoadError.c_str());
+        }
+    }
+
     physics_.attach(scene_);
     physics_.setGravity(Vector3{0.0f, config_.gravity, 0.0f});
     physics_.setFixedStep(config_.physicsFixedStep, config_.physicsMaxSubSteps);
@@ -92,7 +121,21 @@ bool Application::initialize() {
     renderer_ = std::make_unique<SceneRenderer>();
     ui_ = std::make_unique<EditorUI>(scene_, physics_, camera_, *renderer_, config_);
     ui_->setOnSceneLoaded([this]() { physics_.rebuildAll(scene_); });
-    ui_->setStatus("Loblox Open-Source pronto. Toolbox a esquerda para construir.");
+    if (projectLoaded) {
+        std::error_code pathError;
+        const std::filesystem::path absolute =
+            std::filesystem::absolute(startupPath, pathError);
+        const std::string resolved = pathError ? startupPath : absolute.string();
+        config_.defaultProjectPath = resolved;
+        ui_->setProjectPath(resolved);
+        ui_->setStatus("Projeto carregado: " + resolved);
+    } else if (shouldLoad) {
+        ui_->setStatus("Falha ao carregar '" + startupPath +
+                           "': " + projectLoadError + ". Cena padrao preservada.",
+                       true);
+    } else {
+        ui_->setStatus("Loblox Open-Source pronto. Toolbox a esquerda para construir.");
+    }
     return true;
 }
 

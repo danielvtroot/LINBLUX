@@ -87,6 +87,9 @@ enable_testing()
 add_executable(loblox_tests tests/test_main.cpp)
 target_link_libraries(loblox_tests PRIVATE loblox_core)
 add_test(NAME loblox_tests COMMAND loblox_tests)
+add_test(NAME loblox_startup_no_display
+  COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/startup_no_display.sh
+          $<TARGET_FILE:loblox>)
 
 # Regressao grafica dos gizmos: renderiza em RenderTexture e confere pixel e
 # hit test. Sem contexto grafico o executavel retorna 77 (SKIP).

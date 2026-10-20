@@ -56,6 +56,12 @@ public:
     // Usado apenas ao carregar um projeto.
     void clearObjects();
 
+    // Troca o conteudo por uma cena temporaria ja construida e validada.
+    // Nunca falha: a cena atual so e substituida depois que o candidato esta
+    // completo. Os listeners de remocao permanecem neste Scene e sao avisados
+    // sobre as Parts antigas para que a fisica nao guarde corpos orfaos.
+    void replaceContentsFrom(Scene& source);
+
     Instance* find(InstanceId id) const;
     Part* findPart(InstanceId id) const;
 

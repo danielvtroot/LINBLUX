@@ -1172,6 +1172,45 @@ void TestProjectValidation() {
     EndSection();
 }
 
+void TestTransactionalLoad() {
+    Section("Carregamento transacional e sincronizacao da fisica");
+    using namespace loblox;
+    Scene source;
+    source.createPart(PartShape::Block, V3(1, 6, 2), V3(5, 2, 3), "Candidato");
+    const auto path = std::filesystem::temp_directory_path() / "loblox_transactional_load.json";
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+    std::string error;
+    CHECK(projectio::save(source, path.string(), error));
+
+    Scene target;
+    target.buildDefaultScene();
+    PhysicsWorld physics;
+    physics.attach(target);
+    target.select(target.workspace());
+    const std::size_t oldBodies = physics.bodyCount();
+    CHECK(oldBodies > 0);
+    CHECK(projectio::load(target, path.string(), error));
+    CHECK(error.empty());
+    CHECK(target.parts().size() == 1);
+    CHECK(target.selection() == nullptr);
+    // A troca avisa a fisica sobre as Parts antigas; o chamador reconstroi os
+    // corpos da cena nova (EditorUI faz isso via onSceneLoaded).
+    CHECK(physics.bodyCount() == 0);
+    physics.rebuildAll(target);
+    CHECK(physics.bodyCount() == target.parts().size());
+    CHECK(target.findPart(target.parts().front()->id()) != nullptr);
+
+    // Uma falha posterior nao pode desmontar a cena valida que acabou de
+    // entrar nem remover os corpos correspondentes.
+    CHECK(!projectio::fromJson(target, "{\"format\":\"loblox-project\"", error));
+    CHECK(!error.empty());
+    CHECK(target.parts().size() == 1);
+    CHECK(physics.bodyCount() == 1);
+    std::filesystem::remove(path, ignored);
+    EndSection();
+}
+
 void TestBaseplatePhysics() {
     Section("Baseplate na fisica e protecao");
     loblox::Scene scene;
@@ -1259,6 +1298,7 @@ int main() {
     TestLuaDeclarativeSceneRoundTrip();
     TestProjectRoundTrip();
     TestProjectValidation();
+    TestTransactionalLoad();
     TestBaseplatePhysics();
     TestClearObjects();
 

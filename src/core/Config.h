@@ -35,7 +35,11 @@ struct AppConfig {
     // 1 unidade de mundo ~ 10 cm; gravidade realista (-9.81 m/s^2) em unidades.
     float gravity = -98.1f;
 
+    // Caminho padrao de save/abertura. Tambem e o "ultimo projeto" usado
+    // automaticamente na inicializacao quando o arquivo existe.
     std::string defaultProjectPath = DefaultProjectPath();
+    // Definido apenas por `--project`; vazio significa usar o caminho padrao.
+    std::string startupProjectPath;
 };
 
 }  // namespace loblox

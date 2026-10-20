@@ -32,6 +32,7 @@ public:
 
     void setOnSceneLoaded(std::function<void()> callback);
     void setStatus(std::string message, bool error = false);
+    void setProjectPath(std::string path);
 
     ToolMode tool() const { return tool_; }
 

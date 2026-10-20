@@ -352,6 +352,11 @@ void EditorUI::setStatus(std::string message, bool error) {
     statusUntil_ = ImGui::GetTime() + 5.0;
 }
 
+void EditorUI::setProjectPath(std::string path) {
+    projectPath_ = std::move(path);
+    std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
+}
+
 void EditorUI::resizeViewport(int width, int height) {
     if (width < 8 || height < 8) {
         return;

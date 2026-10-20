@@ -459,9 +459,11 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         }
     }
 
-    // --- Validacao concluida: agora reconstroi a cena. ---
-    scene.clearObjects();
-    scene.workspace()->setName(
+    // --- Validacao concluida: constroi uma cena candidata isolada. ---
+    // A cena atual permanece intocada ate que todos os objetos tenham sido
+    // criados com sucesso. A troca final e O(1) e nao pode falhar.
+    Scene staged;
+    staged.workspace()->setName(
         [&parsed]() {
             for (const ParsedObject& object : parsed) {
                 if (object.instanceClass == InstanceClass::Workspace) {
@@ -470,7 +472,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
             }
             return std::string("Workspace");
         }());
-    scene.lighting()->setName([&parsed]() {
+    staged.lighting()->setName([&parsed]() {
         for (const ParsedObject& object : parsed) {
             if (object.instanceClass == InstanceClass::Lighting) {
                 return object.name;
@@ -478,32 +480,27 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         }
         return std::string("Lighting");
     }());
-    scene.lighting()->setSkyColor(lighting.skyColor);
-    scene.lighting()->setAmbientColor(lighting.ambientColor);
-    scene.lighting()->setSunDirection(lighting.sunDirection);
-    scene.lighting()->setSunIntensity(lighting.sunIntensity);
-    scene.lighting()->setBrightness(lighting.brightness);
+    staged.lighting()->setSkyColor(lighting.skyColor);
+    staged.lighting()->setAmbientColor(lighting.ambientColor);
+    staged.lighting()->setSunDirection(lighting.sunDirection);
+    staged.lighting()->setSunIntensity(lighting.sunIntensity);
+    staged.lighting()->setBrightness(lighting.brightness);
 
     for (const ParsedObject& object : parsed) {
         if (object.instanceClass == InstanceClass::Workspace ||
             object.instanceClass == InstanceClass::Lighting) {
             continue;
         }
-        if (scene.find(object.id) != nullptr) {
-            error = "id conflita com um servico da cena: " + std::to_string(object.id);
-            return false;
-        }
-
         Part* part = nullptr;
         if (object.instanceClass == InstanceClass::Baseplate) {
-            part = scene.createBaseplate(object.transform.position, object.transform.size,
-                                         object.name, object.id);
+            part = staged.createBaseplate(object.transform.position, object.transform.size,
+                                          object.name, object.id);
         } else if (object.instanceClass == InstanceClass::SpawnLocation) {
-            part = scene.createSpawnLocation(object.transform.position, object.transform.size,
-                                             object.name, object.id);
+            part = staged.createSpawnLocation(object.transform.position, object.transform.size,
+                                              object.name, object.id);
         } else {
-            part = scene.createPart(object.shape, object.transform.position,
-                                    object.transform.size, object.name, object.id);
+            part = staged.createPart(object.shape, object.transform.position,
+                                     object.transform.size, object.name, object.id);
         }
         if (part == nullptr) {
             error = "falha ao recriar objeto '" + object.name + "' (id " +
@@ -520,47 +517,32 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         part->clearDirty();
     }
 
-    if (requestedNextId != 0) scene.setNextId(requestedNextId);
-    scene.select(nullptr);
+    if (requestedNextId != 0) staged.setNextId(requestedNextId);
+    staged.select(nullptr);
+    scene.replaceContentsFrom(staged);
     return true;
 }
 
-bool save(const Scene& scene, const std::string& path, std::string& error) {
+bool writeFileAtomically(const std::string& path, const std::string& content,
+                         std::string& error) {
     error.clear();
     const std::filesystem::path target(path);
-    if (target.empty()) {
+    if (target.empty() || target.filename().empty()) {
         error = "caminho de salvamento vazio";
-        return false;
-    }
-
-    std::error_code directoryError;
-    const std::filesystem::path parent = target.parent_path();
-    if (!parent.empty()) {
-        std::filesystem::create_directories(parent, directoryError);
-        if (directoryError) {
-            error = "nao foi possivel criar '" + parent.string() + "': " +
-                    directoryError.message();
-            return false;
-        }
-    }
-
-    std::string text;
-    try {
-        text = toJson(scene);
-        // Validate the produced document before creating/replacing any file.
-        Scene validation;
-        if (!fromJson(validation, text, error)) {
-            error = "cena nao pode ser salva: " + error;
-            return false;
-        }
-    } catch (const std::exception& exception) {
-        error = "falha ao serializar a cena: " + std::string(exception.what());
         return false;
     }
 
     const std::filesystem::path parentDirectory = target.parent_path().empty()
                                                      ? std::filesystem::path(".")
                                                      : target.parent_path();
+    std::error_code directoryError;
+    std::filesystem::create_directories(parentDirectory, directoryError);
+    if (directoryError) {
+        error = "nao foi possivel criar '" + parentDirectory.string() + "': " +
+                directoryError.message();
+        return false;
+    }
+
     std::string temporaryTemplate =
         (parentDirectory / (target.filename().string() + ".tmp.XXXXXX")).string();
     std::vector<char> temporaryName(temporaryTemplate.begin(), temporaryTemplate.end());
@@ -579,8 +561,9 @@ bool save(const Scene& scene, const std::string& path, std::string& error) {
     }
 
     std::size_t written = 0;
-    while (written < text.size()) {
-        const ssize_t result = ::write(descriptor, text.data() + written, text.size() - written);
+    while (written < content.size()) {
+        const ssize_t result =
+            ::write(descriptor, content.data() + written, content.size() - written);
         if (result < 0 && errno == EINTR) continue;
         if (result <= 0) {
             const int savedErrno = errno;
@@ -618,7 +601,50 @@ bool save(const Scene& scene, const std::string& path, std::string& error) {
         error = "falha ao substituir '" + target.string() + "': " + std::strerror(savedErrno);
         return false;
     }
+
+    // fsync do diretorio garante que o rename tambem sobreviva a queda. Alguns
+    // filesystems nao implementam fsync de diretorio; nesse caso EINVAL e
+    // ENOTSUP nao indicam perda de dados.
+    const int directoryFd =
+        ::open(parentDirectory.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (directoryFd < 0) {
+        error = "arquivo gravado, mas nao foi possivel abrir o diretorio '" +
+                parentDirectory.string() + "': " + std::strerror(errno);
+        return false;
+    }
+    const int syncResult = ::fsync(directoryFd);
+    const int syncErrno = errno;
+    ::close(directoryFd);
+    if (syncResult != 0 && syncErrno != EINVAL && syncErrno != ENOTSUP) {
+        error = "arquivo gravado, mas falhou a sincronizacao do diretorio '" +
+                parentDirectory.string() + "': " + std::strerror(syncErrno);
+        return false;
+    }
     return true;
+}
+
+bool save(const Scene& scene, const std::string& path, std::string& error) {
+    error.clear();
+    if (path.empty()) {
+        error = "caminho de salvamento vazio";
+        return false;
+    }
+
+    std::string text;
+    try {
+        text = toJson(scene);
+        // Validate the produced document before creating/replacing any file.
+        Scene validation;
+        if (!fromJson(validation, text, error)) {
+            error = "cena nao pode ser salva: " + error;
+            return false;
+        }
+    } catch (const std::exception& exception) {
+        error = "falha ao serializar a cena: " + std::string(exception.what());
+        return false;
+    }
+
+    return writeFileAtomically(path, text, error);
 }
 
 bool load(Scene& scene, const std::string& path, std::string& error) {

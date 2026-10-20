@@ -14,7 +14,7 @@ class EditorUI;
 
 class Application {
 public:
-    Application();
+    explicit Application(AppConfig config = AppConfig{});
     ~Application();
 
     Application(const Application&) = delete;
