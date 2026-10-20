@@ -16,6 +16,7 @@
 #include "core/Diagnostics.h"
 #include "scene/Scene.h"
 #include "serialization/ProjectIO.h"
+#include "game/GameAssetsIO.h"
 
 namespace loblox::scenelua {
 namespace {
@@ -264,6 +265,9 @@ void Emit(const json& value, std::ostringstream& out, int depth) {
 }  // namespace
 
 std::string toLua(const Scene& scene) {
+    if (game::EncodeAssets(scene.gameAssets()) != game::EncodeAssets(game::GameAssets{})) {
+        throw std::runtime_error("Lua v1 nao suporta rigs/animacoes; salve o projeto JSON v2 para preservar os assets");
+    }
     json document = json::parse(projectio::toJson(scene));
     document["format"] = "loblox-scene";
     std::ostringstream out;

@@ -188,8 +188,8 @@ int Application::run() {
     while (!WindowShouldClose()) {
         const float deltaSeconds = GetFrameTime();
 
-        // A fisica roda continuamente (sem Play/Stop), com passo fixo interno.
-        physics_.simulate(scene_, deltaSeconds);
+        // Play owns a different Scene and Bullet world. Authoring freezes exactly.
+        if (!ui_ || !ui_->playing()) physics_.simulate(scene_, deltaSeconds);
 
         BeginDrawing();
         ClearBackground(Color{18, 18, 20, 255});

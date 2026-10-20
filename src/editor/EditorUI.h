@@ -9,6 +9,7 @@
 #include "editor/InputRouting.h"
 #include "editor/Tool.h"
 #include "editor/TransformSession.h"
+#include "game/Runtime.h"
 #include "raylib.h"
 
 namespace loblox {
@@ -36,6 +37,7 @@ public:
     void setProjectPath(std::string path);
 
     ToolMode tool() const { return tool_; }
+    bool playing() const { return runtime_.active(); }
 
 private:
     friend struct EditorUITestAccess;
@@ -57,6 +59,22 @@ private:
     void drawLightingProperties();
     void drawWorkspaceProperties();
     void drawDialogs();
+    void drawGameToolbar();
+    void drawRigEditor();
+    void drawAnimationEditor();
+    void drawGameSettings();
+    void drawPauseMenu();
+    void startPlay();
+    void stopPlay();
+    void setGameplayCapture(bool capture);
+    void drawGameplayViewport(bool hovered, bool focused, bool blocked, Vector2 imagePosition);
+    void insertR6();
+    void selectRig(const std::string& id, int body = -1);
+    void openAnimation(const std::string& id);
+    void saveAnimation();
+    void cancelRigGizmo(bool restore = true);
+    bool updateRigGizmo(const EditorInput& input, const InputRoute& route, Rectangle viewport,
+                        bool hovered, bool blocked);
 
     void insertPart(PartShape shape);
     void insertSpawnLocation();
@@ -81,6 +99,34 @@ private:
     bool viewportFocused_ = false;
     unsigned long long frame_ = 0;
     bool traceInput_ = false;
+    game::RuntimeSession runtime_;
+    bool gameplayCapture_ = false;
+    bool gameplaySkipDelta_ = true;
+    Vector2 gameplayRestoreCursor_{};
+    int pausePage_ = 0;
+    bool showRigEditor_ = false, showAnimationEditor_ = false, showGameSettings_ = false;
+    enum class RigContext { Edit, Pose, Animation };
+    RigContext rigContext_ = RigContext::Edit;
+    std::string selectedRig_;
+    int selectedRigBody_ = -1, selectedJoint_ = 0;
+    bool showJointPivots_ = true;
+    game::Pose previewPose_{};
+    game::AnimationClip animationDraft_;
+    std::string animationSource_;
+    bool animationDirty_ = false, previewPlaying_ = false;
+    float previewTime_ = 0;
+    int keyInterpolation_ = 1;
+    game::RigidTransform copiedKey_;
+    bool hasCopiedKey_ = false;
+    int timelineDragJoint_ = -1;
+    float timelineDragTime_ = 0;
+    game::Keyframe timelineDragInitial_;
+    Gizmo rigGizmo_;
+    Part jointProxy_{~InstanceId{0}-2, "Joint pivot", PartShape::Block};
+    game::RigidTransform rigDragInitial_;
+    RigContext rigDragContext_ = RigContext::Pose;
+    std::string rigDragId_;
+    int rigDragJoint_ = -1;
     bool gizmoLocalSpace_ = false;
     float moveSnap_ = 1.0f;
     float scaleSnap_ = 0.5f;

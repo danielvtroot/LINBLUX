@@ -57,6 +57,7 @@ void Scene::setNextId(InstanceId id) {
 }
 
 bool Scene::validate(std::string& error) const {
+    if (!gameAssets_.validate(error)) return false;
     error.clear();
     if (workspace_ == nullptr || lighting_ == nullptr) {
         error = "cena sem Workspace ou Lighting";
@@ -345,6 +346,7 @@ bool Scene::removeById(InstanceId id) {
 }
 
 void Scene::clearObjects() {
+    gameAssets_ = {};
     if (workspace_ != nullptr) {
         const std::vector<Instance*> children = workspace_->children();
         for (Instance* child : children) {
@@ -379,6 +381,7 @@ void Scene::replaceContentsFrom(Scene& source) {
     std::swap(workspace_, source.workspace_);
     std::swap(lighting_, source.lighting_);
     std::swap(nextId_, source.nextId_);
+    std::swap(gameAssets_, source.gameAssets_);
 }
 
 Instance* Scene::find(InstanceId id) const {

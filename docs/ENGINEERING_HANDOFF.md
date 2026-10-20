@@ -1,4 +1,41 @@
-# Continuidade da estabilização — 2026-10-20
+# Continuidade — R6 e primeiro runtime local — 2026-10-20
+
+## Missão atual (em execução)
+
+Base desta evolução: `d6f1e95` (Ctrl+D), branch preservado. Sem push.
+`src/game/Rig.*`: R6 original Y-up/frente -Z, seis corpos visuais,
+HumanoidRootPart interno, seis juntas com anchors/rest separados da pose;
+SLERP, tracks/keyframes, Walk original de 0,8 s e Idle editáveis.
+`src/game/Runtime.*`: cópia transacional da Scene, Bullet independente,
+uma cápsula dinâmica bloqueada em rotação, passos fixos 60 Hz/limite 6,
+spawn determinístico, WASD relativo à câmera, pulo, pause/reset/stop.
+`GamePanels.cpp`: Game/Rig Editor/Animation Editor/Game Settings, F5,
+Shift+F5, Esc, câmera Classic/Follow/First Person e sweep contra obstáculos.
+O runtime nunca guarda ponteiros da cena de autoria. Template R6 não cria
+seis corpos físicos; apenas o avatar runtime tem cápsula. Sem auto-step de
+escadas, ragdoll, multiplayer, scripts executáveis ou animações externas.
+
+JSON v1 continua para mapas sem dados de gameplay; v2 embute `game` com
+assets versionados, joints, clips e PlayerSettings, pela mesma escrita atômica.
+Lua declarativo v1 recusa exportar gameplay para não perder assets.
+Prévia trabalha numa cópia de animação; Save Animation ou Ctrl+S atualiza
+asset/projeto. Novos rigs não sobrescrevem a caminhada já personalizada.
+
+Checkpoint funcional: CTest Release 8/8 passou; novo headless 219 checks e nova GUI
+102 checks passaram (Xvfb/llvmpipe). GUI usa eventos X11 reais para criação,
+drag de junta, F5/WASD/Space/Esc/reset/zoom/Stop; nesse checkpoint a alteração
+do keyframe é preparada pela fixture, ainda não toda digitada pela GUI.
+Screenshots inspecionadas em `/tmp/loblox-game-ui-*`. O restart Xvfb
+intermitente falhou ao conectar ao display entre processos; `-noreset`
+eliminou a falha na repetição. Restart agora cobre 6 processos, incluindo
+salvar/fechar/reabrir R6, Walk modificada e configurações do Player.
+
+Comandos: `cmake -E env TMPDIR=$PWD/build/compiler-tmp cmake --build build -j2`;
+`ctest --test-dir build --output-on-failure -j2`.
+Próximo: concluir automação de edição pela GUI, executar Debug/sanitizers,
+Sway privado e registrar limites/performance. Sway físico ainda não validado.
+
+## Histórico de estabilização preservado
 
 Base confirmada: `8bd7f9f`, branch `fix/unified-3d-gizmos`. O commit que contém
 este documento é um checkpoint funcional (consultar `git log -1`). Sem push.

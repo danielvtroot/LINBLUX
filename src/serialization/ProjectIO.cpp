@@ -22,6 +22,7 @@
 #include "objects/Part.h"
 #include "objects/SpawnLocation.h"
 #include "scene/Scene.h"
+#include "game/GameAssetsIO.h"
 
 namespace loblox {
 namespace projectio {
@@ -278,7 +279,11 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
 std::string toJson(const Scene& scene) {
     json root;
     root["format"] = kFormatName;
-    root["version"] = kFormatVersion;
+    // A plain legacy scene stays v1; gameplay assets opt into the v2 schema.
+    const auto gameData = game::EncodeAssets(scene.gameAssets());
+    const bool hasGame = gameData != game::EncodeAssets(game::GameAssets{});
+    root["version"] = hasGame ? kFormatVersion : 1;
+    if (hasGame) root["game"] = gameData;
     root["nextId"] = scene.nextId();
 
     json objects = json::array();
@@ -465,6 +470,15 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
     // A cena atual permanece intocada ate que todos os objetos tenham sido
     // criados com sucesso. A troca final e O(1) e nao pode falhar.
     Scene staged;
+    if (version == 2) {
+        if (!root.contains("game") || !game::DecodeAssets(root["game"], staged.gameAssets(), error)) {
+            if (error.empty()) error = "version 2 requires game assets";
+            return false;
+        }
+    } else if (root.contains("game")) {
+        error = "game assets require project version 2";
+        return false;
+    }
     staged.workspace()->setName(
         [&parsed]() {
             for (const ParsedObject& object : parsed) {

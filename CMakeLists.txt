@@ -45,6 +45,9 @@ target_link_libraries(loblox_imgui PUBLIC ${RAYLIB_LIBRARIES} OpenGL::GL)
 
 # Camada sem interface: modelo de objetos, cena, fisica e persistencia.
 add_library(loblox_core STATIC
+  src/game/Rig.cpp
+  src/game/GameAssetsIO.cpp
+  src/game/Runtime.cpp
   src/core/Diagnostics.cpp
   src/objects/Instance.cpp
   src/objects/Part.cpp
@@ -78,6 +81,7 @@ add_executable(loblox
   src/app/Application.cpp
   src/rendering/SceneRenderer.cpp
   src/editor/EditorUI.cpp
+  src/editor/GamePanels.cpp
 )
 target_link_libraries(loblox PRIVATE loblox_core loblox_imgui ${RAYLIB_LIBRARIES} OpenGL::GL)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -85,6 +89,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 enable_testing()
+add_executable(loblox_game_tests tests/game_main.cpp)
+target_link_libraries(loblox_game_tests PRIVATE loblox_core)
+add_test(NAME loblox_game COMMAND loblox_game_tests)
 add_executable(loblox_tests tests/test_main.cpp)
 target_link_libraries(loblox_tests PRIVATE loblox_core)
 add_test(NAME loblox_tests COMMAND loblox_tests)
@@ -106,26 +113,33 @@ endif()
 find_program(XVFB_RUN_EXECUTABLE xvfb-run)
 if(XVFB_RUN_EXECUTABLE)
   add_test(NAME loblox_gizmo_visual
-    COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24"
+    COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset"
             $<TARGET_FILE:loblox_gizmo_visual_tests>)
   set_tests_properties(loblox_gizmo_visual PROPERTIES SKIP_RETURN_CODE 77)
   find_program(XDOTOOL_EXECUTABLE xdotool)
   find_package(X11 QUIET)
   if(XDOTOOL_EXECUTABLE AND X11_FOUND)
+    add_executable(loblox_game_ui_tests tests/game_ui_main.cpp
+      src/editor/EditorUI.cpp src/editor/GamePanels.cpp src/rendering/SceneRenderer.cpp)
+    target_link_libraries(loblox_game_ui_tests PRIVATE loblox_core loblox_imgui OpenGL::GL)
+    add_test(NAME loblox_game_ui
+      COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset"
+              $<TARGET_FILE:loblox_game_ui_tests>)
+    set_tests_properties(loblox_game_ui PROPERTIES TIMEOUT 240 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
     add_executable(loblox_editor_input_tests tests/editor_input_main.cpp
-      tests/x11_focus.cpp src/editor/EditorUI.cpp src/rendering/SceneRenderer.cpp)
+      tests/x11_focus.cpp src/editor/EditorUI.cpp src/editor/GamePanels.cpp src/rendering/SceneRenderer.cpp)
     target_link_libraries(loblox_editor_input_tests PRIVATE loblox_core loblox_imgui OpenGL::GL X11::X11)
     add_test(NAME loblox_editor_input
-      COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24"
+      COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset"
               $<TARGET_FILE:loblox_editor_input_tests>)
     set_tests_properties(loblox_editor_input PROPERTIES TIMEOUT 240
       ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1")
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
       add_test(NAME loblox_editor_restart
-        COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24"
+        COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset"
                 ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/editor_restart.py
-                $<TARGET_FILE:loblox>)
+                $<TARGET_FILE:loblox> $<TARGET_FILE:loblox_game_tests>)
       set_tests_properties(loblox_editor_restart PROPERTIES TIMEOUT 90)
     endif()
   endif()

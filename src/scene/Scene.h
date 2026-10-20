@@ -13,6 +13,7 @@
 #include "objects/Part.h"
 #include "objects/SpawnLocation.h"
 #include "objects/Workspace.h"
+#include "game/Rig.h"
 
 namespace loblox {
 
@@ -70,6 +71,8 @@ public:
 
     const std::vector<std::unique_ptr<Instance>>& objects() const { return objects_; }
     const std::vector<Part*>& parts() const { return parts_; }
+    game::GameAssets& gameAssets() { return gameAssets_; }
+    const game::GameAssets& gameAssets() const { return gameAssets_; }
 
     Instance* selection() const { return selection_; }
     void select(Instance* object);
@@ -101,6 +104,7 @@ private:
     Lighting* lighting_ = nullptr;
     Instance* selection_ = nullptr;
     InstanceId nextId_ = 1;
+    game::GameAssets gameAssets_;
 };
 
 }  // namespace loblox

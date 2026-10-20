@@ -364,6 +364,8 @@ EditorUI::EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera,
 }
 
 EditorUI::~EditorUI() {
+    stopPlay();
+    cancelRigGizmo();
     camera_.releaseCapture();
     endGizmoSession(false);
     unloadViewport();
@@ -377,6 +379,7 @@ void EditorUI::endGizmoSession(bool restoreTransform, const char* reason) {
 
 void EditorUI::setTool(ToolMode tool, const char* source) {
     if (tool_ == tool) return;
+    cancelRigGizmo();
     if (transform_.active()) {
         endGizmoSession(true, "tool_change");
     }
@@ -502,7 +505,13 @@ void EditorUI::handleShortcuts(const EditorInput& input, const InputRoute& route
 void EditorUI::saveCurrentProject() {
     endGizmoSession(false, "save");
     std::string error;
+    if (animationDirty_ && !animationSource_.empty()) {
+        auto* clip = scene_.gameAssets().findAnimation(animationSource_);
+        if (!clip || !animationDraft_.validate(error)) { setStatus("Animacao nao salva: " + error, true); return; }
+        *clip = animationDraft_;
+    }
     if (projectio::save(scene_, projectPath_, error)) {
+        animationDirty_ = false;
         setStatus("Projeto salvo em " + projectPath_);
     } else {
         setStatus("Falha ao salvar '" + projectPath_ + "': " + error, true);
@@ -511,12 +520,19 @@ void EditorUI::saveCurrentProject() {
 
 void EditorUI::draw() {
     diag::setFrame(++frame_);
+    if (!runtime_.active() && !selectedRig_.empty() && !scene_.gameAssets().findRig(selectedRig_)) {
+        cancelRigGizmo(false); selectedRig_.clear(); animationSource_.clear(); previewPlaying_ = false;
+    }
+    if (!runtime_.active() && scene_.selection()) {
+        cancelRigGizmo(); selectedRig_.clear();
+    }
     drawMainMenuBar();
     if (!layoutBuilt_) {
         buildDockLayout();
     }
     ImGui::DockSpaceOverViewport(ImGui::GetID("LobloxDockspace"), ImGui::GetMainViewport());
 
+    ImGui::BeginDisabled(runtime_.active());
     drawToolbar();
     if (showToolbox_) {
         drawToolbox();
@@ -527,8 +543,15 @@ void EditorUI::draw() {
     if (showProperties_) {
         drawProperties();
     }
+    if (!runtime_.active()) {
+        if (showRigEditor_) drawRigEditor();
+        if (showAnimationEditor_) drawAnimationEditor();
+        if (showGameSettings_) drawGameSettings();
+    }
+    ImGui::EndDisabled();
     drawDialogs();
     drawViewport(); // UI actions and popup requests are known before routing.
+    drawPauseMenu();
 }
 
 void EditorUI::drawMainMenuBar() {
@@ -537,6 +560,7 @@ void EditorUI::drawMainMenuBar() {
     ImGui::SameLine(0.0f, 4.0f);
     ImGui::TextUnformatted("Loblox");
     ImGui::SameLine(0.0f, 18.0f);
+    ImGui::BeginDisabled(runtime_.active());
     if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Save Project", "Ctrl+S")) {
             saveCurrentProject();
@@ -595,6 +619,8 @@ void EditorUI::drawMainMenuBar() {
         ImGui::MenuItem("Properties", nullptr, &showProperties_);
         ImGui::EndMenu();
     }
+    ImGui::EndDisabled();
+    drawGameToolbar();
     ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(projectPath_.c_str()).x - 16.0f);
     ImGui::TextDisabled("%s", projectPath_.c_str());
     ImGui::EndMainMenuBar();
@@ -807,6 +833,23 @@ void EditorUI::drawToolbar() {
         ImGui::EndTabItem();
     }
 
+    if (ImGui::BeginTabItem("Game")) {
+        ImGui::Spacing();
+        if (ImGui::Button("Insert R6", ImVec2(105, 35))) insertR6();
+        ImGui::SameLine();
+        if (ImGui::Button("Rig Editor", ImVec2(105, 35))) showRigEditor_ = true;
+        ImGui::SameLine();
+        if (ImGui::Button("Animation Editor", ImVec2(140, 35))) {
+            showAnimationEditor_ = true;
+            if (animationSource_.empty()) openAnimation(scene_.gameAssets().player.walkAnimation);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Game Settings", ImVec2(120, 35))) showGameSettings_ = true;
+        ImGui::SameLine();
+        if (ImGui::Button("Play (F5)", ImVec2(105, 35))) startPlay();
+        ImGui::EndTabItem();
+    }
+
     ImGui::EndTabBar();
 
     ImGui::End();
@@ -860,6 +903,8 @@ void EditorUI::drawViewport() {
     const bool visible = ImGui::Begin("Viewport", nullptr,
                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     if (!visible) {
+        if (runtime_.state() == game::RuntimeState::Playing) runtime_.pause();
+        setGameplayCapture(false);
         endGizmoSession(true, "viewport_hidden");
         camera_.releaseCapture();
         viewportFocused_ = false;
@@ -914,8 +959,15 @@ void EditorUI::drawViewport() {
     context.keyboardCaptured = io.WantCaptureKeyboard;
     context.transforming = transform_.active();
     context.navigating = camera_.cursorCaptured();
+    if (runtime_.active()) {
+        drawGameplayViewport(hovered, viewportFocused_, context.popup || context.widget,
+                             {imagePosition.x, imagePosition.y});
+        ImGui::End(); ImGui::PopStyleVar(); return;
+    }
+    context.transforming = context.transforming || rigGizmo_.dragging();
     const InputRoute route = RouteInput(input, context);
     if (route.owner == InputOwner::Cancel) {
+        cancelRigGizmo();
         endGizmoSession(true, route.reason);
         camera_.releaseCapture();
     }
@@ -953,6 +1005,8 @@ void EditorUI::drawViewport() {
     const Rectangle viewportRect{imagePosition.x, imagePosition.y,
                                  static_cast<float>(viewportWidth_),
                                  static_cast<float>(viewportHeight_)};
+    const bool rigConsumed = updateRigGizmo(input, route, viewportRect, hovered,
+        context.popup || context.widget || !context.windowFocused);
 
     GizmoInput gizmoInput;
     gizmoInput.mousePosition = input.mouse;
@@ -969,7 +1023,7 @@ void EditorUI::drawViewport() {
     const auto previousHover = gizmo_.hoveredHandle();
     const GizmoUpdateResult gizmoResult = transform_.update(
         tool_, selectedPart, camera_, viewportRect, hovered,
-        viewportOwns || sessionOwns, gizmoInput);
+        (viewportOwns || sessionOwns) && !rigConsumed, gizmoInput);
     if (gizmoResult.ended) {
         checkInvariants(gizmoResult.cancelled ? "transform_cancel" : "transform_commit");
     }
@@ -984,11 +1038,11 @@ void EditorUI::drawViewport() {
     }
     const bool cameraOwns = route.owner == InputOwner::Camera;
     camera_.handleInput(input, Vector2{viewportRect.width, viewportRect.height}, cameraOwns,
-        !transform_.active() && !gizmoResult.consumed &&
+        !transform_.active() && !gizmoResult.consumed && !rigConsumed &&
             (cameraOwns || (route.editorKeys && !sessionOwns)),
-        viewportOwns && !gizmoResult.consumed, GetFrameTime());
+        viewportOwns && !gizmoResult.consumed && !rigConsumed, GetFrameTime());
 
-    if (viewportOwns && !gizmoResult.consumed && input.leftPressed) {
+    if (viewportOwns && !gizmoResult.consumed && !rigConsumed && input.leftPressed) {
         const Vector2 mouse = input.mouse;
         if (mouse.x >= viewportRect.x && mouse.y >= viewportRect.y &&
             mouse.x <= viewportRect.x + viewportRect.width &&
@@ -998,9 +1052,29 @@ void EditorUI::drawViewport() {
                 Vector2{viewportRect.width, viewportRect.height});
             Part* hit = nullptr;
             Vector3 point{};
-            if (physics_.raycast(ray.position, ray.direction, 5000.0f, &hit, &point)) {
+            bool partHit = physics_.raycast(ray.position, ray.direction, 5000.0f, &hit, &point);
+            float nearest = partHit ? Vector3Distance(ray.position, point) : 5000.f;
+            std::string rigHit;
+            int bodyHit = -1;
+            for (const auto& rig : scene_.gameAssets().rigs) {
+                const auto world = rig.evaluate(rig.id == selectedRig_ ? previewPose_ : game::Pose{}, rig.root);
+                for (int b = 0; b < game::kBodyCount; ++b) {
+                    const auto inverse = game::Inverse(world[b]);
+                    Ray local{game::Compose(inverse, {ray.position}).position,
+                              Vector3RotateByQuaternion(ray.direction, inverse.rotation)};
+                    const auto half = Vector3Scale(rig.bodies[b].size, .5f);
+                    const auto collision = GetRayCollisionBox(local, {Vector3Negate(half), half});
+                    if (collision.hit && collision.distance < nearest) {
+                        nearest = collision.distance; rigHit = rig.id; bodyHit = b;
+                    }
+                }
+            }
+            if (!rigHit.empty()) selectRig(rigHit, bodyHit);
+            else if (partHit) {
+                cancelRigGizmo(); selectedRig_.clear();
                 scene_.select(hit);
             } else {
+                cancelRigGizmo(); selectedRig_.clear();
                 scene_.select(nullptr);
             }
         }
@@ -1015,8 +1089,15 @@ void EditorUI::drawViewport() {
         (gizmoResult.cancelled ? "drag_cancel" : "drag_commit") : "routed");
 
     BeginTextureMode(viewport_);
+    RigRenderState rigState;
+    if (auto* rig = scene_.gameAssets().findRig(selectedRig_)) {
+        rigState = {rig, previewPose_, rig->root, selectedRigBody_, showJointPivots_};
+    }
     renderer_.drawScene(scene_, camera_, viewportWidth_, viewportHeight_,
-                        selection != nullptr ? selection->id() : kInvalidInstanceId);
+                        selection != nullptr ? selection->id() : kInvalidInstanceId,
+                        rigState.rig ? &rigState : nullptr);
+    if (rigState.rig && showJointPivots_ && tool_ == ToolMode::Rotate)
+        rigGizmo_.drawOverlay(jointProxy_, ToolMode::Rotate, camera_, viewportRect);
     if (selectedPart != nullptr && tool_ != ToolMode::Select) {
         gizmo_.drawOverlay(*selectedPart, tool_, camera_, viewportRect);
     }
@@ -1162,6 +1243,20 @@ void EditorUI::drawExplorer() {
     }
     if (scene_.lighting() != nullptr) {
         drawExplorerNode(scene_.lighting(), explorerFilter_);
+    }
+    for (const auto& rig : scene_.gameAssets().rigs) {
+        ImGui::PushID(rig.id.c_str());
+        const bool open = ImGui::TreeNodeEx(rig.name.c_str(),
+            ImGuiTreeNodeFlags_DefaultOpen | (rig.id == selectedRig_ ? ImGuiTreeNodeFlags_Selected : 0));
+        if (ImGui::IsItemClicked()) selectRig(rig.id);
+        if (open) {
+            ImGui::TextDisabled("HumanoidRootPart (internal)");
+            for (int b = 0; b < game::kBodyCount; ++b)
+                if (ImGui::Selectable(rig.bodies[b].name.c_str(), rig.id == selectedRig_ && selectedRigBody_ == b)) selectRig(rig.id, b);
+            ImGui::TextDisabled("CharacterController / Animator");
+            ImGui::TreePop();
+        }
+        ImGui::PopID();
     }
     ImGui::Separator();
     if (scene_.selection() != nullptr) {
@@ -1349,6 +1444,14 @@ void EditorUI::drawProperties() {
     ImGui::Begin("Properties");
     Instance* selection = scene_.selection();
     if (selection == nullptr) {
+        if (auto* rig = scene_.gameAssets().findRig(selectedRig_)) {
+            ImGui::Text("%s (R6 rig)", rig->name.c_str());
+            ImGui::Text("Root: %.2f, %.2f, %.2f", rig->root.position.x, rig->root.position.y, rig->root.position.z);
+            if (selectedRigBody_ >= 0) ImGui::Text("Body: %s", rig->bodies[selectedRigBody_].name.c_str());
+            ImGui::Text("Joint: %s", rig->joints[selectedJoint_].name.c_str());
+            if (ImGui::Button("Open Rig Editor")) showRigEditor_ = true;
+            ImGui::End(); return;
+        }
         ImGui::TextDisabled("Nenhum objeto selecionado.");
         ImGui::Separator();
         ImGui::TextWrapped("Selecione um objeto na viewport ou no Explorer para editar Name, Position, Size, Color e fisica.");
@@ -1430,6 +1533,8 @@ void EditorUI::drawDialogs() {
             std::string error;
             endGizmoSession(true);
             if (projectio::load(scene_, pathBuffer_, error)) {
+                cancelRigGizmo(false); selectedRig_.clear(); animationSource_.clear();
+                previewPlaying_ = false; previewPose_ = {}; animationDirty_ = false;
                 std::error_code pathError;
                 const std::filesystem::path opened = std::filesystem::absolute(pathBuffer_, pathError);
                 projectPath_ = pathError ? std::string(pathBuffer_) : opened.string();
@@ -1487,6 +1592,8 @@ void EditorUI::drawDialogs() {
             std::string error;
             endGizmoSession(true);
             if (scenelua::load(scene_, pathBuffer_, error)) {
+                cancelRigGizmo(false); selectedRig_.clear(); animationSource_.clear();
+                previewPlaying_ = false; previewPose_ = {}; animationDirty_ = false;
                 camera_.releaseCapture();
                 if (onSceneLoaded_) onSceneLoaded_();
                 checkInvariants("lua_import");

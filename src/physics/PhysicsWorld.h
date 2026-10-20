@@ -20,6 +20,7 @@ class btSequentialImpulseConstraintSolver;
 class btDefaultCollisionConfiguration;
 
 namespace loblox {
+namespace game { class RuntimeSession; }
 
 class Scene;
 
@@ -74,6 +75,7 @@ public:
                  Vector3* hitPoint = nullptr, Vector3* hitNormal = nullptr) const;
 
 private:
+    friend class game::RuntimeSession; // single explicitly-owned runtime capsule
     struct BodyEntry {
         btRigidBody* body = nullptr;
         btCollisionShape* shape = nullptr;

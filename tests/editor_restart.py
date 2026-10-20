@@ -164,6 +164,17 @@ def main():
     assert sum(e["event"] == "startup_project_loaded" for e in events()) == 2
     assert sum(e["event"] == "save_end" and e.get("result") == "ok" for e in events()) == 4
     print(f"Actual app: 4 launches, fresh startup/save/exit/restart, IDs/transforms/properties/deletion OK; artifacts: {root}")
+    if len(sys.argv) > 2:
+        game_project = root / "animated-r6.json"
+        subprocess.run([str(Path(sys.argv[2]).resolve()), "--write-fixture", str(game_project)],
+                       env=environment, check=True, timeout=15)
+        game = json.loads(game_project.read_text())
+        assert game["version"] == 2 and len(game["game"]["rigs"][0]["bodies"]) == 6
+        game = run(game_project, game_project, game)
+        game = run(game_project, game_project, game)
+        assert game["game"]["player"]["walkSpeed"] == 18
+        assert any(k["time"] == .25 for k in game["game"]["animations"][0]["tracks"][3])
+        print("Actual app: 2 additional launches; custom R6, edited Walk keyframes and player settings preserved")
 
 
 if __name__ == "__main__":

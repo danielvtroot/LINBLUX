@@ -387,7 +387,39 @@ void SceneRenderer::drawSelection(const Part& part) const {
 }
 
 void SceneRenderer::drawScene(const Scene& scene, const EditorCamera& camera, int width,
-                              int height, InstanceId selectedId) {
+                              int height, InstanceId selectedId, const RigRenderState* rig) {
+    drawScene(scene, camera.camera(), width, height, selectedId, rig);
+}
+
+void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float intensity, float brightness) {
+    if (!state.rig) return;
+    const auto& rig = *state.rig;
+    const auto world = rig.evaluate(state.pose, state.root);
+    for (int i = 0; i < game::kBodyCount; ++i) {
+        const auto& body = rig.bodies[i];
+        DrawShadedBox(world[i].position, body.size, world[i].rotation, body.color, light,
+                      body.material == PartMaterial::Neon ? 0.f : intensity,
+                      body.material == PartMaterial::Neon ? 1.4f : brightness);
+        if (i == state.selectedBody) DrawRotatedBoxWires(world[i].position,
+            Vector3Scale(body.size, 1.02f), world[i].rotation, GOLD);
+    }
+    // Original minimal face marks the -Z front without external textures.
+    for (float side : {-1.f, 1.f}) {
+        const auto eye = game::Compose(world[game::Head], {{side*.35f, .08f, -rig.bodies[game::Head].size.z*.5f-.015f}});
+        DrawShadedBox(eye.position, {.13f, .15f, .035f}, eye.rotation, DARKGRAY, light, 0, 1);
+    }
+    if (state.pivots) {
+        for (const auto& joint : rig.joints) {
+            const auto pivot = game::Compose(joint.parent < 0 ? state.root : world[joint.parent], joint.parentAnchor);
+            DrawSphere(pivot.position, .10f, ORANGE);
+            DrawLine3D(pivot.position, world[joint.child].position, YELLOW);
+        }
+    }
+}
+
+void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
+                              int height, InstanceId selectedId, const RigRenderState* rig,
+                              bool authoredRigs) {
     const Lighting* lighting = scene.lighting();
     const Color sky = lighting != nullptr ? lighting->skyColor() : Color{120, 180, 240, 255};
     const float sunIntensity = lighting != nullptr ? lighting->sunIntensity() : 1.0f;
@@ -399,7 +431,7 @@ void SceneRenderer::drawScene(const Scene& scene, const EditorCamera& camera, in
     ClearBackground(sky);
     DrawRectangleGradientV(0, 0, width, height, sky, Shade(sky, 1.22f));
 
-    BeginMode3D(camera.camera());
+    BeginMode3D(camera);
     rlEnableDepthTest();
     rlDisableBackfaceCulling();
     for (Part* part : scene.parts()) {
@@ -421,9 +453,10 @@ void SceneRenderer::drawScene(const Scene& scene, const EditorCamera& camera, in
             const Color marker = Color{235, 248, 255, 255};
             localBox(Vector3{0.0f, top + 0.08f, 0.0f},
                      Vector3{part->size().x * 0.55f, 0.12f, part->size().z * 0.55f}, marker);
-            localBox(Vector3{0.0f, top + 2.2f, 0.0f}, Vector3{0.35f, 4.2f, 0.35f}, marker);
-            localBox(Vector3{0.95f, top + 3.6f, 0.0f}, Vector3{1.8f, 1.1f, 0.12f},
-                     Color{0, 120, 255, 255});
+            if (authoredRigs) { // editor marker, not a pole intersecting the spawned avatar
+                localBox(Vector3{0.0f, top + 2.2f, 0.0f}, Vector3{0.35f, 4.2f, 0.35f}, marker);
+                localBox(Vector3{0.95f, top + 3.6f, 0.0f}, Vector3{1.8f, 1.1f, 0.12f}, Color{0, 120, 255, 255});
+            }
         } else if (part->shape() == PartShape::Sphere) {
             DrawShadedSphere(part->position(), part->sphereRadius(), MaterialColor(*part),
                              lightDirection, sunIntensity, brightness);
@@ -436,6 +469,11 @@ void SceneRenderer::drawScene(const Scene& scene, const EditorCamera& camera, in
             drawSelection(*part);
         }
     }
+    if (authoredRigs) for (const auto& asset : scene.gameAssets().rigs) {
+        if (rig && rig->rig && rig->rig->id == asset.id) continue;
+        drawRig({&asset, {}, asset.root}, lightDirection, sunIntensity, brightness);
+    }
+    if (rig) drawRig(*rig, lightDirection, sunIntensity, brightness);
     EndMode3D();
 }
 

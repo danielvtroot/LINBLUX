@@ -1,0 +1,275 @@
+#include <cmath>
+#include <cstdio>
+#include <limits>
+#include <cstdlib>
+#include "core/Diagnostics.h"
+
+#include "game/Rig.h"
+#include "game/GameAssetsIO.h"
+#include "game/Runtime.h"
+#include "scene/Scene.h"
+#include "serialization/ProjectIO.h"
+
+namespace {
+int checks = 0, failures = 0;
+void Check(bool value, const char* expression, int line) {
+    ++checks;
+    if (!value) { ++failures; std::printf("FAIL %d: %s\n", line, expression); }
+}
+#define CHECK(x) Check((x), #x, __LINE__)
+using namespace loblox;
+using namespace loblox::game;
+void RigTests() {
+    std::string error;
+    Rig rig = MakeR6();
+    CHECK(rig.validate(error));
+    CHECK(rig.bodies.size() == 6);
+    CHECK(rig.joints.size() == 6);
+    Pose pose{};
+    auto neutral = rig.evaluate(pose, rig.root);
+    CHECK(NearlyEqual(neutral[Torso].position, rig.root.position));
+    CHECK(NearlyEqual(neutral[Head].position, Vector3{8, 4.5f, 0}));
+    CHECK(NearlyEqual(neutral[LeftLeg].position, Vector3{7.5f, 1, 0}));
+    pose[LeftShoulder].rotation = QuaternionFromEuler(PI/2, 0, 0);
+    auto raised = rig.evaluate(pose, rig.root);
+    CHECK(NearlyEqual(raised[Torso].position, neutral[Torso].position));
+    CHECK(NearlyEqual(raised[RightArm].position, neutral[RightArm].position));
+    CHECK(raised[LeftArm].position.z < neutral[LeftArm].position.z - .9f);
+    auto pivot = rig.pivot(LeftShoulder, pose);
+    auto anchor = Compose(raised[LeftArm], rig.joints[LeftShoulder].childAnchor);
+    CHECK(NearlyEqual(pivot.position, anchor.position));
+    pose[LeftHip].rotation = QuaternionFromEuler(-PI/4, 0, 0);
+    CHECK(rig.evaluate(pose, rig.root)[LeftLeg].position.z > .6f);
+    auto movedRoot = rig.root;
+    movedRoot.position = Vector3Add(movedRoot.position, {4, 5, 6});
+    movedRoot.rotation = QuaternionFromEuler(0, PI/2, 0);
+    auto moved = rig.evaluate(pose, movedRoot);
+    for (const auto& body : moved) CHECK(Valid(body));
+    rig.resizeBody(Torso, {3, 4, 2});
+    rig.resizeBody(LeftArm, {2, 3, 1});
+    auto resized = rig.evaluate(pose, rig.root);
+    CHECK(NearlyEqual(rig.pivot(LeftShoulder, pose).position,
+                      Compose(resized[LeftArm], rig.joints[LeftShoulder].childAnchor).position));
+    CHECK(rig.validate(error));
+    pose = {};
+    CHECK(NearlyEqual(rig.evaluate(pose, rig.root)[Torso].position, rig.root.position));
+    rig.joints[0].parent = Torso;
+    CHECK(!rig.validate(error));
+    rig = MakeR6(); rig.joints[2].child = Torso;
+    CHECK(!rig.validate(error));
+    rig = MakeR6(); rig.joints[1].parentAnchor.rotation.w = 0;
+    CHECK(!rig.validate(error));
+}
+void AnimationTests() {
+    auto walk = MakeWalk();
+    std::string error;
+    CHECK(walk.validate(error));
+    CHECK(walk.tracks[LeftHip].size() == 5);
+    for (int quarter = 0; quarter <= 4; ++quarter) {
+        auto pose = walk.sample(walk.duration * quarter / 4);
+        for (const auto& joint : pose) CHECK(Valid(joint));
+        const auto leg = EulerDegreesFromQuat(pose[LeftHip].rotation).x;
+        const auto arm = EulerDegreesFromQuat(pose[RightShoulder].rotation).x;
+        CHECK(std::fabs(arm - leg * .8f) < .001f);
+        CHECK(std::fabs(leg + EulerDegreesFromQuat(pose[RightHip].rotation).x) < .001f);
+    }
+    CHECK(NearlyEqual(walk.sample(0)[LeftHip].rotation, walk.sample(walk.duration)[LeftHip].rotation));
+    CHECK(NearlyEqual(walk.sample(.0001f)[LeftHip].rotation,
+                      walk.sample(walk.duration - .0001f)[LeftHip].rotation, .0001f));
+    AnimationClip clip = MakeIdle(); clip.loop = false; clip.duration = 1;
+    clip.setKey(Neck, {0, {{}, QuatFromEulerDegrees({0, 170, 0})}, Interpolation::Linear});
+    clip.setKey(Neck, {1, {{}, QuatFromEulerDegrees({0, -170, 0})}});
+    auto half = clip.sample(.5f)[Neck].rotation;
+    CHECK(std::fabs(half.y) > .999f); // short arc through 180, not through zero
+    CHECK(clip.validate(error));
+    clip.setKey(Neck, {.5f, {{0, .2f, 0}}});
+    CHECK(clip.tracks[Neck].size() == 3);
+    CHECK(NearlyEqual(clip.sample(.5f)[Neck].position.y, .2f));
+    CHECK(clip.eraseKey(Neck, .5f));
+    CHECK(!clip.eraseKey(Neck, .5f));
+    clip.tracks[Neck][0].interpolation = Interpolation::Constant;
+    CHECK(NearlyEqual(clip.sample(.5f)[Neck].rotation, clip.tracks[Neck][0].pose.rotation));
+    // Sparse looping tracks interpolate across the boundary.
+    clip.loop = true; clip.tracks[Neck].clear();
+    clip.setKey(Neck, {.25f, {{0, 0, 0}}, Interpolation::Linear});
+    clip.setKey(Neck, {.75f, {{0, 2, 0}}, Interpolation::Linear});
+    CHECK(NearlyEqual(clip.sample(0)[Neck].position.y, 1));
+    CHECK(NearlyEqual(clip.sample(-1)[Neck].position.y, 1));
+    Animator animator; animator.play(walk); animator.advance(.2f);
+    CHECK(NearlyEqual(animator.time(), .2f));
+    animator.pause(true); animator.advance(.2f);
+    CHECK(NearlyEqual(animator.time(), .2f));
+    animator.seek(.4f);
+    CHECK(NearlyEqual(animator.pose()[LeftHip].rotation, walk.sample(.4f)[LeftHip].rotation));
+    animator.stop(); CHECK(!animator.playing());
+    CHECK(NearlyEqual(animator.pose()[Neck].rotation, QuaternionIdentity()));
+    walk.tracks[0][1].time = 0;
+    CHECK(!walk.validate(error));
+    GameAssets assets; auto id = assets.createR6().id;
+    CHECK(assets.animations.size() == 2);
+    assets.animations[0].name = "My edited walk";
+    assets.createR6();
+    CHECK(assets.animations[0].name == "My edited walk");
+    CHECK(assets.defaultRig == id);
+    CHECK(assets.validate(error));
+    assets.player.gravity = std::numeric_limits<float>::quiet_NaN();
+    CHECK(!assets.validate(error));
+}
+void PersistenceTests() {
+    Scene scene; scene.buildDefaultScene();
+    auto& rig = scene.gameAssets().createR6();
+    rig.bodies[LeftArm].color = RED;
+    rig.resizeBody(LeftLeg, {1.2f, 2.3f, 1});
+    rig.joints[LeftShoulder].parentAnchor.position.x -= .2f;
+    auto* walk = scene.gameAssets().findAnimation("r6-walk");
+    walk->setKey(RightShoulder, {.25f, {{}, QuatFromEulerDegrees({42, 5, 0})}});
+    scene.gameAssets().player.walkSpeed = 18;
+    std::string error;
+    CHECK(scene.validate(error));
+    const auto saved = projectio::toJson(scene);
+    CHECK(nlohmann::json::parse(saved)["version"] == 2);
+    Scene loaded;
+    CHECK(projectio::fromJson(loaded, saved, error));
+    CHECK(projectio::toJson(loaded) == saved);
+    CHECK(loaded.gameAssets().rigs[0].bodies[LeftArm].color.r == RED.r);
+    CHECK(NearlyEqual(loaded.gameAssets().player.walkSpeed, 18));
+    auto invalid = nlohmann::json::parse(saved);
+    invalid["game"]["rigs"][0]["joints"][0]["parent"] = 0;
+    CHECK(!projectio::fromJson(loaded, invalid.dump(), error));
+    CHECK(projectio::toJson(loaded) == saved);
+    invalid = nlohmann::json::parse(saved);
+    invalid["game"]["animations"][0]["tracks"][0][1]["time"] = 0;
+    CHECK(!projectio::fromJson(loaded, invalid.dump(), error));
+    CHECK(projectio::toJson(loaded) == saved);
+    invalid = nlohmann::json::parse(saved);
+    invalid["game"]["player"]["walkAnimation"] = "missing";
+    CHECK(!projectio::fromJson(loaded, invalid.dump(), error));
+    CHECK(projectio::toJson(loaded) == saved);
+    invalid = nlohmann::json::parse(saved);
+    invalid["game"]["animations"][0]["fps"] = 30.5;
+    CHECK(!projectio::fromJson(loaded, invalid.dump(), error));
+    CHECK(projectio::toJson(loaded) == saved);
+    invalid["game"]["animations"][0]["fps"] = 4294967326ULL;
+    CHECK(!projectio::fromJson(loaded, invalid.dump(), error));
+    CHECK(projectio::toJson(loaded) == saved);
+    Scene legacy; legacy.buildDefaultScene();
+    CHECK(projectio::fromJson(loaded, projectio::toJson(legacy), error));
+    CHECK(loaded.gameAssets().rigs.empty());
+    CHECK(loaded.gameAssets().player.validate(error));
+}
+void Advance(RuntimeSession& runtime, float seconds, PlayerInput input = {}, float step = 1.f/60) {
+    for (int i = 0; i < static_cast<int>(seconds/step+.5f); ++i) {
+        runtime.update(step, input); input.jump = false;
+    }
+}
+void RuntimeTests() {
+    Scene author; author.buildDefaultScene();
+    author.gameAssets().createR6();
+    auto* wall = author.createPart(PartShape::Block, {0, 5, -15}, {30, 10, 1}, "Wall");
+    wall->setAnchored(true);
+    const std::string original = projectio::toJson(author);
+    RuntimeSession runtime; std::string error;
+    CHECK(runtime.start(author, error));
+    CHECK(runtime.validate(error));
+    CHECK(runtime.bodyCount() == author.parts().size()+1);
+    Advance(runtime, 1);
+    CHECK(runtime.grounded());
+    CHECK(runtime.position().y > 3.7f && runtime.position().y < 4.1f); // spawn top 1 + half capsule
+    CHECK(runtime.humanoidState() == HumanoidState::Idle);
+    const auto spawn = runtime.position();
+    PlayerInput forward; forward.movement = {0, 1};
+    Advance(runtime, .4f, forward);
+    CHECK(runtime.position().z < spawn.z - 3);
+    CHECK(runtime.humanoidState() == HumanoidState::Walking);
+    CHECK(std::fabs(runtime.pose()[LeftHip].rotation.x) > .01f);
+    Advance(runtime, 2, forward);
+    CHECK(runtime.position().z > -13.7f); // wall face -14.5 + capsule radius
+    Advance(runtime, .5f);
+    CHECK(runtime.humanoidState() == HumanoidState::Idle);
+    CHECK(std::hypot(runtime.velocity().x, runtime.velocity().z) < .01f);
+    CHECK(runtime.respawn(error));
+    Advance(runtime, .5f);
+    const float groundedY = runtime.position().y;
+    PlayerInput jump; jump.jump = true;
+    runtime.update(1.f/60, jump);
+    CHECK(runtime.velocity().y > 10);
+    CHECK(runtime.humanoidState() == HumanoidState::Jumping);
+    const float firstJump = runtime.velocity().y;
+    runtime.update(1.f/60, jump); // a repeated press in midair cannot jump again
+    CHECK(runtime.velocity().y < firstJump);
+    Advance(runtime, .2f);
+    CHECK(runtime.position().y > groundedY+3);
+    Advance(runtime, 1.5f);
+    CHECK(runtime.grounded());
+    CHECK(std::fabs(runtime.position().y-groundedY) < .1f);
+    runtime.pause(); const auto paused = runtime.position(); const auto pose = runtime.pose();
+    Advance(runtime, 1, forward);
+    CHECK(NearlyEqual(runtime.position(), paused));
+    CHECK(NearlyEqual(runtime.pose()[LeftHip].rotation, pose[LeftHip].rotation));
+    runtime.resume(); Advance(runtime, .3f, forward);
+    CHECK(runtime.position().z < paused.z - 1);
+    for (int i = 0; i < 20; ++i) { CHECK(runtime.respawn(error)); CHECK(runtime.validate(error)); }
+    CHECK(runtime.bodyCount() == author.parts().size()+1);
+    CHECK(projectio::toJson(author) == original);
+    runtime.stop(); CHECK(runtime.bodyCount() == 0); CHECK(runtime.validate(error));
+    for (int i = 0; i < 10; ++i) {
+        CHECK(runtime.start(author, error)); Advance(runtime, .1f); runtime.stop();
+        CHECK(runtime.validate(error)); CHECK(projectio::toJson(author) == original);
+    }
+    // Frame-rate independence, normalized diagonals and camera-relative movement.
+    Scene flat; flat.createBaseplate({0, -.5f, 0}, {200, 1, 200});
+    flat.gameAssets().createR6();
+    CHECK(runtime.start(flat, error)); Advance(runtime, .5f);
+    auto begin = runtime.position(); Advance(runtime, 1, forward);
+    const float distance = Vector3Distance(begin, runtime.position()); runtime.stop();
+    CHECK(runtime.start(flat, error)); Advance(runtime, .5f);
+    begin = runtime.position(); PlayerInput diagonal; diagonal.movement = {1, 1};
+    Advance(runtime, 1, diagonal);
+    CHECK(std::fabs(Vector3Distance(begin, runtime.position())-distance) < .1f);
+    runtime.stop(); CHECK(runtime.start(flat, error)); Advance(runtime, .5f);
+    begin = runtime.position(); Advance(runtime, 1, forward, 1.f/15);
+    CHECK(std::fabs(Vector3Distance(begin, runtime.position())-distance) < .1f);
+    runtime.stop(); CHECK(runtime.start(flat, error)); Advance(runtime, .5f);
+    PlayerInput look; look.look = {-PI/.003f/2, 100000};
+    runtime.update(0, look);
+    CHECK(runtime.playerCamera().pitch() <= 1.35f);
+    auto direction = runtime.playerCamera().moveDirection({0, 1});
+    CHECK(direction.x < -.99f && std::fabs(direction.z) < .01f);
+    runtime.settings().cameraMode = game::CameraMode::FirstPerson; runtime.update(.016f, {});
+    CHECK(runtime.playerCamera().firstPerson());
+    runtime.settings().cameraMode = game::CameraMode::Classic;
+    PlayerInput zoom; zoom.zoom = 100; runtime.update(.016f, zoom);
+    CHECK(runtime.playerCamera().firstPerson());
+    zoom.zoom = -100; runtime.update(.016f, zoom);
+    CHECK(!runtime.playerCamera().firstPerson());
+    CHECK(runtime.playerCamera().distance() <= runtime.settings().maxZoom);
+    runtime.stop();
+    // CanCollide=false does not block the capsule or the camera sweep.
+    auto* ghost = flat.createPart(PartShape::Block, {0, 4, -8}, {30, 8, 1}, "Ghost wall");
+    ghost->setAnchored(true); ghost->setCanCollide(false);
+    CHECK(runtime.start(flat, error)); Advance(runtime, .5f); Advance(runtime, 1, forward);
+    CHECK(runtime.position().z < -10);
+    CHECK(NearlyEqual(runtime.cameraClearance({0, 4, 0}, {0, 4, -10}, .25f), 1));
+    runtime.stop(); ghost->setCanCollide(true);
+    CHECK(runtime.start(flat, error));
+    CHECK(runtime.cameraClearance({0, 4, 0}, {0, 4, -10}, .25f) < .8f);
+    runtime.stop();
+}
+}
+int main(int argc, char** argv) {
+    char temporary[] = "/tmp/loblox-game-headless-XXXXXX";
+    if (const char* path = mkdtemp(temporary)) loblox::diag::configure(std::string(path)+"/game.jsonl");
+    if (argc == 3 && std::string(argv[1]) == "--write-fixture") {
+        Scene scene; scene.buildDefaultScene();
+        auto& rig = scene.gameAssets().createR6();
+        rig.bodies[LeftArm].color = {210,50,140,255}; rig.resizeBody(LeftLeg, {1.2f,2.3f,1});
+        scene.gameAssets().findAnimation("r6-walk")->setKey(RightShoulder, {.25f, {{}, QuatFromEulerDegrees({55,5,0})}});
+        scene.gameAssets().player.walkSpeed = 18;
+        std::string error;
+        if (!projectio::save(scene, argv[2], error)) { std::fprintf(stderr,"%s\n",error.c_str()); return 1; }
+        return 0;
+    }
+    RigTests(); AnimationTests(); PersistenceTests(); RuntimeTests();
+    std::printf("Game: %d checks, %d failures\n", checks, failures);
+    return failures ? 1 : 0;
+}
