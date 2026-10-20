@@ -102,6 +102,7 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                                 const GizmoInput& input) {
     GizmoUpdateResult result;
     consumedLastInput_ = false;
+    if (!dragging_) hoveredHandle_ = gizmomath::HandleId::None;
     const auto finish = [this](GizmoUpdateResult value) {
         consumedLastInput_ = value.consumed;
         return value;

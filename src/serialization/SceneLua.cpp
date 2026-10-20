@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <cerrno>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -12,6 +13,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "core/Diagnostics.h"
 #include "scene/Scene.h"
 #include "serialization/ProjectIO.h"
 
@@ -283,25 +285,87 @@ bool fromLua(Scene& scene, const std::string& text, std::string& error) {
 }
 
 bool save(const Scene& scene, const std::string& path, std::string& error) {
+    const auto started = std::chrono::steady_clock::now();
+    const std::string correlation = diag::newCorrelationId();
+    diag::Event begin;
+    begin.subsystem = "persistence";
+    begin.name = "lua_export_begin";
+    begin.correlationId = correlation;
+    begin.file = path;
+    begin.context = {{"format", "lua"}};
+    diag::log(begin);
+    const auto finish = [&](bool ok) {
+        diag::Event end;
+        end.level = ok ? diag::Level::Info : diag::Level::Error;
+        end.subsystem = "persistence";
+        end.name = "lua_export_end";
+        end.correlationId = correlation;
+        end.file = path;
+        end.durationMs = std::chrono::duration<double, std::milli>(
+                             std::chrono::steady_clock::now() - started).count();
+        end.result = ok ? "ok" : "error";
+        end.error = ok ? std::string() : error;
+        end.context = {{"format", "lua"}, {"parts", scene.parts().size()}};
+        diag::log(end);
+        return ok;
+    };
+
     error.clear();
     if (path.empty()) {
         error = "caminho de exportacao vazio";
-        return false;
+        return finish(false);
     }
-    return projectio::writeFileAtomically(path, toLua(scene), error);
+    std::string text;
+    try {
+        text = toLua(scene);
+    } catch (const std::exception& exception) {
+        error = "falha ao serializar cena Lua: " + std::string(exception.what());
+        return finish(false);
+    }
+    return finish(projectio::writeFileAtomically(path, text, error));
 }
 
 bool load(Scene& scene, const std::string& path, std::string& error) {
+    const auto started = std::chrono::steady_clock::now();
+    const std::string correlation = diag::newCorrelationId();
+    diag::Event begin;
+    begin.subsystem = "persistence";
+    begin.name = "lua_import_begin";
+    begin.correlationId = correlation;
+    begin.file = path;
+    begin.context = {{"format", "lua"}};
+    diag::log(begin);
+    const auto finish = [&](bool ok) {
+        diag::Event end;
+        end.level = ok ? diag::Level::Info : diag::Level::Error;
+        end.subsystem = "persistence";
+        end.name = "lua_import_end";
+        end.correlationId = correlation;
+        end.file = path;
+        end.durationMs = std::chrono::duration<double, std::milli>(
+                             std::chrono::steady_clock::now() - started).count();
+        end.result = ok ? "ok" : "error";
+        end.error = ok ? std::string() : error;
+        end.context = {{"format", "lua"}, {"parts", scene.parts().size()}};
+        diag::log(end);
+        return ok;
+    };
+
+    error.clear();
     std::error_code sizeError;
     const std::uintmax_t size = std::filesystem::file_size(path, sizeError);
     if (!sizeError && size > kMaxSceneBytes) {
-        error = "arquivo Lua declarativo excede 16 MiB"; return false;
+        error = "arquivo Lua declarativo excede 16 MiB";
+        return finish(false);
     }
     std::ifstream in(path, std::ios::binary);
-    if (!in) { error = "nao foi possivel abrir `" + path + "`"; return false; }
+    if (!in) {
+        error = "nao foi possivel abrir `" + path + "`";
+        return finish(false);
+    }
     std::ostringstream data;
     data << in.rdbuf();
-    return fromLua(scene, data.str(), error);
+    return finish(fromLua(scene, data.str(), error));
 }
 
 }  // namespace loblox::scenelua
