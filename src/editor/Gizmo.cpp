@@ -117,7 +117,7 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
         return result;
     };
 
-    if (dragging_ && !input.windowFocused) {
+    if (dragging_ && (!input.windowFocused || mode != dragTool_)) {
         return finish(endSession(part, true, true));
     }
     if (mode == ToolMode::Select || viewport.width < 8 || viewport.height < 8) {
@@ -144,8 +144,11 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
         if (handle_ == Handle::Axis || handle_ == Handle::ScaleFace) {
             const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
             float parameter = 0.0f;
-            if (!AxisParameter(ray, center, axis, viewForward, parameter)) return finish(result);
-            const float delta = parameter - startParam_;
+            if (dragProjection_ == DragProjection::World &&
+                !AxisParameter(ray, center, axis, viewForward, parameter)) return finish(result);
+            const float delta = dragProjection_ == DragProjection::Screen ?
+                Vector2DotProduct(Vector2Subtract(localMouse, startMouse_), screenDirection_) * screenUnits_ :
+                parameter - startParam_;
             if (handle_ == Handle::Axis) {
                 part->setPosition(gizmomath::MoveAxis(
                     {startTransform_.position, startTransform_.rotation, startTransform_.size},
@@ -178,16 +181,22 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
             return finish(result);
         }
         if (handle_ == Handle::RotateRing) {
-            Vector3 hit;
-            if (!RayPlane(ray, center, axis, hit)) return finish(result);
-            const Vector3 offset = Vector3Subtract(hit, center);
-            if (Vector3LengthSqr(offset) < 1e-5f) return finish(result);
-            const float delta = gizmomath::WrappedAngleDelta(
-                startAngle_, AngleOnPlane(offset, axis));
+            if (dragProjection_ == DragProjection::Screen) {
+                accumulatedAngle_ = Vector2DotProduct(Vector2Subtract(localMouse, startMouse_),
+                                                       screenDirection_) * screenUnits_;
+            } else {
+                Vector3 hit;
+                if (!RayPlane(ray, center, axis, hit)) return finish(result);
+                const Vector3 offset = Vector3Subtract(hit, center);
+                if (Vector3LengthSqr(offset) < 1e-5f) return finish(result);
+                const float angle = AngleOnPlane(offset, axis);
+                accumulatedAngle_ += gizmomath::WrappedAngleDelta(startAngle_, angle);
+                startAngle_ = angle;
+            }
             const float snap = input.shiftDown ? 0.0f : rotateSnapDegrees_;
             part->setRotation(gizmomath::Rotate(
                 {startTransform_.position, startTransform_.rotation, startTransform_.size},
-                axis, delta, snap));
+                axis, accumulatedAngle_, snap));
             return finish(result);
         }
         return finish(result);
@@ -249,6 +258,10 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
     activePlane_ = pickedPlane;
     draggedPartId_ = part->id();
     startTransform_ = part->transform();
+    dragTool_ = mode;
+    startMouse_ = localMouse;
+    dragProjection_ = DragProjection::World;
+    accumulatedAngle_ = 0;
     dragging_ = true;
 
     const auto failedStart = [&]() {
@@ -260,8 +273,13 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
     if (handle_ == Handle::Axis || handle_ == Handle::ScaleFace) {
         const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, localSpace_);
         const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
-        if (!AxisParameter(ray, startTransform_.position, axis, viewForward, startParam_)) {
-            return failedStart();
+        // Looking down an axis makes ray/axis intersection singular. The
+        // visible screen-space handle remains usable through its shared layout.
+        if (std::fabs(Vector3DotProduct(axis, viewForward)) > 0.98f ||
+            !AxisParameter(ray, startTransform_.position, axis, viewForward, startParam_)) {
+            dragProjection_ = DragProjection::Screen;
+            screenDirection_ = layout.axisDirection[activeAxis_];
+            screenUnits_ = camera.worldUnitsPerPixel(startTransform_.position, viewport.height);
         }
     } else if (handle_ == Handle::Plane) {
         const Vector3 a = PlaneAxisA(activePlane_, *part, localSpace_);
@@ -273,11 +291,21 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
     } else if (handle_ == Handle::RotateRing) {
         const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, localSpace_);
         Vector3 hit;
-        if (!RayPlane(ray, startTransform_.position, axis, hit) ||
+        const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
+        const float facing = Vector3DotProduct(axis, viewForward);
+        if (std::fabs(facing) < 0.15f || !RayPlane(ray, startTransform_.position, axis, hit) ||
             Vector3LengthSqr(Vector3Subtract(hit, startTransform_.position)) < 1e-5f) {
-            return failedStart();
+            // Edge-on rings have no invertible ray/plane map. Freeze a screen
+            // tangent for this session; do not switch mappings midway through.
+            dragProjection_ = DragProjection::Screen;
+            const Vector2 radial = Vector2Subtract(localMouse, layout.center);
+            screenDirection_ = Vector2Normalize(Vector2{-radial.y, radial.x});
+            if (Vector2LengthSqr(screenDirection_) < 0.5f) screenDirection_ = {1, 0};
+            if (facing > 0) screenDirection_ = Vector2Negate(screenDirection_);
+            screenUnits_ = 1.0f / std::max(1.0f, layout.ringRadiusPx);
+        } else {
+            startAngle_ = AngleOnPlane(Vector3Subtract(hit, startTransform_.position), axis);
         }
-        startAngle_ = AngleOnPlane(Vector3Subtract(hit, startTransform_.position), axis);
     }
     result.consumed = true;
     result.started = true;

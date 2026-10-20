@@ -71,6 +71,12 @@ private:
     Vector3 startPlaneHit_{0.0f, 0.0f, 0.0f};
     float startParam_ = 0.0f;
     float startAngle_ = 0.0f;
+    float accumulatedAngle_ = 0.0f;
+    enum class DragProjection { World, Screen };
+    DragProjection dragProjection_ = DragProjection::World;
+    ToolMode dragTool_ = ToolMode::Select;
+    Vector2 startMouse_{}, screenDirection_{};
+    float screenUnits_ = 1.0f;
     Transform startTransform_{};
 };
 

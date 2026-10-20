@@ -43,7 +43,7 @@ private:
     void handleShortcuts(const EditorInput& input, const InputRoute& route);
     void saveCurrentProject();
     void setTool(ToolMode tool, const char* source = "toolbar");
-    void endGizmoSession(bool restoreTransform);
+    void endGizmoSession(bool restoreTransform, const char* reason = "ui_action");
     void checkInvariants(const char* operation);
 
     void drawToolbar();

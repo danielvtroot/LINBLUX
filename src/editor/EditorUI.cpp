@@ -367,16 +367,16 @@ EditorUI::~EditorUI() {
     unloadViewport();
 }
 
-void EditorUI::endGizmoSession(bool restoreTransform) {
+void EditorUI::endGizmoSession(bool restoreTransform, const char* reason) {
     Part* part = scene_.findPart(transform_.partId());
-    if (restoreTransform) transform_.cancel(part, true);
-    else transform_.commit(part);
+    if (restoreTransform) transform_.cancel(part, true, reason);
+    else transform_.commit(part, reason);
 }
 
 void EditorUI::setTool(ToolMode tool, const char* source) {
     if (tool_ == tool) return;
     if (transform_.active()) {
-        endGizmoSession(true);
+        endGizmoSession(true, "tool_change");
     }
     diag::Event event;
     event.subsystem = "tool";
@@ -485,18 +485,17 @@ void EditorUI::handleShortcuts(const EditorInput& input, const InputRoute& route
         setTool(tools[input.tool], "shortcut");
     }
     if (route.globalKeys && input.save) {
-        endGizmoSession(false);
         saveCurrentProject();
     }
     if (route.globalKeys && input.open) {
-        endGizmoSession(true);
+        endGizmoSession(true, "open_dialog");
         requestOpenPopup_ = true;
         std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
     }
 }
 
 void EditorUI::saveCurrentProject() {
-    endGizmoSession(false);
+    endGizmoSession(false, "save");
     std::string error;
     if (projectio::save(scene_, projectPath_, error)) {
         setStatus("Projeto salvo em " + projectPath_);
@@ -856,7 +855,7 @@ void EditorUI::drawViewport() {
     const bool visible = ImGui::Begin("Viewport", nullptr,
                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     if (!visible) {
-        endGizmoSession(true);
+        endGizmoSession(true, "viewport_hidden");
         camera_.releaseCapture();
         viewportFocused_ = false;
         ImGui::End();
@@ -879,9 +878,18 @@ void EditorUI::drawViewport() {
     }
 
     const ImVec2 imagePosition = ImGui::GetCursorScreenPos();
-    ImGui::Image(static_cast<ImTextureID>(static_cast<intptr_t>(viewport_.texture.id)),
-                 ImVec2(static_cast<float>(viewportWidth_), static_cast<float>(viewportHeight_)),
-                 ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
+    // Image alone has no ID: ImGui assigns a held click to the window's
+    // MoveId even with ConfigWindowsMoveFromTitleBarOnly. Register ownership
+    // explicitly so a viewport drag cannot be mistaken for an active UI widget.
+    const ImVec2 imageSize(static_cast<float>(viewportWidth_), static_cast<float>(viewportHeight_));
+    ImGui::InvisibleButton("##viewport_input", imageSize,
+        ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight |
+        ImGuiButtonFlags_MouseButtonMiddle);
+    const bool viewportActive = ImGui::IsItemActive();
+    ImGui::GetWindowDrawList()->AddImage(
+        static_cast<ImTextureID>(static_cast<intptr_t>(viewport_.texture.id)), imagePosition,
+        ImVec2(imagePosition.x + imageSize.x, imagePosition.y + imageSize.y),
+        ImVec2(0, 1), ImVec2(1, 0));
     const bool hovered = ImGui::IsItemHovered();
     const ImGuiIO& io = ImGui::GetIO();
     const EditorInput input = ReadEditorInput();
@@ -896,36 +904,44 @@ void EditorUI::drawViewport() {
     context.focused = viewportFocused_;
     context.popup = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopup) ||
         requestSavePopup_ || requestOpenPopup_ || requestLuaExportPopup_ || requestLuaImportPopup_;
-    context.text = io.WantTextInput;
-    context.widget = ImGui::IsAnyItemActive();
+    context.widget = ImGui::IsAnyItemActive() && !viewportActive;
+    context.text = io.WantTextInput && context.widget;
     context.keyboardCaptured = io.WantCaptureKeyboard;
     context.transforming = transform_.active();
     context.navigating = camera_.cursorCaptured();
     const InputRoute route = RouteInput(input, context);
     if (route.owner == InputOwner::Cancel) {
-        endGizmoSession(true);
+        endGizmoSession(true, route.reason);
         camera_.releaseCapture();
     }
     handleShortcuts(input, route);
-    if (traceInput_) {
+    const auto traceDispatch = [&](const char* consumer, const char* outcome) {
+      if (traceInput_) {
         const bool mouseEvent = input.leftPressed || input.rightPressed || input.middlePressed ||
             ImGui::IsMouseReleased(0) || ImGui::IsMouseReleased(1) || ImGui::IsMouseReleased(2);
         const bool keyEvent = input.tool >= 0 || input.save || input.open || input.escape ||
             input.remove || input.focus;
-        if (mouseEvent || keyEvent || input.wheel != 0) {
+        if (mouseEvent || keyEvent || input.wheel != 0 || route.owner == InputOwner::Cancel) {
             diag::Event event;
             event.subsystem = "input";
             event.name = "dispatch";
-            event.correlationId = diag::newCorrelationId();
-            event.context = {{"consumer", InputOwnerName(route.owner)}, {"reason", route.reason},
+            event.entityId = scene_.selection() ? scene_.selection()->id() : kInvalidInstanceId;
+            event.result = outcome;
+            event.context = {{"consumer", consumer}, {"reason", route.reason}, {"source", "imgui"},
                 {"tool", ToolModeName(tool_)}, {"hovered", hovered}, {"focused", viewportFocused_},
                 {"capture_mouse", io.WantCaptureMouse}, {"capture_keyboard", io.WantCaptureKeyboard},
                 {"left_pressed", input.leftPressed}, {"left_down", input.leftDown},
                 {"right_pressed", input.rightPressed}, {"right_down", input.rightDown},
-                {"key_tool", input.tool}, {"save", input.save}, {"open", input.open}};
+                {"left_released", ImGui::IsMouseReleased(0)},
+                {"right_released", ImGui::IsMouseReleased(1)},
+                {"middle_pressed", input.middlePressed}, {"middle_down", input.middleDown},
+                {"middle_released", ImGui::IsMouseReleased(2)},
+                {"key_tool", input.tool}, {"save", input.save}, {"open", input.open},
+                {"escape", input.escape}, {"delete", input.remove}};
             diag::log(event);
         }
-    }
+      }
+    };
     Instance* selection = scene_.selection();
     Part* selectedPart =
         selection != nullptr && selection->isPart() ? static_cast<Part*>(selection) : nullptr;
@@ -945,11 +961,21 @@ void EditorUI::drawViewport() {
     // pode navegar; um clique em handle nunca chega ao raycast de selecao.
     const bool viewportOwns = route.owner == InputOwner::Viewport;
     const bool sessionOwns = route.owner == InputOwner::Transform;
+    const auto previousHover = gizmo_.hoveredHandle();
     const GizmoUpdateResult gizmoResult = transform_.update(
         tool_, selectedPart, camera_, viewportRect, hovered,
         viewportOwns || sessionOwns, gizmoInput);
     if (gizmoResult.ended) {
         checkInvariants(gizmoResult.cancelled ? "transform_cancel" : "transform_commit");
+    }
+    if (traceInput_ && previousHover != gizmo_.hoveredHandle()) {
+        diag::Event event;
+        event.subsystem = "gizmo";
+        event.name = "hover";
+        event.entityId = selectedPart ? selectedPart->id() : kInvalidInstanceId;
+        event.context = {{"handle", static_cast<int>(gizmo_.hoveredHandle())},
+                         {"tool", ToolModeName(tool_)}};
+        diag::log(event);
     }
     const bool cameraOwns = route.owner == InputOwner::Camera;
     camera_.handleInput(input, Vector2{viewportRect.width, viewportRect.height}, cameraOwns,
@@ -978,6 +1004,10 @@ void EditorUI::drawViewport() {
     // Selection may have changed in the raycast above.
     selection = scene_.selection();
     selectedPart = selection && selection->isPart() ? static_cast<Part*>(selection) : nullptr;
+    traceDispatch(gizmoResult.consumed ? "gizmo" :
+        viewportOwns && input.leftPressed ? "selection" : InputOwnerName(route.owner),
+        gizmoResult.started ? "drag_begin" : gizmoResult.ended ?
+        (gizmoResult.cancelled ? "drag_cancel" : "drag_commit") : "routed");
 
     BeginTextureMode(viewport_);
     renderer_.drawScene(scene_, camera_, viewportWidth_, viewportHeight_,
@@ -1529,7 +1559,7 @@ void EditorUI::deleteSelection() {
         return;
     }
     const std::string name = selection->name();
-    endGizmoSession(false);
+    endGizmoSession(true, "delete");
     if (scene_.remove(selection)) {
         checkInvariants("delete");
         setStatus("Excluido: " + name);

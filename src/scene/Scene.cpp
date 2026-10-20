@@ -1,4 +1,5 @@
 #include "scene/Scene.h"
+#include "core/Diagnostics.h"
 
 #include <algorithm>
 #include <cmath>
@@ -284,7 +285,7 @@ void Scene::removeSubtree(Instance* object) {
 
     notifyRemoval(object);
     if (selection_ == object) {
-        selection_ = nullptr;
+        select(nullptr);
     }
     if (object->parent() != nullptr) {
         object->parent()->detachChild(object);
@@ -364,10 +365,16 @@ Part* Scene::findPart(InstanceId id) const {
 }
 
 void Scene::select(Instance* object) {
-    if (object != nullptr && byId_.find(object->id()) == byId_.end()) {
-        selection_ = nullptr;
-        return;
-    }
+    if (object != nullptr && (byId_.find(object->id()) == byId_.end() ||
+                             byId_.at(object->id()) != object)) object = nullptr;
+    if (object == selection_) return;
+    diag::Event event;
+    event.subsystem = "scene";
+    event.name = "selection_change";
+    event.entityId = object ? object->id() : kInvalidInstanceId;
+    event.context = {{"previous", selection_ ? selection_->id() : kInvalidInstanceId},
+                     {"selected", object ? object->id() : kInvalidInstanceId}};
+    diag::log(event);
     selection_ = object;
 }
 

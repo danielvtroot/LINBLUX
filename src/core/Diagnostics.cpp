@@ -14,6 +14,7 @@ namespace {
 
 constexpr std::uintmax_t kMaxLogBytes = 1024u * 1024u;
 std::atomic<unsigned long long> currentFrame{0};
+thread_local std::string frameCorrelation;
 
 struct State {
     std::mutex mutex;
@@ -119,7 +120,10 @@ void configure(const std::string& path) {
     state.openFailed = false;
 }
 
-void setFrame(unsigned long long frame) { currentFrame.store(frame, std::memory_order_relaxed); }
+void setFrame(unsigned long long frame) {
+    currentFrame.store(frame, std::memory_order_relaxed);
+    frameCorrelation.clear();
+}
 
 std::string newCorrelationId() {
     static std::atomic<unsigned long long> counter{0};
@@ -138,7 +142,8 @@ void log(const Event& event) {
         record["subsystem"] = event.subsystem;
         record["event"] = event.name;
         record["frame"] = currentFrame.load(std::memory_order_relaxed);
-        if (!event.correlationId.empty()) record["correlation_id"] = event.correlationId;
+        if (event.correlationId.empty() && frameCorrelation.empty()) frameCorrelation = newCorrelationId();
+        record["correlation_id"] = event.correlationId.empty() ? frameCorrelation : event.correlationId;
         if (event.entityId != kInvalidInstanceId) record["entity_id"] = event.entityId;
         if (!event.file.empty()) record["file"] = event.file;
         if (event.durationMs >= 0.0) record["duration_ms"] = event.durationMs;

@@ -110,8 +110,9 @@ bool Application::initialize() {
     const std::string startupPath = config_.startupProjectPath.empty()
                                         ? config_.defaultProjectPath
                                         : config_.startupProjectPath;
-    const bool shouldLoad = !config_.startupProjectPath.empty() ||
-                            std::filesystem::is_regular_file(startupPath);
+    std::error_code startupPathError;
+    const bool defaultExists = std::filesystem::is_regular_file(startupPath, startupPathError);
+    const bool shouldLoad = !config_.startupProjectPath.empty() || defaultExists || startupPathError;
     bool projectLoaded = false;
     std::string projectLoadError;
     if (shouldLoad) {

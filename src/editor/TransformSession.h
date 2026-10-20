@@ -28,8 +28,8 @@ public:
     GizmoUpdateResult update(ToolMode mode, Part* part, const EditorCamera& camera,
                              Rectangle viewport, bool hovered, bool allowInput,
                              const GizmoInput& input);
-    void cancel(Part* part, bool restoreTransform);
-    void commit(Part* part);
+    void cancel(Part* part, bool restoreTransform, const char* reason = "cancel");
+    void commit(Part* part, const char* reason = "commit");
 
     bool active() const { return gizmo_.dragging(); }
     InstanceId partId() const { return gizmo_.sessionPartId(); }
@@ -39,7 +39,7 @@ public:
 private:
     void releasePhysics(InstanceId id);
     void beginDiagnostics(ToolMode mode);
-    void endDiagnostics(bool cancelled, InstanceId id);
+    void endDiagnostics(bool cancelled, InstanceId id, const char* reason);
 
     Gizmo& gizmo_;
     PhysicsWorld& physics_;

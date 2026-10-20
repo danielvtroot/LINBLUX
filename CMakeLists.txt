@@ -110,14 +110,23 @@ if(XVFB_RUN_EXECUTABLE)
             $<TARGET_FILE:loblox_gizmo_visual_tests>)
   set_tests_properties(loblox_gizmo_visual PROPERTIES SKIP_RETURN_CODE 77)
   find_program(XDOTOOL_EXECUTABLE xdotool)
-  if(XDOTOOL_EXECUTABLE)
+  find_package(X11 QUIET)
+  if(XDOTOOL_EXECUTABLE AND X11_FOUND)
     add_executable(loblox_editor_input_tests tests/editor_input_main.cpp
-      src/editor/EditorUI.cpp src/rendering/SceneRenderer.cpp)
-    target_link_libraries(loblox_editor_input_tests PRIVATE loblox_core loblox_imgui OpenGL::GL)
+      tests/x11_focus.cpp src/editor/EditorUI.cpp src/rendering/SceneRenderer.cpp)
+    target_link_libraries(loblox_editor_input_tests PRIVATE loblox_core loblox_imgui OpenGL::GL X11::X11)
     add_test(NAME loblox_editor_input
       COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24"
               $<TARGET_FILE:loblox_editor_input_tests>)
-    set_tests_properties(loblox_editor_input PROPERTIES TIMEOUT 120
+    set_tests_properties(loblox_editor_input PROPERTIES TIMEOUT 240
       ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1")
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+      add_test(NAME loblox_editor_restart
+        COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24"
+                ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/editor_restart.py
+                $<TARGET_FILE:loblox>)
+      set_tests_properties(loblox_editor_restart PROPERTIES TIMEOUT 90)
+    endif()
   endif()
 endif()

@@ -12,7 +12,7 @@ TransformSession::~TransformSession() {
     // Se a UI for destruida durante um arraste, nenhum corpo pode continuar
     // suspenso. O Gizmo pode ja ter restaurado a Part antes da destruicao.
     if (gizmo_.dragging()) {
-        endDiagnostics(true, gizmo_.sessionPartId());
+        endDiagnostics(true, gizmo_.sessionPartId(), "session_destroyed");
     }
     releasePhysics(gizmo_.sessionPartId());
 }
@@ -28,25 +28,29 @@ GizmoUpdateResult TransformSession::update(ToolMode mode, Part* part,
         beginDiagnostics(mode);
     }
     if (result.ended) {
+        if (part && part->id() == result.partId) physics_.applyChanges(part);
         releasePhysics(result.partId);
-        endDiagnostics(result.cancelled, result.partId);
+        endDiagnostics(result.cancelled, result.partId,
+                       result.cancelled ? "context_changed" : "mouse_release");
     }
     return result;
 }
 
-void TransformSession::cancel(Part* part, bool restoreTransform) {
+void TransformSession::cancel(Part* part, bool restoreTransform, const char* reason) {
     const InstanceId id = gizmo_.sessionPartId();
     if (gizmo_.dragging()) {
-        endDiagnostics(true, id);
+        endDiagnostics(true, id, reason);
     }
     gizmo_.cancel(part, restoreTransform);
+    if (id != kInvalidInstanceId && part && part->id() == id) physics_.applyChanges(part);
     releasePhysics(id);
 }
 
-void TransformSession::commit(Part* part) {
+void TransformSession::commit(Part* part, const char* reason) {
     const InstanceId id = gizmo_.sessionPartId();
-    if (gizmo_.dragging()) endDiagnostics(false, id);
+    if (gizmo_.dragging()) endDiagnostics(false, id, reason);
     gizmo_.cancel(part, false);
+    if (id != kInvalidInstanceId && part && part->id() == id) physics_.applyChanges(part);
     releasePhysics(id);
 }
 
@@ -60,24 +64,26 @@ void TransformSession::beginDiagnostics(ToolMode mode) {
     correlationId_ = diag::newCorrelationId();
     startedAt_ = std::chrono::steady_clock::now();
     diag::Event event;
-    event.subsystem = "transform";
+    event.subsystem = "gizmo";
     event.name = "drag_begin";
     event.correlationId = correlationId_;
     event.entityId = gizmo_.sessionPartId();
-    event.context = {{"tool", static_cast<int>(mode)}};
+    event.context = {{"tool", ToolModeName(mode)}, {"consumer", "gizmo"},
+                     {"handle", static_cast<int>(gizmo_.hoveredHandle())}};
     diag::log(event);
 }
 
-void TransformSession::endDiagnostics(bool cancelled, InstanceId id) {
+void TransformSession::endDiagnostics(bool cancelled, InstanceId id, const char* reason) {
     diag::Event event;
     event.level = cancelled ? diag::Level::Warning : diag::Level::Info;
-    event.subsystem = "transform";
+    event.subsystem = "gizmo";
     event.name = cancelled ? "drag_cancel" : "drag_commit";
     event.correlationId = correlationId_;
     event.entityId = id;
     event.durationMs = std::chrono::duration<double, std::milli>(
                            std::chrono::steady_clock::now() - startedAt_).count();
     event.result = cancelled ? "cancelled" : "committed";
+    event.context = {{"reason", reason}};
     diag::log(event);
     correlationId_.clear();
 }

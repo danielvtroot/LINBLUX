@@ -874,6 +874,66 @@ void TestInputRouting() {
     EndSection();
 }
 
+void TestGizmoHandleDrags() {
+    Section("Handles reais: begin/update/cancel em vistas obliquas e axiais");
+    using namespace loblox;
+    Scene scene;
+    Part* part = scene.createPart(PartShape::Block, V3(0, 20, 0), V3(8, 2, 4));
+    part->setAnchored(false);
+    PhysicsWorld physics;
+    physics.attach(scene);
+    EditorCamera camera;
+    const Rectangle viewport{100, 80, 640, 400};
+    const loblox::Transform initial = part->transform();
+    for (const Vector2 orbit : {Vector2{0.75f, 0.4f}, Vector2{0, 0},
+                                Vector2{PI / 2, 0}, Vector2{0.5f, 1.4f}}) {
+        camera.setOrbit(initial.position, 18, orbit.x, orbit.y);
+        for (ToolMode mode : {ToolMode::Move, ToolMode::Scale, ToolMode::Rotate}) {
+            const int handles = mode == ToolMode::Scale ? 6 : 3;
+            for (int index = 0; index < handles; ++index) {
+                part->setTransform(initial);
+                physics.syncScene(scene);
+                Gizmo gizmo;
+                TransformSession session(gizmo, physics);
+                const auto layout = gizmolayout::Build(*part, mode, camera, viewport, false);
+                const Vector2 point = mode == ToolMode::Move ? layout.axisButton[index] :
+                    mode == ToolMode::Scale ? layout.scaleHandle[index] : layout.rotateMarker[index];
+                GizmoInput input;
+                input.mousePosition = {point.x + viewport.x, point.y + viewport.y};
+                input.leftPressed = input.leftDown = input.shiftDown = true;
+                const auto result = session.update(mode, part, camera, viewport, true, true, input);
+                if (!result.started) std::printf("  start failed: mode=%s handle=%d yaw=%.2f pitch=%.2f\n",
+                    ToolModeName(mode), index, orbit.x, orbit.y);
+                CHECK(result.started);
+                CHECK(result.consumed);
+                if (!result.started) continue;
+                CHECK(physics.isPartEditing(part->id()));
+                input.leftPressed = false;
+                const Vector2 delta = mode == ToolMode::Rotate ? Vector2{27, 19} :
+                    Vector2Scale(layout.axisDirection[mode == ToolMode::Scale ? index / 2 : index], 35);
+                input.mousePosition = Vector2Add(input.mousePosition, delta);
+                session.update(mode, part, camera, viewport, true, true, input);
+                const bool changed = mode == ToolMode::Move ?
+                    Vector3Distance(part->position(), initial.position) > 0.01f :
+                    mode == ToolMode::Scale ? Vector3Distance(part->size(), initial.size) > 0.01f :
+                    std::fabs(Vector4DotProduct(part->rotation(), initial.rotation)) < 0.99999f;
+                if (!changed) std::printf("  update failed: mode=%s handle=%d yaw=%.2f pitch=%.2f\n",
+                    ToolModeName(mode), index, orbit.x, orbit.y);
+                CHECK(changed);
+                if (mode != ToolMode::Scale) CHECK(NearlyEqual(part->size(), initial.size));
+                if (mode == ToolMode::Rotate) CHECK(NearlyEqual(part->position(), initial.position));
+                CHECK(std::isfinite(Vector3Length(part->position())));
+                CHECK(std::isfinite(Vector3Length(part->size())));
+                session.cancel(part, true);
+                CHECK(!physics.isPartEditing(part->id()));
+                CHECK(NearlyEqual(part->position(), initial.position));
+                CHECK(NearlyEqual(part->size(), initial.size));
+            }
+        }
+    }
+    EndSection();
+}
+
 void TestPhysicsEditSuspension() {
     Section("Fisica suspensa durante edicao de gizmo");
     loblox::Scene scene;
@@ -1462,6 +1522,7 @@ int main() {
     TestGizmoSessionLifecycle();
     TestEditorCameraMath();
     TestInputRouting();
+    TestGizmoHandleDrags();
     TestPhysicsEditSuspension();
     TestLuaDeclarativeSceneRoundTrip();
     TestProjectRoundTrip();

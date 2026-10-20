@@ -1,4 +1,5 @@
 #include "physics/PhysicsWorld.h"
+#include "core/Diagnostics.h"
 
 #include <algorithm>
 #include <cmath>
@@ -321,6 +322,11 @@ void PhysicsWorld::setPartEditing(InstanceId id, bool editing) {
         body->setAngularVelocity(btVector3(0, 0, 0));
         body->clearForces();
         body->forceActivationState(DISABLE_SIMULATION);
+        diag::Event event;
+        event.subsystem = "physics";
+        event.name = "edit_begin";
+        event.entityId = id;
+        diag::log(event);
         return;
     }
     if (editingParts_.erase(id) == 0) return;
@@ -329,6 +335,11 @@ void PhysicsWorld::setPartEditing(InstanceId id, bool editing) {
     body->setAngularVelocity(btVector3(0, 0, 0));
     body->clearForces();
     body->activate(true);
+    diag::Event event;
+    event.subsystem = "physics";
+    event.name = "edit_end";
+    event.entityId = id;
+    diag::log(event);
 }
 
 bool PhysicsWorld::isPartEditing(InstanceId id) const {
