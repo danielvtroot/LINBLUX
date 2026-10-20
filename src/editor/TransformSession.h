@@ -44,6 +44,7 @@ private:
     Gizmo& gizmo_;
     PhysicsWorld& physics_;
     std::string correlationId_;
+    const char* lastError_ = nullptr;
     std::chrono::steady_clock::time_point startedAt_{};
 };
 

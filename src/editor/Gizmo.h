@@ -27,6 +27,7 @@ struct GizmoUpdateResult {
     bool ended = false;
     bool cancelled = false;
     InstanceId partId = kInvalidInstanceId;
+    const char* error = nullptr;
 };
 
 class Gizmo {
@@ -75,7 +76,7 @@ private:
     enum class DragProjection { World, Screen };
     DragProjection dragProjection_ = DragProjection::World;
     ToolMode dragTool_ = ToolMode::Select;
-    Vector2 startMouse_{}, screenDirection_{};
+    Vector2 startMouse_{}, screenDirection_{}, secondScreenDirection_{};
     float screenUnits_ = 1.0f;
     Transform startTransform_{};
 };

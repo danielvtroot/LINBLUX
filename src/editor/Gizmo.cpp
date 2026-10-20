@@ -145,7 +145,10 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
             const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
             float parameter = 0.0f;
             if (dragProjection_ == DragProjection::World &&
-                !AxisParameter(ray, center, axis, viewForward, parameter)) return finish(result);
+                !AxisParameter(ray, center, axis, viewForward, parameter)) {
+                result.error = "axis_intersection_unavailable";
+                return finish(result);
+            }
             const float delta = dragProjection_ == DragProjection::Screen ?
                 Vector2DotProduct(Vector2Subtract(localMouse, startMouse_), screenDirection_) * screenUnits_ :
                 parameter - startParam_;
@@ -172,9 +175,24 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
             const Vector3 a = PlaneAxisA(activePlane_, *part, localSpace_);
             const Vector3 b = PlaneAxisB(activePlane_, *part, localSpace_);
             const Vector3 normal = Vector3Normalize(Vector3CrossProduct(a, b));
-            Vector3 hit;
-            if (!RayPlane(ray, center, normal, hit)) return finish(result);
-            const Vector3 delta = Vector3Subtract(hit, startPlaneHit_);
+            Vector3 delta;
+            if (dragProjection_ == DragProjection::Screen) {
+                const Vector2 screenDelta = Vector2Subtract(localMouse, startMouse_);
+                const float determinant = screenDirection_.x * secondScreenDirection_.y -
+                                          screenDirection_.y * secondScreenDirection_.x;
+                const float da = (screenDelta.x * secondScreenDirection_.y -
+                                  screenDelta.y * secondScreenDirection_.x) / determinant;
+                const float db = (screenDirection_.x * screenDelta.y -
+                                  screenDirection_.y * screenDelta.x) / determinant;
+                delta = Vector3Scale(Vector3Add(Vector3Scale(a, da), Vector3Scale(b, db)), screenUnits_);
+            } else {
+                Vector3 hit;
+                if (!RayPlane(ray, center, normal, hit)) {
+                    result.error = "plane_intersection_unavailable";
+                    return finish(result);
+                }
+                delta = Vector3Subtract(hit, startPlaneHit_);
+            }
             part->setPosition(gizmomath::MovePlane(
                 {startTransform_.position, startTransform_.rotation, startTransform_.size}, a, b,
                 delta, input.shiftDown ? 0.0f : moveSnap_));
@@ -186,9 +204,15 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                                                        screenDirection_) * screenUnits_;
             } else {
                 Vector3 hit;
-                if (!RayPlane(ray, center, axis, hit)) return finish(result);
+                if (!RayPlane(ray, center, axis, hit)) {
+                    result.error = "rotation_intersection_unavailable";
+                    return finish(result);
+                }
                 const Vector3 offset = Vector3Subtract(hit, center);
-                if (Vector3LengthSqr(offset) < 1e-5f) return finish(result);
+                if (Vector3LengthSqr(offset) < 1e-5f) {
+                    result.error = "rotation_at_pivot";
+                    return finish(result);
+                }
                 const float angle = AngleOnPlane(offset, axis);
                 accumulatedAngle_ += gizmomath::WrappedAngleDelta(startAngle_, angle);
                 startAngle_ = angle;
@@ -264,12 +288,6 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
     accumulatedAngle_ = 0;
     dragging_ = true;
 
-    const auto failedStart = [&]() {
-        cancel(part, false);
-        // O clique era do gizmo: nao pode cair na selecao de Part.
-        result.consumed = true;
-        return finish(result);
-    };
     if (handle_ == Handle::Axis || handle_ == Handle::ScaleFace) {
         const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, localSpace_);
         const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
@@ -284,9 +302,21 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
     } else if (handle_ == Handle::Plane) {
         const Vector3 a = PlaneAxisA(activePlane_, *part, localSpace_);
         const Vector3 b = PlaneAxisB(activePlane_, *part, localSpace_);
-        if (!RayPlane(ray, startTransform_.position, Vector3Normalize(Vector3CrossProduct(a, b)),
-                      startPlaneHit_)) {
-            return failedStart();
+        const Vector3 normal = Vector3Normalize(Vector3CrossProduct(a, b));
+        const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
+        if (std::fabs(Vector3DotProduct(normal, viewForward)) < 0.15f ||
+            !RayPlane(ray, startTransform_.position, normal, startPlaneHit_)) {
+            dragProjection_ = DragProjection::Screen;
+            const int axes[3][2] = {{0, 1}, {0, 2}, {1, 2}};
+            screenDirection_ = layout.axisDirection[axes[activePlane_][0]];
+            secondScreenDirection_ = layout.axisDirection[axes[activePlane_][1]];
+            const float determinant = screenDirection_.x * secondScreenDirection_.y -
+                                      screenDirection_.y * secondScreenDirection_.x;
+            if (std::fabs(determinant) < 0.2f) {
+                const Vector2 perpendicular{-screenDirection_.y, screenDirection_.x};
+                secondScreenDirection_ = Vector2Scale(perpendicular, determinant < 0 ? -1.0f : 1.0f);
+            }
+            screenUnits_ = camera.worldUnitsPerPixel(startTransform_.position, viewport.height);
         }
     } else if (handle_ == Handle::RotateRing) {
         const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, localSpace_);

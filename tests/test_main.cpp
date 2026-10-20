@@ -889,14 +889,15 @@ void TestGizmoHandleDrags() {
                                 Vector2{PI / 2, 0}, Vector2{0.5f, 1.4f}}) {
         camera.setOrbit(initial.position, 18, orbit.x, orbit.y);
         for (ToolMode mode : {ToolMode::Move, ToolMode::Scale, ToolMode::Rotate}) {
-            const int handles = mode == ToolMode::Scale ? 6 : 3;
+            const int handles = mode == ToolMode::Rotate ? 3 : 6;
             for (int index = 0; index < handles; ++index) {
                 part->setTransform(initial);
                 physics.syncScene(scene);
                 Gizmo gizmo;
                 TransformSession session(gizmo, physics);
                 const auto layout = gizmolayout::Build(*part, mode, camera, viewport, false);
-                const Vector2 point = mode == ToolMode::Move ? layout.axisButton[index] :
+                const Vector2 point = mode == ToolMode::Move ?
+                    (index < 3 ? layout.axisButton[index] : layout.planeCenter[index - 3]) :
                     mode == ToolMode::Scale ? layout.scaleHandle[index] : layout.rotateMarker[index];
                 GizmoInput input;
                 input.mousePosition = {point.x + viewport.x, point.y + viewport.y};
@@ -907,9 +908,17 @@ void TestGizmoHandleDrags() {
                 CHECK(result.started);
                 CHECK(result.consumed);
                 if (!result.started) continue;
+                CHECK(gizmo.activeAxis() == (mode == ToolMode::Move && index >= 3 ? -1 :
+                    mode == ToolMode::Scale ? index / 2 : index));
+                if (mode == ToolMode::Move && index >= 3) {
+                    const gizmomath::HandleId planes[] = {gizmomath::HandleId::XYPlane,
+                        gizmomath::HandleId::XZPlane, gizmomath::HandleId::YZPlane};
+                    CHECK(gizmo.hoveredHandle() == planes[index - 3]);
+                }
                 CHECK(physics.isPartEditing(part->id()));
                 input.leftPressed = false;
-                const Vector2 delta = mode == ToolMode::Rotate ? Vector2{27, 19} :
+                const Vector2 delta = mode == ToolMode::Rotate ||
+                    (mode == ToolMode::Move && index >= 3) ? Vector2{27, 19} :
                     Vector2Scale(layout.axisDirection[mode == ToolMode::Scale ? index / 2 : index], 35);
                 input.mousePosition = Vector2Add(input.mousePosition, delta);
                 session.update(mode, part, camera, viewport, true, true, input);

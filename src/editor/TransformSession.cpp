@@ -23,6 +23,18 @@ GizmoUpdateResult TransformSession::update(ToolMode mode, Part* part,
                                            const GizmoInput& input) {
     const GizmoUpdateResult result =
         gizmo_.update(mode, part, camera, viewport, hovered, allowInput, input);
+    if (result.error && result.error != lastError_) {
+        diag::Event event;
+        event.level = diag::Level::Warning;
+        event.subsystem = "gizmo";
+        event.name = "drag_update_error";
+        event.correlationId = correlationId_;
+        event.entityId = partId();
+        event.result = "unchanged";
+        event.error = result.error;
+        diag::log(event);
+    }
+    lastError_ = result.error;
     if (result.started) {
         physics_.setPartEditing(result.partId, true);
         beginDiagnostics(mode);
