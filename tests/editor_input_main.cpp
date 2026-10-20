@@ -131,6 +131,26 @@ int main() {
         CHECK(Vector3Distance(camera.position(), beforeCapture) > 0.01f);
         command("mouseup 3");
 
+        const Vector3 beforePan = camera.target();
+        const Vector3 beforePanOffset = Vector3Subtract(camera.position(), camera.target());
+        command("mousedown 2");
+        CHECK(camera.cursorCaptured());
+        command("mousemove_relative -- 12 7");
+        CHECK(Vector3Distance(camera.target(), beforePan) > 0.01f);
+        CHECK(NearlyEqual(Vector3Subtract(camera.position(), camera.target()), beforePanOffset));
+        command("mouseup 2");
+        CHECK(!camera.cursorCaptured());
+        const Vector3 beforeFreeMove = camera.target();
+        command("keydown w");
+        command("keyup w");
+        CHECK(Vector3Distance(camera.target(), beforeFreeMove) > 0.01f);
+        CHECK(ui.tool() == ToolMode::Move);
+        const float beforeZoom = camera.distance();
+        command("click 4");
+        CHECK(camera.distance() < beforeZoom);
+        camera.setOrbit(part->position(), 22, 0.75f, 0.4f);
+        frames();
+
         Rectangle rect = viewport();
         mouse(Vector2{rect.x + 35, rect.y + 90});
         command("mousedown 3");
@@ -174,6 +194,7 @@ int main() {
             command("mouseup 1");
             CHECK(ui.tool() == mode);
             CHECK(scene.selection() == part);
+            TakeScreenshot((std::string(directory) + "/" + ToolModeName(mode) + ".png").c_str());
         };
         const auto layout = [&]() {
             return gizmolayout::Build(*part, ui.tool(), camera, viewport(), false);
@@ -345,5 +366,6 @@ int main() {
     rlImGuiShutdown();
     CloseWindow();
     std::printf("Editor input: %d checks, %d failures; artifacts: %s\n", checks, failures, directory);
+    std::fflush(stdout); // Keep functional results visible if LSan reports driver leaks at exit.
     return failures ? 1 : 0;
 }
