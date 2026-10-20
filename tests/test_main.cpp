@@ -828,6 +828,52 @@ void TestEditorCameraMath() {
     EndSection();
 }
 
+void TestInputRouting() {
+    Section("Roteamento: UI, sessoes, navegacao e atalhos");
+    using namespace loblox;
+    EditorInput input;
+    InputContext context;
+    context.windowFocused = context.viewportVisible = context.hovered = context.focused = true;
+    CHECK(RouteInput(input, context).owner == InputOwner::Viewport);
+    input.rightPressed = true;
+    CHECK(RouteInput(input, context).owner == InputOwner::Camera);
+    context.transforming = true;
+    CHECK(RouteInput(input, context).owner == InputOwner::Transform);
+    context.hovered = false;
+    CHECK(RouteInput(input, context).owner == InputOwner::Transform);
+    context.popup = true;
+    CHECK(RouteInput(input, context).owner == InputOwner::Cancel);
+    context.popup = false;
+    context.text = true;
+    CHECK(RouteInput(input, context).owner == InputOwner::Cancel);
+    context.text = false;
+    input.escape = true;
+    CHECK(RouteInput(input, context).owner == InputOwner::Cancel);
+    input.escape = false;
+    context.windowFocused = false;
+    CHECK(RouteInput(input, context).owner == InputOwner::Cancel);
+    context.windowFocused = true;
+    context.transforming = false;
+    context.navigating = true;
+    CHECK(RouteInput(input, context).owner == InputOwner::Camera);
+    CHECK(!RouteInput(input, context).editorKeys);
+    context.navigating = false;
+    input.rightPressed = false;
+    input.rightDown = true;
+    context.hovered = true;
+    CHECK(RouteInput(input, context).owner == InputOwner::UI);
+    input.rightDown = false;
+    context.widget = true;
+    CHECK(RouteInput(input, context).owner == InputOwner::UI);
+    CHECK(!RouteInput(input, context).globalKeys);
+    context.widget = false;
+    context.viewportVisible = false;
+    CHECK(RouteInput(input, context).owner == InputOwner::UI);
+    context.navigating = true;
+    CHECK(RouteInput(input, context).owner == InputOwner::Cancel);
+    EndSection();
+}
+
 void TestPhysicsEditSuspension() {
     Section("Fisica suspensa durante edicao de gizmo");
     loblox::Scene scene;
@@ -1415,6 +1461,7 @@ int main() {
     TestGizmoLayout();
     TestGizmoSessionLifecycle();
     TestEditorCameraMath();
+    TestInputRouting();
     TestPhysicsEditSuspension();
     TestLuaDeclarativeSceneRoundTrip();
     TestProjectRoundTrip();

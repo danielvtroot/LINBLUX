@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <filesystem>
 #include <utility>
 
@@ -29,6 +30,38 @@
 namespace loblox {
 
 namespace {
+
+EditorInput ReadEditorInput() {
+    const ImGuiIO& io = ImGui::GetIO();
+    EditorInput input;
+    input.mouse = {io.MousePos.x, io.MousePos.y};
+    input.delta = GetMouseDelta(); // Relative motion while GLFW owns the cursor.
+    input.wheel = io.MouseWheel;
+    input.leftPressed = ImGui::IsMouseClicked(ImGuiMouseButton_Left, false);
+    input.leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+    input.rightPressed = ImGui::IsMouseClicked(ImGuiMouseButton_Right, false);
+    input.rightDown = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+    input.middlePressed = ImGui::IsMouseClicked(ImGuiMouseButton_Middle, false);
+    input.middleDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
+    input.escape = ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+    input.shift = io.KeyShift;
+    input.modified = io.KeyCtrl || io.KeyAlt || io.KeySuper;
+    input.save = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false);
+    input.open = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O, false);
+    input.remove = ImGui::IsKeyPressed(ImGuiKey_Delete, false) ||
+                   ImGui::IsKeyPressed(ImGuiKey_Backspace, false);
+    input.focus = ImGui::IsKeyPressed(ImGuiKey_F, false);
+    if (!input.modified) {
+        const ImGuiKey tools[] = {ImGuiKey_1, ImGuiKey_2, ImGuiKey_3, ImGuiKey_4};
+        for (int i = 0; i < 4; ++i)
+            if (ImGui::IsKeyPressed(tools[i], false)) input.tool = i;
+    }
+    input.movement = {
+        float(ImGui::IsKeyDown(ImGuiKey_D)) - float(ImGui::IsKeyDown(ImGuiKey_A)),
+        float(ImGui::IsKeyDown(ImGuiKey_E)) - float(ImGui::IsKeyDown(ImGuiKey_Q)),
+        float(ImGui::IsKeyDown(ImGuiKey_W)) - float(ImGui::IsKeyDown(ImGuiKey_S))};
+    return input;
+}
 
 enum class Icon {
     Select,
@@ -324,6 +357,8 @@ EditorUI::EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera,
     cameraMoveSpeed_ = camera_.moveSpeed();
     cameraLookSensitivity_ = camera_.lookSensitivity();
     camera_.reset();
+    const char* trace = std::getenv("LOBLOX_TRACE_INPUT");
+    traceInput_ = trace && std::strcmp(trace, "1") == 0;
 }
 
 EditorUI::~EditorUI() {
@@ -333,13 +368,24 @@ EditorUI::~EditorUI() {
 }
 
 void EditorUI::endGizmoSession(bool restoreTransform) {
-    transform_.cancel(scene_.findPart(transform_.partId()), restoreTransform);
+    Part* part = scene_.findPart(transform_.partId());
+    if (restoreTransform) transform_.cancel(part, true);
+    else transform_.commit(part);
 }
 
-void EditorUI::setTool(ToolMode tool) {
+void EditorUI::setTool(ToolMode tool, const char* source) {
+    if (tool_ == tool) return;
     if (transform_.active()) {
         endGizmoSession(true);
     }
+    diag::Event event;
+    event.subsystem = "tool";
+    event.name = "change";
+    event.context = {{"previous", ToolModeName(tool_)}, {"tool", ToolModeName(tool)},
+                     {"source", source}, {"consumer", "editor"}};
+    event.result = "ok";
+    diag::log(event);
+    gizmo_.cancel();
     tool_ = tool;
     camera_.releaseCapture();
 }
@@ -427,34 +473,22 @@ void EditorUI::buildDockLayout() {
     layoutBuilt_ = true;
 }
 
-void EditorUI::handleShortcuts() {
-    const ImGuiIO& io = ImGui::GetIO();
-    if (io.WantTextInput) {
-        return;
-    }
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-        endGizmoSession(true);
-        camera_.releaseCapture();
-        return;
-    }
-    if (!ImGui::IsAnyItemActive() &&
-        (ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyPressed(ImGuiKey_Backspace))) {
+void EditorUI::handleShortcuts(const EditorInput& input, const InputRoute& route) {
+    if (route.editorKeys && input.remove && !input.modified) {
         deleteSelection();
     }
-    if (viewportFocused_ && !ImGui::IsAnyItemActive() && ImGui::IsKeyPressed(ImGuiKey_F)) {
+    if (route.editorKeys && input.focus && !input.modified) {
         focusSelection();
     }
-    if (viewportFocused_ && !ImGui::IsAnyItemActive()) {
-        if (ImGui::IsKeyPressed(ImGuiKey_1)) setTool(ToolMode::Select);
-        if (ImGui::IsKeyPressed(ImGuiKey_2)) setTool(ToolMode::Move);
-        if (ImGui::IsKeyPressed(ImGuiKey_3)) setTool(ToolMode::Scale);
-        if (ImGui::IsKeyPressed(ImGuiKey_4)) setTool(ToolMode::Rotate);
+    if (route.editorKeys && input.tool >= 0) {
+        const ToolMode tools[] = {ToolMode::Select, ToolMode::Move, ToolMode::Scale, ToolMode::Rotate};
+        setTool(tools[input.tool], "shortcut");
     }
-    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
+    if (route.globalKeys && input.save) {
         endGizmoSession(false);
         saveCurrentProject();
     }
-    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O)) {
+    if (route.globalKeys && input.open) {
         endGizmoSession(true);
         requestOpenPopup_ = true;
         std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
@@ -472,19 +506,17 @@ void EditorUI::saveCurrentProject() {
 }
 
 void EditorUI::draw() {
+    diag::setFrame(++frame_);
     drawMainMenuBar();
     if (!layoutBuilt_) {
         buildDockLayout();
     }
     ImGui::DockSpaceOverViewport(ImGui::GetID("LobloxDockspace"), ImGui::GetMainViewport());
 
-    handleShortcuts();
-
     drawToolbar();
     if (showToolbox_) {
         drawToolbox();
     }
-    drawViewport();
     if (showExplorer_) {
         drawExplorer();
     }
@@ -492,6 +524,7 @@ void EditorUI::draw() {
         drawProperties();
     }
     drawDialogs();
+    drawViewport(); // UI actions and popup requests are known before routing.
 }
 
 void EditorUI::drawMainMenuBar() {
@@ -536,10 +569,10 @@ void EditorUI::drawMainMenuBar() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Home")) {
-        if (ImGui::MenuItem("Select", "1")) setTool(ToolMode::Select);
-        if (ImGui::MenuItem("Move", "2")) setTool(ToolMode::Move);
-        if (ImGui::MenuItem("Scale", "3")) setTool(ToolMode::Scale);
-        if (ImGui::MenuItem("Rotate", "4")) setTool(ToolMode::Rotate);
+        if (ImGui::MenuItem("Select", "1")) setTool(ToolMode::Select, "menu");
+        if (ImGui::MenuItem("Move", "2")) setTool(ToolMode::Move, "menu");
+        if (ImGui::MenuItem("Scale", "3")) setTool(ToolMode::Scale, "menu");
+        if (ImGui::MenuItem("Rotate", "4")) setTool(ToolMode::Rotate, "menu");
         if (ImGui::MenuItem("Insert Block")) insertPart(PartShape::Block);
         if (ImGui::MenuItem("Insert Sphere")) insertPart(PartShape::Sphere);
         if (ImGui::MenuItem("Insert Spawn")) insertSpawnLocation();
@@ -675,6 +708,7 @@ void EditorUI::drawToolbar() {
     if (ImGui::BeginTabItem("Model")) {
         ImGui::Spacing();
         if (ImGui::Checkbox("Local axes", &gizmoLocalSpace_)) {
+            endGizmoSession(true);
             gizmo_.setLocalSpace(gizmoLocalSpace_);
         }
         ImGui::SameLine();
@@ -819,8 +853,16 @@ void EditorUI::drawToolbox() {
 
 void EditorUI::drawViewport() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::Begin("Viewport", nullptr,
+    const bool visible = ImGui::Begin("Viewport", nullptr,
                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    if (!visible) {
+        endGizmoSession(true);
+        camera_.releaseCapture();
+        viewportFocused_ = false;
+        ImGui::End();
+        ImGui::PopStyleVar();
+        return;
+    }
 
     const ImVec2 available = ImGui::GetContentRegionAvail();
     const int width = std::max(8, static_cast<int>(available.x));
@@ -828,6 +870,8 @@ void EditorUI::drawViewport() {
     resizeViewport(width, height);
 
     if (!viewportReady_) {
+        endGizmoSession(true);
+        camera_.releaseCapture();
         ImGui::TextDisabled("Viewport indisponivel.");
         ImGui::End();
         ImGui::PopStyleVar();
@@ -840,18 +884,48 @@ void EditorUI::drawViewport() {
                  ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
     const bool hovered = ImGui::IsItemHovered();
     const ImGuiIO& io = ImGui::GetIO();
+    const EditorInput input = ReadEditorInput();
     const bool clickedViewport = hovered &&
-        (ImGui::IsMouseClicked(ImGuiMouseButton_Left) ||
-         ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
-         ImGui::IsMouseClicked(ImGuiMouseButton_Middle));
+        (input.leftPressed || input.rightPressed || input.middlePressed);
     if (clickedViewport) ImGui::SetWindowFocus();
-    // DockHierarchy: em layout dockado a aba selecionada precisa contar como
-    // foco, senao atalhos de ferramenta/WASD ficam inativos na viewport.
-    viewportFocused_ = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows |
-                                              ImGuiFocusedFlags_DockHierarchy);
-    const bool allowKeyboard = viewportFocused_ && !io.WantTextInput &&
-                               !ImGui::IsAnyItemActive();
-    const bool allowMouse = hovered && !io.WantTextInput && !ImGui::IsAnyItemActive();
+    viewportFocused_ = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
+    InputContext context;
+    context.windowFocused = IsWindowFocused();
+    context.viewportVisible = true;
+    context.hovered = hovered;
+    context.focused = viewportFocused_;
+    context.popup = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopup) ||
+        requestSavePopup_ || requestOpenPopup_ || requestLuaExportPopup_ || requestLuaImportPopup_;
+    context.text = io.WantTextInput;
+    context.widget = ImGui::IsAnyItemActive();
+    context.keyboardCaptured = io.WantCaptureKeyboard;
+    context.transforming = transform_.active();
+    context.navigating = camera_.cursorCaptured();
+    const InputRoute route = RouteInput(input, context);
+    if (route.owner == InputOwner::Cancel) {
+        endGizmoSession(true);
+        camera_.releaseCapture();
+    }
+    handleShortcuts(input, route);
+    if (traceInput_) {
+        const bool mouseEvent = input.leftPressed || input.rightPressed || input.middlePressed ||
+            ImGui::IsMouseReleased(0) || ImGui::IsMouseReleased(1) || ImGui::IsMouseReleased(2);
+        const bool keyEvent = input.tool >= 0 || input.save || input.open || input.escape ||
+            input.remove || input.focus;
+        if (mouseEvent || keyEvent || input.wheel != 0) {
+            diag::Event event;
+            event.subsystem = "input";
+            event.name = "dispatch";
+            event.correlationId = diag::newCorrelationId();
+            event.context = {{"consumer", InputOwnerName(route.owner)}, {"reason", route.reason},
+                {"tool", ToolModeName(tool_)}, {"hovered", hovered}, {"focused", viewportFocused_},
+                {"capture_mouse", io.WantCaptureMouse}, {"capture_keyboard", io.WantCaptureKeyboard},
+                {"left_pressed", input.leftPressed}, {"left_down", input.leftDown},
+                {"right_pressed", input.rightPressed}, {"right_down", input.rightDown},
+                {"key_tool", input.tool}, {"save", input.save}, {"open", input.open}};
+            diag::log(event);
+        }
+    }
     Instance* selection = scene_.selection();
     Part* selectedPart =
         selection != nullptr && selection->isPart() ? static_cast<Part*>(selection) : nullptr;
@@ -860,28 +934,31 @@ void EditorUI::drawViewport() {
                                  static_cast<float>(viewportHeight_)};
 
     GizmoInput gizmoInput;
-    gizmoInput.mousePosition = GetMousePosition();
-    gizmoInput.leftPressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-    gizmoInput.leftDown = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-    gizmoInput.windowFocused = IsWindowFocused();
-    gizmoInput.shiftDown =
-        IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    gizmoInput.mousePosition = input.mouse;
+    gizmoInput.leftPressed = input.leftPressed;
+    gizmoInput.leftDown = input.leftDown;
+    gizmoInput.windowFocused = context.windowFocused;
+    gizmoInput.shiftDown = input.shift;
 
     // Prioridade unica: o gizmo processa a entrada antes da camera e da
     // selecao. O estado atual (nao o do frame anterior) decide se a camera
     // pode navegar; um clique em handle nunca chega ao raycast de selecao.
+    const bool viewportOwns = route.owner == InputOwner::Viewport;
+    const bool sessionOwns = route.owner == InputOwner::Transform;
     const GizmoUpdateResult gizmoResult = transform_.update(
-        tool_, selectedPart, camera_, viewportRect, hovered, allowMouse, gizmoInput);
+        tool_, selectedPart, camera_, viewportRect, hovered,
+        viewportOwns || sessionOwns, gizmoInput);
     if (gizmoResult.ended) {
         checkInvariants(gizmoResult.cancelled ? "transform_cancel" : "transform_commit");
     }
-    camera_.handleInput(Vector2{static_cast<float>(viewportWidth_),
-                                static_cast<float>(viewportHeight_)},
-                        hovered, viewportFocused_, allowKeyboard, allowMouse,
-                        transform_.active() || gizmo_.hoveringHandle(), GetFrameTime());
+    const bool cameraOwns = route.owner == InputOwner::Camera;
+    camera_.handleInput(input, Vector2{viewportRect.width, viewportRect.height}, cameraOwns,
+        !transform_.active() && !gizmoResult.consumed &&
+            (cameraOwns || (route.editorKeys && !sessionOwns)),
+        viewportOwns && !gizmoResult.consumed, GetFrameTime());
 
-    if (allowMouse && !gizmoResult.consumed && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        const ImVec2 mouse = ImGui::GetMousePos();
+    if (viewportOwns && !gizmoResult.consumed && input.leftPressed) {
+        const Vector2 mouse = input.mouse;
         if (mouse.x >= viewportRect.x && mouse.y >= viewportRect.y &&
             mouse.x <= viewportRect.x + viewportRect.width &&
             mouse.y <= viewportRect.y + viewportRect.height) {
@@ -898,6 +975,10 @@ void EditorUI::drawViewport() {
         }
     }
 
+    // Selection may have changed in the raycast above.
+    selection = scene_.selection();
+    selectedPart = selection && selection->isPart() ? static_cast<Part*>(selection) : nullptr;
+
     BeginTextureMode(viewport_);
     renderer_.drawScene(scene_, camera_, viewportWidth_, viewportHeight_,
                         selection != nullptr ? selection->id() : kInvalidInstanceId);
@@ -908,8 +989,8 @@ void EditorUI::drawViewport() {
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     char overlay[192];
-    std::snprintf(overlay, sizeof(overlay), "%s  |  %.0f FPS  |  WASD move | RMB look | Q/E vertical",
-                  ToolModeName(tool_), ImGui::GetIO().Framerate);
+    std::snprintf(overlay, sizeof(overlay), "%s%s | %.0f FPS | WASD move | RMB look | Q/E vertical",
+                  ToolModeName(tool_), viewportFocused_ ? " [focus]" : "", ImGui::GetIO().Framerate);
     const ImVec2 overlaySize = ImGui::CalcTextSize(overlay);
     const ImVec2 overlayMin(imagePosition.x + 10.0f, imagePosition.y + 9.0f);
     drawList->AddRectFilled(overlayMin,

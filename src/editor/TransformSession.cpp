@@ -43,6 +43,13 @@ void TransformSession::cancel(Part* part, bool restoreTransform) {
     releasePhysics(id);
 }
 
+void TransformSession::commit(Part* part) {
+    const InstanceId id = gizmo_.sessionPartId();
+    if (gizmo_.dragging()) endDiagnostics(false, id);
+    gizmo_.cancel(part, false);
+    releasePhysics(id);
+}
+
 void TransformSession::releasePhysics(InstanceId id) {
     if (id != kInvalidInstanceId) {
         physics_.setPartEditing(id, false);

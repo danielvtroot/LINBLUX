@@ -109,4 +109,15 @@ if(XVFB_RUN_EXECUTABLE)
     COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24"
             $<TARGET_FILE:loblox_gizmo_visual_tests>)
   set_tests_properties(loblox_gizmo_visual PROPERTIES SKIP_RETURN_CODE 77)
+  find_program(XDOTOOL_EXECUTABLE xdotool)
+  if(XDOTOOL_EXECUTABLE)
+    add_executable(loblox_editor_input_tests tests/editor_input_main.cpp
+      src/editor/EditorUI.cpp src/rendering/SceneRenderer.cpp)
+    target_link_libraries(loblox_editor_input_tests PRIVATE loblox_core loblox_imgui OpenGL::GL)
+    add_test(NAME loblox_editor_input
+      COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24"
+              $<TARGET_FILE:loblox_editor_input_tests>)
+    set_tests_properties(loblox_editor_input PROPERTIES TIMEOUT 120
+      ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1")
+  endif()
 endif()

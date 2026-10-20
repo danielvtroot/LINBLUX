@@ -29,6 +29,7 @@ public:
                              Rectangle viewport, bool hovered, bool allowInput,
                              const GizmoInput& input);
     void cancel(Part* part, bool restoreTransform);
+    void commit(Part* part);
 
     bool active() const { return gizmo_.dragging(); }
     InstanceId partId() const { return gizmo_.sessionPartId(); }

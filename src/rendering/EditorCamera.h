@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Math.h"
+#include "editor/InputRouting.h"
 
 namespace loblox {
 
@@ -31,16 +32,15 @@ public:
     void focusOn(Vector3 point, float radius);
     void reset();
     void releaseCapture();
-    bool cursorCaptured() const { return cursorCaptured_; }
+    bool cursorCaptured() const { return gesture_ != Gesture::None; }
     float pitch() const { return pitch_; }
     void rotateBy(Vector2 mouseDelta);
     void zoomBy(float wheelDelta);
     void moveFree(Vector3 localInput, float deltaSeconds, bool fast);
     void setNavigationSettings(float moveSpeed, float lookSensitivity);
 
-    void handleInput(Vector2 viewportSize, bool hovered, bool focused,
-                     bool allowKeyboard, bool allowMouse, bool interactionBlocked,
-                     float deltaSeconds);
+    void handleInput(const EditorInput& input, Vector2 viewportSize, bool navigation,
+                     bool keyboard, bool zoom, float deltaSeconds);
 
     // Coordenadas locais do viewport (0..width, 0..height).
     Ray rayFromScreen(Vector2 localMouse, Vector2 viewportSize) const;
@@ -64,7 +64,8 @@ private:
     float minimumOrbitDistance_ = 2.0f;
     float moveSpeed_ = 30.0f;
     float lookSensitivity_ = 0.0065f;
-    bool cursorCaptured_ = false;
+    enum class Gesture { None, Look, Pan };
+    Gesture gesture_ = Gesture::None;
     Vector2 cursorRestorePosition_{0.0f, 0.0f};
 };
 

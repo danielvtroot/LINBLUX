@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "raylib.h"
+#include "core/Diagnostics.h"
 
 namespace loblox {
 
@@ -72,11 +73,15 @@ void EditorCamera::focusOn(Vector3 point, float radius) {
 }
 
 void EditorCamera::releaseCapture() {
-    if (!cursorCaptured_) return;
+    if (!cursorCaptured()) return;
     EnableCursor();
     SetMousePosition(static_cast<int>(cursorRestorePosition_.x),
                      static_cast<int>(cursorRestorePosition_.y));
-    cursorCaptured_ = false;
+    gesture_ = Gesture::None;
+    diag::Event event;
+    event.subsystem = "camera";
+    event.name = "capture_end";
+    diag::log(event);
 }
 
 void EditorCamera::rotateBy(Vector2 mouseDelta) {
@@ -108,34 +113,30 @@ void EditorCamera::moveFree(Vector3 localInput, float deltaSeconds, bool fast) {
     target_ = Vector3Add(target_, step);
 }
 
-void EditorCamera::handleInput(Vector2 viewportSize, bool hovered, bool focused,
-                               bool allowKeyboard, bool allowMouse, bool interactionBlocked,
-                               float deltaSeconds) {
-    const bool windowFocused = IsWindowFocused();
-    const bool rightPressed = IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
-    const bool rightDown = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
+void EditorCamera::handleInput(const EditorInput& input, Vector2 viewportSize,
+                               bool navigation, bool keyboard, bool zoom, float deltaSeconds) {
     bool capturedThisFrame = false;
-
-    if (!windowFocused || interactionBlocked || (!hovered && !cursorCaptured_)) {
-        releaseCapture();
-    }
-    if (rightPressed && hovered && windowFocused && allowMouse && !interactionBlocked) {
-        cursorRestorePosition_ = GetMousePosition();
+    if (!navigation) releaseCapture();
+    if (navigation && !cursorCaptured() && (input.rightPressed || input.middlePressed)) {
+        cursorRestorePosition_ = input.mouse;
         DisableCursor();
-        cursorCaptured_ = true;
+        gesture_ = input.rightPressed ? Gesture::Look : Gesture::Pan;
         capturedThisFrame = true;
+        diag::Event event;
+        event.subsystem = "camera";
+        event.name = "capture_begin";
+        event.context = {{"gesture", gesture_ == Gesture::Look ? "look" : "pan"}};
+        diag::log(event);
     }
-    if (cursorCaptured_ && (!rightDown || !windowFocused || !hovered || interactionBlocked)) {
+    if ((gesture_ == Gesture::Look && !input.rightDown) ||
+        (gesture_ == Gesture::Pan && !input.middleDown)) {
         releaseCapture();
     }
-
-    if (cursorCaptured_ && !capturedThisFrame) {
-        rotateBy(GetMouseDelta());
+    if (gesture_ == Gesture::Look && !capturedThisFrame) {
+        rotateBy(input.delta);
     }
-
-    if (!cursorCaptured_ && hovered && allowMouse && !interactionBlocked &&
-        IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
-        const Vector2 delta = GetMouseDelta();
+    if (gesture_ == Gesture::Pan && !capturedThisFrame) {
+        const Vector2 delta = input.delta;
         const Vector3 forward = Vector3Normalize(Vector3Subtract(target_, position()));
         const Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, Vector3{0, 1, 0}));
         const Vector3 up = Vector3Normalize(Vector3CrossProduct(right, forward));
@@ -145,20 +146,11 @@ void EditorCamera::handleInput(Vector2 viewportSize, bool hovered, bool focused,
         target_ = Vector3Add(target_, Vector3Scale(up, delta.y * worldPerPixel));
     }
 
-    if (focused && allowKeyboard && !interactionBlocked) {
-        Vector3 input{0.0f, 0.0f, 0.0f};
-        if (IsKeyDown(KEY_D)) input.x += 1.0f;
-        if (IsKeyDown(KEY_A)) input.x -= 1.0f;
-        if (IsKeyDown(KEY_W)) input.z += 1.0f;
-        if (IsKeyDown(KEY_S)) input.z -= 1.0f;
-        if (IsKeyDown(KEY_E)) input.y += 1.0f;
-        if (IsKeyDown(KEY_Q)) input.y -= 1.0f;
-        const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-        moveFree(input, deltaSeconds, shift);
+    if (keyboard && !input.modified && !capturedThisFrame) {
+        moveFree(input.movement, deltaSeconds, input.shift);
     }
-
-    if (hovered && allowMouse && !interactionBlocked && !cursorCaptured_) {
-        zoomBy(GetMouseWheelMove());
+    if (zoom && !cursorCaptured()) {
+        zoomBy(input.wheel);
     }
 }
 

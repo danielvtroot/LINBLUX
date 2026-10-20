@@ -27,6 +27,7 @@ struct Event {
 // Configura o arquivo JSONL. Vazio usa o caminho padrao do usuario.
 // Pode ser chamado nos testes para isolar o log em um diretorio temporario.
 void configure(const std::string& path);
+void setFrame(unsigned long long frame);
 void log(const Event& event);
 std::string newCorrelationId();
 const char* LevelName(Level level);

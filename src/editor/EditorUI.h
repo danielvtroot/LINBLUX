@@ -6,6 +6,7 @@
 #include "core/Config.h"
 #include "core/Math.h"
 #include "editor/Gizmo.h"
+#include "editor/InputRouting.h"
 #include "editor/Tool.h"
 #include "editor/TransformSession.h"
 #include "raylib.h"
@@ -37,10 +38,11 @@ public:
     ToolMode tool() const { return tool_; }
 
 private:
+    friend struct EditorUITestAccess;
     void buildDockLayout();
-    void handleShortcuts();
+    void handleShortcuts(const EditorInput& input, const InputRoute& route);
     void saveCurrentProject();
-    void setTool(ToolMode tool);
+    void setTool(ToolMode tool, const char* source = "toolbar");
     void endGizmoSession(bool restoreTransform);
     void checkInvariants(const char* operation);
 
@@ -76,6 +78,8 @@ private:
     TransformSession transform_;
     ToolMode tool_ = ToolMode::Select;
     bool viewportFocused_ = false;
+    unsigned long long frame_ = 0;
+    bool traceInput_ = false;
     bool gizmoLocalSpace_ = false;
     float moveSnap_ = 1.0f;
     float scaleSnap_ = 0.5f;
