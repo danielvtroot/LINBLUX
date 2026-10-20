@@ -1,5 +1,6 @@
 #include "serialization/ProjectIO.h"
 
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -15,6 +16,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "core/Diagnostics.h"
 #include "objects/Baseplate.h"
 #include "objects/Lighting.h"
 #include "objects/Part.h"
@@ -519,6 +521,10 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
 
     if (requestedNextId != 0) staged.setNextId(requestedNextId);
     staged.select(nullptr);
+    if (!staged.validate(error)) {
+        error = "cena candidata viola invariantes: " + error;
+        return false;
+    }
     scene.replaceContentsFrom(staged);
     return true;
 }
@@ -623,10 +629,16 @@ bool writeFileAtomically(const std::string& path, const std::string& content,
     return true;
 }
 
-bool save(const Scene& scene, const std::string& path, std::string& error) {
+namespace {
+
+bool SaveImpl(const Scene& scene, const std::string& path, std::string& error) {
     error.clear();
     if (path.empty()) {
         error = "caminho de salvamento vazio";
+        return false;
+    }
+    if (!scene.validate(error)) {
+        error = "cena nao pode ser salva: " + error;
         return false;
     }
 
@@ -647,7 +659,12 @@ bool save(const Scene& scene, const std::string& path, std::string& error) {
     return writeFileAtomically(path, text, error);
 }
 
-bool load(Scene& scene, const std::string& path, std::string& error) {
+double ElapsedMs(std::chrono::steady_clock::time_point started) {
+    return std::chrono::duration<double, std::milli>(
+               std::chrono::steady_clock::now() - started).count();
+}
+
+bool LoadImpl(Scene& scene, const std::string& path, std::string& error) {
     error.clear();
     std::ifstream in(path, std::ios::binary);
     if (!in) {
@@ -661,6 +678,62 @@ bool load(Scene& scene, const std::string& path, std::string& error) {
         return false;
     }
     return fromJson(scene, buffer.str(), error);
+}
+
+}  // namespace
+
+bool save(const Scene& scene, const std::string& path, std::string& error) {
+    const auto started = std::chrono::steady_clock::now();
+    const std::string correlation = diag::newCorrelationId();
+    diag::Event begin;
+    begin.subsystem = "persistence";
+    begin.name = "save_begin";
+    begin.correlationId = correlation;
+    begin.file = path;
+    begin.context = {{"format", "json"}};
+    diag::log(begin);
+
+    const bool ok = SaveImpl(scene, path, error);
+    diag::Event end;
+    end.level = ok ? diag::Level::Info : diag::Level::Error;
+    end.subsystem = "persistence";
+    end.name = "save_end";
+    end.correlationId = correlation;
+    end.file = path;
+    end.durationMs = ElapsedMs(started);
+    end.result = ok ? "ok" : "error";
+    end.error = ok ? std::string() : error;
+    end.context = {{"format", "json"}, {"parts", scene.parts().size()}};
+    diag::log(end);
+    return ok;
+}
+
+bool load(Scene& scene, const std::string& path, std::string& error) {
+    const auto started = std::chrono::steady_clock::now();
+    const std::string correlation = diag::newCorrelationId();
+    diag::Event begin;
+    begin.subsystem = "persistence";
+    begin.name = "load_begin";
+    begin.correlationId = correlation;
+    begin.file = path;
+    begin.context = {{"format", "json"}};
+    diag::log(begin);
+
+    const bool ok = LoadImpl(scene, path, error);
+    diag::Event end;
+    end.level = ok ? diag::Level::Info : diag::Level::Error;
+    end.subsystem = "persistence";
+    end.name = "load_end";
+    end.correlationId = correlation;
+    end.file = path;
+    end.durationMs = ElapsedMs(started);
+    end.result = ok ? "ok" : "error";
+    end.error = ok ? std::string() : error;
+    end.context = {{"format", "json"},
+                   {"parts", scene.parts().size()},
+                   {"objects", scene.objects().size()}};
+    diag::log(end);
+    return ok;
 }
 
 }  // namespace projectio

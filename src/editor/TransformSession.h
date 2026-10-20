@@ -1,5 +1,8 @@
 #pragma once
 
+#include <chrono>
+#include <string>
+
 #include "core/Math.h"
 #include "editor/Gizmo.h"
 #include "editor/Tool.h"
@@ -34,9 +37,13 @@ public:
 
 private:
     void releasePhysics(InstanceId id);
+    void beginDiagnostics(ToolMode mode);
+    void endDiagnostics(bool cancelled, InstanceId id);
 
     Gizmo& gizmo_;
     PhysicsWorld& physics_;
+    std::string correlationId_;
+    std::chrono::steady_clock::time_point startedAt_{};
 };
 
 }  // namespace loblox

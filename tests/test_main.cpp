@@ -3,10 +3,14 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <sstream>
 #include <string>
 
+#include <nlohmann/json.hpp>
+
 #include "core/Config.h"
+#include "core/Diagnostics.h"
 #include "objects/Baseplate.h"
 #include "objects/SpawnLocation.h"
 #include "editor/Gizmo.h"
@@ -1172,6 +1176,108 @@ void TestProjectValidation() {
     EndSection();
 }
 
+
+void TestInvariantsAndDiagnostics() {
+    Section("Invariantes, saneamento de NaN e diagnostico JSONL");
+    using namespace loblox;
+    std::string error;
+    Scene scene;
+    scene.buildDefaultScene();
+    CHECK(scene.validate(error));
+
+    Part* part = scene.parts().front();
+    const Vector3 originalPosition = part->position();
+    const Vector3 originalSize = part->size();
+    const Quaternion originalRotation = part->rotation();
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    part->setPosition(Vector3{nan, 2.0f, 3.0f});
+    CHECK(NearlyEqual(part->position(), originalPosition, 0.001f));
+    part->setSize(Vector3{nan, 2.0f, 3.0f});
+    CHECK(NearlyEqual(part->size(), originalSize, 0.001f));
+    part->setRotation(Quaternion{nan, 0.0f, 0.0f, 1.0f});
+    CHECK(NearlyEqual(part->rotation().x, originalRotation.x, 0.001f));
+    CHECK(NearlyEqual(part->rotation().w, originalRotation.w, 0.001f));
+    part->setTransform(loblox::Transform{originalPosition, originalRotation,
+                                 Vector3{originalSize.x, nan, originalSize.z}});
+    CHECK(NearlyEqual(part->position(), originalPosition, 0.001f));
+    CHECK(NearlyEqual(part->size(), originalSize, 0.001f));
+    CHECK(scene.validate(error));
+
+    // Ids continuam unicos mesmo quando o chamador tenta forcar um conflito.
+    CHECK(scene.createPart(PartShape::Block, V3(0, 2, 0), V3(2, 2, 2),
+                           "Conflito", part->id()) == nullptr);
+    Part* deletable = scene.createPart(PartShape::Block, V3(0, 2, 0), V3(2, 2, 2),
+                                        "Deletable");
+    CHECK(deletable != nullptr);
+    scene.select(deletable);
+    CHECK(scene.remove(deletable));
+    CHECK(scene.selection() == nullptr);
+    CHECK(scene.validate(error));
+
+    // Corpo ausente e corpo orfao sao detectados; sync/remocao restauram a
+    // correspondencia exata.
+    Scene physicsScene;
+    Part* first = physicsScene.createPart(PartShape::Block, V3(0, 4, 0), V3(4, 4, 4), "First");
+    PhysicsWorld physics;
+    physics.attach(physicsScene);
+    CHECK(physics.validate(physicsScene, error));
+    Part* late = physicsScene.createPart(PartShape::Block, V3(6, 4, 0), V3(2, 2, 2), "Late");
+    CHECK(!physics.validate(physicsScene, error));
+    CHECK(error.find("sem corpo") != std::string::npos);
+    physics.simulate(physicsScene, 0.0f);
+    CHECK(physics.validate(physicsScene, error));
+    physics.setPartEditing(late->id(), true);
+    CHECK(physics.isPartEditing(late->id()));
+    CHECK(physics.validate(physicsScene, error));
+    CHECK(physicsScene.remove(late));
+    CHECK(!physics.isPartEditing(late->id()));
+    CHECK(physics.validate(physicsScene, error));
+    CHECK(physicsScene.remove(first));
+    CHECK(physics.validate(physicsScene, error));
+
+    const auto logPath =
+        std::filesystem::temp_directory_path() / "loblox_diagnostics_test.jsonl";
+    std::error_code ignored;
+    std::filesystem::remove(logPath, ignored);
+    diag::configure(logPath.string());
+    diag::Event event;
+    event.level = diag::Level::Error;
+    event.subsystem = "test";
+    event.name = "invariant_probe";
+    event.correlationId = diag::newCorrelationId();
+    event.entityId = 42;
+    event.file = "projeto.json";
+    event.durationMs = 12.5;
+    event.result = "error";
+    event.error = "falha controlada";
+    event.context = {{"check", "jsonl"}, {"count", 3}};
+    diag::log(event);
+    CHECK(std::filesystem::exists(logPath));
+    std::ifstream input(logPath);
+    std::string line;
+    CHECK(static_cast<bool>(std::getline(input, line)));
+    bool parsed = false;
+    try {
+        const nlohmann::json record = nlohmann::json::parse(line);
+        parsed = true;
+        CHECK(record.value("level", "") == "error");
+        CHECK(record.value("subsystem", "") == "test");
+        CHECK(record.value("event", "") == "invariant_probe");
+        CHECK(record.value("correlation_id", "") == event.correlationId);
+        CHECK(record.value("entity_id", 0) == 42);
+        CHECK(record.value("file", "") == "projeto.json");
+        CHECK_NEAR(record.value("duration_ms", 0.0), 12.5, 0.001);
+        CHECK(record.value("result", "") == "error");
+        CHECK(record.value("error", "") == "falha controlada");
+        CHECK(record.contains("timestamp"));
+        CHECK(record["context"].value("check", "") == "jsonl");
+    } catch (const std::exception&) {
+        CHECK(parsed);
+    }
+    std::filesystem::remove(logPath, ignored);
+    EndSection();
+}
+
 void TestTransactionalLoad() {
     Section("Carregamento transacional e sincronizacao da fisica");
     using namespace loblox;
@@ -1298,6 +1404,7 @@ int main() {
     TestLuaDeclarativeSceneRoundTrip();
     TestProjectRoundTrip();
     TestProjectValidation();
+    TestInvariantsAndDiagnostics();
     TestTransactionalLoad();
     TestBaseplatePhysics();
     TestClearObjects();

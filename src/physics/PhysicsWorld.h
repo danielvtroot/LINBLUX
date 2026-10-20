@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <unordered_set>
 #include <unordered_map>
 
@@ -43,6 +44,8 @@ public:
     void removePart(InstanceId id);
     bool hasBody(InstanceId id) const;
     std::size_t bodyCount() const { return bodies_.size(); }
+    // Correspondencia exata Part <-> corpo e editingParts_ contido nos corpos.
+    bool validate(const Scene& scene, std::string& error) const;
 
     // Aplica as flags dirty de uma Part ao corpo correspondente.
     void applyChanges(Part* part);

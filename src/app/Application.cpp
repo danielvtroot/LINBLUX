@@ -8,6 +8,7 @@
 #include "raylib.h"
 #include "rlImGui.h"
 
+#include "core/Diagnostics.h"
 #include "editor/EditorUI.h"
 #include "rendering/SceneRenderer.h"
 #include "serialization/ProjectIO.h"
@@ -28,6 +29,13 @@ bool Application::initialize() {
     SetConfigFlags(flags);
     InitWindow(config_.windowWidth, config_.windowHeight, "Loblox Studio");
     if (!IsWindowReady()) {
+        diag::Event event;
+        event.level = diag::Level::Error;
+        event.subsystem = "app";
+        event.name = "startup_window_failed";
+        event.result = "error";
+        event.error = "janela grafica indisponivel";
+        diag::log(event);
         std::fprintf(stderr,
                      "Falha ao criar a janela grafica. Verifique DISPLAY/WAYLAND_DISPLAY "
                      "e o driver OpenGL.\n");
@@ -108,6 +116,14 @@ bool Application::initialize() {
     std::string projectLoadError;
     if (shouldLoad) {
         projectLoaded = projectio::load(scene_, startupPath, projectLoadError);
+        diag::Event event;
+        event.level = projectLoaded ? diag::Level::Info : diag::Level::Error;
+        event.subsystem = "app";
+        event.name = projectLoaded ? "startup_project_loaded" : "startup_project_failed";
+        event.file = startupPath;
+        event.result = projectLoaded ? "ok" : "error";
+        event.error = projectLoaded ? std::string() : projectLoadError;
+        diag::log(event);
         if (!projectLoaded) {
             std::fprintf(stderr, "Falha ao carregar '%s': %s. Cena padrao preservada.\n",
                          startupPath.c_str(), projectLoadError.c_str());

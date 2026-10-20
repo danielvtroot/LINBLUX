@@ -189,6 +189,48 @@ bool PhysicsWorld::hasBody(InstanceId id) const {
     return bodies_.find(id) != bodies_.end();
 }
 
+bool PhysicsWorld::validate(const Scene& scene, std::string& error) const {
+    error.clear();
+    std::size_t partCount = 0;
+    for (Part* part : scene.parts()) {
+        if (part == nullptr) {
+            error = "Part nula na cena";
+            return false;
+        }
+        ++partCount;
+        const auto it = bodies_.find(part->id());
+        if (it == bodies_.end()) {
+            error = "Part sem corpo fisico: " + std::to_string(part->id());
+            return false;
+        }
+        if (it->second.body == nullptr || it->second.shape == nullptr) {
+            error = "corpo ou shape nulo para a Part " + std::to_string(part->id());
+            return false;
+        }
+        if (it->second.body->getUserPointer() != part) {
+            error = "corpo aponta para outra Part: " + std::to_string(part->id());
+            return false;
+        }
+    }
+    if (bodies_.size() != partCount) {
+        error = "quantidade de corpos difere da quantidade de Parts";
+        return false;
+    }
+    for (const auto& pair : bodies_) {
+        if (scene.findPart(pair.first) == nullptr) {
+            error = "corpo orfao sem Part: " + std::to_string(pair.first);
+            return false;
+        }
+    }
+    for (InstanceId id : editingParts_) {
+        if (bodies_.find(id) == bodies_.end()) {
+            error = "Part em edicao sem corpo: " + std::to_string(id);
+            return false;
+        }
+    }
+    return true;
+}
+
 void PhysicsWorld::setBodyTransform(const Part& part, BodyEntry& entry, bool resetVelocity) {
     btTransform transform;
     transform.setIdentity();

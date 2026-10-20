@@ -12,6 +12,17 @@ const char* const kShapeNames[] = {"Block", "Sphere"};
 const char* const kMaterialNames[] = {"SmoothPlastic", "Plastic", "Wood",
                                       "Metal",         "Concrete", "Neon"};
 
+bool Finite(Vector3 value) {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+bool Finite(Quaternion value) {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z) &&
+           std::isfinite(value.w) &&
+           (value.x * value.x + value.y * value.y + value.z * value.z +
+            value.w * value.w) > 1e-8f;
+}
+
 }  // namespace
 
 const char* PartShapeName(PartShape shape) {
@@ -76,6 +87,10 @@ void Part::setShape(PartShape shape) {
 }
 
 void Part::setTransform(const Transform& transform) {
+    if (!Finite(transform.position) || !Finite(transform.size) ||
+        !Finite(transform.rotation)) {
+        return;
+    }
     const Transform sanitized{transform.position, CanonicalQuaternion(QuaternionNormalize(transform.rotation)),
                               ClampSize(transform.size)};
     if (NearlyEqual(transform_.position, sanitized.position) &&
@@ -91,7 +106,7 @@ void Part::setTransform(const Transform& transform) {
 }
 
 void Part::setPosition(Vector3 position) {
-    if (NearlyEqual(transform_.position, position)) {
+    if (!Finite(position) || NearlyEqual(transform_.position, position)) {
         return;
     }
     transform_.position = position;
@@ -99,6 +114,9 @@ void Part::setPosition(Vector3 position) {
 }
 
 void Part::setRotation(Quaternion rotation) {
+    if (!Finite(rotation)) {
+        return;
+    }
     const Quaternion normalized = CanonicalQuaternion(QuaternionNormalize(rotation));
     if (NearlyEqual(transform_.rotation, normalized)) {
         return;
@@ -112,6 +130,9 @@ void Part::setRotationEulerDegrees(Vector3 degrees) {
 }
 
 void Part::setSize(Vector3 size) {
+    if (!Finite(size)) {
+        return;
+    }
     const Vector3 clamped = ClampSize(size);
     if (NearlyEqual(transform_.size, clamped)) {
         return;
@@ -157,6 +178,9 @@ void Part::setCanCollide(bool canCollide) {
 }
 
 void Part::syncFromPhysics(Vector3 position, Quaternion rotation) {
+    if (!Finite(position) || !Finite(rotation)) {
+        return;
+    }
     transform_.position = position;
     transform_.rotation = CanonicalQuaternion(QuaternionNormalize(rotation));
 }

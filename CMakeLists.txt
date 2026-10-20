@@ -45,6 +45,7 @@ target_link_libraries(loblox_imgui PUBLIC ${RAYLIB_LIBRARIES} OpenGL::GL)
 
 # Camada sem interface: modelo de objetos, cena, fisica e persistencia.
 add_library(loblox_core STATIC
+  src/core/Diagnostics.cpp
   src/objects/Instance.cpp
   src/objects/Part.cpp
   src/objects/Workspace.cpp

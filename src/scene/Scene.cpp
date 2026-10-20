@@ -1,13 +1,24 @@
 #include "scene/Scene.h"
 
 #include <algorithm>
+#include <cmath>
+#include <set>
 #include <utility>
 
 namespace loblox {
 
 namespace {
 constexpr InstanceId kFirstId = 1;
+
+bool Finite(Vector3 value) {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
+
+bool Finite(Quaternion value) {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z) &&
+           std::isfinite(value.w);
+}
+}  // namespace
 
 Scene::Scene() {
     auto workspace = std::make_unique<Workspace>(allocateId());
@@ -42,6 +53,116 @@ InstanceId Scene::allocateId() {
 
 void Scene::setNextId(InstanceId id) {
     nextId_ = std::max(nextId_, std::max(kFirstId, id));
+}
+
+bool Scene::validate(std::string& error) const {
+    error.clear();
+    if (workspace_ == nullptr || lighting_ == nullptr) {
+        error = "cena sem Workspace ou Lighting";
+        return false;
+    }
+    if (workspace_->instanceClass() != InstanceClass::Workspace ||
+        lighting_->instanceClass() != InstanceClass::Lighting) {
+        error = "servicos com classes invalidas";
+        return false;
+    }
+    if (workspace_->parent() != nullptr || lighting_->parent() != nullptr) {
+        error = "servicos devem estar na raiz";
+        return false;
+    }
+    if (byId_.size() != objects_.size()) {
+        error = "indice de ids inconsistente com os objetos";
+        return false;
+    }
+    if (nextId_ == kInvalidInstanceId) {
+        error = "nextId invalido";
+        return false;
+    }
+
+    std::set<InstanceId> objectIds;
+    for (const std::unique_ptr<Instance>& object : objects_) {
+        if (!object) {
+            error = "objeto nulo na cena";
+            return false;
+        }
+        if (object->id() == kInvalidInstanceId || !objectIds.insert(object->id()).second) {
+            error = "id invalido ou duplicado: " + std::to_string(object->id());
+            return false;
+        }
+        const auto indexed = byId_.find(object->id());
+        if (indexed == byId_.end() || indexed->second != object.get()) {
+            error = "indice de id nao aponta para o objeto " + std::to_string(object->id());
+            return false;
+        }
+        if (object->parent() != nullptr && object->parent() != workspace_ &&
+            object->parent() != lighting_) {
+            error = "objeto com pai invalido: " + std::to_string(object->id());
+            return false;
+        }
+        if (object->isPart() && object->parent() != workspace_) {
+            error = "Part fora do Workspace: " + std::to_string(object->id());
+            return false;
+        }
+    }
+    if (byId_.find(workspace_->id()) == byId_.end() ||
+        byId_.find(lighting_->id()) == byId_.end()) {
+        error = "servicos ausentes do indice de ids";
+        return false;
+    }
+    if (workspace_->children().size() != parts_.size()) {
+        error = "Workspace e lista de Parts divergem";
+        return false;
+    }
+    if (!lighting_->children().empty()) {
+        error = "Lighting nao pode conter Parts";
+        return false;
+    }
+
+    std::set<InstanceId> partIds;
+    for (const Part* part : parts_) {
+        if (part == nullptr) {
+            error = "Part nula na lista de Parts";
+            return false;
+        }
+        if (!partIds.insert(part->id()).second) {
+            error = "Part duplicada: " + std::to_string(part->id());
+            return false;
+        }
+        const auto indexed = byId_.find(part->id());
+        if (indexed == byId_.end() || indexed->second != part ||
+            part->parent() != workspace_) {
+            error = "Part orfa ou com pai invalido: " + std::to_string(part->id());
+            return false;
+        }
+        const Transform& transform = part->transform();
+        if (!Finite(transform.position) || !Finite(transform.size) ||
+            !Finite(transform.rotation)) {
+            error = "transform nao finito na Part " + std::to_string(part->id());
+            return false;
+        }
+        if (transform.size.x < kMinPartSize || transform.size.y < kMinPartSize ||
+            transform.size.z < kMinPartSize) {
+            error = "tamanho abaixo do minimo na Part " + std::to_string(part->id());
+            return false;
+        }
+        const float lengthSqr =
+            transform.rotation.x * transform.rotation.x +
+            transform.rotation.y * transform.rotation.y +
+            transform.rotation.z * transform.rotation.z +
+            transform.rotation.w * transform.rotation.w;
+        if (std::fabs(lengthSqr - 1.0f) > 0.002f) {
+            error = "quaternion nao normalizado na Part " + std::to_string(part->id());
+            return false;
+        }
+    }
+    if (selection_ != nullptr) {
+        const auto selected = byId_.find(selection_->id());
+        if (selected == byId_.end() || selected->second != selection_) {
+            error = "selecao aponta para objeto inexistente";
+            return false;
+        }
+    }
+    return true;
 }
 
 bool Scene::adopt(std::unique_ptr<Instance> object, Instance* parent) {

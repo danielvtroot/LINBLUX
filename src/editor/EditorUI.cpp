@@ -1,5 +1,7 @@
 #include "editor/EditorUI.h"
 
+#include "core/Diagnostics.h"
+
 #include <algorithm>
 #include <cfloat>
 #include <cctype>
@@ -340,6 +342,21 @@ void EditorUI::setTool(ToolMode tool) {
     }
     tool_ = tool;
     camera_.releaseCapture();
+}
+
+void EditorUI::checkInvariants(const char* operation) {
+    std::string error;
+    if (!scene_.validate(error) || !physics_.validate(scene_, error)) {
+        diag::Event event;
+        event.level = diag::Level::Error;
+        event.subsystem = "invariants";
+        event.name = "violation";
+        event.result = "error";
+        event.error = error;
+        event.context = {{"operation", operation}};
+        diag::log(event);
+        setStatus(std::string("Invariante violada em ") + operation + ": " + error, true);
+    }
 }
 
 void EditorUI::setOnSceneLoaded(std::function<void()> callback) {
@@ -855,6 +872,9 @@ void EditorUI::drawViewport() {
     // pode navegar; um clique em handle nunca chega ao raycast de selecao.
     const GizmoUpdateResult gizmoResult = transform_.update(
         tool_, selectedPart, camera_, viewportRect, hovered, allowMouse, gizmoInput);
+    if (gizmoResult.ended) {
+        checkInvariants(gizmoResult.cancelled ? "transform_cancel" : "transform_commit");
+    }
     camera_.handleInput(Vector2{static_cast<float>(viewportWidth_),
                                 static_cast<float>(viewportHeight_)},
                         hovered, viewportFocused_, allowKeyboard, allowMouse,
@@ -1302,6 +1322,7 @@ void EditorUI::drawDialogs() {
                 if (onSceneLoaded_) {
                     onSceneLoaded_();
                 }
+                checkInvariants("load");
                 setStatus("Projeto carregado: " + projectPath_);
                 ImGui::CloseCurrentPopup();
             } else {
@@ -1352,6 +1373,7 @@ void EditorUI::drawDialogs() {
             if (scenelua::load(scene_, pathBuffer_, error)) {
                 camera_.releaseCapture();
                 if (onSceneLoaded_) onSceneLoaded_();
+                checkInvariants("lua_import");
                 setStatus("Cena declarativa importada.");
                 dialogError_.clear();
                 ImGui::CloseCurrentPopup();
@@ -1428,6 +1450,7 @@ void EditorUI::deleteSelection() {
     const std::string name = selection->name();
     endGizmoSession(false);
     if (scene_.remove(selection)) {
+        checkInvariants("delete");
         setStatus("Excluido: " + name);
     } else {
         setStatus("Nao foi possivel excluir " + name, true);
@@ -1435,6 +1458,8 @@ void EditorUI::deleteSelection() {
 }
 
 void EditorUI::focusSelection() {
+    // Enquadrar move a camera; nunca durante um arraste do gizmo.
+    if (transform_.active()) return;
     Instance* selection = scene_.selection();
     if (selection == nullptr) {
         return;

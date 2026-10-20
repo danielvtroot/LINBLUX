@@ -42,6 +42,7 @@ private:
     void saveCurrentProject();
     void setTool(ToolMode tool);
     void endGizmoSession(bool restoreTransform);
+    void checkInvariants(const char* operation);
 
     void drawToolbar();
     void drawMainMenuBar();

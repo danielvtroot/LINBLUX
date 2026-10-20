@@ -75,6 +75,9 @@ public:
     void setNextId(InstanceId id);
     InstanceId allocateId();
 
+    // Invariantes de cena. Retorna false com uma descricao sem alterar nada.
+    bool validate(std::string& error) const;
+
     std::string makeUniqueName(const std::string& base) const;
 
     void addRemovalListener(RemovalListener listener);
