@@ -363,3 +363,45 @@ matemática compartilhada, mas não substituem essa interação gráfica.
   não foram individualmente arrastados no GUI.
 - O teste foi feito em Xvfb/GLFW/X11 com renderização llvmpipe, não em Sway ou
   no notebook de destino.
+
+## 16. Estabilização B–E — 2026-10-20
+
+- Preservei o trabalho local no commit `c218a78` antes das alterações, sem
+  reset/clean e sem push. O backup verificado permanece fora do repositório.
+- **B — rotação:** o renderer ignorava `Part::rotation()` em boxes, seleção,
+  Baseplate/studs/grade e decorações da SpawnLocation. O collider já rotacionava,
+  por isso a silhueta ficava 214×54 px após Y=90° enquanto o AABB mudava para
+  x≈4/z≈8. Vértices e normais agora usam o mesmo quaternion em todos esses
+  caminhos. O teste gráfico 8×2×4 em 0/45/90/arbitrário compara silhueta,
+  wireframe e collider com os oito vértices projetados.
+- **C — sessão de drag:** `gizmoEditingId_` era uma segunda fonte de verdade e a
+  câmera processava RMB antes do gizmo. `GizmoInput`/`GizmoUpdateResult` tornaram
+  o ciclo determinístico; `TransformSession` suspende e libera o corpo em
+  começo/fim/cancelamento. Clique no handle é consumido antes da seleção;
+  câmera não navega durante o arraste; Escape/perda de foco/troca de ferramenta/
+  seleção/modal/exclusão encerram a sessão; soltar confirma. Testes cobrem
+  hover, confirmação, foco perdido, troca de ferramenta, cancelamento explícito,
+  destruição e ausência de corpo suspenso.
+- **D — persistência/inicialização:** `ProjectIO::fromJson` construía a cena
+  depois de `clearObjects`, podendo deixar estado parcial. Agora uma cena
+  candidata é construída e validada; `replaceContentsFrom` faz a troca O(1) e
+  avisa a física sobre as Parts antigas. Save valida cena+JSON antes do destino;
+  o escritor atômico foi extraído e reutilizado pelo Lua, com `fsync` do
+  diretório. `--project`, caminho padrão e cena padrão têm policy documentada;
+  projeto inválido não destrói a cena. `IsWindowReady` elimina o segfault sem
+  display (agora exit 1).
+- **E — invariantes/diagnóstico:** `Scene::validate` e `PhysicsWorld::validate`
+  cobrem ids, hierarquia, seleção, transform finito/normalizado, tamanho mínimo,
+  Part↔corpo, órfãos e edição contida. `Part` rejeita NaN/infinito. O logger
+  JSONL registra inicialização, persistência e transformações com correlação,
+  duração, resultado e erro, sem conteúdo de projeto, rotacionando em 1 MiB.
+- Resultado vigente: build Release, CTest 4/4, **845 checagens headless**, 300
+  casos / **7.509 checagens gráficas**; build ASan/UBSan e CTest 4/4 sem
+  relatórios. Um use-after-free no teste de invariantes foi encontrado pelo ASan
+  e corrigido.
+- A validação gráfica continua em Xvfb/llvmpipe, não em Sway/XWayland, GPU
+  física ou HDD. Não há CI versionado nem teste de falha de energia/fsync.
+
+Próximo passo: repetir a matriz de drags e o startup no Sway/XWayland real,
+adicionar undo/redo transacional e considerar um teste de injeção de falhas de
+escrita/fsync em ambiente controlado.

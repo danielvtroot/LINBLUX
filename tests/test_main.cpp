@@ -36,6 +36,16 @@ void Section(const char* name) {
     std::printf("\n[%s]\n", name);
 }
 
+bool TempFilesWithPrefix(const std::string& prefix) {
+    std::error_code scanError;
+    for (std::filesystem::directory_iterator it(std::filesystem::temp_directory_path(),
+                                                 scanError), end;
+         !scanError && it != end; it.increment(scanError)) {
+        if (it->path().filename().string().rfind(prefix, 0) == 0) return true;
+    }
+    return false;
+}
+
 void CheckTrue(bool condition, const char* expression, int line) {
     ++gChecks;
     if (!condition) {
@@ -923,6 +933,8 @@ void TestLuaDeclarativeSceneRoundTrip() {
     physics.attach(fileLoaded);
     const auto path = std::filesystem::temp_directory_path() / "loblox_scene_test.lua";
     CHECK(scenelua::save(source, path.string(), error));
+    CHECK(!std::filesystem::exists(path.string() + ".tmp"));
+    CHECK(!TempFilesWithPrefix("loblox_scene_test.lua.tmp."));
     CHECK(scenelua::load(fileLoaded, path.string(), error));
     physics.rebuildAll(fileLoaded);
     CHECK(physics.bodyCount() == fileLoaded.parts().size());
@@ -966,6 +978,7 @@ void TestProjectRoundTrip() {
     CHECK(error.empty());
     CHECK(std::filesystem::exists(path));
     CHECK(!std::filesystem::exists(path + ".tmp"));
+    CHECK(!TempFilesWithPrefix("loblox_test_project.json.tmp."));
 
     // A failed replace (destination is a directory) must not destroy its contents.
     const auto blockedPath = std::filesystem::temp_directory_path() / "loblox-blocked-save.json";
@@ -976,6 +989,7 @@ void TestProjectRoundTrip() {
     { std::ofstream marker(markerPath); marker << "preserve"; }
     CHECK(!loblox::projectio::save(scene, blockedPath.string(), error));
     CHECK(!error.empty());
+    CHECK(!TempFilesWithPrefix("loblox-blocked-save.json.tmp."));
     std::ifstream marker(markerPath);
     std::string markerContents;
     marker >> markerContents;
@@ -1226,11 +1240,12 @@ void TestInvariantsAndDiagnostics() {
     CHECK(error.find("sem corpo") != std::string::npos);
     physics.simulate(physicsScene, 0.0f);
     CHECK(physics.validate(physicsScene, error));
-    physics.setPartEditing(late->id(), true);
-    CHECK(physics.isPartEditing(late->id()));
+    const InstanceId lateId = late->id();
+    physics.setPartEditing(lateId, true);
+    CHECK(physics.isPartEditing(lateId));
     CHECK(physics.validate(physicsScene, error));
     CHECK(physicsScene.remove(late));
-    CHECK(!physics.isPartEditing(late->id()));
+    CHECK(!physics.isPartEditing(lateId));
     CHECK(physics.validate(physicsScene, error));
     CHECK(physicsScene.remove(first));
     CHECK(physics.validate(physicsScene, error));

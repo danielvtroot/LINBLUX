@@ -37,7 +37,8 @@ src/
   main.cpp                     entrada: cria Application e roda
   app/Application.{h,cpp}      janela, ImGui, cena, física, loop principal
   core/Math.h                  Vector3/Quaternion/Color helpers, clamp de tamanho
-  core/Config.h                AppConfig (FPS alvo, gravidade, passo fixo)
+  core/Config.h                AppConfig (FPS alvo, gravidade, passo fixo, projeto)
+  core/Diagnostics.{h,cpp}     eventos JSONL com rotação e correlação
   objects/Instance.{h,cpp}     nó base: id, nome, classe, pai, filhos, deletável
   objects/Part.{h,cpp}         transformação, forma, cor, material, flags físicas
   objects/Workspace.{h,cpp}    serviço raiz da cena
@@ -51,8 +52,10 @@ src/
   rendering/EditorCamera.{h,cpp} câmera orbital/livre, entrada, raio/projeção
   rendering/SceneRenderer.{h,cpp} céu, partes sombreadas, studs, seleção
   editor/Tool.h                enum ToolMode
-  editor/Gizmo.{h,cpp}         picking e desenho dos manipuladores 3D
+  editor/Gizmo.{h,cpp}         picking, desenho e estado do arraste
+  editor/GizmoLayout.{h,cpp}   posições screen-space compartilhadas desenho/hit test
   editor/GizmoMath.{h,cpp}     matemática pura de move/scale/rotate/snap
+  editor/TransformSession.{h,cpp} owner do ciclo gizmo ↔ suspensão física
   editor/EditorUI.{h,cpp}      toolbar, toolbox, viewport, explorer, properties
 tests/test_main.cpp            testes headless
 ```
@@ -237,19 +240,26 @@ Antes de tocar na cena, o loader valida:
 - `shape` e `material` conhecidos; booleanos presentes;
 - posições/rotações finitas, tamanho ≥ 0.2, canais de cor 0..255.
 
-Só depois `scene.clearObjects()` é chamado e a cena é reconstruída. Erros
-retornam mensagem legível e não deixam o arquivo em estado parcial.
+Em vez de limpar a cena antes de reconstruir, o loader constrói uma `Scene`
+candidata completa, aplica os objetos e chama `Scene::validate`. Somente se tudo
+passar, `Scene::replaceContentsFrom` troca o conteúdo em O(1). Os listeners de
+remoção permanecem no `Scene` de destino e são avisados sobre as Parts antigas,
+para que a física não conserve corpos órfãos; o chamador reconstrói os corpos da
+cena nova (`EditorUI` faz isso via `onSceneLoaded`). Erros retornam mensagem
+legível e não alteram a cena, a seleção ou os corpos atuais.
 
 ### 7.2 Escrita atômica
 
-`ProjectIO::save` serializa e valida a cena antes de tocar no destino. Cria um
-temporário único no mesmo diretório (`mkstemp`), escreve em loop, sincroniza com
-`fsync`, fecha e substitui com `rename` POSIX atômico. Falha de criação,
-gravação, sincronização, fechamento ou rename remove o temporário e preserva o
-destino anterior. Ao substituir um arquivo regular, mantém as permissões dele.
-Esse caminho de baixo nível é específico ao Linux/POSIX, plataforma suportada
-atualmente; não promete durabilidade do rename contra falha de energia em todos
-os sistemas de arquivos.
+`ProjectIO::save` valida as invariantes da cena, serializa e valida o JSON
+antes de tocar no destino. `writeFileAtomically` cria um temporário único no
+mesmo diretório (`mkstemp`), escreve em loop com `EINTR`, sincroniza com
+`fsync`, fecha e substitui com `rename` POSIX atômico. Depois do rename, abre o
+diretório e faz `fsync` quando o filesystem suporta. Falha de criação, gravação,
+sincronização, fechamento ou rename remove o temporário e preserva o destino
+anterior. Ao substituir um arquivo regular, mantém as permissões dele. O
+exportador Lua usa o mesmo escritor, eliminando o `.tmp` fixo que podia colidir
+com outra execução. Esse caminho é específico ao Linux/POSIX, plataforma
+suportada atualmente; `EINVAL`/`ENOTSUP` no `fsync` do diretório são tolerados.
 
 ## 8. Formato declarativo de cena (Lua v1)
 
@@ -279,7 +289,12 @@ invocado. JSON v1 segue sendo o formato nativo de projeto.
 - sincronização transformação ↔ corpo e raycast;
 - redimensionamento sem duplicar corpo;
 - round-trip JSON, escrita atômica, validação de arquivos inválidos;
+- carga transacional: falha não muda cena/física e sucesso remove corpos antigos;
 - reconstrução de corpos após carregar;
+- invariantes de cena/física, rejeição de NaN/infinito e diagnóstico JSONL;
+- sessão de transformação: clique consumido, confirmação, cancelamento por
+  foco/ferramenta/API e liberação do corpo;
+- inicialização sem display e parse de `--project`/`--help`;
 - matemática de eixos/planos, snap, face oposta fixa na escala, mínimo e rotação;
 - navegação livre, delta time, limite de pitch, zoom e foco;
 - suspensão/restauração de corpos durante edição;
@@ -383,3 +398,38 @@ quando suas projeções coincidem e são desenhados em passe de overlay com dept
 test desligado apenas durante esse desenho, para que a própria Part não os
 oculte. A seleção usa exatamente os limites desses ícones. Sphere continua
 uniforme por causa do `btSphereShape`.
+
+
+## 13. Sessão de transformação, invariantes e inicialização
+
+`Gizmo::update` recebe `GizmoInput` sintético (posição, botões, foco e Shift) e
+retorna `GizmoUpdateResult` com `started`, `ended`, `cancelled`, `consumed` e o
+`partId` da sessão mesmo depois de limpar o estado interno. `TransformSession`
+é o único dono da chamada e aplica o resultado à física: ao iniciar, suspende o
+corpo dinâmico; ao terminar, libera exatamente o corpo daquela sessão. A UI não
+mantém um id de edição paralelo. Escape, perda de foco, mudança de ferramenta,
+seleção, abertura de modal, exclusão e destruição passam por cancelamento/
+liberação explícitos. O `Gizmo` restaura o snapshot apenas quando o cancelamento
+pede restauração; soltar o botão confirma o transform atual.
+
+A prioridade é resolvida em uma única ordem por frame: o gizmo vê a entrada
+primeiro; se consumiu o clique, o raycast de seleção não roda; a câmera recebe
+`interactionBlocked` enquanto houver arraste ou handle sob o cursor e não
+processa RMB/MMB/roda/WASD. A navegação continua possível fora desses estados.
+
+`Scene::validate` verifica serviços, índice id→objeto, unicidade, hierarquia,
+seleção, Parts no Workspace, transform finito, tamanho mínimo e quaternion
+normalizado. `PhysicsWorld::validate` verifica correspondência exata entre Parts
+e corpos, `getUserPointer`, corpos órfãos e se o conjunto de edição está contido
+nos corpos. `Part` rejeita posição/rotação/tamanho não finitos em vez de
+propagar NaN ao Bullet ou ao renderer. Essas verificações rodam depois de carga,
+exclusão e fim de arraste; violações viram evento de diagnóstico e mensagem de
+erro, sem tentar “consertar” silenciosamente a cena.
+
+`Application` valida `IsWindowReady` antes de inicializar ImGui/raylib. Sem
+display, retorna falha controlada. Na inicialização, `--project` tem
+precedência; sem a flag, o caminho padrão é tentado apenas se for arquivo
+regular. Falhas mantêm a cena padrão e são mostradas na UI/stderr/log. O logger
+`core/Diagnostics` grava JSONL com timestamp UTC, nível, subsistema, evento,
+correlação, entidade, arquivo, duração, resultado, erro e contexto; rotação
+ocorre em 1 MiB e conteúdo de projeto nunca é registrado.

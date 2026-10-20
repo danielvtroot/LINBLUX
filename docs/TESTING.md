@@ -1,8 +1,12 @@
 # Testes e verificação
 
+> As seções 4–10 registram execuções históricas, com contagens antigas. O estado
+> atual desta estabilização está nas seções 2, 3 e 11; os números antigos foram
+> preservados como registro, não como resultado vigente.
+
 ## 1. Ambiente usado nesta etapa
 
-- Linux (contêiner de desenvolvimento), GCC com C++17, CMake 3.28.
+- Linux (contêiner de desenvolvimento), GCC 14.2 com C++17, CMake 3.31.6.
 - raylib 6.2.0 instalada em `/usr/local` (`pkg-config --modversion raylib`).
 - Bullet 3.24 (`libbullet-dev`).
 - Sem GPU: a verificação gráfica usou `Xvfb` + `LIBGL_ALWAYS_SOFTWARE=1`
@@ -26,17 +30,23 @@ Resultado: compilação concluída sem erros. Os alvos do projeto usam
 ctest --test-dir build --output-on-failure
 ```
 
-Saída real:
+Saída real (build externo desta auditoria):
 
 ```
-Test project /home/labubu/projeto/loblox/build
+Test project /tmp/opencode/loblox-phase-a-build
     Start 1: loblox_tests
-1/1 Test #1: loblox_tests .....................   Passed    0.02 sec
+1/4 Test #1: loblox_tests .....................   Passed    0.03 sec
+    Start 2: loblox_startup_no_display
+2/4 Test #2: loblox_startup_no_display ........   Passed    0.01 sec
+    Start 3: loblox_help
+3/4 Test #3: loblox_help ......................   Passed    0.01 sec
+    Start 4: loblox_gizmo_visual
+4/4 Test #4: loblox_gizmo_visual ..............   Passed    5.80 sec
 
-100% tests passed, 0 tests failed out of 1
+100% tests passed, 0 tests failed out of 4
 ```
 
-Executando o binário diretamente:
+Executando o binário headless diretamente:
 
 ```bash
 ./build/loblox_tests
@@ -45,9 +55,16 @@ Executando o binário diretamente:
 Saída real (final):
 
 ```
-149 checagens, 0 falhas
+845 checagens, 0 falhas
 RESULTADO: OK
 ```
+
+O teste gráfico reporta **300 casos renderizados e 7.509 checagens**, incluindo
+o novo caso de rotação de uma caixa 8×2×4 em 0°, 45°, 90° e orientação
+arbitrária. Ele compara a silhueta rasterizada, o wireframe de seleção e a
+rotação do collider com a projeção dos oito vértices. O teste de inicialização
+sem display exige código de saída 1 e mensagem controlada; o teste `--help`
+verifica o parse da CLI.
 
 ### 3.1 Cobertura da suíte
 
@@ -69,6 +86,12 @@ RESULTADO: OK
 | Validação | JSON inválido, versão 99, Lighting ausente, id duplicado, tamanho negativo, pai inválido, arquivo inexistente |
 | Carga + física | corpos são reconstruídos; peça carregada cai e colide |
 | Limpeza | `clearObjects` remove Parts e corpos, mantém a cena utilizável |
+| Rotação renderizada | caixa 8×2×4 em 0/45/90/arbitrária: silhueta, seleção e collider coerentes com os vértices projetados |
+| Sessão do gizmo | hover, início, consumo do clique, confirmação ao soltar, Escape/perda de foco/troca de ferramenta, restauração e liberação do corpo |
+| Carga transacional | falha não altera a cena nem corpos; sucesso remove corpos antigos e permite reconstrução explícita |
+| Invariantes | ids únicos, hierarquia, seleção, transform finito/normalizado, tamanho mínimo, Part ↔ corpo, edição contida nos corpos |
+| Diagnóstico | JSONL com timestamp, nível, subsistema, evento, correlação, entidade, arquivo, duração, resultado, erro e contexto |
+| Inicialização | sem display retorna 1 sem segfault; `--project` e cena padrão preservada em falha |
 
 ## 4. Smoke test gráfico
 
@@ -297,3 +320,85 @@ As capturas após os drags são `/tmp/loblox-rotate-drag.png` e
 lado em cada ferramenta; os outros lados de Scale têm cobertura de matemática
 automatizada, mas não foram arrastados individualmente. Xvfb usa GLFW/X11 e
 llvmpipe; Sway/XWayland real continua sem validação.
+
+
+## 11. Estabilização B–E — 2026-10-20
+
+Esta etapa corrigiu a causa dos principais defeitos observados e ampliou a
+verificação sem alterar o modelo de objetos nem trocar as bibliotecas.
+
+### 11.1 Correções cobertas
+
+- **Rotação no renderer:** boxes sombreados, normais por face, wireframe de
+  seleção, Baseplate, studs, grade e decorações da SpawnLocation agora usam o
+  mesmo quaternion da Part. Antes, a física rotacionava o collider e o desenho
+  permanecia alinhado aos eixos.
+- **Sessão de transformação:** `TransformSession` é o único dono da transição
+  entre o estado do `Gizmo` e a suspensão do corpo no Bullet. Não existe mais
+  `gizmoEditingId_` como fonte paralela. Clique em handle é consumido antes do
+  raycast de seleção; câmera (RMB/MMB/roda/WASD) não navega durante o arraste;
+  soltar confirma, Escape/perda de foco/troca de ferramenta/seleção/modal
+  cancelam e restauram; o corpo é liberado em todos os caminhos, inclusive na
+  destruição da UI.
+- **Persistência transacional:** `ProjectIO::fromJson` constrói uma cena
+  candidata completa, valida invariantes e só então troca o conteúdo. Falhas de
+  parse, schema, ids, construção ou invariantes deixam a cena e a física atuais
+  intactas. O save valida a cena e o JSON antes de tocar no destino; o
+  exportador Lua reutiliza o mesmo escritor atômico.
+- **Escrita durável:** arquivo temporário exclusivo no mesmo diretório, escrita
+  com tratamento de `EINTR`, `fsync`, `close`, `rename` e `fsync` do diretório.
+  Falhas antes do rename removem o temporário e preservam o destino anterior.
+- **Inicialização:** a janela é validada com `IsWindowReady`; sem display o app
+  retorna 1 com mensagem, sem segfault. `--project` tem precedência; sem a flag,
+  o caminho padrão só é carregado se for arquivo regular; falha mantém a cena
+  padrão, aparece na UI/stderr e é registrada.
+- **Invariantes e diagnóstico:** `Scene::validate` e `PhysicsWorld::validate`
+  detectam ids/hierarquia/seleção inválidos, transform não finito ou não
+  normalizado, tamanho abaixo do mínimo, Part sem corpo, corpo órfão e edição
+  fora dos corpos. `Part` rejeita atualizações com NaN/infinito. O log JSONL é
+  rotacionado em 1 MiB e não registra conteúdo de projeto.
+
+### 11.2 Comandos e resultados
+
+Build Release e suíte normal:
+
+```bash
+cmake -S . -B /tmp/opencode/loblox-phase-a-build -DCMAKE_BUILD_TYPE=Release
+cmake --build /tmp/opencode/loblox-phase-a-build -j2
+ctest --test-dir /tmp/opencode/loblox-phase-a-build --output-on-failure
+# 4/4 testes; headless: 845 checagens; gráfico: 300 casos / 7.509 checagens
+```
+
+Build ASan/UBSan e suíte:
+
+```bash
+cmake -S . -B /tmp/opencode/loblox-sanitize-build -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer -g' \
+  -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'
+cmake --build /tmp/opencode/loblox-sanitize-build -j2
+ASAN_OPTIONS=detect_leaks=0:abort_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
+  ctest --test-dir /tmp/opencode/loblox-sanitize-build --output-on-failure
+# 4/4 testes; nenhum relatório ASan/UBSan
+```
+
+O `detect_leaks=0` é necessário porque bibliotecas gráficas e o contexto GLFW/GL
+mantêm alocações globais; ele não desativa a detecção de use-after-free,
+out-of-bounds ou UB, que foi o objetivo desta execução. Um use-after-free no
+próprio teste de invariantes foi encontrado pelo ASan e corrigido antes deste
+resultado.
+
+### 11.3 Limitações desta validação
+
+- A execução gráfica continua sendo `Xvfb` + `LIBGL_ALWAYS_SOFTWARE=1`
+  (llvmpipe), não Sway/XWayland com GPU física, nem o notebook de destino.
+- A prioridade de entrada e o cancelamento são testados com entrada sintética
+  no `Gizmo`/`TransformSession`, não por eventos reais de janela. O caminho de
+  câmera bloqueada durante o arraste é garantido pelo mesmo `interactionBlocked`
+  que os testes de câmera já cobrem, mas não foi exercitado por mouse real.
+- Falhas de `fsync` não têm injeção determinística; são cobertas por revisão do
+  caminho de erro e pelo teste de rename/diretório. Escrita em sistema de
+  arquivos real com falha de energia não foi simulada.
+- O log JSONL foi validado em teste com campos obrigatórios, mas não há
+  coleta/observabilidade externa nem rotação testada com 1 MiB real.
+- Não há CI versionado nem validação de longa duração, milhares de peças,
+  memória ou HDD mecânico.

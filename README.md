@@ -35,11 +35,16 @@ carregamento remoto e sem assets pesados.
 - Peças novas começam ancoradas para permanecerem no lugar durante a edição;
   desative `Anchored` para simular gravidade e colisões.
 - Salvar/abrir projeto JSON versionado, com validação, escrita atômica e
-  tratamento de erros.
+  carregamento transacional: um arquivo inválido não altera a cena atual.
 - Exportar/importar cena `.lua` declarativa com hierarquia e propriedades. O
   parser aceita apenas `return` e tabelas de literais; arquivos nunca são
   executados e o formato JSON do projeto permanece intacto.
-- Testes automatizados headless via CTest.
+- Inicialização segura: sem display a aplicação sai com erro controlado; um
+  projeto inválido mantém a cena padrão e mostra a falha.
+- Invariantes de cena/física verificadas após carga, exclusão e fim de arraste.
+- Diagnóstico estruturado em JSONL, com rotação limitada, para falhas de
+  inicialização, persistência e transformação.
+- Testes automatizados headless e gráficos via CTest.
 
 Não há botão Play, Test ou Stop nesta etapa, nem personagem R6, scripts,
 terreno ou multiplayer.
@@ -82,7 +87,29 @@ não é necessário baixar nada durante o build ou a execução.
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j2
 ./build/loblox
+# ou, para abrir um projeto específico:
+./build/loblox --project /caminho/projeto.json
 ```
+
+### Inicialização e recuperação
+
+- `--project CAMINHO` abre explicitamente o arquivo indicado; ele nunca é
+  sobrescrito automaticamente.
+- Sem a flag, o caminho padrão de projeto é carregado somente se existir. Esse
+  é o conceito de “último projeto válido” nesta etapa: o arquivo salvo por
+  `Ctrl+S` no caminho padrão; não há histórico de projetos recentes.
+- Se o arquivo estiver ausente, ilegível ou inválido, a cena padrão é mantida,
+  a falha aparece na barra de status e uma linha de erro é gravada no log. O
+  carregamento usa uma cena candidata e só troca o conteúdo depois da validação.
+- Sem `DISPLAY`/`WAYLAND_DISPLAY`, a inicialização falha com código 1 em vez de
+  continuar com uma janela inválida.
+
+O log de diagnóstico fica em
+`$XDG_STATE_HOME/loblox/loblox.jsonl` ou, sem essa variável,
+`~/.local/state/loblox/loblox.jsonl`. É JSONL com timestamp UTC, nível,
+subsistema, evento, correlação, arquivo, duração, resultado, erro e contexto
+(contagens/formato), sem conteúdo de projeto. Cada arquivo é rotacionado ao
+atingir 1 MiB, mantendo um backup `.1`.
 
 ## Controles
 
@@ -128,12 +155,12 @@ runtime Luau permanece planejado para uma etapa separada.
 src/
   main.cpp
   app/            ciclo de vida da aplicação
-  core/           constantes e utilidades de matemática
+  core/           constantes, matemática e diagnósticos JSONL
   objects/        Instance, Part, Workspace, Lighting, Baseplate, SpawnLocation
   scene/          Scene (posse, hierarquia, seleção)
   physics/        PhysicsWorld (Bullet, um corpo por Part)
   rendering/      EditorCamera e SceneRenderer
-  editor/         EditorUI, Gizmo, GizmoMath, ToolMode
+  editor/         EditorUI, Gizmo, GizmoMath, TransformSession, ToolMode
   serialization/  ProjectIO JSON e SceneLua declarativo sem runtime
 tests/            suíte headless (CTest; matemática, física e round-trips)
 third_party/      Dear ImGui 1.93 docking, rlImGui, nlohmann/json
@@ -148,17 +175,34 @@ ctest --test-dir build --output-on-failure
 ```
 
 A suíte cobre criação/remoção, hierarquia, propriedades, JSON e Lua declarativo,
-validação, matemática de câmera/gizmos, snap, faces de escala, pausa física na
-edição, Anchored, CanCollide, raycast e corpos únicos. Veja `docs/TESTING.md`
-para resultados e limitações dos testes gráficos.
+validação transacional, matemática de câmera/gizmos, snap, faces de escala,
+rotação renderizada, sessão de arraste, pausa física, invariantes, Anchored,
+CanCollide, raycast, corpos únicos e inicialização sem display. Veja
+`docs/TESTING.md` para resultados, contagens e limitações dos testes gráficos.
+
+Teste com sanitizers (ASan/UBSan), em diretório separado:
+
+```bash
+cmake -S . -B /tmp/loblox-sanitize -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer -g' \
+  -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'
+cmake --build /tmp/loblox-sanitize -j2
+ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1 \
+  ctest --test-dir /tmp/loblox-sanitize --output-on-failure
+```
 
 ## Limitações desta etapa
 
 - Materiais são presets visuais de cor/tonalidade, não PBR.
 - Escala Global de uma caixa rotacionada é limitada à dimensão local mais
   alinhada; escala global exata exigiria shear, que o modelo `Part` não guarda.
-- A substituição de arquivos usa `mkstemp`/`fsync`/`rename` POSIX; portabilidade
-  de gravação para sistemas não POSIX ainda não foi implementada.
+- A substituição de arquivos usa `mkstemp`/`fsync`/`rename` e `fsync` do
+  diretório em POSIX/Linux; portabilidade para sistemas não POSIX ainda não
+  foi implementada.
+- Não há autosave nem histórico/undo. O “último projeto” é apenas o caminho
+  padrão salvo por `Ctrl+S`, não uma lista de arquivos recentes.
+- A validação foi executada em Xvfb/llvmpipe; não houve teste no Sway/XWayland
+  real, em GPU física ou em HD mecânico.
 - Seleção única (sem multi-seleção), sem undo/redo e sem duplicar.
 - Sem personagem, animações, scripts ou modo de jogo.
 - A interface usa X11/XWayland; não há backend Wayland nativo.
