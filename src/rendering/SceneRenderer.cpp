@@ -270,6 +270,9 @@ SceneRenderer::SceneRenderer() {
 
 SceneRenderer::~SceneRenderer() {
     unloadStudMeshes();
+    // LoadMaterialDefault allocates the maps even though shader/texture are
+    // shared defaults. UnloadMaterial preserves those defaults and frees maps.
+    UnloadMaterial(studMaterial_);
 }
 
 Color SceneRenderer::MaterialColor(const Part& part) {
@@ -339,9 +342,9 @@ void SceneRenderer::drawBaseplate(const Part& baseplate, Vector3 lightDirection,
     if (entry.valid) {
         studMaterial_.maps[MATERIAL_MAP_DIFFUSE].color = MaterialColor(baseplate);
         const Matrix transform = MatrixMultiply(
+            QuaternionToMatrix(rotation),
             MatrixTranslate(baseplate.position().x, baseplate.position().y,
-                            baseplate.position().z),
-            QuaternionToMatrix(rotation));
+                            baseplate.position().z));
         DrawMesh(entry.mesh, studMaterial_, transform);
         studMaterial_.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
     }

@@ -21,6 +21,7 @@
 #include "rendering/EditorCamera.h"
 #include "rendering/SceneRenderer.h"
 #include "scene/Scene.h"
+#include "objects/Baseplate.h"
 
 using namespace loblox;
 
@@ -430,6 +431,40 @@ bool BoundsNear(const PixelBounds& actual, const ProjectedBounds& expected, int 
            std::fabs(static_cast<float>(actual.maxY) - expected.maxY) <= tolerance;
 }
 
+void VerifyBaseplateStudTransform(RenderTexture2D target, SceneRenderer& renderer,
+                                  EditorCamera& camera) {
+    Scene scene;
+    Part* base = scene.createBaseplate(Vector3{20, 10, 30}, Vector3{16, 1, 16});
+    const Color studColor{80, 100, 120, 255};
+    base->setColor(studColor);
+    scene.lighting()->setSunIntensity(0); // Base shade differs from unlit stud tops.
+    PhysicsWorld physics;
+    physics.attach(scene);
+    for (const Vector3 degrees : {Vector3{0, 0, 0}, Vector3{0, 45, 0},
+                                  Vector3{0, 90, 0}, Vector3{25, 37, -16}}) {
+        gCase = "baseplate/studs/" + std::to_string(static_cast<int>(degrees.y));
+        gCaseFailures = 0;
+        base->setRotationEulerDegrees(degrees);
+        physics.simulate(scene, 0);
+        camera.setOrbit(base->position(), 28, 0.75f, 1.0f);
+        BeginTextureMode(target);
+        renderer.drawScene(scene, camera, target.texture.width, target.texture.height, kInvalidInstanceId);
+        EndTextureMode();
+        Image image = LoadImageFromTexture(target.texture);
+        ImageFlipVertical(&image);
+        for (float x : {-4.0f, 4.0f}) for (float z : {-4.0f, 4.0f}) {
+            // These are the centers of the four visible stud top faces.
+            const Vector3 world = Vector3Add(base->position(),
+                Vector3RotateByQuaternion(Vector3{x, 0.95f, z}, base->rotation()));
+            const Vector2 pixel = camera.project(world,
+                Vector2{float(target.texture.width), float(target.texture.height)});
+            CHECK(Nearly(PixelAt(image, pixel), studColor, 5));
+        }
+        CHECK(NearlyEqual(physics.bodyRotation(base->id()), base->rotation(), 0.002f));
+        UnloadImage(image);
+    }
+}
+
 void VerifyRotatedPartRendering(RenderTexture2D target, SceneRenderer& renderer,
                                 EditorCamera& camera) {
     const int width = target.texture.width;
@@ -518,6 +553,8 @@ int main() {
         return 77;
     }
 
+    int casesRun = 0;
+    {
     Scene scene;
     Part* nearPart = scene.createPart(PartShape::Block, Vector3{0.0f, 4.0f, 0.0f},
                                       Vector3{4.0f, 4.0f, 4.0f}, "GizmoTest");
@@ -532,6 +569,7 @@ int main() {
     EditorCamera camera;
 
     VerifyRotatedPartRendering(target, renderer, camera);
+    VerifyBaseplateStudTransform(target, renderer, camera);
 
     const ToolMode modes[3] = {ToolMode::Move, ToolMode::Scale, ToolMode::Rotate};
     const char* modeNames[3] = {"Move", "Scale", "Rotate"};
@@ -550,7 +588,6 @@ int main() {
         {"rotated", {0.0f, 4.0f, 0.0f}, {4.0f, 6.0f, 8.0f}, {23.0f, 37.0f, -16.0f}},
     };
 
-    int casesRun = 0;
     for (int partIndex = 0; partIndex < 4; ++partIndex) {
         const PartConfig& config = parts[partIndex];
         nearPart->setTransform(loblox::Transform{config.position,
@@ -733,10 +770,12 @@ int main() {
         UnloadRenderTexture(big);
     }
 
+    } // Destroy renderer/material/meshes while the OpenGL context is alive.
     UnloadRenderTexture(target);
     CloseWindow();
     std::printf("\n%d casos renderizados, %d checagens, %d falhas\n", casesRun, gChecks,
                 gFailures);
+    std::fflush(stdout);
     if (gFailures != 0) {
         std::printf("RESULTADO: FALHOU\n");
         return 1;
