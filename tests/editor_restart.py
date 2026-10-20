@@ -95,7 +95,8 @@ def main():
         before = len(events())
         started = time.monotonic()
         with (root / f"run-{before}.log").open("w") as output:
-            process = subprocess.Popen([binary, "--project", str(project)], cwd=root,
+            arguments = [binary] if project is None else [binary, "--project", str(project)]
+            process = subprocess.Popen(arguments, cwd=root,
                                        env=environment, stdout=output, stderr=output)
             try:
                 def find_window():
@@ -104,7 +105,7 @@ def main():
                                             capture_output=True, text=True, timeout=2)
                     return result.stdout.strip().splitlines()[-1] if result.returncode == 0 else None
                 window = wait_for(find_window, process)
-                wait_for(lambda: any(e["event"].startswith("startup_project_")
+                wait_for(lambda: any(e["event"] == "startup_ready"
                                       for e in events()[before:]), process)
                 startup = time.monotonic() - started
                 xdo("windowfocus", "--sync", window)
@@ -119,7 +120,7 @@ def main():
                     cpu_started = time.monotonic()
                     time.sleep(2)
                     cpu = (ticks() - initial) / os.sysconf("SC_CLK_TCK") / (time.monotonic() - cpu_started)
-                    print(f"Actual app: startup to load event {startup:.3f}s; {rss}; CPU {cpu * 100:.1f}% of one core (llvmpipe)")
+                    print(f"Actual app: startup to ready event {startup:.3f}s; {rss}; CPU {cpu * 100:.1f}% of one core (llvmpipe)")
                 previous = save_path.stat().st_mtime_ns if save_path.exists() else 0
                 xdo("keydown", "ctrl", "keydown", "s")
                 try:
@@ -141,7 +142,9 @@ def main():
     # the failed startup file when saving normally.
     missing = root / "missing.json"
     default = root / "data/loblox/projects/default.loblox.json"
-    document = run(missing, default, benchmark=True)
+    document = run(None, default)
+    assert not any(e["event"] == "startup_project_failed" for e in events()), "fresh startup must not report a missing default as an error"
+    document = run(missing, default, document, benchmark=True)
     assert not missing.exists()
     assert {o["class"] for o in document["objects"]} >= {"Baseplate", "SpawnLocation"}
     for index in range(2):
@@ -159,8 +162,8 @@ def main():
     run(project, project, document)
     assert any(e["event"] == "startup_project_failed" for e in events())
     assert sum(e["event"] == "startup_project_loaded" for e in events()) == 2
-    assert sum(e["event"] == "save_end" and e.get("result") == "ok" for e in events()) == 3
-    print(f"Actual app: 3 launches, save/exit/restart, IDs/transforms/properties/deletion OK; artifacts: {root}")
+    assert sum(e["event"] == "save_end" and e.get("result") == "ok" for e in events()) == 4
+    print(f"Actual app: 4 launches, fresh startup/save/exit/restart, IDs/transforms/properties/deletion OK; artifacts: {root}")
 
 
 if __name__ == "__main__":

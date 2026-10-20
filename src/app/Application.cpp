@@ -112,7 +112,10 @@ bool Application::initialize() {
                                         : config_.startupProjectPath;
     std::error_code startupPathError;
     const bool defaultExists = std::filesystem::is_regular_file(startupPath, startupPathError);
-    const bool shouldLoad = !config_.startupProjectPath.empty() || defaultExists || startupPathError;
+    const bool inaccessible = startupPathError &&
+        startupPathError != std::errc::no_such_file_or_directory &&
+        startupPathError != std::errc::not_a_directory;
+    const bool shouldLoad = !config_.startupProjectPath.empty() || defaultExists || inaccessible;
     bool projectLoaded = false;
     std::string projectLoadError;
     if (shouldLoad) {
@@ -153,6 +156,12 @@ bool Application::initialize() {
     } else {
         ui_->setStatus("Loblox Open-Source pronto. Toolbox a esquerda para construir.");
     }
+    diag::Event ready;
+    ready.subsystem = "app";
+    ready.name = "startup_ready";
+    ready.result = "ok";
+    ready.context = {{"project_loaded", projectLoaded}, {"parts", scene_.parts().size()}};
+    diag::log(ready);
     return true;
 }
 
