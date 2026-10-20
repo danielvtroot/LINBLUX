@@ -1,5 +1,34 @@
 # Testes e verificação
 
+> Atualização de entrada e estabilização: consulte
+> [INPUT_AND_VALIDATION.md](INPUT_AND_VALIDATION.md) e
+> [ENGINEERING_HANDOFF.md](ENGINEERING_HANDOFF.md). Há agora testes de entrada
+> X11 real pela EditorUI e de reinício do executável. Os resultados anteriores
+> abaixo permanecem como histórico, não como prova da interação atual.
+
+## Validação desta missão — 2026-10-20
+
+- Release: `cmake --build build -j2`; `ctest --test-dir build --output-on-failure`:
+  **6/6 passaram**, 1.520 checks headless, 300 casos/7.529 checks de render/picking,
+  204 checks de entrada real e 4 execuções/reinícios do aplicativo.
+- Debug limpo: `cmake --build build/stabilization-debug --clean-first -j2`,
+  seguido de CTest no mesmo diretório: **6/6 passaram**.
+- Sway 1.10.1 headless/pixman com XWayland isolado: 204 checks e 4 reinícios
+  passaram, sem automação no desktop do usuário. Script: `bash tests/run_sway_input.sh`.
+- ASan/UBSan: build Debug com `-fsanitize=address,undefined -fno-omit-frame-pointer
+  -fno-pie` e linker `-fsanitize=address,undefined -no-pie`. Executar com
+  `ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1`.
+  Headless/help/startup passam; a suíte completa fica **3/6** por leaks Mesa/GLX
+  no encerramento dos testes gráficos (~194 kB). O leak próprio de 336 bytes
+  do material dos studs foi corrigido. Um probe apenas raylib, sem Loblox,
+  reproduz o resíduo externo. Nenhuma verificação foi desativada.
+- Houve falha inicial dos builds por `/tmp` tmpfs de 512 MB esgotado; os builds
+  foram refeitos em `build/`, com TMPDIR em `build/compiler-tmp`. Houve uma
+  execução sem display Xvfb disponível; o app terminou controladamente, e
+  a repetição isolada e a suíte completa subsequente passaram.
+- Pendentes: notebook/sessão física, GPU/DPI, cenas grandes e sessões longas.
+  A instalação anuncia 6.2.0 no pkg-config, mas usa headers/runtime 6.5-dev.
+
 > As seções 4–10 registram execuções históricas, com contagens antigas. O estado
 > atual desta estabilização está nas seções 2, 3 e 11; os números antigos foram
 > preservados como registro, não como resultado vigente.

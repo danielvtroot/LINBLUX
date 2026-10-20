@@ -1,5 +1,8 @@
 # Loblox Open-Source
 
+Validação de controles, atalhos, diagnóstico e procedimento manual em Sway:
+[Entrada e validação integrada](docs/INPUT_AND_VALIDATION.md).
+
 Editor 3D nativo para Linux, inspirado no Roblox Studio clássico. Esta é a
 **fundação 0.3**: viewport 3D real, física 3D contínua, hierarquia de objetos,
 painel de propriedades, ferramentas de construção e salvamento em JSON.
