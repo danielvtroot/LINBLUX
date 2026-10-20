@@ -315,6 +315,10 @@ bool save(const Scene& scene, const std::string& path, std::string& error) {
         error = "caminho de exportacao vazio";
         return finish(false);
     }
+    if (!scene.validate(error)) {
+        error = "cena nao pode ser exportada: " + error;
+        return finish(false);
+    }
     std::string text;
     try {
         text = toLua(scene);
