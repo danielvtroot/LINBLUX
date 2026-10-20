@@ -9,8 +9,10 @@
 #include "core/Config.h"
 #include "objects/Baseplate.h"
 #include "objects/SpawnLocation.h"
+#include "editor/Gizmo.h"
 #include "editor/GizmoLayout.h"
 #include "editor/GizmoMath.h"
+#include "editor/TransformSession.h"
 #include "physics/PhysicsWorld.h"
 #include "rendering/EditorCamera.h"
 #include "scene/Scene.h"
@@ -636,6 +638,147 @@ void TestGizmoLayout() {
     EndSection();
 }
 
+void TestGizmoSessionLifecycle() {
+    Section("Sessao de transformacao: prioridade, confirmacao, cancelamento e fisica");
+    using namespace loblox;
+    Scene scene;
+    Part* part = scene.createPart(PartShape::Block, V3(0, 20, 0), V3(8, 2, 4), "SessionPart");
+    part->setAnchored(false);
+    PhysicsWorld physics;
+    physics.attach(scene);
+    Gizmo gizmo;
+    TransformSession session(gizmo, physics);
+    EditorCamera camera;
+    const Rectangle viewport{0.0f, 0.0f, 640.0f, 400.0f};
+    const loblox::Transform start = part->transform();
+    camera.setOrbit(part->position(), 14.0f, 0.75f, 0.35f);
+
+    const auto layout = gizmolayout::Build(*part, ToolMode::Move, camera, viewport, false);
+    CHECK(layout.valid);
+    int axis = -1;
+    Vector2 pressPoint{};
+    for (int candidate = 0; candidate < 3; ++candidate) {
+        const Rectangle rect = gizmolayout::AxisButtonRect(layout, candidate);
+        const Vector2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
+        if (gizmolayout::PickPlane(layout, center) < 0 &&
+            gizmolayout::PickAxisButton(layout, center) == candidate) {
+            axis = candidate;
+            pressPoint = center;
+            break;
+        }
+    }
+    CHECK(axis >= 0);
+    if (axis < 0) { EndSection(); return; }
+
+    const Vector2 direction = Vector2Normalize(
+        Vector2Subtract(pressPoint, layout.center));
+    const Vector2 dragPoint{std::clamp(pressPoint.x + direction.x * 55.0f, 5.0f, 635.0f),
+                            std::clamp(pressPoint.y + direction.y * 55.0f, 5.0f, 395.0f)};
+
+    const auto makeInput = [&](Vector2 mouse, bool pressed, bool down, bool focused = true) {
+        GizmoInput input;
+        input.mousePosition = mouse;
+        input.leftPressed = pressed;
+        input.leftDown = down;
+        input.windowFocused = focused;
+        return input;
+    };
+    const auto resetPart = [&]() {
+        part->setTransform(start);
+        physics.simulate(scene, 0.0f);
+        camera.setOrbit(part->position(), 14.0f, 0.75f, 0.35f);
+    };
+    const auto begin = [&](Gizmo& targetGizmo, TransformSession& targetSession) {
+        (void)targetGizmo.update(ToolMode::Move, part, camera, viewport, true, true,
+                                 makeInput(pressPoint, false, false));
+        return targetSession.update(ToolMode::Move, part, camera, viewport, true, true,
+                                    makeInput(pressPoint, true, true));
+    };
+
+    resetPart();
+    GizmoUpdateResult result = begin(gizmo, session);
+    CHECK(result.started);
+    CHECK(result.consumed);
+    CHECK(!result.ended);
+    CHECK(result.partId == part->id());
+    CHECK(session.active());
+    CHECK(session.partId() == part->id());
+    CHECK(physics.isPartEditing(part->id()));
+    CHECK(gizmo.hoveringHandle());
+
+    result = session.update(ToolMode::Move, part, camera, viewport, true, true,
+                            makeInput(dragPoint, false, true));
+    CHECK(result.consumed);
+    CHECK(!result.started);
+    CHECK(Vector3Distance(part->position(), start.position) > 0.01f);
+    CHECK(physics.isPartEditing(part->id()));
+
+    result = session.update(ToolMode::Move, part, camera, viewport, true, true,
+                            makeInput(dragPoint, false, false));
+    CHECK(result.ended);
+    CHECK(!result.cancelled);
+    CHECK(result.partId == part->id());
+    CHECK(!session.active());
+    CHECK(!physics.isPartEditing(part->id()));
+    const Vector3 releasedPosition = part->position();
+
+    resetPart();
+    result = begin(gizmo, session);
+    CHECK(result.started && physics.isPartEditing(part->id()));
+    (void)session.update(ToolMode::Move, part, camera, viewport, true, true,
+                         makeInput(dragPoint, false, true));
+    result = session.update(ToolMode::Move, part, camera, viewport, true, true,
+                            makeInput(dragPoint, false, true, false));
+    CHECK(result.ended);
+    CHECK(result.cancelled);
+    CHECK(NearlyEqual(part->position(), start.position, 0.001f));
+    CHECK(!physics.isPartEditing(part->id()));
+
+    resetPart();
+    result = begin(gizmo, session);
+    CHECK(result.started);
+    (void)session.update(ToolMode::Move, part, camera, viewport, true, true,
+                         makeInput(dragPoint, false, true));
+    result = session.update(ToolMode::Select, part, camera, viewport, true, true,
+                            makeInput(dragPoint, false, true));
+    CHECK(result.ended);
+    CHECK(result.cancelled);
+    CHECK(NearlyEqual(part->position(), start.position, 0.001f));
+    CHECK(!physics.isPartEditing(part->id()));
+
+    resetPart();
+    result = begin(gizmo, session);
+    CHECK(result.started);
+    (void)session.update(ToolMode::Move, part, camera, viewport, true, true,
+                         makeInput(dragPoint, false, true));
+    session.cancel(part, true);
+    CHECK(!session.active());
+    CHECK(NearlyEqual(part->position(), start.position, 0.001f));
+    CHECK(!physics.isPartEditing(part->id()));
+
+    {
+        resetPart();
+        Gizmo temporaryGizmo;
+        TransformSession temporarySession(temporaryGizmo, physics);
+        result = begin(temporaryGizmo, temporarySession);
+        CHECK(result.started);
+        CHECK(physics.isPartEditing(part->id()));
+    }
+    CHECK(!physics.isPartEditing(part->id()));
+
+    // O clique que inicia um arraste e consumido: a selecao por raycast nao
+    // pode trocar a Part no mesmo evento.
+    resetPart();
+    result = begin(gizmo, session);
+    CHECK(result.consumed);
+    CHECK(result.partId == part->id());
+    session.cancel(part, false);
+    CHECK(!physics.isPartEditing(part->id()));
+    CHECK(std::isfinite(releasedPosition.x) && std::isfinite(releasedPosition.y) &&
+          std::isfinite(releasedPosition.z));
+    EndSection();
+}
+
 void TestEditorCameraMath() {
     Section("Matematica de navegacao da camera");
     using namespace loblox;
@@ -1110,6 +1253,7 @@ int main() {
     TestResizeKeepsSingleBody();
     TestGizmoMath();
     TestGizmoLayout();
+    TestGizmoSessionLifecycle();
     TestEditorCameraMath();
     TestPhysicsEditSuspension();
     TestLuaDeclarativeSceneRoundTrip();

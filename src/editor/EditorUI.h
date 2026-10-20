@@ -7,6 +7,7 @@
 #include "core/Math.h"
 #include "editor/Gizmo.h"
 #include "editor/Tool.h"
+#include "editor/TransformSession.h"
 #include "raylib.h"
 
 namespace loblox {
@@ -38,7 +39,8 @@ private:
     void buildDockLayout();
     void handleShortcuts();
     void saveCurrentProject();
-    void finishGizmoEdit();
+    void setTool(ToolMode tool);
+    void endGizmoSession(bool restoreTransform);
 
     void drawToolbar();
     void drawMainMenuBar();
@@ -69,9 +71,9 @@ private:
     const AppConfig& config_;
 
     Gizmo gizmo_;
+    TransformSession transform_;
     ToolMode tool_ = ToolMode::Select;
     bool viewportFocused_ = false;
-    InstanceId gizmoEditingId_ = kInvalidInstanceId;
     bool gizmoLocalSpace_ = false;
     float moveSnap_ = 1.0f;
     float scaleSnap_ = 0.5f;

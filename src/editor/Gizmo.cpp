@@ -93,35 +93,49 @@ void Gizmo::cancel(Part* part, bool restoreTransform) {
     handle_ = Handle::None;
     activeAxis_ = activePlane_ = -1;
     activeHandle_ = gizmomath::HandleId::None;
+    hoveredHandle_ = gizmomath::HandleId::None;
     draggedPartId_ = kInvalidInstanceId;
 }
 
-bool Gizmo::update(ToolMode mode, Part* part, const EditorCamera& camera, Rectangle viewport,
-                   bool hovered, bool allowInput) {
+GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& camera,
+                                Rectangle viewport, bool hovered, bool allowInput,
+                                const GizmoInput& input) {
+    GizmoUpdateResult result;
     consumedLastInput_ = false;
-    if (dragging_ && !IsWindowFocused()) {
-        cancel(part, false);
-        consumedLastInput_ = true;
-        return true;
+    const auto finish = [this](GizmoUpdateResult value) {
+        consumedLastInput_ = value.consumed;
+        return value;
+    };
+    const auto endSession = [this, &result](Part* sessionPart, bool restore,
+                                            bool cancelled) {
+        result.ended = true;
+        result.cancelled = cancelled;
+        result.partId = draggedPartId_;
+        result.consumed = true;
+        cancel(sessionPart, restore);
+        return result;
+    };
+
+    if (dragging_ && !input.windowFocused) {
+        return finish(endSession(part, true, true));
     }
     if (mode == ToolMode::Select || viewport.width < 8 || viewport.height < 8) {
-        if (dragging_) cancel(part, false);
-        return false;
+        if (dragging_) return finish(endSession(part, true, true));
+        return finish(result);
     }
 
     // Todo hit test usa coordenadas locais da viewport; o layout tambem.
-    const Vector2 mouse = GetMousePosition();
-    const Vector2 localMouse{mouse.x - viewport.x, mouse.y - viewport.y};
+    const Vector2 localMouse{input.mousePosition.x - viewport.x,
+                             input.mousePosition.y - viewport.y};
     const Ray ray = camera.rayFromScreen(localMouse, Vector2{viewport.width, viewport.height});
     if (dragging_) {
-        consumedLastInput_ = true;
+        result.consumed = true;
         if (part == nullptr || part->id() != draggedPartId_) {
-            cancel(nullptr, false);
-            return true;
+            return finish(endSession(nullptr, false, true));
         }
-        if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            cancel(part, false);
-            return true;
+        if (!input.leftDown) {
+            // Soltar o botao e o unico caminho que confirma o transform atual.
+            return finish(endSession(part, false, false));
         }
 
         const Vector3 center = startTransform_.position;
@@ -129,18 +143,17 @@ bool Gizmo::update(ToolMode mode, Part* part, const EditorCamera& camera, Rectan
         if (handle_ == Handle::Axis || handle_ == Handle::ScaleFace) {
             const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
             float parameter = 0.0f;
-            if (!AxisParameter(ray, center, axis, viewForward, parameter)) return true;
+            if (!AxisParameter(ray, center, axis, viewForward, parameter)) return finish(result);
             const float delta = parameter - startParam_;
             if (handle_ == Handle::Axis) {
                 part->setPosition(gizmomath::MoveAxis(
                     {startTransform_.position, startTransform_.rotation, startTransform_.size},
-                    axis, delta, IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 0.0f : moveSnap_));
+                    axis, delta, input.shiftDown ? 0.0f : moveSnap_));
             } else {
                 const auto snapshot = gizmomath::TransformSnapshot{
                     startTransform_.position, startTransform_.rotation, startTransform_.size};
-                const float snap = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)
-                                       ? 0.0f : scaleSnap_;
-                if (!gizmomath::IsScaleFace(activeHandle_)) return true;
+                const float snap = input.shiftDown ? 0.0f : scaleSnap_;
+                if (!gizmomath::IsScaleFace(activeHandle_)) return finish(result);
                 const auto transformed = part->shape() == PartShape::Sphere
                     ? gizmomath::ScaleUniformFace(snapshot, axis,
                                                   gizmomath::HandleSide(activeHandle_), delta, snap)
@@ -149,42 +162,41 @@ bool Gizmo::update(ToolMode mode, Part* part, const EditorCamera& camera, Rectan
                 part->setTransform(Transform{transformed.position, startTransform_.rotation,
                                              transformed.size});
             }
-            return true;
+            return finish(result);
         }
         if (handle_ == Handle::Plane) {
             const Vector3 a = PlaneAxisA(activePlane_, *part, localSpace_);
             const Vector3 b = PlaneAxisB(activePlane_, *part, localSpace_);
             const Vector3 normal = Vector3Normalize(Vector3CrossProduct(a, b));
             Vector3 hit;
-            if (!RayPlane(ray, center, normal, hit)) return true;
+            if (!RayPlane(ray, center, normal, hit)) return finish(result);
             const Vector3 delta = Vector3Subtract(hit, startPlaneHit_);
             part->setPosition(gizmomath::MovePlane(
                 {startTransform_.position, startTransform_.rotation, startTransform_.size}, a, b,
-                delta, IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 0.0f : moveSnap_));
-            return true;
+                delta, input.shiftDown ? 0.0f : moveSnap_));
+            return finish(result);
         }
         if (handle_ == Handle::RotateRing) {
             Vector3 hit;
-            if (!RayPlane(ray, center, axis, hit)) return true;
+            if (!RayPlane(ray, center, axis, hit)) return finish(result);
             const Vector3 offset = Vector3Subtract(hit, center);
-            if (Vector3LengthSqr(offset) < 1e-5f) return true;
+            if (Vector3LengthSqr(offset) < 1e-5f) return finish(result);
             const float delta = gizmomath::WrappedAngleDelta(
                 startAngle_, AngleOnPlane(offset, axis));
-            const float snap = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)
-                                   ? 0.0f : rotateSnapDegrees_;
+            const float snap = input.shiftDown ? 0.0f : rotateSnapDegrees_;
             part->setRotation(gizmomath::Rotate(
                 {startTransform_.position, startTransform_.rotation, startTransform_.size},
                 axis, delta, snap));
-            return true;
+            return finish(result);
         }
-        return true;
+        return finish(result);
     }
 
     hoveredHandle_ = gizmomath::HandleId::None;
-    if (part == nullptr || !hovered || !allowInput) return false;
+    if (part == nullptr || !hovered || !allowInput) return finish(result);
     const gizmolayout::Layout layout =
         gizmolayout::Build(*part, mode, camera, viewport, localSpace_);
-    if (!layout.valid) return false;
+    if (!layout.valid) return finish(result);
 
     int pickedAxis = -1;
     int pickedSide = 1;
@@ -222,13 +234,13 @@ bool Gizmo::update(ToolMode mode, Part* part, const EditorCamera& camera, Rectan
         }
     }
 
-    if (pickedHandle == Handle::None) return false;
+    if (pickedHandle == Handle::None) return finish(result);
     hoveredHandle_ = pickedHandle == Handle::ScaleFace ? gizmomath::ScaleFaceHandleId(pickedAxis, pickedSide)
                     : pickedHandle == Handle::RotateRing ? RotateHandleId(pickedAxis)
                     : pickedHandle == Handle::Plane ? PlaneHandleId(pickedPlane)
                     : pickedHandle == Handle::Axis ? AxisHandleId(pickedAxis)
                     : gizmomath::HandleId::None;
-    if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return false;
+    if (!input.leftPressed) return finish(result);
 
     handle_ = pickedHandle;
     activeHandle_ = hoveredHandle_;
@@ -237,38 +249,39 @@ bool Gizmo::update(ToolMode mode, Part* part, const EditorCamera& camera, Rectan
     draggedPartId_ = part->id();
     startTransform_ = part->transform();
     dragging_ = true;
-    consumedLastInput_ = true;
 
+    const auto failedStart = [&]() {
+        cancel(part, false);
+        // O clique era do gizmo: nao pode cair na selecao de Part.
+        result.consumed = true;
+        return finish(result);
+    };
     if (handle_ == Handle::Axis || handle_ == Handle::ScaleFace) {
         const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, localSpace_);
         const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
         if (!AxisParameter(ray, startTransform_.position, axis, viewForward, startParam_)) {
-            cancel(part, false);
-            // O clique era do gizmo: nao pode cair na selecao de Part.
-            consumedLastInput_ = true;
-            return true;
+            return failedStart();
         }
     } else if (handle_ == Handle::Plane) {
         const Vector3 a = PlaneAxisA(activePlane_, *part, localSpace_);
         const Vector3 b = PlaneAxisB(activePlane_, *part, localSpace_);
         if (!RayPlane(ray, startTransform_.position, Vector3Normalize(Vector3CrossProduct(a, b)),
                       startPlaneHit_)) {
-            cancel(part, false);
-            consumedLastInput_ = true;
-            return true;
+            return failedStart();
         }
     } else if (handle_ == Handle::RotateRing) {
         const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, localSpace_);
         Vector3 hit;
         if (!RayPlane(ray, startTransform_.position, axis, hit) ||
             Vector3LengthSqr(Vector3Subtract(hit, startTransform_.position)) < 1e-5f) {
-            cancel(part, false);
-            consumedLastInput_ = true;
-            return true;
+            return failedStart();
         }
         startAngle_ = AngleOnPlane(Vector3Subtract(hit, startTransform_.position), axis);
     }
-    return true;
+    result.consumed = true;
+    result.started = true;
+    result.partId = draggedPartId_;
+    return finish(result);
 }
 
 void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& camera,

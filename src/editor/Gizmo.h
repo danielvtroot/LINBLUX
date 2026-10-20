@@ -9,13 +9,35 @@ namespace loblox {
 
 class EditorCamera;
 
+// Entrada sintetica: permite testar o ciclo de vida do gizmo sem janela e
+// impede que o hit test e o arraste leiam estados globais divergentes.
+struct GizmoInput {
+    Vector2 mousePosition{0.0f, 0.0f};
+    bool leftPressed = false;
+    bool leftDown = false;
+    bool windowFocused = true;
+    bool shiftDown = false;
+};
+
+// Resultado de um unico update. `partId` identifica a sessao encerrada mesmo
+// depois de o Gizmo limpar seu estado interno.
+struct GizmoUpdateResult {
+    bool consumed = false;
+    bool started = false;
+    bool ended = false;
+    bool cancelled = false;
+    InstanceId partId = kInvalidInstanceId;
+};
+
 class Gizmo {
 public:
-    bool update(ToolMode mode, Part* part, const EditorCamera& camera, Rectangle viewport,
-                bool hovered, bool allowInput);
+    GizmoUpdateResult update(ToolMode mode, Part* part, const EditorCamera& camera,
+                             Rectangle viewport, bool hovered, bool allowInput,
+                             const GizmoInput& input);
     void drawOverlay(const Part& part, ToolMode mode, const EditorCamera& camera,
                      Rectangle viewport) const;
     bool dragging() const { return dragging_; }
+    InstanceId sessionPartId() const { return draggedPartId_; }
     bool consumedLastInput() const { return consumedLastInput_; }
     bool hoveringHandle() const { return hoveredHandle_ != gizmomath::HandleId::None; }
     gizmomath::HandleId hoveredHandle() const { return hoveredHandle_; }

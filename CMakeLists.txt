@@ -57,6 +57,8 @@ add_library(loblox_core STATIC
   src/serialization/SceneLua.cpp
   src/editor/GizmoMath.cpp
   src/editor/GizmoLayout.cpp
+  src/editor/Gizmo.cpp
+  src/editor/TransformSession.cpp
   src/rendering/EditorCamera.cpp
 )
 target_include_directories(loblox_core PUBLIC
@@ -74,7 +76,6 @@ add_executable(loblox
   src/main.cpp
   src/app/Application.cpp
   src/rendering/SceneRenderer.cpp
-  src/editor/Gizmo.cpp
   src/editor/EditorUI.cpp
 )
 target_link_libraries(loblox PRIVATE loblox_core loblox_imgui ${RAYLIB_LIBRARIES} OpenGL::GL)
@@ -91,7 +92,6 @@ add_test(NAME loblox_tests COMMAND loblox_tests)
 # hit test. Sem contexto grafico o executavel retorna 77 (SKIP).
 add_executable(loblox_gizmo_visual_tests
   tests/gizmo_visual_main.cpp
-  src/editor/Gizmo.cpp
   src/rendering/SceneRenderer.cpp
 )
 target_link_libraries(loblox_gizmo_visual_tests PRIVATE loblox_core)

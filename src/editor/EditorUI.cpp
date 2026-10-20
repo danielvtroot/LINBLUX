@@ -315,6 +315,8 @@ EditorUI::EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera,
       camera_(camera),
       renderer_(renderer),
       config_(config),
+      gizmo_(),
+      transform_(gizmo_, physics_),
       projectPath_(config.defaultProjectPath) {
     std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
     cameraMoveSpeed_ = camera_.moveSpeed();
@@ -324,14 +326,20 @@ EditorUI::EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera,
 
 EditorUI::~EditorUI() {
     camera_.releaseCapture();
-    finishGizmoEdit();
+    endGizmoSession(false);
     unloadViewport();
 }
 
-void EditorUI::finishGizmoEdit() {
-    if (gizmoEditingId_ == kInvalidInstanceId) return;
-    physics_.setPartEditing(gizmoEditingId_, false);
-    gizmoEditingId_ = kInvalidInstanceId;
+void EditorUI::endGizmoSession(bool restoreTransform) {
+    transform_.cancel(scene_.findPart(transform_.partId()), restoreTransform);
+}
+
+void EditorUI::setTool(ToolMode tool) {
+    if (transform_.active()) {
+        endGizmoSession(true);
+    }
+    tool_ = tool;
+    camera_.releaseCapture();
 }
 
 void EditorUI::setOnSceneLoaded(std::function<void()> callback) {
@@ -403,9 +411,7 @@ void EditorUI::handleShortcuts() {
         return;
     }
     if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-        Part* edited = scene_.findPart(gizmoEditingId_);
-        gizmo_.cancel(edited, true);
-        finishGizmoEdit();
+        endGizmoSession(true);
         camera_.releaseCapture();
         return;
     }
@@ -417,21 +423,24 @@ void EditorUI::handleShortcuts() {
         focusSelection();
     }
     if (viewportFocused_ && !ImGui::IsAnyItemActive()) {
-        if (ImGui::IsKeyPressed(ImGuiKey_1)) { tool_ = ToolMode::Select; camera_.releaseCapture(); }
-        if (ImGui::IsKeyPressed(ImGuiKey_2)) { tool_ = ToolMode::Move; camera_.releaseCapture(); }
-        if (ImGui::IsKeyPressed(ImGuiKey_3)) { tool_ = ToolMode::Scale; camera_.releaseCapture(); }
-        if (ImGui::IsKeyPressed(ImGuiKey_4)) { tool_ = ToolMode::Rotate; camera_.releaseCapture(); }
+        if (ImGui::IsKeyPressed(ImGuiKey_1)) setTool(ToolMode::Select);
+        if (ImGui::IsKeyPressed(ImGuiKey_2)) setTool(ToolMode::Move);
+        if (ImGui::IsKeyPressed(ImGuiKey_3)) setTool(ToolMode::Scale);
+        if (ImGui::IsKeyPressed(ImGuiKey_4)) setTool(ToolMode::Rotate);
     }
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
+        endGizmoSession(false);
         saveCurrentProject();
     }
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O)) {
+        endGizmoSession(true);
         requestOpenPopup_ = true;
         std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
     }
 }
 
 void EditorUI::saveCurrentProject() {
+    endGizmoSession(false);
     std::string error;
     if (projectio::save(scene_, projectPath_, error)) {
         setStatus("Projeto salvo em " + projectPath_);
@@ -474,17 +483,20 @@ void EditorUI::drawMainMenuBar() {
             saveCurrentProject();
         }
         if (ImGui::MenuItem("Save Project As...")) {
+            endGizmoSession(true);
             requestSavePopup_ = true;
             std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
             dialogError_.clear();
         }
         if (ImGui::MenuItem("Open Project...", "Ctrl+O")) {
+            endGizmoSession(true);
             requestOpenPopup_ = true;
             std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
             dialogError_.clear();
         }
         ImGui::Separator();
         if (ImGui::MenuItem("Export Scene as Lua...")) {
+            endGizmoSession(true);
             requestLuaExportPopup_ = true;
             std::string luaPath = projectPath_;
             const std::size_t extension = luaPath.find_last_of('.');
@@ -494,6 +506,7 @@ void EditorUI::drawMainMenuBar() {
             dialogError_.clear();
         }
         if (ImGui::MenuItem("Import Scene from Lua...")) {
+            endGizmoSession(true);
             requestLuaImportPopup_ = true;
             std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", "projects/scene.lua");
             dialogError_.clear();
@@ -501,10 +514,10 @@ void EditorUI::drawMainMenuBar() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Home")) {
-        if (ImGui::MenuItem("Select", "1")) { tool_ = ToolMode::Select; gizmo_.cancel(); camera_.releaseCapture(); }
-        if (ImGui::MenuItem("Move", "2")) { tool_ = ToolMode::Move; camera_.releaseCapture(); }
-        if (ImGui::MenuItem("Scale", "3")) { tool_ = ToolMode::Scale; camera_.releaseCapture(); }
-        if (ImGui::MenuItem("Rotate", "4")) { tool_ = ToolMode::Rotate; camera_.releaseCapture(); }
+        if (ImGui::MenuItem("Select", "1")) setTool(ToolMode::Select);
+        if (ImGui::MenuItem("Move", "2")) setTool(ToolMode::Move);
+        if (ImGui::MenuItem("Scale", "3")) setTool(ToolMode::Scale);
+        if (ImGui::MenuItem("Rotate", "4")) setTool(ToolMode::Rotate);
         if (ImGui::MenuItem("Insert Block")) insertPart(PartShape::Block);
         if (ImGui::MenuItem("Insert Sphere")) insertPart(PartShape::Sphere);
         if (ImGui::MenuItem("Insert Spawn")) insertSpawnLocation();
@@ -550,19 +563,17 @@ void EditorUI::drawToolbar() {
         ImGui::Spacing();
         if (IconButton("select", Icon::Select, "Select", tool_ == ToolMode::Select,
                        "Selecionar objetos (1)")) {
-            tool_ = ToolMode::Select;
-            gizmo_.cancel();
-            camera_.releaseCapture();
+            setTool(ToolMode::Select);
         }
         ImGui::SameLine();
         if (IconButton("move", Icon::Move, "Move", tool_ == ToolMode::Move,
-                       "Mover nos eixos X/Y/Z e planos (2)")) { tool_ = ToolMode::Move; camera_.releaseCapture(); }
+                       "Mover nos eixos X/Y/Z e planos (2)")) setTool(ToolMode::Move);
         ImGui::SameLine();
         if (IconButton("scale", Icon::Scale, "Scale", tool_ == ToolMode::Scale,
-                       "Redimensionar pelo gizmo (3)")) { tool_ = ToolMode::Scale; camera_.releaseCapture(); }
+                       "Redimensionar pelo gizmo (3)")) setTool(ToolMode::Scale);
         ImGui::SameLine();
         if (IconButton("rotate", Icon::Rotate, "Rotate", tool_ == ToolMode::Rotate,
-                       "Girar pelo gizmo (4)")) { tool_ = ToolMode::Rotate; camera_.releaseCapture(); }
+                       "Girar pelo gizmo (4)")) setTool(ToolMode::Rotate);
         ToolbarSeparator();
         if (IconButton("part", Icon::Part, "Part", false, "Criar um Block")) insertPart(PartShape::Block);
         ImGui::SameLine();
@@ -584,11 +595,13 @@ void EditorUI::drawToolbar() {
         ImGui::SameLine();
         if (IconButton("color_home", Icon::Color, "Color", false,
                        "Mudar a cor da peça selecionada", homePart != nullptr)) {
+            endGizmoSession(true);
             ImGui::OpenPopup("##color_palette");
         }
         ImGui::SameLine();
         if (IconButton("material_home", Icon::Material, "Material", false,
                        "Mudar o material da peça selecionada", homePart != nullptr)) {
+            endGizmoSession(true);
             ImGui::OpenPopup("##material_menu");
         }
         if (ImGui::BeginPopup("##color_palette")) {
@@ -629,6 +642,7 @@ void EditorUI::drawToolbar() {
                        "Mostrar/ocultar Properties")) showProperties_ = !showProperties_;
         ToolbarSeparator();
         if (IconButton("save_home", Icon::Save, "Save", false, "Salvar projeto (Ctrl+S)")) {
+            endGizmoSession(true);
             requestSavePopup_ = true;
             std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
             dialogError_.clear();
@@ -676,11 +690,13 @@ void EditorUI::drawToolbar() {
         ImGui::SameLine();
         if (IconButton("color_model", Icon::Color, "Color", false,
                        "Mudar a cor da peça selecionada", part != nullptr)) {
+            endGizmoSession(true);
             ImGui::OpenPopup("##color_palette");
         }
         ImGui::SameLine();
         if (IconButton("material_model", Icon::Material, "Material", false,
                        "Mudar o material da peça selecionada", part != nullptr)) {
+            endGizmoSession(true);
             ImGui::OpenPopup("##material_menu");
         }
         if (ImGui::BeginPopup("##color_palette")) {
@@ -814,13 +830,6 @@ void EditorUI::drawViewport() {
     const bool allowKeyboard = viewportFocused_ && !io.WantTextInput &&
                                !ImGui::IsAnyItemActive();
     const bool allowMouse = hovered && !io.WantTextInput && !ImGui::IsAnyItemActive();
-    // O gizmo tem prioridade sobre os controles da camera: enquanto um handle
-    // esta sob o cursor ou em arraste, RMB/MMB/roda nao capturam a navegacao.
-    camera_.handleInput(Vector2{static_cast<float>(viewportWidth_),
-                                static_cast<float>(viewportHeight_)},
-                        hovered, viewportFocused_, allowKeyboard, allowMouse,
-                        gizmo_.dragging() || gizmo_.hoveringHandle(), GetFrameTime());
-
     Instance* selection = scene_.selection();
     Part* selectedPart =
         selection != nullptr && selection->isPart() ? static_cast<Part*>(selection) : nullptr;
@@ -828,17 +837,25 @@ void EditorUI::drawViewport() {
                                  static_cast<float>(viewportWidth_),
                                  static_cast<float>(viewportHeight_)};
 
-    const bool wasDragging = gizmo_.dragging();
-    const bool gizmoConsumed = gizmo_.update(tool_, selectedPart, camera_, viewportRect, hovered,
-                                             allowMouse);
-    if (!wasDragging && gizmo_.dragging() && selectedPart != nullptr) {
-        gizmoEditingId_ = selectedPart->id();
-        physics_.setPartEditing(gizmoEditingId_, true);
-    } else if (wasDragging && !gizmo_.dragging()) {
-        finishGizmoEdit();
-    }
+    GizmoInput gizmoInput;
+    gizmoInput.mousePosition = GetMousePosition();
+    gizmoInput.leftPressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    gizmoInput.leftDown = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+    gizmoInput.windowFocused = IsWindowFocused();
+    gizmoInput.shiftDown =
+        IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
 
-    if (allowMouse && !gizmoConsumed && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    // Prioridade unica: o gizmo processa a entrada antes da camera e da
+    // selecao. O estado atual (nao o do frame anterior) decide se a camera
+    // pode navegar; um clique em handle nunca chega ao raycast de selecao.
+    const GizmoUpdateResult gizmoResult = transform_.update(
+        tool_, selectedPart, camera_, viewportRect, hovered, allowMouse, gizmoInput);
+    camera_.handleInput(Vector2{static_cast<float>(viewportWidth_),
+                                static_cast<float>(viewportHeight_)},
+                        hovered, viewportFocused_, allowKeyboard, allowMouse,
+                        transform_.active() || gizmo_.hoveringHandle(), GetFrameTime());
+
+    if (allowMouse && !gizmoResult.consumed && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         const ImVec2 mouse = ImGui::GetMousePos();
         if (mouse.x >= viewportRect.x && mouse.y >= viewportRect.y &&
             mouse.x <= viewportRect.x + viewportRect.width &&
@@ -967,16 +984,19 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
     ImGui::PopStyleColor();
 
     if (ImGui::IsItemClicked()) {
+        endGizmoSession(true);
         scene_.select(instance);
     }
     if (ImGui::BeginPopupContextItem("##explorer_context")) {
         ImGui::TextDisabled("%s", instance->className());
         ImGui::Separator();
         if (ImGui::MenuItem("Focar na viewport", "F")) {
+            endGizmoSession(true);
             scene_.select(instance);
             focusSelection();
         }
         if (ImGui::MenuItem("Excluir", "Del", false, instance->deletable())) {
+            endGizmoSession(true);
             scene_.select(instance);
             deleteSelection();
         }
@@ -1267,13 +1287,12 @@ void EditorUI::drawDialogs() {
         ImGui::Spacing();
         if (ImGui::Button("Abrir", ImVec2(120.0f, 0.0f))) {
             std::string error;
+            endGizmoSession(true);
             if (projectio::load(scene_, pathBuffer_, error)) {
                 std::error_code pathError;
                 const std::filesystem::path opened = std::filesystem::absolute(pathBuffer_, pathError);
                 projectPath_ = pathError ? std::string(pathBuffer_) : opened.string();
                 dialogError_.clear();
-                gizmo_.cancel(nullptr, false);
-                finishGizmoEdit();
                 camera_.releaseCapture();
                 if (onSceneLoaded_) {
                     onSceneLoaded_();
@@ -1324,9 +1343,8 @@ void EditorUI::drawDialogs() {
         if (!dialogError_.empty()) ImGui::TextColored(ImVec4(0.78f, 0.12f, 0.10f, 1), "%s", dialogError_.c_str());
         if (ImGui::Button("Importar", ImVec2(120, 0))) {
             std::string error;
+            endGizmoSession(true);
             if (scenelua::load(scene_, pathBuffer_, error)) {
-                gizmo_.cancel(nullptr, false);
-                finishGizmoEdit();
                 camera_.releaseCapture();
                 if (onSceneLoaded_) onSceneLoaded_();
                 setStatus("Cena declarativa importada.");
@@ -1343,6 +1361,7 @@ void EditorUI::drawDialogs() {
 }
 
 void EditorUI::insertPart(PartShape shape) {
+    endGizmoSession(true);
     const Vector3 focus = camera_.target();
     const Vector3 position{focus.x, std::max(6.0f, focus.y + 4.0f), focus.z};
     const Vector3 size = shape == PartShape::Sphere ? Vector3{3.0f, 3.0f, 3.0f}
@@ -1360,6 +1379,7 @@ void EditorUI::insertPart(PartShape shape) {
 }
 
 void EditorUI::insertSpawnLocation() {
+    endGizmoSession(true);
     const Vector3 focus = camera_.target();
     SpawnLocation* spawn =
         scene_.createSpawnLocation(Vector3{focus.x, 0.5f, focus.z});
@@ -1401,8 +1421,7 @@ void EditorUI::deleteSelection() {
         return;
     }
     const std::string name = selection->name();
-    gizmo_.cancel(selection->isPart() ? static_cast<Part*>(selection) : nullptr, false);
-    finishGizmoEdit();
+    endGizmoSession(false);
     if (scene_.remove(selection)) {
         setStatus("Excluido: " + name);
     } else {
