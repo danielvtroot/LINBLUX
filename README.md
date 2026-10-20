@@ -128,6 +128,7 @@ atingir 1 MiB, mantendo um backup `.1`.
 | Zoom | roda do mouse |
 | Focar seleção | `F` |
 | Excluir seleção | `Delete` ou `Backspace` |
+| Duplicar Part selecionada | `Ctrl+D` (cópia na mesma posição, já selecionada) |
 | Salvar | `Ctrl+S` (ou botão Save) |
 | Abrir | `Ctrl+O` (ou botão Open) |
 | Cancelar arrasto / soltar captura | `Esc` |

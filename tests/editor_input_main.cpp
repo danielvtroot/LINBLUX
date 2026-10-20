@@ -308,6 +308,10 @@ int main() {
         CHECK(ImGui::IsPopupOpen("Abrir projeto", ImGuiPopupFlags_AnyPopupId));
         key("4");
         CHECK(ui.tool() == ToolMode::Move);
+        const auto modalPartCount = scene.parts().size();
+        command("keydown ctrl keydown d");
+        command("keyup d keyup ctrl");
+        CHECK(scene.parts().size() == modalPartCount);
         command("mouseup 1");
         // Close through the real Cancel button in the modal.
         ImGuiWindow* modal = ImGui::FindWindowByName("Abrir projeto");
@@ -329,12 +333,46 @@ int main() {
         key("4");
         CHECK(ui.tool() == ToolMode::Move);
         CHECK(part->name().find("24") != std::string::npos);
+        const auto typingPartCount = scene.parts().size();
+        command("keydown ctrl keydown d");
+        command("keyup d keyup ctrl");
+        CHECK(scene.parts().size() == typingPartCount);
         key("Return");
 
         // Save using the editor, then load into a fresh scene with fresh Bullet.
         mouse({rect.x + 35, rect.y + 90});
         command("mousedown 3");
         command("mouseup 3");
+        // Ctrl+D creates exactly one selected copy without moving the camera.
+        // Newly inserted editor Parts are anchored. Use that normal workflow
+        // here so Bullet does not separate overlapping dynamic bodies while
+        // we hold the shortcut for several frames; dynamic flags are tested headlessly.
+        part->setAnchored(true);
+        physics.syncScene(scene);
+        const auto beforeDuplicateCount = scene.parts().size();
+        const Vector3 beforeDuplicateCamera = camera.target();
+        command("keydown ctrl keydown d");
+        frames(35); // Holding past the repeat delay must not make more copies.
+        command("keyup d keyup ctrl");
+        CHECK(scene.parts().size() == beforeDuplicateCount + 1);
+        Instance* duplicate = scene.selection();
+        CHECK(duplicate && duplicate->isPart() && duplicate != part);
+        if (duplicate && duplicate->isPart() && duplicate != part) {
+            Part* copy = static_cast<Part*>(duplicate);
+            CHECK(copy->id() != part->id());
+            CHECK(copy->name() != part->name());
+            CHECK(NearlyEqual(copy->position(), part->position()));
+            CHECK(NearlyEqual(copy->size(), part->size()));
+            CHECK(NearlyEqual(copy->rotation(), part->rotation()));
+            CHECK(copy->anchored() == part->anchored());
+            CHECK(physics.hasBody(copy->id()));
+            scene.remove(copy);
+        }
+        CHECK(NearlyEqual(camera.target(), beforeDuplicateCamera));
+        CHECK(ui.tool() == ToolMode::Move);
+        scene.select(part);
+        part->setAnchored(false);
+        physics.syncScene(scene);
         const std::string expected = projectio::toJson(scene);
         command("keydown ctrl keydown s");
         command("keyup s keyup ctrl");

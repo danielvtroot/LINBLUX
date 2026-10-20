@@ -13,7 +13,7 @@ struct EditorInput {
     bool rightPressed = false, rightDown = false;
     bool middlePressed = false, middleDown = false;
     bool escape = false, shift = false, modified = false;
-    bool save = false, open = false, remove = false, focus = false;
+    bool save = false, open = false, remove = false, focus = false, duplicate = false;
     int tool = -1;
 };
 

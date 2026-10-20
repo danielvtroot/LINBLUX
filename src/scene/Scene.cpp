@@ -264,6 +264,33 @@ SpawnLocation* Scene::createSpawnLocation(Vector3 position, Vector3 size,
     return raw;
 }
 
+Part* Scene::duplicatePart(const Part& source) {
+    if (findPart(source.id()) != &source) return nullptr;
+    Part* copy = nullptr;
+    switch (source.instanceClass()) {
+        case InstanceClass::Part:
+            copy = createPart(source.shape(), source.position(), source.size(), source.name());
+            break;
+        case InstanceClass::SpawnLocation:
+            copy = createSpawnLocation(source.position(), source.size(), source.name());
+            break;
+        case InstanceClass::Baseplate:
+            copy = createBaseplate(source.position(), source.size(), source.name());
+            break;
+        default: return nullptr;
+    }
+    if (copy) {
+        copy->setShape(source.shape());
+        copy->setTransform(source.transform());
+        copy->setColor(source.color());
+        copy->setMaterial(source.material());
+        copy->setAnchored(source.anchored());
+        copy->setCanCollide(source.canCollide());
+        copy->setDeletable(source.deletable());
+    }
+    return copy;
+}
+
 bool Scene::canDeleteSubtree(const Instance* object) const {
     if (object == nullptr || isService(object) || !object->deletable()) {
         return false;

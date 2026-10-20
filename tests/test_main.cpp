@@ -828,6 +828,52 @@ void TestEditorCameraMath() {
     EndSection();
 }
 
+void TestDuplicatePart() {
+    Section("Duplicar Part: propriedades, IDs, classe e corpo fisico");
+    using namespace loblox;
+    Scene scene;
+    scene.buildDefaultScene();
+    scene.createPart(PartShape::Sphere, V3(4, 12, 8), V3(3, 3, 3), "Sphere");
+    PhysicsWorld physics;
+    physics.attach(scene);
+    const auto originals = scene.parts();
+    for (Part* source : originals) {
+        source->setRotationEulerDegrees(V3(15, 30, 45));
+        source->setColor(Color{77, 88, 99, 201});
+        source->setMaterial(PartMaterial::Wood);
+        source->setAnchored(false);
+        source->setCanCollide(false);
+        scene.select(source);
+        Part* copy = scene.duplicatePart(*source);
+        CHECK(copy != nullptr);
+        if (!copy) continue;
+        CHECK(copy->id() != source->id());
+        CHECK(copy->name() != source->name());
+        CHECK(copy->instanceClass() == source->instanceClass());
+        CHECK(copy->shape() == source->shape());
+        CHECK(NearlyEqual(copy->position(), source->position()));
+        CHECK(NearlyEqual(copy->size(), source->size()));
+        CHECK(NearlyEqual(copy->rotation(), source->rotation()));
+        CHECK(copy->color().r == 77 && copy->color().g == 88 &&
+              copy->color().b == 99 && copy->color().a == 201);
+        CHECK(copy->material() == source->material());
+        CHECK(copy->anchored() == source->anchored());
+        CHECK(copy->canCollide() == source->canCollide());
+        CHECK(copy->deletable() == source->deletable());
+        CHECK(scene.selection() == source);
+        physics.syncScene(scene);
+        CHECK(physics.hasBody(copy->id()));
+        CHECK(physics.bodyCount() == scene.parts().size());
+        std::string error;
+        CHECK(scene.validate(error));
+        CHECK(physics.validate(scene, error));
+    }
+    Scene other;
+    Part* foreign = other.createPart(PartShape::Block, V3(0, 0, 0));
+    CHECK(scene.duplicatePart(*foreign) == nullptr);
+    EndSection();
+}
+
 void TestInputRouting() {
     Section("Roteamento: UI, sessoes, navegacao e atalhos");
     using namespace loblox;
@@ -1531,6 +1577,7 @@ int main() {
     TestGizmoSessionLifecycle();
     TestEditorCameraMath();
     TestInputRouting();
+    TestDuplicatePart();
     TestGizmoHandleDrags();
     TestPhysicsEditSuspension();
     TestLuaDeclarativeSceneRoundTrip();

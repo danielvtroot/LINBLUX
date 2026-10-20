@@ -63,6 +63,7 @@ private:
     void applyColorToSelection(Color color);
     void applyMaterialToSelection(int materialIndex);
     void deleteSelection();
+    void duplicateSelection();
     void focusSelection();
 
     void resizeViewport(int width, int height);

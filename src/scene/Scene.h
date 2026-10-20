@@ -48,6 +48,9 @@ public:
         const std::string& name = "",
         InstanceId forcedId = kInvalidInstanceId);
 
+    // Copy properties in place, with a fresh ID and unique name. Selection is unchanged.
+    Part* duplicatePart(const Part& source);
+
     // Remove a subarvore. Recusa objetos protegidos (Baseplate/servicos).
     bool remove(Instance* object);
     bool removeById(InstanceId id);

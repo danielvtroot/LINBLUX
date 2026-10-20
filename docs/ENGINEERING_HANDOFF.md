@@ -2,11 +2,19 @@
 
 Base confirmada: `8bd7f9f`, branch `fix/unified-3d-gizmos`. O commit que contém
 este documento é um checkpoint funcional (consultar `git log -1`). Sem push.
-Implementação/testes atuais: `e035035`. Checkpoints anteriores desta missão:
+Checkpoint de estabilização: `e035035`. Checkpoints anteriores desta missão:
 `d550f85` (roteamento), `3148377` (viewport/axiais), `20e8d9f` (planos),
 `a91d445` (studs/material), `6efaf9b` (startup/restart).
 `.desenvolvimento/` já existia e foi preservado fora dos commits. Nenhum projeto pessoal
 é usado pelos testes novos; os artefatos ficam em `/tmp/loblox-input-*`.
+
+Incremento posterior: Ctrl+D duplica a Part selecionada na mesma posição, com
+novo ID/nome e propriedades/classe preservadas; seleciona a cópia. Usa o mesmo
+roteamento, sem repetir ao segurar D nem atuar em texto/modal/navegação. CTest
+Release 6/6 passou: 1.575 checks headless e 223 de entrada real. Testes gráficos
+usam Part ancorada para comparar posições sem separação física entre cópias;
+o teste headless cobre também flags dinâmicas. A validação Sway/sanitizer abaixo
+pertence ao checkpoint anterior. Commit do incremento: consultar `git log -1`.
 
 ## Causas confirmadas
 

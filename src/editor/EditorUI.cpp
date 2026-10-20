@@ -48,6 +48,8 @@ EditorInput ReadEditorInput() {
     input.modified = io.KeyCtrl || io.KeyAlt || io.KeySuper;
     input.save = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false);
     input.open = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O, false);
+    input.duplicate = io.KeyCtrl && !io.KeyShift && !io.KeyAlt && !io.KeySuper &&
+        ImGui::IsKeyPressed(ImGuiKey_D, false);
     input.remove = ImGui::IsKeyPressed(ImGuiKey_Delete, false) ||
                    ImGui::IsKeyPressed(ImGuiKey_Backspace, false);
     input.focus = ImGui::IsKeyPressed(ImGuiKey_F, false);
@@ -474,6 +476,9 @@ void EditorUI::buildDockLayout() {
 }
 
 void EditorUI::handleShortcuts(const EditorInput& input, const InputRoute& route) {
+    if ((route.editorKeys || route.globalKeys) && input.duplicate) {
+        duplicateSelection();
+    }
     if (route.editorKeys && input.remove && !input.modified) {
         deleteSelection();
     }
@@ -920,7 +925,7 @@ void EditorUI::drawViewport() {
         const bool mouseEvent = input.leftPressed || input.rightPressed || input.middlePressed ||
             ImGui::IsMouseReleased(0) || ImGui::IsMouseReleased(1) || ImGui::IsMouseReleased(2);
         const bool keyEvent = input.tool >= 0 || input.save || input.open || input.escape ||
-            input.remove || input.focus;
+            input.remove || input.focus || input.duplicate;
         if (mouseEvent || keyEvent || input.wheel != 0 || route.owner == InputOwner::Cancel) {
             diag::Event event;
             event.subsystem = "input";
@@ -937,7 +942,7 @@ void EditorUI::drawViewport() {
                 {"middle_pressed", input.middlePressed}, {"middle_down", input.middleDown},
                 {"middle_released", ImGui::IsMouseReleased(2)},
                 {"key_tool", input.tool}, {"save", input.save}, {"open", input.open},
-                {"escape", input.escape}, {"delete", input.remove}};
+                {"escape", input.escape}, {"delete", input.remove}, {"duplicate", input.duplicate}};
             diag::log(event);
         }
       }
@@ -1547,6 +1552,21 @@ void EditorUI::applyMaterialToSelection(int materialIndex) {
     }
     static_cast<Part*>(selection)->setMaterial(PartMaterialFromIndex(materialIndex));
     setStatus("Material aplicado.");
+}
+
+void EditorUI::duplicateSelection() {
+    Instance* selection = scene_.selection();
+    if (!selection || !selection->isPart()) return;
+    endGizmoSession(false, "duplicate");
+    Part* copy = scene_.duplicatePart(*static_cast<Part*>(selection));
+    if (!copy) {
+        setStatus("Nao foi possivel duplicar a peca selecionada.", true);
+        return;
+    }
+    physics_.syncScene(scene_);
+    scene_.select(copy);
+    checkInvariants("duplicate");
+    setStatus("Duplicado: " + copy->name());
 }
 
 void EditorUI::deleteSelection() {

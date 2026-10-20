@@ -19,6 +19,7 @@ drag. A tecla de ferramenta não repete automaticamente.
 | F | Enquadra seleção com viewport focada, fora de drag |
 | Delete / Backspace | Remove seleção com viewport focada; durante drag cancela antes de remover |
 | Ctrl+S | Salva; confirma uma transformação ativa antes da escrita |
+| Ctrl+D | Duplica a Part selecionada na mesma posição, com novo ID/nome; seleciona a cópia. Confirma drag ativo antes de copiar. |
 | Ctrl+O | Cancela transformação e abre o modal de projeto |
 | Esc | Cancela transformação ou captura; campos/modais conservam o tratamento do ImGui |
 
