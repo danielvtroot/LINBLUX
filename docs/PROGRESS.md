@@ -187,3 +187,179 @@ Implementar **undo/redo** para criação, edição de propriedades, transformaç
 e exclusão (comandos que guardem o estado anterior e restaurem cena + corpos
 físicos), seguido de **duplicar seleção com Ctrl+D**. Isso solidifica o fluxo
 de construção antes de introduzir o personagem R6.
+
+## 8. Redesign visual do editor — 2026-10-20
+
+- Tema claro padrão com paleta consistente de superfícies, texto, campos,
+  divisores, hover e azul de destaque. Uma fonte sans local é usada quando
+  instalada, com a fonte padrão do ImGui como fallback.
+- Barra de menus File/Home/Model/View com ações de salvar, salvar como, abrir,
+  seleção, transformações, inserção e visibilidade dos painéis.
+- Mantidas as abas Home/Model/View da ribbon e reduzida a faixa superior de
+  docking para devolver altura à viewport.
+- Layout de painéis salvo em `loblox_imgui.ini`; primeira execução usa o layout
+  padrão e sessões seguintes preservam o docking existente.
+- Toolbox e Explorer continuam filtrando os dados existentes da cena. Inserção,
+  seleção, propriedades, gizmos, renderização, física e ProjectIO permanecem
+  conectados aos componentes originais.
+- Arquivos alterados nesta etapa: `src/app/Application.cpp`,
+  `src/editor/EditorUI.cpp`, `docs/ARCHITECTURE.md`, `docs/PROGRESS.md` e
+  `docs/TESTING.md`.
+- Build final concluído (`cmake --build build -j2`); CTest passou (1/1, 0 falhas)
+  e `git diff --check` passou.
+- Smoke gráfico em Xvfb/llvmpipe 1280×720 iniciou e renderizou a viewport
+  775×538. A captura `/tmp/loblox-ui-final.png` foi inspecionada visualmente:
+  tema claro, ribbon, Toolbox, viewport, Explorer e Properties aparecem nas
+  regiões planejadas, com cena real (céu, studs e SpawnLocation).
+- Abrir/salvar e comandos por mouse não foram reexercitados nesta etapa; os
+  testes headless existentes verificam a cena, física e serialização.
+- Limitações restantes: a aba Model mantém comandos contextuais repetidos para
+  transformação/aparência; ícones continuam desenhados com primitivas ImGui,
+  sem uma fonte de ícones dedicada.
+
+## 9. Câmera, gizmos e formato declarativo de cena — 2026-10-20
+
+- Causa da navegação presa ao botão direito: o movimento WASD estava dentro da
+  mesma condição de RMB usada para órbita. A câmera agora separa movimento livre
+  com viewport focada e órbita temporária com cursor capturado. A captura é
+  liberada ao soltar RMB, perder foco, sair/cancelar interação e destruir a UI;
+  a posição anterior do cursor é restaurada.
+- Entrada de câmera é bloqueada quando ImGui está editando texto, um gizmo está
+  ativo ou outro painel tem foco. RMB não seleciona; MMB faz pan; roda aproxima
+  ao foco; F enquadra; WASD/QE movem com delta time e Shift acelera.
+- Causa da escala incorreta: o antigo manipulador alterava tamanho simetricamente
+  ao redor do centro. O novo cálculo guarda snapshot e aplica a escala da face
+  escolhida, mantendo a face oposta parada. Move inclui três eixos e três planos;
+  Rotate usa ângulo entre vetores no plano do anel. Há modo global/local e snap.
+- Durante manipulação, o corpo Bullet é suspenso sem recriação por frame e
+  reativado ao fim. A edição in-place atualiza shape e AABB. Sphere mantém escala
+  uniforme por ser representada por esfera Bullet, não elipsoide.
+- `SceneLua` importa/exporta uma tabela literal restrita, validada antes de
+  substituir a cena. Não executa Lua/Luau. JSON nativo v1 permanece compatível.
+- Arquivos principais: `EditorCamera`, `Gizmo`, `GizmoMath`, `EditorUI`,
+  `PhysicsWorld`, `ProjectIO`, `SceneLua`, testes e documentação.
+- Validação: `cmake --build build -j2` passou; CTest 1/1 passou; executável de
+  testes reportou 241 verificações e 0 falhas. Xvfb/llvmpipe iniciou o app em
+  1280×720 e a captura `/tmp/loblox-camera-gizmo-lua.png` foi inspecionada.
+- Limites: captura/teclas dependem do backend GLFW/X11 e não foram automatizadas
+  em teste headless. A interface foi inspecionada graficamente; essa captura
+  valida layout/inicialização, não substitui teste interativo no Sway/Loc-OS.
+
+## 10. Próximo passo
+
+Adicionar undo/redo transacional para criação, propriedades, transformações e
+exclusão. Depois, testar a captura de cursor e a edição de gizmos em uma sessão
+interativa real no Sway/XWayland.
+
+## 11. Auditoria e estabilização da edição — 2026-10-20
+
+- Auditoria encontrou alças de Scale antigas posicionadas em `centro ± tamanho
+  fixo do gizmo`; por isso entravam em peças grandes. Além disso, eixos opostos
+  projetavam-se um sobre o outro perto de ângulos diagonais. Agora as âncoras
+  partem do suporte da caixa orientada atual, recebem offset por profundidade e
+  os ícones de tela são separados em caso de colisão; o picking reutiliza os
+  mesmos centros e os tether lines ligam o ícone à âncora 3D.
+- Scale Global em peça rotacionada projeta o movimento do eixo mundial para a
+  dimensão local mais alinhada, mantendo apenas um componente de tamanho e a
+  face local oposta fixa. Uma escala global exata produziria shear não
+  representável pelo modelo atual de `Part`; esta limitação está documentada.
+- `WrappedAngleDelta` e teste de borda ±180° foram centralizados na matemática
+  do gizmo. Arraste gráfico de anel atualizou rotação para ~30° Z no JSON.
+- A sensibilidade/velocidade da câmera agora são ajustáveis na aba Model;
+  trocar ferramenta libera captura. Em Xvfb, RMB + movimento mudou a câmera e
+  a soltura restaurou a posição do cursor (700,440).
+- Causa raiz de “arquivo salvo sumiu”: o caminho inicial era relativo ao cwd.
+  Agora usa `$XDG_DATA_HOME` ou `~/.local/share/loblox`; Save abre diálogo
+  preenchido e Save As mantém o caminho atual. JSON v1 permanece o formato.
+- `ProjectIO::save` valida a serialização, cria temporário único no mesmo
+  diretório, escreve/sincroniza/fecha e faz rename POSIX. Falhas pré-rename
+  limpam o temporário e preservam o destino. A UI reporta caminho e causa.
+- Arquivos desta etapa: `GizmoMath`, `Gizmo`, `EditorUI`, `EditorCamera`,
+  `Config`, `ProjectIO`, `tests/test_main.cpp`, README e documentação.
+- Build passou, CTest 1/1 e suíte direta 306 verificações/0 falhas. Smoke Xvfb
+  validou seis alças, arraste X e salvamento, anel Rotate, órbita RMB e
+  restauração do cursor. Capturas em `/tmp/loblox-scale-stabilized.png`,
+  `/tmp/loblox-rotate-rings.png` e `/tmp/loblox-camera-after.png`.
+- Não validado: execução no Sway/Loc-OS físico, as outras duas rotações por
+  interação gráfica, captura ao alternar foco real de janela, e salvar em mídia
+  com falha real de I/O. Testes headless cobrem os caminhos matemáticos e erro
+  de rename; não simulam o subsistema de janela.
+
+## 12. Próximo passo
+
+Testar no Sway/XWayland real os seis handles, três anéis, perda de foco e
+digitação simultânea em Properties/Toolbox; em seguida adicionar undo/redo
+transacional para operações de edição.
+
+## 13. Unificação dos gizmos 3D — 2026-10-20
+
+- Auditoria dos caminhos reais confirmou que a seleção de Scale já desenhava e
+  percorria seis centros, mas não existia identidade de handle persistente: o
+  drag reconstruía eixo e sinal em campos separados. O caminho Global também
+  dividia o deslocamento pela projeção e descartava seu sinal ao mapear um eixo
+  mundial para o eixo local. Isso exagerava a escala quando os eixos apontavam
+  no mesmo sentido e fazia faces correspondentes a alinhamento negativo
+  diminuírem ao arrastar para fora. Os testes gráficos anteriores só tinham
+  arrastado X−, então não haviam revelado a assimetria.
+- `GizmoMath::HandleId` agora identifica cada face, eixo, plano e anel. O
+  retângulo usado no hit test é o mesmo 24×20 px do overlay; um clique sem
+  handle válido não inicia transformação.
+- Unifiquei a aplicação das seis faces em `ScaleFaceForHandle`, sempre a
+  partir do snapshot inicial. Global usa projeção (multiplicação), Local usa o
+  eixo local direto; o lado oposto permanece fixo. O overlay passa por etapa
+  sem depth test, restrita aos handles de tela, e as âncoras usam o suporte
+  atualizado da caixa.
+- A matemática recusa delta/eixo/tamanho inválidos. Move e Rotate continuam
+  usando o mesmo snapshot e os mesmos eixos normalizados; cada operação mantém
+  sua semântica própria.
+- Testes automatizados incluem os seis lados em caixas alinhadas e rotacionadas,
+  nos modos Global e Local, dimensões não selecionadas, face oposta,
+  identidade/picking dos seis ícones, ausência de seleção e valores mínimos;
+  build e CTest passaram após a mudança.
+- Xvfb permitiu abrir o editor e inspecionar a composição clara e a viewport.
+  A tentativa de clique via `xdotool` neste contêiner sem gerenciador de janelas
+  não acionou o botão Toolbox; assim, não declaro validação gráfica interativa
+  dos seis drags nesta etapa.
+
+Próximo passo: executar a matriz de seis drags em sessão XWayland/Sway com foco
+de janela real e comparar os JSON antes/depois. Os testes headless verificam a
+matemática compartilhada, mas não substituem essa interação gráfica.
+
+## 14. Realce e visibilidade unificados dos gizmos — 2026-10-20
+
+- Move, Scale e Rotate agora consultam o `HandleId` selecionado para desenhar o
+  estado de hover/drag; o realce já não depende de comparar eixos/planos em
+  estado separado.
+- Eixos, planos, anéis e faces são desenhados em passe x-ray, passando
+  visualmente sobre a Part. O depth test fica desligado só durante o desenho
+  do gizmo e é restaurado ao fim; o restante da cena mantém a profundidade
+  normal. Scale conserva os alvos de tela e hit test coincidentes.
+- Build passou; CTest 1/1 passou; suíte direta: 506 verificações, 0 falhas.
+- A abertura/captura visual Xvfb anterior confirma a viewport e painéis, mas
+  não mostra um gizmo selecionado. Interação gráfica em janela com foco
+  continua pendente: o Xvfb local não possui window manager e os cliques de
+  `xdotool` não ativaram os controles.
+
+## 15. Controles visíveis sobre a geometria — 2026-10-20
+
+- A inspeção confirmou que as linhas 3D finas ainda pareciam iguais à versão
+  anterior. Substituí o desenho dos gizmos por controles screen-space no passe
+  overlay: Move mostra eixos grossos com botões X/Y/Z e botões XY/XZ/YZ;
+  Rotate mostra anéis espessos com contorno escuro e botões X/Y/Z conectados
+  ao anel; Scale mantém os seis botões X±/Y±/Z±. Todos são renderizados acima
+  da Part, com depth test desligado somente nesse passe.
+- O picking dos botões de eixos e anéis usa as posições dos próprios controles
+  visuais; os anéis continuam tendo também picking geométrico ao longo do arco.
+  Hover e drag destacam o `HandleId` correto.
+- Interação gráfica real em Xvfb/llvmpipe 1280×720: arrastei o botão Move X e
+  confirmei `position.x = 3`; arrastei o botão de Rotate X e Properties mostrou
+  `rotation.x = 15°`; arrastei Scale Y+ e Properties mostrou `size.y = 5` e
+  `position.y = 6.5` (face oposta em Y=4). Capturas: `/tmp/loblox-move-overlay.png`,
+  `/tmp/loblox-rotate-overlay.png`, `/tmp/loblox-scale-overlay.png`,
+  `/tmp/loblox-rotate-drag.png` e `/tmp/loblox-scale-drag-check.png`.
+- Build, CTest e suíte direta aprovados (506 verificações, 0 falhas). Os drags
+  visuais confirmam um eixo de Move, um anel de Rotate e um lado de Scale; os
+  seis lados de Scale permanecem cobertos pela matemática automatizada, mas
+  não foram individualmente arrastados no GUI.
+- O teste foi feito em Xvfb/GLFW/X11 com renderização llvmpipe, não em Sway ou
+  no notebook de destino.

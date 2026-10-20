@@ -54,6 +54,10 @@ add_library(loblox_core STATIC
   src/scene/Scene.cpp
   src/physics/PhysicsWorld.cpp
   src/serialization/ProjectIO.cpp
+  src/serialization/SceneLua.cpp
+  src/editor/GizmoMath.cpp
+  src/editor/GizmoLayout.cpp
+  src/rendering/EditorCamera.cpp
 )
 target_include_directories(loblox_core PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -61,7 +65,7 @@ target_include_directories(loblox_core PUBLIC
   ${BULLET_INCLUDE_DIR}
   ${RAYLIB_INCLUDE_DIRS}
 )
-target_link_libraries(loblox_core PUBLIC ${BULLET_LIBRARIES} Threads::Threads)
+target_link_libraries(loblox_core PUBLIC ${BULLET_LIBRARIES} ${RAYLIB_LIBRARIES} Threads::Threads)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(loblox_core PRIVATE -Wall -Wextra)
 endif()
@@ -69,7 +73,6 @@ endif()
 add_executable(loblox
   src/main.cpp
   src/app/Application.cpp
-  src/rendering/EditorCamera.cpp
   src/rendering/SceneRenderer.cpp
   src/editor/Gizmo.cpp
   src/editor/EditorUI.cpp
@@ -83,3 +86,22 @@ enable_testing()
 add_executable(loblox_tests tests/test_main.cpp)
 target_link_libraries(loblox_tests PRIVATE loblox_core)
 add_test(NAME loblox_tests COMMAND loblox_tests)
+
+# Regressao grafica dos gizmos: renderiza em RenderTexture e confere pixel e
+# hit test. Sem contexto grafico o executavel retorna 77 (SKIP).
+add_executable(loblox_gizmo_visual_tests
+  tests/gizmo_visual_main.cpp
+  src/editor/Gizmo.cpp
+  src/rendering/SceneRenderer.cpp
+)
+target_link_libraries(loblox_gizmo_visual_tests PRIVATE loblox_core)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(loblox_gizmo_visual_tests PRIVATE -Wall -Wextra)
+endif()
+find_program(XVFB_RUN_EXECUTABLE xvfb-run)
+if(XVFB_RUN_EXECUTABLE)
+  add_test(NAME loblox_gizmo_visual
+    COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24"
+            $<TARGET_FILE:loblox_gizmo_visual_tests>)
+  set_tests_properties(loblox_gizmo_visual PROPERTIES SKIP_RETURN_CODE 77)
+endif()

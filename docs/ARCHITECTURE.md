@@ -47,10 +47,12 @@ src/
   scene/Scene.{h,cpp}          posse de todos os objetos, hierarquia, seleção
   physics/PhysicsWorld.{h,cpp} mundo Bullet, corpos, raycast, passo fixo
   serialization/ProjectIO.{h,cpp} JSON v1, validação, escrita atômica
-  rendering/EditorCamera.{h,cpp} câmera orbital, raio e projeção
+  serialization/SceneLua.{h,cpp} subset declarativo Lua sem execução
+  rendering/EditorCamera.{h,cpp} câmera orbital/livre, entrada, raio/projeção
   rendering/SceneRenderer.{h,cpp} céu, partes sombreadas, studs, seleção
   editor/Tool.h                enum ToolMode
-  editor/Gizmo.{h,cpp}         mover/escalar/girar nos eixos
+  editor/Gizmo.{h,cpp}         picking e desenho dos manipuladores 3D
+  editor/GizmoMath.{h,cpp}     matemática pura de move/scale/rotate/snap
   editor/EditorUI.{h,cpp}      toolbar, toolbox, viewport, explorer, properties
 tests/test_main.cpp            testes headless
 ```
@@ -113,6 +115,7 @@ serviços (ids 1 e 2 são Workspace e Lighting por convenção da cena). O conta
 | alternar `canCollide` | liga/desliga `CF_NO_CONTACT_RESPONSE` |
 | excluir Part | remove e destrói corpo, shape e motion state |
 | `syncScene` | cria corpo se a Part ainda não tiver um |
+| editar Part dinâmica | suspende temporariamente o body existente, sem duplicá-lo |
 
 Detalhes:
 
@@ -129,6 +132,12 @@ As alterações do editor são propagadas por flags em `PartDirty`
 (`transform`, `shape`, `anchored`, `collide`). A UI só chama setters; a física
 consome as flags no próximo `simulate()`, evitando reconstruções por frame e
 mantendo um único caminho de sincronização.
+
+Durante um drag de gizmo, `setPartEditing(id, true)` coloca o corpo dinâmico em
+`DISABLE_SIMULATION`, zera velocidades e mantém o mesmo body/collider. A UI
+continua alterando o `Part`; o sync atualiza transform e AABB sem ativar a
+simulação. Ao terminar ou cancelar, o corpo volta a `ACTIVE_TAG` com velocidades
+zeradas e a gravidade age no próximo passo.
 
 ### 4.1 Baseplate
 
@@ -157,10 +166,14 @@ loop:
 `ui.draw()` do viewport:
 
 1. ajusta a `RenderTexture2D` ao tamanho do painel;
-2. desenha a imagem e consulta hover;
-3. aplica órbita/pan/zoom e o gizmo (raycast/planos);
-4. clique esquerdo seleciona a Part via `PhysicsWorld::raycast`;
-5. renderiza a cena + seleção + gizmo na render texture.
+2. desenha a imagem e consulta hover/foco; campos ativos e texto bloqueiam o
+   teclado de navegação;
+3. processa câmera livre quando a viewport tem foco; RMB captura cursor,
+   MMB faz pan e a roda aproxima do foco;
+4. resolve o handle do gizmo antes da seleção; drag em eixo/plano/anel usa raio
+   da viewport, interseções geométricas e snapshot inicial da transformação;
+5. clique esquerdo sem handle seleciona a Part via `PhysicsWorld::raycast`;
+6. renderiza a cena + seleção + gizmo na render texture.
 
 A física roda antes do desenho, então as posições exibidas no mesmo frame já
 refletem a simulação.
@@ -182,7 +195,7 @@ refletem a simulação.
 - Limite de FPS configurável (`AppConfig::targetFps`, padrão 60).
 - A viewport só recria a render texture quando o tamanho muda.
 
-## 7. Formato de projeto (versão 1)
+## 7. Formato de projeto nativo (JSON versão 1)
 
 ```json
 {
@@ -229,11 +242,32 @@ retornam mensagem legível e não deixam o arquivo em estado parcial.
 
 ### 7.2 Escrita atômica
 
-`ProjectIO::save` grava `<arquivo>.tmp`, fecha o stream e faz
-`std::filesystem::rename` sobre o destino (atômico em POSIX). Em caso de erro,
-o temporário é removido e o arquivo anterior permanece intacto.
+`ProjectIO::save` serializa e valida a cena antes de tocar no destino. Cria um
+temporário único no mesmo diretório (`mkstemp`), escreve em loop, sincroniza com
+`fsync`, fecha e substitui com `rename` POSIX atômico. Falha de criação,
+gravação, sincronização, fechamento ou rename remove o temporário e preserva o
+destino anterior. Ao substituir um arquivo regular, mantém as permissões dele.
+Esse caminho de baixo nível é específico ao Linux/POSIX, plataforma suportada
+atualmente; não promete durabilidade do rename contra falha de energia em todos
+os sistemas de arquivos.
 
-## 8. Testes
+## 8. Formato declarativo de cena (Lua v1)
+
+`serialization/SceneLua` importa/exporta uma tabela literal Lua com
+`format = "loblox-scene"`, `version = 1`, `nextId` e `objects`. Preserva IDs,
+parent, Workspace, Lighting, Baseplate, SpawnLocation, shape, transform, cor,
+material, Anchored e CanCollide. Lighting inclui céu/ambiente, direção do sol,
+intensidade e brilho.
+
+O parser aceita somente comentários de linha, `return`, tabelas nomeadas e
+sequenciais, strings, números finitos e booleanos. Não aceita expressões,
+índices computados, funções, chamadas, `require`, `load` ou código após o valor.
+Há limites de 16 MiB, profundidade e quantidade de valores. Classes e campos
+são whitelisted; os dados são convertidos ao esquema versionado e passam pela
+validação do JSON antes de substituir a cena. Nenhum runtime Lua/Luau é
+invocado. JSON v1 segue sendo o formato nativo de projeto.
+
+## 9. Testes
 
 `tests/test_main.cpp` roda sem janela/OpenGL e cobre o núcleo:
 
@@ -245,16 +279,107 @@ o temporário é removido e o arquivo anterior permanece intacto.
 - sincronização transformação ↔ corpo e raycast;
 - redimensionamento sem duplicar corpo;
 - round-trip JSON, escrita atômica, validação de arquivos inválidos;
-- reconstrução de corpos após carregar.
+- reconstrução de corpos após carregar;
+- matemática de eixos/planos, snap, face oposta fixa na escala, mínimo e rotação;
+- navegação livre, delta time, limite de pitch, zoom e foco;
+- suspensão/restauração de corpos durante edição;
+- round-trip Lua de classes, IDs, hierarquia, Lighting e propriedades;
+- rejeição de código, classes/campos desconhecidos e nextId inválido sem mudar
+  a cena atual.
 
-## 9. Limitações conhecidas da arquitetura atual
+## 10. Limitações conhecidas da arquitetura atual
 
 - `Part` usa tipos da raylib (`Vector3`, `Color`) também no núcleo; isso reduz
   conversões, mas acopla o modelo à biblioteca de renderização. Uma separação
   total exigiria tipos próprios e uma camada de conversão.
 - Seleção é única; não há undo/redo nem multi-seleção.
 - Materiais não alteram rugosidade/reflexão (não há PBR).
-- O gizmo escolhe o eixo mais próximo em espaço de tela; eixos que se cruzam
-  podem exigir um clique mais preciso.
+- Picking de eixos/anéis usa tolerância em pixels e planos usam o centro
+  projetado; cruzamentos visuais próximos ainda exigem um clique preciso.
+- Sphere continua usando `btSphereShape` e raio uniforme; Scale mantém a
+  semântica uniforme da primitiva (não há elipsoides).
 - A render texture é recriada somente ao redimensionar; não há resolução
   dinâmica para GPUs muito fracas.
+
+## 11. Redesign da interface (2026-10-20)
+
+- Dear ImGui continua como única camada de interface e o docking nativo organiza
+  Toolbox à esquerda, Viewport ao centro, Explorer e Properties à direita.
+- O tema claro usa tokens centralizados no setup de `Application`: superfícies
+  claras, texto escuro, bordas discretas e azul para ações/seleção. Fonte sans
+  local é carregada quando disponível, com fonte vendorizada como fallback.
+- Barra de menus File/Home/Model/View e ribbon Home/Model/View operam sobre os
+  mesmos comandos da cena. Save/Open continuam usando `ProjectIO`; inserção,
+  seleção e propriedades chamam o modelo e a física existentes.
+- O arquivo `loblox_imgui.ini` guarda o docking entre sessões. Se não existir
+  layout restaurável, `EditorUI::buildDockLayout` monta o padrão; o nó existente
+  é preservado em vez de ser reconstruído a cada inicialização.
+- A busca local do Toolbox filtra Block, Sphere e SpawnLocation. A busca do
+  Explorer percorre a hierarquia real, sem manter uma lista paralela de objetos.
+
+Na etapa do redesign visual descrita acima, esses módulos não foram alterados.
+Na etapa de câmera/gizmos/SceneLua, `PhysicsWorld` ganhou suspensão temporária
+de corpos durante edição e `ProjectIO` passou a validar IDs e faixas numéricas
+antes de reconstruir a cena; `Scene` e `Part` mantiveram seus contratos.
+
+## 12. Entrada de câmera e transformações
+
+`EditorCamera` separa movimento livre (WASD/QE, Shift e delta time) da órbita
+com RMB. Orbit captura o cursor via raylib/GLFW, usa delta relativo e restaura a
+posição ao liberar; perda de foco, cancelamento e destruição também liberam.
+Wheel faz zoom ao ponto focal, F enquadra e MMB desloca o alvo nos eixos da
+câmera. A UI consulta foco/hover do ImGui e bloqueia navegação durante edição
+de texto ou arraste de gizmo.
+
+`Gizmo` identifica cada eixo, plano, face ou anel e guarda snapshot de
+transformação no começo do arraste. `GizmoMath` calcula deltas/snap sem
+dependência de UI. Move restringe ao eixo/plano escolhido; Scale desloca o
+centro pela metade da variação assinada para manter a face oposta fixa; Rotate
+usa ângulo entre vetores projetados no plano normal ao eixo. O espaço pode ser
+global ou local. Sphere permanece uniforme devido a `btSphereShape`.
+
+Os seis controles de Scale partem do limite de suporte da caixa orientada e
+recebem offset calculado pela profundidade de projeção. Como duas alças podem
+projetar no mesmo ponto (por exemplo, câmera próxima a 45° entre eixos), seus
+ícones são afastados em tela com linhas-guia; o hit test usa exatamente esses
+mesmos centros visuais. A escala Global escolhe a dimensão local mais alinhada
+ao eixo mundial e aplica o deslocamento projetado com seu sinal. A
+implementação anterior dividia pelo alinhamento e perdia seu sinal ao
+determinar o lado local: isso amplificava o arraste e fazia algumas faces
+diminuírem quando puxadas para fora. Transformar uma caixa rotacionada em
+escala global exata exigiria shear, que `Part` não representa; o modo mantém
+caixa orientada e escala apenas uma dimensão local por arraste.
+
+Ao manipular Part dinâmica, `PhysicsWorld` suspende a integração do corpo
+existente; a atualização in-place mantém um único collider e atualiza seu AABB.
+Ao encerrar, o corpo é reativado sem velocidade residual do estado suspenso.
+
+### 8.1 Identidade e escala unilateral
+
+`GizmoMath::HandleId` é a identidade estável do controle (`XPositive`,
+`XNegative`, planos, eixos e anéis). O picking dos seis controles de escala
+usa os mesmos centros e retângulos de 24×20 pixels que o overlay desenha; o id
+escolhido é mantido durante todo o drag. `None` não possui transformação de
+fallback. Move e Rotate também mantêm ids explícitos (`XAxis`, `XYPlane`,
+`RotateX`, etc.) do hover ao drag, e o realce desenhado consulta esse mesmo id.
+
+Todos os gizmos são renderizados em um passe x-ray local: o depth test é
+desativado somente enquanto os manipuladores são desenhados e restaurado antes
+da UI continuar. Isso permite ver e selecionar as alças mesmo atravessando a
+Part sem alterar a oclusão normal da cena. Scale usa overlay 2D com a mesma
+política.
+
+O drag guarda um snapshot inicial. Para uma face local, o deslocamento assinado
+é projetado no eixo selecionado, altera somente aquela dimensão e desloca o
+centro por metade da variação no eixo local, mantendo fixa a face oposta. Em
+Global, a dimensão local mais alinhada ao eixo mundial recebe a projeção
+assinada do deslocamento no eixo local; o código anterior dividia pela
+projeção e descartava o sinal do alinhamento ao escolher a face local,
+amplificando o drag e invertendo algumas faces. Geometria de escala inválida
+ou raio sem interseção não altera o snapshot.
+
+As âncoras vêm do suporte atual da caixa orientada. Os ícones 2D são afastados
+quando suas projeções coincidem e são desenhados em passe de overlay com depth
+test desligado apenas durante esse desenho, para que a própria Part não os
+oculte. A seleção usa exatamente os limites desses ícones. Sphere continua
+uniforme por causa do `btSphereShape`.

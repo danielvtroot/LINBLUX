@@ -3,9 +3,14 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <cerrno>
+#include <cstring>
+#include <fcntl.h>
 #include <map>
 #include <set>
 #include <sstream>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -55,6 +60,10 @@ bool ReadFloat(const json& value, const char* field, float& out, std::string& er
         return false;
     }
     out = static_cast<float>(number);
+    if (!std::isfinite(out)) {
+        error = std::string("campo '") + field + "' fora da faixa float";
+        return false;
+    }
     return true;
 }
 
@@ -80,8 +89,23 @@ bool ReadColor(const json& value, const char* field, Color& out, std::string& er
             error = std::string("campo '") + field + "' deve conter inteiros 0..255";
             return false;
         }
-        const int channel = value[i].get<int>();
-        if (channel < 0 || channel > 255) {
+        unsigned int channel = 0;
+        if (value[i].is_number_unsigned()) {
+            const auto raw = value[i].get<unsigned long long>();
+            if (raw > 255) {
+                error = std::string("campo '") + field + "' fora do intervalo 0..255";
+                return false;
+            }
+            channel = static_cast<unsigned int>(raw);
+        } else {
+            const long long raw = value[i].get<long long>();
+            if (raw < 0 || raw > 255) {
+                error = std::string("campo '") + field + "' fora do intervalo 0..255";
+                return false;
+            }
+            channel = static_cast<unsigned int>(raw);
+        }
+        if (channel > 255) {
             error = std::string("campo '") + field + "' fora do intervalo 0..255";
             return false;
         }
@@ -410,6 +434,31 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         }
     }
 
+    InstanceId requestedNextId = 0;
+    if (root.contains("nextId")) {
+        const json& nextField = root["nextId"];
+        if (!nextField.is_number_unsigned() && !nextField.is_number_integer()) {
+            error = "campo 'nextId' invalido";
+            return false;
+        }
+        if (nextField.is_number_unsigned()) {
+            const auto value = nextField.get<unsigned long long>();
+            if (value == 0 || value >= static_cast<unsigned long long>(kInvalidInstanceId - 1)) {
+                error = "campo 'nextId' fora da faixa suportada";
+                return false;
+            }
+            requestedNextId = static_cast<InstanceId>(value);
+        } else {
+            const long long value = nextField.get<long long>();
+            if (value <= 0 || static_cast<unsigned long long>(value) >=
+                                  static_cast<unsigned long long>(kInvalidInstanceId - 1)) {
+                error = "campo 'nextId' fora da faixa suportada";
+                return false;
+            }
+            requestedNextId = static_cast<InstanceId>(value);
+        }
+    }
+
     // --- Validacao concluida: agora reconstroi a cena. ---
     scene.clearObjects();
     scene.workspace()->setName(
@@ -471,16 +520,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         part->clearDirty();
     }
 
-    if (root.contains("nextId")) {
-        if (!root["nextId"].is_number_unsigned() && !root["nextId"].is_number_integer()) {
-            error = "campo 'nextId' invalido";
-            return false;
-        }
-        const long long next = root["nextId"].get<long long>();
-        if (next > 0) {
-            scene.setNextId(static_cast<InstanceId>(next));
-        }
-    }
+    if (requestedNextId != 0) scene.setNextId(requestedNextId);
     scene.select(nullptr);
     return true;
 }
@@ -504,31 +544,78 @@ bool save(const Scene& scene, const std::string& path, std::string& error) {
         }
     }
 
-    const std::string text = toJson(scene);
-    const std::filesystem::path temporary = target.string() + ".tmp";
-
-    {
-        std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
-        if (!out) {
-            error = "nao foi possivel abrir '" + temporary.string() + "' para escrita";
+    std::string text;
+    try {
+        text = toJson(scene);
+        // Validate the produced document before creating/replacing any file.
+        Scene validation;
+        if (!fromJson(validation, text, error)) {
+            error = "cena nao pode ser salva: " + error;
             return false;
         }
-        out.write(text.data(), static_cast<std::streamsize>(text.size()));
-        out.flush();
-        if (!out) {
-            error = "falha ao escrever '" + temporary.string() + "'";
-            std::error_code ignored;
-            std::filesystem::remove(temporary, ignored);
-            return false;
-        }
+    } catch (const std::exception& exception) {
+        error = "falha ao serializar a cena: " + std::string(exception.what());
+        return false;
     }
 
-    std::error_code renameError;
-    std::filesystem::rename(temporary, target, renameError);
-    if (renameError) {
+    const std::filesystem::path parentDirectory = target.parent_path().empty()
+                                                     ? std::filesystem::path(".")
+                                                     : target.parent_path();
+    std::string temporaryTemplate =
+        (parentDirectory / (target.filename().string() + ".tmp.XXXXXX")).string();
+    std::vector<char> temporaryName(temporaryTemplate.begin(), temporaryTemplate.end());
+    temporaryName.push_back('\0');
+    const int descriptor = ::mkstemp(temporaryName.data());
+    if (descriptor < 0) {
+        error = "nao foi possivel criar arquivo temporario ao lado de '" + target.string() +
+                "': " + std::strerror(errno);
+        return false;
+    }
+    const std::filesystem::path temporary(temporaryName.data());
+
+    struct stat previousMetadata {};
+    if (::stat(target.c_str(), &previousMetadata) == 0 && S_ISREG(previousMetadata.st_mode)) {
+        (void)::fchmod(descriptor, previousMetadata.st_mode & 0777);
+    }
+
+    std::size_t written = 0;
+    while (written < text.size()) {
+        const ssize_t result = ::write(descriptor, text.data() + written, text.size() - written);
+        if (result < 0 && errno == EINTR) continue;
+        if (result <= 0) {
+            const int savedErrno = errno;
+            ::close(descriptor);
+            std::error_code ignored;
+            std::filesystem::remove(temporary, ignored);
+            error = "falha ao escrever arquivo temporario para '" + target.string() + "': " +
+                    std::strerror(savedErrno);
+            return false;
+        }
+        written += static_cast<std::size_t>(result);
+    }
+    if (::fsync(descriptor) != 0) {
+        const int savedErrno = errno;
+        ::close(descriptor);
         std::error_code ignored;
         std::filesystem::remove(temporary, ignored);
-        error = "falha ao substituir '" + target.string() + "': " + renameError.message();
+        error = "falha ao sincronizar arquivo temporario para '" + target.string() + "': " +
+                std::strerror(savedErrno);
+        return false;
+    }
+    if (::close(descriptor) != 0) {
+        const int savedErrno = errno;
+        std::error_code ignored;
+        std::filesystem::remove(temporary, ignored);
+        error = "falha ao fechar arquivo temporario para '" + target.string() + "': " +
+                std::strerror(savedErrno);
+        return false;
+    }
+
+    if (::rename(temporary.c_str(), target.c_str()) != 0) {
+        const int savedErrno = errno;
+        std::error_code ignored;
+        std::filesystem::remove(temporary, ignored);
+        error = "falha ao substituir '" + target.string() + "': " + std::strerror(savedErrno);
         return false;
     }
     return true;

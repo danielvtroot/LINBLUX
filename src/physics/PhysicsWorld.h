@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <unordered_set>
 #include <unordered_map>
 
 #include "core/Math.h"
@@ -45,6 +46,8 @@ public:
 
     // Aplica as flags dirty de uma Part ao corpo correspondente.
     void applyChanges(Part* part);
+    void setPartEditing(InstanceId id, bool editing);
+    bool isPartEditing(InstanceId id) const;
     void syncScene(Scene& scene);
 
     // Passo fixo (1/60) com limite de subpassos; independente do FPS.
@@ -86,6 +89,7 @@ private:
     std::unique_ptr<btSequentialImpulseConstraintSolver> solver_;
     std::unique_ptr<btDiscreteDynamicsWorld> world_;
     std::unordered_map<InstanceId, BodyEntry> bodies_;
+    std::unordered_set<InstanceId> editingParts_;
     float fixedStep_ = 1.0f / 60.0f;
     int maxSubSteps_ = 5;
 };

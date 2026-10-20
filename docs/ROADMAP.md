@@ -17,7 +17,9 @@ Sequência sugerida. Nenhum item abaixo está implementado além do que consta e
 - Undo/redo de criação, propriedades, transformações e exclusão.
 - Duplicar seleção (`Ctrl+D`).
 - Multi-seleção e transformação em grupo.
-- Snap de grade e de rotação (ex.: 1 unidade / 15°).
+- Snap de grade/rotação já existe no gizmo (incrementos configuráveis na aba
+  Model); melhorar edição visual dos incrementos e adicionar snap de grade à
+  superfície continuam pendentes.
 - Renomear pelo Explorer (duplo clique).
 - Reordenar hierarquia e agrupar em pastas/modelos.
 - Atalhos de ferramenta (`1`–`4`).
@@ -46,7 +48,8 @@ Sequência sugerida. Nenhum item abaixo está implementado além do que consta e
 
 ## Etapa 6 — Scripts e lógica
 
-- Sandbox de scripts do usuário.
+- Runtime/sandbox Luau de scripts do usuário (SceneLua atual é somente formato
+  declarativo e nunca executa código).
 - Eventos de toque/colisão expostos de forma controlada.
 - Depuração e console.
 

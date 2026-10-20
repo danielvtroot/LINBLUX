@@ -90,6 +90,7 @@ void PhysicsWorld::clearBodies() {
         delete entry.shape;
     }
     bodies_.clear();
+    editingParts_.clear();
 }
 
 btCollisionShape* PhysicsWorld::createShape(const Part& part) const {
@@ -165,6 +166,7 @@ void PhysicsWorld::addPart(Part* part) {
 }
 
 void PhysicsWorld::destroyEntry(InstanceId id) {
+    editingParts_.erase(id);
     const auto it = bodies_.find(id);
     if (it == bodies_.end()) {
         return;
@@ -204,10 +206,8 @@ void PhysicsWorld::setBodyTransform(const Part& part, BodyEntry& entry, bool res
         body->setAngularVelocity(btVector3(0.0f, 0.0f, 0.0f));
         body->clearForces();
     }
-    body->activate(true);
-    if (body->isStaticOrKinematicObject()) {
-        world_->updateSingleAabb(body);
-    }
+    if (!isPartEditing(part.id())) body->activate(true);
+    world_->updateSingleAabb(body);
 }
 
 void PhysicsWorld::applyChanges(Part* part) {
@@ -266,7 +266,31 @@ void PhysicsWorld::updateShape(const Part& part, BodyEntry& entry) {
     entry.body->setMassProps(mass, inertia);
     entry.body->updateInertiaTensor();
     world_->updateSingleAabb(entry.body);
-    entry.body->activate(true);
+    if (!isPartEditing(part.id())) entry.body->activate(true);
+}
+
+void PhysicsWorld::setPartEditing(InstanceId id, bool editing) {
+    const auto bodyIt = bodies_.find(id);
+    if (bodyIt == bodies_.end() || bodyIt->second.body->getInvMass() <= 0.0f) return;
+    btRigidBody* body = bodyIt->second.body;
+    if (editing) {
+        if (!editingParts_.insert(id).second) return;
+        body->setLinearVelocity(btVector3(0, 0, 0));
+        body->setAngularVelocity(btVector3(0, 0, 0));
+        body->clearForces();
+        body->forceActivationState(DISABLE_SIMULATION);
+        return;
+    }
+    if (editingParts_.erase(id) == 0) return;
+    body->forceActivationState(ACTIVE_TAG);
+    body->setLinearVelocity(btVector3(0, 0, 0));
+    body->setAngularVelocity(btVector3(0, 0, 0));
+    body->clearForces();
+    body->activate(true);
+}
+
+bool PhysicsWorld::isPartEditing(InstanceId id) const {
+    return editingParts_.find(id) != editingParts_.end();
 }
 
 void PhysicsWorld::syncScene(Scene& scene) {
@@ -297,7 +321,7 @@ void PhysicsWorld::simulate(Scene& scene, float deltaSeconds) {
 
 void PhysicsWorld::syncFromBodies(Scene& scene) {
     for (Part* part : scene.parts()) {
-        if (part == nullptr || part->anchored()) {
+        if (part == nullptr || part->anchored() || isPartEditing(part->id())) {
             continue;
         }
         const auto it = bodies_.find(part->id());

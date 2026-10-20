@@ -12,7 +12,9 @@ carregamento remoto e sem assets pesados.
 
 - Viewport 3D com céu azul, iluminação direcional simples, grade e Baseplate
   grande com studs (malha única, sem um objeto por stud).
-- Câmera orbital: orbitar, deslocar, zoom e focar a seleção.
+- Câmera de editor orbital e livre: `WASD` move sem RMB, `Q/E` sobe/desce,
+  `Shift` acelera; RMB captura/oculta o cursor para olhar; MMB faz pan, roda
+  aproxima ao foco e `F` enquadra a seleção.
 - Física Bullet 3D rodando continuamente (sem botão Play/Stop):
   - peças ancoradas ficam estáticas e servem de apoio;
   - peças soltas caem, colidem e repousam sobre a Baseplate/outras peças;
@@ -25,11 +27,18 @@ carregamento remoto e sem assets pesados.
   Lighting e peças criadas) e seleção sincronizada.
 - Properties com Name, ClassName, Position, Size, Rotation, Color, Material,
   Anchored e CanCollide; alterações aplicam no objeto real.
-- Gizmos de mover, redimensionar e girar nos eixos X/Y/Z.
+- Gizmos Move com 3 eixos e 3 planos, Scale com faces positivas/negativas e
+  preservação da face oposta, Rotate por anéis. Global/Local e snap configurável
+  (Shift suspende snap durante o drag).
+- As seis alças de escala ficam fora dos limites atuais e seus ícones são
+  separados quando se sobrepõem na projeção; o hit test usa as mesmas posições.
 - Peças novas começam ancoradas para permanecerem no lugar durante a edição;
   desative `Anchored` para simular gravidade e colisões.
 - Salvar/abrir projeto JSON versionado, com validação, escrita atômica e
   tratamento de erros.
+- Exportar/importar cena `.lua` declarativa com hierarquia e propriedades. O
+  parser aceita apenas `return` e tabelas de literais; arquivos nunca são
+  executados e o formato JSON do projeto permanece intacto.
 - Testes automatizados headless via CTest.
 
 Não há botão Play, Test ou Stop nesta etapa, nem personagem R6, scripts,
@@ -82,27 +91,36 @@ cmake --build build -j2
 | Selecionar objeto | clique esquerdo na viewport |
 | Mover / redimensionar / girar | escolha a ferramenta e arraste o eixo na viewport |
 | Orbitar câmera | arrastar com o botão direito |
-| Câmera livre | segurar botão direito + `W`, `A`, `S`, `D`; `Q` desce e `E` sobe |
-| Acelerar câmera livre | `Alt` enquanto move |
-| Deslocar câmera | botão do meio (ou Shift + botão direito) |
+| Câmera livre | viewport focada: `W`, `A`, `S`, `D`; `Q` desce e `E` sobe |
+| Acelerar câmera livre | `Shift` enquanto move |
+| Ajustar velocidade/sensibilidade | ribbon **Model** |
+| Deslocar câmera | botão do meio + arrastar |
 | Zoom | roda do mouse |
 | Focar seleção | `F` |
 | Excluir seleção | `Delete` ou `Backspace` |
 | Salvar | `Ctrl+S` (ou botão Save) |
 | Abrir | `Ctrl+O` (ou botão Open) |
-| Cancelar arrasto | `Esc` |
+| Cancelar arrasto / soltar captura | `Esc` |
 | Ferramentas | `1` Select, `2` Move, `3` Scale, `4` Rotate |
 
 A Baseplate inicial e os serviços Workspace/Lighting são protegidos contra
 exclusão acidental.
 
-## Projetos
+## Projetos e cenas declarativas
 
-O caminho padrão é `projects/default.loblox.json`. O botão **Save** abre um
-diálogo com caminho editável; **Ctrl+S** grava direto no caminho atual. O
+O caminho inicial é `$XDG_DATA_HOME/loblox/projects/default.loblox.json`, ou
+`~/.local/share/loblox/projects/default.loblox.json` quando `XDG_DATA_HOME` não
+está definido. O botão **Save** abre um diálogo com caminho editável;
+**Ctrl+S** grava direto no caminho atual. O
 formato é JSON legível, com versão, ids estáveis, hierarquia e todas as
 propriedades. Arquivos inválidos ou de versão desconhecida são rejeitados sem
 destruir a cena atual.
+
+No menu File, **Save Project / Open Project** continuam usando o projeto JSON
+nativo. **Export Scene as Lua / Import Scene from Lua** usam o formato
+declarativo `loblox-scene` v1. Ele preserva IDs, pais, objetos, Lighting e
+propriedades de Part, mas não executa Lua e não é um sistema de scripts. O
+runtime Luau permanece planejado para uma etapa separada.
 
 ## Estrutura
 
@@ -115,9 +133,9 @@ src/
   scene/          Scene (posse, hierarquia, seleção)
   physics/        PhysicsWorld (Bullet, um corpo por Part)
   rendering/      EditorCamera e SceneRenderer
-  editor/         EditorUI, Gizmo, ToolMode
-  serialization/  ProjectIO (JSON versionado e escrita atômica)
-tests/            suíte headless (CTest)
+  editor/         EditorUI, Gizmo, GizmoMath, ToolMode
+  serialization/  ProjectIO JSON e SceneLua declarativo sem runtime
+tests/            suíte headless (CTest; matemática, física e round-trips)
 third_party/      Dear ImGui 1.93 docking, rlImGui, nlohmann/json
 prototype/        protótipo single-file preservado (não compilado)
 docs/             arquitetura, progresso, decisões, testes e roadmap
@@ -129,14 +147,18 @@ docs/             arquitetura, progresso, decisões, testes e roadmap
 ctest --test-dir build --output-on-failure
 ```
 
-A suíte cobre criação/remoção, hierarquia, propriedades, serialização,
-validação de projetos, alternância Anchored, CanCollide, sincronização de
-transformações, raycast, redimensionamento sem recriar corpos e limpeza de
-corpos. Veja `docs/TESTING.md` para os resultados e para o smoke test gráfico.
+A suíte cobre criação/remoção, hierarquia, propriedades, JSON e Lua declarativo,
+validação, matemática de câmera/gizmos, snap, faces de escala, pausa física na
+edição, Anchored, CanCollide, raycast e corpos únicos. Veja `docs/TESTING.md`
+para resultados e limitações dos testes gráficos.
 
 ## Limitações desta etapa
 
 - Materiais são presets visuais de cor/tonalidade, não PBR.
+- Escala Global de uma caixa rotacionada é limitada à dimensão local mais
+  alinhada; escala global exata exigiria shear, que o modelo `Part` não guarda.
+- A substituição de arquivos usa `mkstemp`/`fsync`/`rename` POSIX; portabilidade
+  de gravação para sistemas não POSIX ainda não foi implementada.
 - Seleção única (sem multi-seleção), sem undo/redo e sem duplicar.
 - Sem personagem, animações, scripts ou modo de jogo.
 - A interface usa X11/XWayland; não há backend Wayland nativo.

@@ -84,7 +84,8 @@ da simulação. Limitar subpassos evita espiral de tempo.
 ## D008 — JSON versionado com escrita atômica
 
 **Decisão:** formato texto `loblox-project` versão 1, com ids estáveis e
-propriedades explícitas; gravar em `.tmp` e renomear sobre o destino.
+propriedades explícitas; validar primeiro, escrever para temporário único no
+mesmo diretório e renomear atomicamente em POSIX.
 
 **Motivo:** legibilidade, depuração e compatibilidade futura. A troca atômica
 evita substituir um projeto válido por um arquivo parcialmente escrito. Nada de
@@ -92,6 +93,10 @@ ponteiros/handles é serializado.
 
 **Alternativas descartadas:** binário proprietário (difícil de inspecionar) e
 serialização direta de structs (frágil e insegura).
+
+**Atualização 2026-10-20:** o temporário é criado por `mkstemp`, o conteúdo é
+verificado e sincronizado com `fsync`, e o arquivo anterior é preservado nas
+falhas anteriores ao rename. O destino conserva suas permissões existentes.
 
 ## D009 — Rotação persistida em graus Euler
 
@@ -173,3 +178,77 @@ necessário para esta fundação.
 
 **Motivo:** o programa precisa compilar e rodar offline; fixar versões evita
 quebras por atualizações externas. O custo é ~4 MB no repositório.
+
+## D018 — Estados de movimento e captura de câmera separados
+
+**Decisão:** movimento livre de câmera exige foco/hover da viewport, não RMB;
+RMB captura o cursor somente enquanto a órbita está ativa. A UI libera captura
+em soltura, perda de foco, saída/cancelamento e destruição.
+
+**Motivo:** antes movimento WASD e rotação compartilhavam o gate de RMB, e a
+rotação usava posição absoluta do cursor sem captura, falhando nas bordas.
+
+## D019 — Transformações de gizmo calculadas de snapshots
+
+**Decisão:** cada arraste fixa manipulador, espaço local/global e transformação
+inicial. Uma camada `GizmoMath` pura calcula eixo/plano, face de escala e ângulo;
+os incrementos de snap são aplicados a partir dos valores iniciais.
+
+**Motivo:** evita deriva por acumulação e permite testar a matemática sem
+janela. Para Sphere, o tamanho permanece uniforme, compatível com o collider
+esférico existente.
+
+## D020 — Lua declarativo separado de script/runtime
+
+**Decisão:** `SceneLua` lê/escreve somente um subconjunto literal seguro de
+Lua (`loblox-scene` v1), com allowlist e validação via esquema JSON existente.
+Não há execução Lua/Luau; JSON continua o formato nativo.
+
+**Motivo:** preparar interoperabilidade textual e futura integração sem
+executar código ao abrir projetos, sem runtime novo e sem quebrar arquivos
+existentes.
+
+## D021 — Suspender corpo dinâmico enquanto o gizmo edita
+
+**Decisão:** o corpo Bullet associado é temporariamente removido da simulação
+durante o arraste, preservado no mapa de corpos e reativado ao terminar. O shape
+e o AABB são atualizados in-place.
+
+**Motivo:** gravidade e integração não devem competir com o cursor, e recriar
+corpos por frame causaria custo e risco de duplicação.
+
+## D022 — Caminho inicial de projeto independente do diretório de execução
+
+**Decisão:** o projeto inicial usa `$XDG_DATA_HOME/loblox/projects`, com fallback
+para `~/.local/share/loblox/projects`; caminhos escolhidos em Save As passam a
+ser absolutos na sessão.
+
+**Motivo:** atalhos de desktop podem iniciar o processo com qualquer cwd; um
+caminho relativo fazia o salvamento parecer perdido em outra pasta.
+
+## D023 — Alças de escala acessíveis após projeção
+
+**Decisão:** as seis alças derivam dos limites geométricos atuais, mas seus
+ícones de tela são separados quando a projeção os sobrepõe. A seleção usa os
+mesmos centros visuais e linhas-guia apontam para a âncora geométrica.
+
+**Motivo:** alças em lados opostos frequentemente se sobrepunham na câmera
+diagonal mesmo estando em pontos 3D distintos.
+
+**Limitação:** escalar uma caixa rotacionada em eixos globais exatos requer
+shear; `Part` guarda somente rotação e dimensões locais. O editor mantém OBB e
+aplica o eixo mundial à dimensão local mais alinhada, compensando a projeção.
+
+## D024 — Identidade inequívoca e projeção para escala unilateral
+
+**Decisão:** cada controle tem `HandleId`; a identidade retornada pelo hit test
+é preservada no arraste. Um algoritmo snapshot-relative serve aos seis lados.
+Em Global, o delta mundial é projetado multiplicando pela componente local
+alinhada; em Local, usa-se o eixo local diretamente. O overlay 2D usa retângulos
+idênticos no desenho e no hit test.
+
+**Motivo:** uma face deve mudar somente sua dimensão e manter a face oposta
+fixa. Dividir o deslocamento pela projeção amplificava escala em Parts
+rotacionadas; descartar o sinal do alinhamento também fazia algumas faces
+diminuírem quando puxadas para fora. Reconstruir eixo e lado em campos
+independentes dificultava confirmar que o controle selecionado era o aplicado.

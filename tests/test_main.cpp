@@ -6,11 +6,16 @@
 #include <sstream>
 #include <string>
 
+#include "core/Config.h"
 #include "objects/Baseplate.h"
 #include "objects/SpawnLocation.h"
+#include "editor/GizmoLayout.h"
+#include "editor/GizmoMath.h"
 #include "physics/PhysicsWorld.h"
+#include "rendering/EditorCamera.h"
 #include "scene/Scene.h"
 #include "serialization/ProjectIO.h"
+#include "serialization/SceneLua.h"
 
 namespace {
 
@@ -331,8 +336,458 @@ void TestResizeKeepsSingleBody() {
     EndSection();
 }
 
+void TestGizmoMath() {
+    Section("Matematica de gizmos, eixos, planos, escala e rotacao");
+    using namespace loblox;
+    using namespace loblox::gizmomath;
+    const TransformSnapshot start{V3(10, 20, 30), QuatFromEulerDegrees(V3(0, 0, 0)), V3(4, 6, 8)};
+    const Vector3 axes[3] = {V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1)};
+    for (int i = 0; i < 3; ++i) {
+        const Vector3 moved = MoveAxis(start, axes[i], 2.4f, 1.0f);
+        CHECK_NEAR(i == 0 ? moved.x : start.position.x, i == 0 ? 12.0f : 10.0f, 0.001f);
+        CHECK_NEAR(i == 1 ? moved.y : start.position.y, i == 1 ? 22.0f : 20.0f, 0.001f);
+        CHECK_NEAR(i == 2 ? moved.z : start.position.z, i == 2 ? 32.0f : 30.0f, 0.001f);
+    }
+    const Vector3 xy = MovePlane(start, axes[0], axes[1], V3(2.2f, -1.2f, 9.0f), 1.0f);
+    CHECK_NEAR(xy.x, 12.0f, 0.001f); CHECK_NEAR(xy.y, 19.0f, 0.001f); CHECK_NEAR(xy.z, 30.0f, 0.001f);
+    const Vector3 xz = MovePlane(start, axes[0], axes[2], V3(1.2f, 9.0f, 3.7f), 1.0f);
+    CHECK_NEAR(xz.x, 11.0f, 0.001f); CHECK_NEAR(xz.y, 20.0f, 0.001f); CHECK_NEAR(xz.z, 34.0f, 0.001f);
+    const Vector3 yz = MovePlane(start, axes[1], axes[2], V3(9.0f, 2.2f, -2.2f), 1.0f);
+    CHECK_NEAR(yz.x, 10.0f, 0.001f); CHECK_NEAR(yz.y, 22.0f, 0.001f); CHECK_NEAR(yz.z, 28.0f, 0.001f);
+
+    const auto plus = ScaleFace(start, axes[0], 1, 2.0f, 0.5f);
+    CHECK_NEAR(plus.size.x, 6.0f, 0.001f); CHECK_NEAR(plus.size.y, 6.0f, 0.001f);
+    CHECK_NEAR(plus.size.z, 8.0f, 0.001f); CHECK_NEAR(plus.position.x, 11.0f, 0.001f);
+    const auto minus = ScaleFace(start, axes[0], -1, -2.0f, 0.5f);
+    CHECK_NEAR(minus.size.x, 6.0f, 0.001f); CHECK_NEAR(minus.position.x, 9.0f, 0.001f);
+    const auto clamped = ScaleFace({V3(0,0,0), start.rotation, V3(0.5f,2,2)}, axes[1], 1, -20.0f, 0.0f);
+    CHECK_NEAR(clamped.size.y, kMinPartSize, 0.001f);
+    CHECK_NEAR(clamped.position.y, -0.9f, 0.001f);
+    const auto localStart = TransformSnapshot{V3(0,0,0), QuatFromEulerDegrees(V3(0,90,0)), V3(4,4,4)};
+    const Vector3 localX = Axis(0, localStart.rotation, true);
+    const auto localScale = ScaleFace(localStart, localX, 1, 2.0f, 0.0f);
+    CHECK_NEAR(localScale.size.x, 6.0f, 0.001f);
+    CHECK_NEAR(localScale.position.z, -1.0f, 0.001f);
+    const TransformSnapshot worldRotated{V3(3, 4, 5), QuatFromEulerDegrees(V3(0, 30, 0)),
+                                         V3(4, 6, 8)};
+    const Vector3 worldXLocalX = Axis(0, worldRotated.rotation, true);
+    const auto worldScale = ScaleFaceAlongAxis(worldRotated, 0, 1, false, 0.8660254f, 0.0f);
+    CHECK_NEAR(worldScale.size.x, 4.75f, 0.001f);
+    CHECK_NEAR(worldScale.size.y, 6.0f, 0.001f);
+    CHECK_NEAR(worldScale.size.z, 8.0f, 0.001f);
+    CHECK_NEAR(Vector3Distance(Vector3Subtract(worldScale.position,
+                                              Vector3Scale(worldXLocalX, worldScale.size.x * 0.5f)),
+                               Vector3Subtract(worldRotated.position,
+                                               Vector3Scale(worldXLocalX, worldRotated.size.x * 0.5f))),
+               0.0f, 0.001f);
+    // All six faces use the same snapshot-relative algorithm. Verify that only
+    // the selected dimension changes and the opposite local face stays fixed,
+    // including for a rotated Part.
+    const HandleId scaleIds[3][2] = {
+        {HandleId::XNegative, HandleId::XPositive},
+        {HandleId::YNegative, HandleId::YPositive},
+        {HandleId::ZNegative, HandleId::ZPositive}};
+    const TransformSnapshot rotatedBox{V3(7, -3, 5), QuatFromEulerDegrees(V3(23, 37, -16)),
+                                       V3(4, 6, 8)};
+    for (const TransformSnapshot candidate : {start, rotatedBox}) {
+        const Vector3 localAxes[3] = {Axis(0, candidate.rotation, true),
+                                      Axis(1, candidate.rotation, true),
+                                      Axis(2, candidate.rotation, true)};
+        for (bool localSpace : {false, true}) {
+            for (int axis = 0; axis < 3; ++axis) {
+                for (int sideIndex = 0; sideIndex < 2; ++sideIndex) {
+                    const int side = sideIndex == 0 ? -1 : 1;
+                    int selectedComponent = axis;
+                    float alignment = 1.0f;
+                    if (!localSpace) {
+                        const Vector3 worldAxis = Axis(axis, candidate.rotation, false);
+                        float bestAlignment = 0.0f;
+                        for (int i = 0; i < 3; ++i) {
+                            const float dot = Vector3DotProduct(worldAxis, localAxes[i]);
+                            if (std::fabs(dot) > std::fabs(bestAlignment)) {
+                                bestAlignment = dot;
+                                selectedComponent = i;
+                            }
+                        }
+                        alignment = bestAlignment;
+                    }
+                    const int localSide = (alignment < 0.0f ? -1 : 1) * side;
+                    const TransformSnapshot scaled = ScaleFaceForHandle(
+                        candidate, scaleIds[axis][sideIndex], localSpace,
+                        static_cast<float>(side) * 2.0f, 0.0f);
+                    const float startSize[3] = {candidate.size.x, candidate.size.y, candidate.size.z};
+                    const float resultSize[3] = {scaled.size.x, scaled.size.y, scaled.size.z};
+                    for (int i = 0; i < 3; ++i) {
+                        const float expectedDelta = i == selectedComponent
+                            ? 2.0f * std::fabs(alignment) : 0.0f;
+                        CHECK_NEAR(resultSize[i], startSize[i] + expectedDelta, 0.001f);
+                    }
+                    const Vector3 fixedAfter = Vector3Add(
+                        scaled.position,
+                        Vector3Scale(localAxes[selectedComponent],
+                                     -localSide * resultSize[selectedComponent] * 0.5f));
+                    const Vector3 fixedBefore = Vector3Add(
+                        candidate.position,
+                        Vector3Scale(localAxes[selectedComponent],
+                                     -localSide * startSize[selectedComponent] * 0.5f));
+                    CHECK_NEAR(Vector3Distance(fixedAfter, fixedBefore), 0.0f, 0.001f);
+                    CHECK(std::isfinite(scaled.size.x) && std::isfinite(scaled.size.y) &&
+                          std::isfinite(scaled.size.z));
+                    CHECK(scaled.size.x >= kMinPartSize && scaled.size.y >= kMinPartSize &&
+                          scaled.size.z >= kMinPartSize);
+                    CHECK(HandleAxis(scaleIds[axis][sideIndex]) == axis);
+                    CHECK(HandleSide(scaleIds[axis][sideIndex]) == side);
+                }
+            }
+        }
+    }
+    for (int axis = 0; axis < 3; ++axis) {
+        for (int side : {-1, 1}) {
+            const Vector3 handle = ScaleHandleCenter(start, axis, side, false, 2.0f);
+            CHECK_NEAR(Vector3Distance(handle, start.position),
+                       (axis == 0 ? 2.0f : axis == 1 ? 3.0f : 4.0f) + 2.0f, 0.001f);
+            const Vector3 localHandle = ScaleHandleCenter(localStart, axis, side, true, 2.0f);
+            CHECK_NEAR(Vector3Distance(localHandle, localStart.position), 4.0f, 0.001f);
+        }
+    }
+    const Vector3 tinyHandle = ScaleHandleCenter(
+        {V3(0, 0, 0), start.rotation, V3(0.2f, 0.2f, 0.2f)}, 1, 1, false, 2.0f);
+    const Vector3 hugeHandle = ScaleHandleCenter(
+        {V3(0, 0, 0), start.rotation, V3(1000, 1000, 1000)}, 1, 1, false, 2.0f);
+    CHECK_NEAR(tinyHandle.y, 2.1f, 0.001f);
+    CHECK_NEAR(hugeHandle.y, 502.0f, 0.001f);
+    const float angleAcrossPi = WrappedAngleDelta(179.0f * DEG2RAD, -179.0f * DEG2RAD);
+    CHECK_NEAR(angleAcrossPi / DEG2RAD, 2.0f, 0.001f);
+    const float angleAcrossMinusPi = WrappedAngleDelta(-179.0f * DEG2RAD, 179.0f * DEG2RAD);
+    CHECK_NEAR(angleAcrossMinusPi / DEG2RAD, -2.0f, 0.001f);
+    CHECK_NEAR(WrappedAngleDelta(0.75f, 0.75f), 0.0f, 0.0001f);
+    const std::array<Vector2, 6> overlapping{};
+    const auto separated = SeparateScreenHandles(overlapping, 23.0f);
+    for (std::size_t i = 0; i < separated.size(); ++i) {
+        for (std::size_t j = i + 1; j < separated.size(); ++j) {
+            const float dx = separated[i].x - separated[j].x;
+            const float dy = separated[i].y - separated[j].y;
+            CHECK(std::sqrt(dx * dx + dy * dy) >= 22.9f);
+        }
+    }
+    for (int axis = 0; axis < 3; ++axis) {
+        for (int side : {-1, 1}) {
+            const int index = axis * 2 + (side > 0 ? 1 : 0);
+            CHECK(PickScaleFaceHandle(separated, separated[static_cast<std::size_t>(index)]) ==
+                  ScaleFaceHandleId(axis, side));
+        }
+    }
+    CHECK(PickScaleFaceHandle(separated, Vector2{1000.0f, 1000.0f}) == HandleId::None);
+    CHECK(ScaleFaceHandleId(3, 1) == HandleId::None);
+    const auto uniformSphere = ScaleUniformFace(start, axes[2], -1, -2.0f, 0.0f);
+    CHECK_NEAR(uniformSphere.size.x, 6.0f, 0.001f);
+    CHECK_NEAR(uniformSphere.size.y, 6.0f, 0.001f);
+    CHECK_NEAR(uniformSphere.size.z, 6.0f, 0.001f);
+    CHECK_NEAR(uniformSphere.position.z, 29.0f, 0.001f);
+    for (int i = 0; i < 3; ++i) {
+        const Quaternion rotated = Rotate(start, axes[i], 30.0f * DEG2RAD, 15.0f);
+        const Vector3 result = EulerDegreesFromQuat(rotated);
+        CHECK(std::isfinite(result.x) && std::isfinite(result.y) && std::isfinite(result.z));
+        CHECK_NEAR(result.x, i == 0 ? 30.0f : 0.0f, 0.01f);
+        CHECK_NEAR(result.y, i == 1 ? 30.0f : 0.0f, 0.01f);
+        CHECK_NEAR(result.z, i == 2 ? 30.0f : 0.0f, 0.01f);
+    }
+    const TransformSnapshot alreadyRotated{V3(0, 0, 0), QuatFromEulerDegrees(V3(12, 38, -7)),
+                                           V3(4, 4, 4)};
+    const Vector3 localY = Axis(1, alreadyRotated.rotation, true);
+    const Quaternion expectedLocalDelta = QuaternionFromAxisAngle(localY, 20.0f * DEG2RAD);
+    const Quaternion combined = Rotate(alreadyRotated, localY, 20.0f * DEG2RAD, 0.0f);
+    CHECK(NearlyEqual(combined,
+                      CanonicalQuaternion(QuaternionNormalize(
+                          QuaternionMultiply(expectedLocalDelta, alreadyRotated.rotation))),
+                      0.001f));
+    CHECK_NEAR(SnapDelta(23.0f * DEG2RAD, 15.0f * DEG2RAD) / DEG2RAD, 30.0f, 0.001f);
+    EndSection();
+}
+
+void TestGizmoLayout() {
+    Section("Layout screen-space do gizmo (desenho == hit test)");
+    using namespace loblox;
+    using namespace loblox::gizmolayout;
+    Part part(1, "Part", PartShape::Block);
+    part.setTransform(loblox::Transform{V3(0, 4, 0), QuatFromEulerDegrees(V3(0, 0, 0)), V3(4, 4, 4)});
+    EditorCamera camera;
+    const Rectangle viewport{0.0f, 0.0f, 640.0f, 400.0f};
+
+    // Projecao valida a frente, invalida atras do near plane/camera.
+    camera.setOrbit(part.position(), 12.0f, 0.75f, 0.48f);
+    Vector2 checked{};
+    CHECK(camera.projectChecked(part.position(), Vector2{640.0f, 400.0f}, checked));
+    const Vector2 plain = camera.project(part.position(), Vector2{640.0f, 400.0f});
+    CHECK_NEAR(checked.x, plain.x, 0.5f);
+    CHECK_NEAR(checked.y, plain.y, 0.5f);
+    const Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
+    Vector2 ignored{123.0f, 456.0f};
+    CHECK(!camera.projectChecked(
+        Vector3Add(camera.position(), Vector3Scale(forward, -3.0f)), Vector2{640.0f, 400.0f},
+        ignored));
+    CHECK_NEAR(ignored.x, 123.0f, 0.001f);
+    CHECK(!camera.projectChecked(
+        Vector3Add(camera.position(), Vector3Scale(forward, 0.01f)), Vector2{640.0f, 400.0f},
+        ignored));
+    CHECK(camera.projectChecked(
+        Vector3Add(camera.position(), Vector3Scale(forward, 0.5f)), Vector2{640.0f, 400.0f},
+        ignored));
+
+    // Tamanho em pixels: acompanha a resolucao e respeita limites.
+    const float tiny = PixelLength(Vector2{200.0f, 200.0f});
+    const float normal = PixelLength(Vector2{640.0f, 400.0f});
+    const float large = PixelLength(Vector2{900.0f, 700.0f});
+    const float huge = PixelLength(Vector2{3840.0f, 2160.0f});
+    CHECK_NEAR(tiny, 60.0f, 0.01f);
+    CHECK_NEAR(huge, 132.0f, 0.01f);
+    CHECK(large > normal);
+    CHECK(huge >= large);
+
+    // Os seis lados de Scale: posicoes distintas, separadas, na viewport e
+    // clicaveis no ponto exato em que sao desenhadas.
+    for (float distance : {2.0f, 4.0f, 12.0f, 42.0f, 200.0f}) {
+        camera.setOrbit(part.position(), distance, 0.75f, 0.48f);
+        const Layout scale = Build(part, ToolMode::Scale, camera, viewport, false);
+        CHECK(scale.valid);
+        for (int axis = 0; axis < 3; ++axis) {
+            for (int side : {-1, 1}) {
+                const int index = axis * 2 + (side > 0 ? 1 : 0);
+                const Rectangle rect = ScaleHandleRect(scale, index);
+                const Vector2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
+                CHECK(rect.x >= 0.0f && rect.y >= 0.0f && rect.x + rect.width <= 640.0f &&
+                      rect.y + rect.height <= 400.0f);
+                CHECK(PickScaleHandle(scale, center) ==
+                      gizmomath::ScaleFaceHandleId(axis, side));
+                for (int other = index + 1; other < 6; ++other) {
+                    const Vector2 otherCenter{scale.scaleHandle[other].x,
+                                              scale.scaleHandle[other].y};
+                    CHECK(Vector2Distance(center, otherCenter) >= 22.0f);
+                }
+            }
+        }
+    }
+
+    // Part enorme com camera muito proxima: as alças continuam na viewport.
+    part.setTransform(loblox::Transform{V3(0, 4, 0), Quaternion{0, 0, 0, 1}, V3(400, 400, 400)});
+    camera.setOrbit(part.position(), 2.0f, 0.75f, 0.48f);
+    const Layout hugePart = Build(part, ToolMode::Scale, camera, viewport, false);
+    CHECK(hugePart.valid);
+    for (int index = 0; index < 6; ++index) {
+        const Rectangle rect = ScaleHandleRect(hugePart, index);
+        CHECK(rect.x >= 0.0f && rect.y >= 0.0f && rect.x + rect.width <= 640.0f &&
+              rect.y + rect.height <= 400.0f);
+    }
+
+    // Part pequena: os controles de Move continuam com tamanho de tela.
+    part.setTransform(loblox::Transform{V3(0, 4, 0), Quaternion{0, 0, 0, 1}, V3(0.2f, 0.2f, 0.2f)});
+    camera.setOrbit(part.position(), 200.0f, 0.0f, 0.0f);
+    const Layout smallPart = Build(part, ToolMode::Move, camera, viewport, false);
+    CHECK(smallPart.valid);
+    for (int axis = 0; axis < 3; ++axis) {
+        const float distance = Vector2Distance(smallPart.center,
+                                               smallPart.axisButton[axis]);
+        CHECK(distance >= 60.0f - 0.5f && distance <= 132.5f);
+        const Rectangle rect = AxisButtonRect(smallPart, axis);
+        const Vector2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
+        if (PickPlane(smallPart, center) < 0) CHECK(PickAxisButton(smallPart, center) == axis);
+    }
+
+    // Rotacao: aneis existem, marcadores sao clicaveis e longe deles nao ha hit.
+    part.setTransform(loblox::Transform{V3(3, 5, -2), QuatFromEulerDegrees(V3(23, 37, -16)),
+                                V3(4, 6, 8)});
+    for (float distance : {2.0f, 12.0f, 200.0f}) {
+        for (float pitch : {-1.2f, 0.0f, 1.2f}) {
+            camera.setOrbit(part.position(), distance, 0.75f, pitch);
+            const Layout rotate = Build(part, ToolMode::Rotate, camera, viewport, true);
+            CHECK(rotate.valid);
+            for (int axis = 0; axis < 3; ++axis) {
+                CHECK(!rotate.ring[axis].empty());
+                const Rectangle rect = RotateMarkerRect(rotate, axis);
+                const Vector2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
+                CHECK(PickRotateMarker(rotate, center) == axis);
+            }
+        }
+    }
+    CHECK(PickRotateRing(smallPart, Vector2{-50.0f, -50.0f}) == -1);
+
+    // Build e puro: duas chamadas produzem exatamente o mesmo layout, premissa
+    // para desenho e picking usarem a mesma geometria.
+    camera.setOrbit(part.position(), 9.0f, 0.9f, 0.4f);
+    const Layout first = Build(part, ToolMode::Scale, camera, viewport, false);
+    const Layout second = Build(part, ToolMode::Scale, camera, viewport, false);
+    CHECK(first.valid && second.valid);
+    for (int index = 0; index < 6; ++index) {
+        CHECK_NEAR(first.scaleHandle[index].x, second.scaleHandle[index].x, 0.0001f);
+        CHECK_NEAR(first.scaleHandle[index].y, second.scaleHandle[index].y, 0.0001f);
+    }
+
+    // Pivo atras da camera: nenhuma geometria valida e nenhum picking.
+    const float yaw = 0.4f;
+    const float pitch = 0.3f;
+    const Vector3 direction{std::cos(pitch) * std::sin(yaw), std::sin(pitch),
+                            std::cos(pitch) * std::cos(yaw)};
+    camera.setOrbit(Vector3Subtract(part.position(), Vector3Scale(direction, 2.5f)), 2.0f, yaw,
+                    pitch);
+    const Layout behind = Build(part, ToolMode::Move, camera, viewport, false);
+    CHECK(!behind.valid);
+    CHECK(PickAxisButton(behind, Vector2{320.0f, 200.0f}) == -1);
+    CHECK(PickScaleHandle(behind, Vector2{320.0f, 200.0f}) == gizmomath::HandleId::None);
+    EndSection();
+}
+
+void TestEditorCameraMath() {
+    Section("Matematica de navegacao da camera");
+    using namespace loblox;
+    EditorCamera camera;
+    const Vector3 initialTarget = camera.target();
+    const Vector3 initialPosition = camera.position();
+    camera.moveFree(V3(0, 0, 1), 0.1f, false);
+    CHECK(Vector3Distance(initialTarget, camera.target()) > 2.9f);
+    CHECK(Vector3Distance(initialPosition, camera.position()) > 2.9f);
+    const Vector3 normalTarget = camera.target();
+    camera.moveFree(V3(1, 0, 0), 0.1f, true);
+    CHECK(Vector3Distance(normalTarget, camera.target()) > 8.9f);
+    EditorCamera sixtyFps;
+    EditorCamera oneTwentyFps;
+    for (int i = 0; i < 60; ++i) sixtyFps.moveFree(V3(1, 0, 1), 1.0f / 60.0f, false);
+    for (int i = 0; i < 120; ++i) oneTwentyFps.moveFree(V3(1, 0, 1), 1.0f / 120.0f, false);
+    CHECK(NearlyEqual(sixtyFps.target(), oneTwentyFps.target(), 0.001f));
+    const Vector3 beforeOrbitTarget = camera.target();
+    const Vector3 beforeOrbitPosition = camera.position();
+    camera.rotateBy(Vector2{80.0f, 20000.0f});
+    CHECK(NearlyEqual(beforeOrbitTarget, camera.target()));
+    CHECK(!NearlyEqual(beforeOrbitPosition, camera.position()));
+    CHECK(std::fabs(camera.pitch()) < 1.46f);
+    camera.zoomBy(500.0f);
+    CHECK(camera.distance() >= 2.0f);
+    camera.zoomBy(-1000.0f);
+    CHECK(camera.distance() <= 2000.0f);
+    camera.focusOn(V3(100, 20, -30), 10.0f);
+    CHECK(NearlyEqual(camera.target(), V3(100, 20, -30)));
+    CHECK(camera.distance() > 20.0f);
+    camera.zoomBy(500.0f);
+    CHECK(camera.distance() >= 12.49f);
+    EndSection();
+}
+
+void TestPhysicsEditSuspension() {
+    Section("Fisica suspensa durante edicao de gizmo");
+    loblox::Scene scene;
+    scene.buildDefaultScene();
+    loblox::PhysicsWorld physics;
+    physics.attach(scene);
+    loblox::Part* part = scene.createPart(loblox::PartShape::Block, loblox::V3(0, 15, 0));
+    physics.simulate(scene, 1.0f / 60.0f);
+    CHECK(part != nullptr);
+    if (part == nullptr) { EndSection(); return; }
+    const std::size_t bodyCount = physics.bodyCount();
+    physics.setPartEditing(part->id(), true);
+    CHECK(physics.isPartEditing(part->id()));
+    part->setPosition(loblox::V3(8, 25, 4));
+    physics.simulate(scene, 0.1f);
+    CHECK_NEAR(part->position().y, 25.0f, 0.001f);
+    CHECK_NEAR(physics.bodyPosition(part->id()).y, 25.0f, 0.001f);
+    CHECK(physics.bodyCount() == bodyCount);
+    physics.setPartEditing(part->id(), false);
+    physics.simulate(scene, 0.1f);
+    CHECK(!physics.isPartEditing(part->id()));
+    CHECK(part->position().y < 25.0f);
+    CHECK(physics.bodyCount() == bodyCount);
+    EndSection();
+}
+
+void TestLuaDeclarativeSceneRoundTrip() {
+    Section("Exportar/importar Lua declarativo sem runtime");
+    using namespace loblox;
+    Scene source;
+    source.buildDefaultScene();
+    Part* part = source.createPart(PartShape::Block, V3(12, 7, -4), V3(3, 5, 7), "Lua Part");
+    CHECK(part != nullptr);
+    if (part == nullptr) { EndSection(); return; }
+    part->setRotationEulerDegrees(V3(12, 38, -7));
+    part->setColor(Color{22, 44, 66, 255});
+    part->setMaterial(PartMaterial::Metal);
+    part->setAnchored(true);
+    part->setCanCollide(false);
+    source.lighting()->setSkyColor(Color{15, 30, 45, 255});
+    source.lighting()->setAmbientColor(Color{55, 66, 77, 255});
+    source.lighting()->setSunDirection(V3(-0.2f, -1.0f, 0.1f));
+    source.lighting()->setSunIntensity(1.6f);
+    source.lighting()->setBrightness(0.8f);
+
+    const std::string text = scenelua::toLua(source);
+    CHECK(text.find("format = \"loblox-scene\"") != std::string::npos);
+    CHECK(text.find("Lua Part") != std::string::npos);
+    Scene loaded;
+    loaded.buildDefaultScene();
+    std::string error;
+    CHECK(scenelua::fromLua(loaded, text, error));
+    CHECK(error.empty());
+    CHECK(loaded.parts().size() == source.parts().size());
+    const Part* copy = loaded.findPart(part->id());
+    CHECK(copy != nullptr);
+    if (copy != nullptr) {
+        CHECK_STR(copy->name(), "Lua Part");
+        CHECK(copy->instanceClass() == InstanceClass::Part);
+        CHECK(NearlyEqual(copy->position(), part->position()));
+        CHECK(NearlyEqual(copy->size(), part->size()));
+        CHECK(NearlyEqual(copy->rotation(), part->rotation(), 0.001f));
+        CHECK(copy->color().r == 22 && copy->color().g == 44 && copy->color().b == 66);
+        CHECK(copy->material() == PartMaterial::Metal && copy->anchored() && !copy->canCollide());
+        CHECK(copy->parent() == loaded.workspace());
+    }
+    CHECK(loaded.lighting()->skyColor().r == 15);
+    CHECK(loaded.lighting()->ambientColor().g == 66);
+    CHECK_NEAR(loaded.lighting()->brightness(), 0.8f, 0.001f);
+    CHECK_NEAR(loaded.lighting()->sunIntensity(), 1.6f, 0.001f);
+    CHECK(loaded.find(source.workspace()->id()) == loaded.workspace());
+    CHECK(loaded.findPart(source.parts()[0]->id())->instanceClass() == InstanceClass::Baseplate);
+    CHECK(loaded.findPart(source.parts()[1]->id())->instanceClass() == InstanceClass::SpawnLocation);
+
+    const std::size_t count = loaded.parts().size();
+    const std::string malicious = text + "os.execute(\\\"touch /tmp/loblox_lua_must_not_run\\\")\n";
+    CHECK(!scenelua::fromLua(loaded, malicious, error));
+    CHECK(loaded.parts().size() == count);
+    std::string unknownClass = "return { format = \"loblox-scene\", version = 1, objects = { { id = 9, class = \"Script\", name = \"x\", parent = 1 } } }";
+    CHECK(!scenelua::fromLua(loaded, unknownClass, error));
+    CHECK(loaded.parts().size() == count);
+    std::string unknownProperty = text;
+    const std::string anchorField = "anchored = true";
+    const std::size_t fieldPosition = unknownProperty.find(anchorField);
+    CHECK(fieldPosition != std::string::npos);
+    if (fieldPosition != std::string::npos) unknownProperty.insert(fieldPosition, "script = \"return 1\", ");
+    CHECK(!scenelua::fromLua(loaded, unknownProperty, error));
+    CHECK(loaded.parts().size() == count);
+    std::string invalidNextId = text;
+    const std::size_t nextIdPosition = invalidNextId.find("nextId = ");
+    CHECK(nextIdPosition != std::string::npos);
+    if (nextIdPosition != std::string::npos) {
+        const std::size_t valueStart = nextIdPosition + std::string("nextId = ").size();
+        const std::size_t valueEnd = invalidNextId.find(',', valueStart);
+        invalidNextId.replace(valueStart, valueEnd - valueStart, "-1");
+    }
+    CHECK(!scenelua::fromLua(loaded, invalidNextId, error));
+    CHECK(loaded.parts().size() == count);
+
+    Scene fileLoaded;
+    fileLoaded.buildDefaultScene();
+    PhysicsWorld physics;
+    physics.attach(fileLoaded);
+    const auto path = std::filesystem::temp_directory_path() / "loblox_scene_test.lua";
+    CHECK(scenelua::save(source, path.string(), error));
+    CHECK(scenelua::load(fileLoaded, path.string(), error));
+    physics.rebuildAll(fileLoaded);
+    CHECK(physics.bodyCount() == fileLoaded.parts().size());
+    CHECK(fileLoaded.parts().size() == source.parts().size());
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+    EndSection();
+}
+
 void TestProjectRoundTrip() {
     Section("Salvar/carregar JSON");
+    CHECK(std::filesystem::path(loblox::DefaultProjectPath()).is_absolute());
     loblox::Scene scene;
     scene.buildDefaultScene();
 
@@ -364,6 +819,24 @@ void TestProjectRoundTrip() {
     CHECK(error.empty());
     CHECK(std::filesystem::exists(path));
     CHECK(!std::filesystem::exists(path + ".tmp"));
+
+    // A failed replace (destination is a directory) must not destroy its contents.
+    const auto blockedPath = std::filesystem::temp_directory_path() / "loblox-blocked-save.json";
+    const auto markerPath = blockedPath / "keep.txt";
+    std::error_code filesystemError;
+    std::filesystem::remove_all(blockedPath, filesystemError);
+    std::filesystem::create_directories(blockedPath);
+    { std::ofstream marker(markerPath); marker << "preserve"; }
+    CHECK(!loblox::projectio::save(scene, blockedPath.string(), error));
+    CHECK(!error.empty());
+    std::ifstream marker(markerPath);
+    std::string markerContents;
+    marker >> markerContents;
+    CHECK_STR(markerContents, "preserve");
+    std::filesystem::remove_all(blockedPath, filesystemError);
+    CHECK(!loblox::projectio::save(
+        scene, "/proc/loblox-denied-save/project.json", error));
+    CHECK(!error.empty());
 
     std::ifstream in(path);
     std::ostringstream text;
@@ -408,6 +881,41 @@ void TestProjectRoundTrip() {
     CHECK_NEAR(static_cast<float>(loaded.lighting()->skyColor().b), 90.0f, 0.5f);
     CHECK_NEAR(loaded.lighting()->sunIntensity(), 1.7f, 0.001f);
     CHECK_NEAR(loaded.lighting()->brightness(), 0.8f, 0.001f);
+
+    // Saving the same path again and reopening preserves the modified state.
+    loadedBlock = loaded.findPart(block->id());
+    CHECK(loadedBlock != nullptr);
+    if (loadedBlock != nullptr) {
+        loadedBlock->setPosition(loblox::V3(12, 7, -4));
+        loadedBlock->setRotationEulerDegrees(loblox::V3(-15, 65, 20));
+        loadedBlock->setSize(loblox::V3(8, 3, 5));
+        loadedBlock->setColor(Color{12, 34, 56, 255});
+        loadedBlock->setMaterial(loblox::PartMaterial::Wood);
+        loadedBlock->setAnchored(true);
+        loadedBlock->setCanCollide(false);
+        CHECK(loblox::projectio::save(loaded, path, error));
+        loblox::Scene reopened;
+        CHECK(loblox::projectio::load(reopened, path, error));
+        const loblox::Part* persisted = reopened.findPart(block->id());
+        CHECK(persisted != nullptr);
+        if (persisted != nullptr) {
+            CHECK(loblox::NearlyEqual(persisted->position(), loblox::V3(12, 7, -4)));
+            CHECK(loblox::NearlyEqual(persisted->size(), loblox::V3(8, 3, 5)));
+            CHECK(loblox::NearlyEqual(persisted->rotation(), loadedBlock->rotation(), 0.001f));
+            CHECK(persisted->color().r == 12 && persisted->color().g == 34 &&
+                  persisted->color().b == 56);
+            CHECK(persisted->material() == loblox::PartMaterial::Wood);
+            CHECK(persisted->anchored() && !persisted->canCollide());
+            CHECK(persisted->parent() == reopened.workspace());
+        }
+        CHECK(reopened.find(block->id()) != nullptr);
+        CHECK(reopened.find(sphere->id()) != nullptr);
+        // Keep the original round-trip physics assertions independent of the
+        // edited state used above to verify a second save.
+        loadedBlock->setTransform(block->transform());
+        loadedBlock->setAnchored(false);
+        loadedBlock->setCanCollide(true);
+    }
 
     // A cena recarregada precisa reconstruir corpos fisicos coerentes.
     loblox::PhysicsWorld physics;
@@ -600,6 +1108,11 @@ int main() {
     TestCanCollide();
     TestTransformSyncAndRaycast();
     TestResizeKeepsSingleBody();
+    TestGizmoMath();
+    TestGizmoLayout();
+    TestEditorCameraMath();
+    TestPhysicsEditSuspension();
+    TestLuaDeclarativeSceneRoundTrip();
     TestProjectRoundTrip();
     TestProjectValidation();
     TestBaseplatePhysics();

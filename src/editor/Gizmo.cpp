@@ -3,401 +3,399 @@
 #include <algorithm>
 #include <cmath>
 
+#include "editor/GizmoLayout.h"
+#include "editor/GizmoMath.h"
 #include "raylib.h"
 #include "raymath.h"
 #include "rlgl.h"
-
 #include "rendering/EditorCamera.h"
 
 namespace loblox {
-
 namespace {
 
-struct AxisDef {
-    Vector3 direction;
-    Color color;
-};
+const Color kAxisColors[3] = {{235, 72, 66, 255}, {62, 174, 92, 255}, {55, 125, 225, 255}};
+const Color kPlaneColors[3] = {{75, 145, 235, 125}, {68, 185, 106, 125}, {230, 90, 78, 125}};
+const Color kHighlight{255, 195, 42, 255};
+const Color kOutline{32, 38, 46, 255};
 
-const AxisDef kAxes[3] = {
-    {{1.0f, 0.0f, 0.0f}, Color{235, 80, 80, 255}},
-    {{0.0f, 1.0f, 0.0f}, Color{90, 220, 110, 255}},
-    {{0.0f, 0.0f, 1.0f}, Color{90, 150, 255, 255}},
-};
-
-const Color kActiveColor{255, 215, 60, 255};
-const Vector3 kPlaneAxisA[3] = {{1, 0, 0}, {1, 0, 0}, {0, 1, 0}};
-const Vector3 kPlaneAxisB[3] = {{0, 1, 0}, {0, 0, 1}, {0, 0, 1}};
-const Vector3 kPlaneNormal[3] = {{0, 0, 1}, {0, 1, 0}, {1, 0, 0}};
-const Color kPlaneColor[3] = {
-    {90, 150, 255, 150}, {90, 220, 110, 150}, {235, 80, 80, 150}};
-constexpr float kGizmoPixelRadius = 11.0f;
-
-float AxisLength(const Part& part) {
-    const Vector3 size = part.size();
-    const float largest = std::max(size.x, std::max(size.y, size.z));
-    return std::clamp(largest * 0.85f + 2.2f, 2.6f, 14.0f);
+Vector3 AxisVector(int axis, const Part& part, bool local) {
+    return gizmomath::Axis(axis, part.rotation(), local);
 }
 
-Vector2 WorldToScreenGlobal(const EditorCamera& camera, Rectangle viewport, Vector3 world) {
-    const Vector2 local = camera.project(world, Vector2{viewport.width, viewport.height});
-    return Vector2{viewport.x + local.x, viewport.y + local.y};
+Vector3 PlaneAxisA(int plane, const Part& part, bool local) {
+    static const int indices[3] = {0, 0, 1};
+    return AxisVector(indices[plane], part, local);
 }
 
-float DistanceToSegment(Vector2 point, Vector2 a, Vector2 b) {
-    const Vector2 ab{b.x - a.x, b.y - a.y};
-    const Vector2 ap{point.x - a.x, point.y - a.y};
-    const float lengthSquared = ab.x * ab.x + ab.y * ab.y;
-    float t = 0.0f;
-    if (lengthSquared > 1e-6f) {
-        t = std::clamp((ap.x * ab.x + ap.y * ab.y) / lengthSquared, 0.0f, 1.0f);
-    }
-    const Vector2 closest{a.x + ab.x * t, a.y + ab.y * t};
-    return std::sqrt((point.x - closest.x) * (point.x - closest.x) +
-                     (point.y - closest.y) * (point.y - closest.y));
+Vector3 PlaneAxisB(int plane, const Part& part, bool local) {
+    static const int indices[3] = {1, 2, 2};
+    return AxisVector(indices[plane], part, local);
 }
 
-bool RayPlane(Vector3 rayOrigin, Vector3 rayDirection, Vector3 planePoint, Vector3 planeNormal,
-              Vector3& hit) {
-    const float denominator = Vector3DotProduct(rayDirection, planeNormal);
-    if (std::fabs(denominator) < 1e-5f) {
-        return false;
-    }
-    const float t = Vector3DotProduct(Vector3Subtract(planePoint, rayOrigin), planeNormal) /
-                    denominator;
-    if (t < 0.0f) {
-        return false;
-    }
-    hit = Vector3Add(rayOrigin, Vector3Scale(rayDirection, t));
+bool RayPlane(const Ray& ray, Vector3 point, Vector3 normal, Vector3& hit) {
+    const float denominator = Vector3DotProduct(ray.direction, normal);
+    if (std::fabs(denominator) < 1e-5f) return false;
+    const float t = Vector3DotProduct(Vector3Subtract(point, ray.position), normal) / denominator;
+    if (t < 0.0f) return false;
+    hit = Vector3Add(ray.position, Vector3Scale(ray.direction, t));
     return true;
 }
 
-bool AxisPlaneParam(const Ray& ray, Vector3 center, Vector3 axis, Vector3 viewForward,
-                    float& parameter) {
-    // Plane contains the selected axis and faces the camera. This stays stable
-    // even when the ray is nearly parallel to the axis, where closest-line
-    // dragging becomes undefined.
-    Vector3 normal = Vector3Subtract(viewForward, Vector3Scale(axis,
-                                      Vector3DotProduct(viewForward, axis)));
+bool AxisParameter(const Ray& ray, Vector3 center, Vector3 axis, Vector3 viewForward,
+                   float& parameter) {
+    Vector3 normal = Vector3Subtract(viewForward,
+                                     Vector3Scale(axis, Vector3DotProduct(viewForward, axis)));
     if (Vector3LengthSqr(normal) < 1e-5f) {
-        normal = Vector3CrossProduct(axis, Vector3{0.0f, 1.0f, 0.0f});
-        if (Vector3LengthSqr(normal) < 1e-5f) {
-            normal = Vector3CrossProduct(axis, Vector3{1.0f, 0.0f, 0.0f});
-        }
+        normal = Vector3CrossProduct(axis, Vector3{0, 1, 0});
+        if (Vector3LengthSqr(normal) < 1e-5f)
+            normal = Vector3CrossProduct(axis, Vector3{1, 0, 0});
     }
     Vector3 hit;
-    if (!RayPlane(ray.position, ray.direction, center, Vector3Normalize(normal), hit)) {
-        return false;
-    }
+    if (!RayPlane(ray, center, Vector3Normalize(normal), hit)) return false;
     parameter = Vector3DotProduct(Vector3Subtract(hit, center), axis);
     return true;
 }
 
 void PerpendicularBasis(Vector3 axis, Vector3& u, Vector3& v) {
-    if (std::fabs(axis.y) < 0.9f) {
-        u = Vector3Normalize(Vector3CrossProduct(axis, Vector3{0, 1, 0}));
-    } else {
-        u = Vector3Normalize(Vector3CrossProduct(axis, Vector3{1, 0, 0}));
-    }
+    const Vector3 helper = std::fabs(axis.y) < 0.9f ? Vector3{0, 1, 0} : Vector3{1, 0, 0};
+    u = Vector3Normalize(Vector3CrossProduct(axis, helper));
     v = Vector3Normalize(Vector3CrossProduct(axis, u));
 }
 
-float RingDistance(const EditorCamera& camera, Rectangle viewport, Vector3 center, Vector3 axis,
-                   float radius, Vector2 mouse) {
-    Vector3 u;
-    Vector3 v;
+float AngleOnPlane(Vector3 offset, Vector3 axis) {
+    Vector3 u, v;
     PerpendicularBasis(axis, u, v);
-    constexpr int segments = 48;
-    float best = 1e9f;
-    Vector2 previous = WorldToScreenGlobal(
-        camera, viewport,
-        Vector3Add(center, Vector3Add(Vector3Scale(u, radius), Vector3Scale(v, 0.0f))));
-    for (int i = 1; i <= segments; ++i) {
-        const float angle = 2.0f * PI * static_cast<float>(i) / static_cast<float>(segments);
-        const Vector3 point =
-            Vector3Add(center, Vector3Add(Vector3Scale(u, std::cos(angle) * radius),
-                                          Vector3Scale(v, std::sin(angle) * radius)));
-        const Vector2 screen = WorldToScreenGlobal(camera, viewport, point);
-        best = std::min(best, DistanceToSegment(mouse, previous, screen));
-        previous = screen;
-    }
-    return best;
+    return std::atan2(Vector3DotProduct(offset, v), Vector3DotProduct(offset, u));
 }
 
-float WrapAngle(float angle) {
-    while (angle > PI) {
-        angle -= 2.0f * PI;
-    }
-    while (angle < -PI) {
-        angle += 2.0f * PI;
-    }
-    return angle;
+gizmomath::HandleId AxisHandleId(int axis) {
+    return axis == 0 ? gizmomath::HandleId::XAxis
+         : axis == 1 ? gizmomath::HandleId::YAxis : gizmomath::HandleId::ZAxis;
+}
+
+gizmomath::HandleId PlaneHandleId(int plane) {
+    return plane == 0 ? gizmomath::HandleId::XYPlane
+         : plane == 1 ? gizmomath::HandleId::XZPlane : gizmomath::HandleId::YZPlane;
+}
+
+gizmomath::HandleId RotateHandleId(int axis) {
+    return axis == 0 ? gizmomath::HandleId::RotateX
+         : axis == 1 ? gizmomath::HandleId::RotateY : gizmomath::HandleId::RotateZ;
 }
 
 }  // namespace
 
-void Gizmo::cancel() {
+void Gizmo::cancel(Part* part, bool restoreTransform) {
+    if (restoreTransform && dragging_ && part != nullptr && part->id() == draggedPartId_) {
+        part->setTransform(startTransform_);
+    }
     dragging_ = false;
-    activeAxis_ = -1;
-    activePlane_ = -1;
+    handle_ = Handle::None;
+    activeAxis_ = activePlane_ = -1;
+    activeHandle_ = gizmomath::HandleId::None;
+    draggedPartId_ = kInvalidInstanceId;
 }
 
 bool Gizmo::update(ToolMode mode, Part* part, const EditorCamera& camera, Rectangle viewport,
                    bool hovered, bool allowInput) {
-    if (mode == ToolMode::Select) {
-        cancel();
+    consumedLastInput_ = false;
+    if (dragging_ && !IsWindowFocused()) {
+        cancel(part, false);
+        consumedLastInput_ = true;
+        return true;
+    }
+    if (mode == ToolMode::Select || viewport.width < 8 || viewport.height < 8) {
+        if (dragging_) cancel(part, false);
         return false;
     }
-    const bool leftDown = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-    const bool leftPressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-    const bool leftReleased = IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
+
+    // Todo hit test usa coordenadas locais da viewport; o layout tambem.
     const Vector2 mouse = GetMousePosition();
     const Vector2 localMouse{mouse.x - viewport.x, mouse.y - viewport.y};
-
-    if (!dragging_) {
-        if (part == nullptr || !leftPressed || !hovered || !allowInput ||
-            viewport.width < 8.0f || viewport.height < 8.0f) {
-            return false;
-        }
-
-        const Ray ray = camera.rayFromScreen(localMouse, Vector2{viewport.width, viewport.height});
-        const Vector3 center = part->position();
-
-        if (mode == ToolMode::Rotate) {
-            const float radius =
-                std::clamp(AxisLength(*part) * 0.85f, 1.8f, 12.0f);
-            int bestAxis = -1;
-            float bestDistance = kGizmoPixelRadius;
-            for (int i = 0; i < 3; ++i) {
-                const float distance = RingDistance(camera, viewport, center,
-                                                    kAxes[i].direction, radius, mouse);
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    bestAxis = i;
-                }
-            }
-            if (bestAxis < 0) {
-                return false;
-            }
-            activeAxis_ = bestAxis;
-            dragging_ = true;
-            startRotation_ = part->rotation();
-
-            Vector3 hit;
-            if (!RayPlane(ray.position, ray.direction, center, kAxes[bestAxis].direction, hit)) {
-                cancel();
-                return false;
-            }
-            Vector3 u;
-            Vector3 v;
-            PerpendicularBasis(kAxes[bestAxis].direction, u, v);
-            const Vector3 offset = Vector3Subtract(hit, center);
-            startAngle_ = std::atan2(Vector3DotProduct(offset, u), Vector3DotProduct(offset, v));
-            return true;
-        }
-
-        const float length = AxisLength(*part);
-        if (mode == ToolMode::Move) {
-            int bestPlane = -1;
-            float bestDistance = 10.0f;
-            for (int i = 0; i < 3; ++i) {
-                const Vector3 planeCenter = Vector3Add(
-                    center, Vector3Scale(Vector3Add(kPlaneAxisA[i], kPlaneAxisB[i]),
-                                         length * 0.24f));
-                const Vector2 screen = WorldToScreenGlobal(camera, viewport, planeCenter);
-                const float dx = mouse.x - screen.x;
-                const float dy = mouse.y - screen.y;
-                const float distance = std::sqrt(dx * dx + dy * dy);
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    bestPlane = i;
-                }
-            }
-            if (bestPlane >= 0 && RayPlane(ray.position, ray.direction, center,
-                                           kPlaneNormal[bestPlane], startPlaneHit_)) {
-                activePlane_ = bestPlane;
-                activeAxis_ = -1;
-                dragging_ = true;
-                startPosition_ = part->position();
-                startSize_ = part->size();
-                startRotation_ = part->rotation();
-                return true;
-            }
-        }
-        int bestAxis = -1;
-        float bestDistance = kGizmoPixelRadius;
-        for (int i = 0; i < 3; ++i) {
-            const Vector2 start = WorldToScreenGlobal(camera, viewport, center);
-            const Vector2 end = WorldToScreenGlobal(
-                camera, viewport, Vector3Add(center, Vector3Scale(kAxes[i].direction, length)));
-            const float distance = DistanceToSegment(mouse, start, end);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                bestAxis = i;
-            }
-        }
-        if (bestAxis < 0) {
-            return false;
-        }
-
-        float parameter = 0.0f;
-        const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
-        if (!AxisPlaneParam(ray, center, kAxes[bestAxis].direction, viewForward, parameter)) {
-            return false;
-        }
-
-        activeAxis_ = bestAxis;
-        activePlane_ = -1;
-        dragging_ = true;
-        startPosition_ = part->position();
-        startSize_ = part->size();
-        startRotation_ = part->rotation();
-        startParam_ = parameter;
-        return true;
-    }
-
-    // Arrasto em andamento.
-    if (!leftDown) {
-        (void)leftReleased;
-        cancel();
-        return false;
-    }
-    if (part == nullptr) {
-        cancel();
-        return false;
-    }
-
     const Ray ray = camera.rayFromScreen(localMouse, Vector2{viewport.width, viewport.height});
-    const Vector3 center = startPosition_;
-    if (mode == ToolMode::Move && activePlane_ >= 0) {
-        Vector3 hit;
-        if (!RayPlane(ray.position, ray.direction, center, kPlaneNormal[activePlane_], hit)) {
+    if (dragging_) {
+        consumedLastInput_ = true;
+        if (part == nullptr || part->id() != draggedPartId_) {
+            cancel(nullptr, false);
             return true;
         }
-        Vector3 delta = Vector3Subtract(hit, startPlaneHit_);
-        delta = Vector3Subtract(
-            delta, Vector3Scale(kPlaneNormal[activePlane_],
-                                Vector3DotProduct(delta, kPlaneNormal[activePlane_])));
-        part->setPosition(Vector3Add(startPosition_, delta));
-        return true;
-    }
-    const Vector3 axis = kAxes[activeAxis_].direction;
-
-    if (mode == ToolMode::Rotate) {
-        Vector3 hit;
-        if (!RayPlane(ray.position, ray.direction, center, axis, hit)) {
+        if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+            cancel(part, false);
             return true;
         }
-        Vector3 u;
-        Vector3 v;
-        PerpendicularBasis(axis, u, v);
-        const Vector3 offset = Vector3Subtract(hit, center);
-        const float angle = std::atan2(Vector3DotProduct(offset, u), Vector3DotProduct(offset, v));
-        const float delta = WrapAngle(angle - startAngle_);
-        const Quaternion rotation = QuaternionFromAxisAngle(axis, delta);
-        part->setRotation(QuaternionNormalize(QuaternionMultiply(rotation, startRotation_)));
+
+        const Vector3 center = startTransform_.position;
+        const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, localSpace_);
+        if (handle_ == Handle::Axis || handle_ == Handle::ScaleFace) {
+            const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
+            float parameter = 0.0f;
+            if (!AxisParameter(ray, center, axis, viewForward, parameter)) return true;
+            const float delta = parameter - startParam_;
+            if (handle_ == Handle::Axis) {
+                part->setPosition(gizmomath::MoveAxis(
+                    {startTransform_.position, startTransform_.rotation, startTransform_.size},
+                    axis, delta, IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 0.0f : moveSnap_));
+            } else {
+                const auto snapshot = gizmomath::TransformSnapshot{
+                    startTransform_.position, startTransform_.rotation, startTransform_.size};
+                const float snap = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)
+                                       ? 0.0f : scaleSnap_;
+                if (!gizmomath::IsScaleFace(activeHandle_)) return true;
+                const auto transformed = part->shape() == PartShape::Sphere
+                    ? gizmomath::ScaleUniformFace(snapshot, axis,
+                                                  gizmomath::HandleSide(activeHandle_), delta, snap)
+                    : gizmomath::ScaleFaceForHandle(snapshot, activeHandle_, localSpace_,
+                                                    delta, snap);
+                part->setTransform(Transform{transformed.position, startTransform_.rotation,
+                                             transformed.size});
+            }
+            return true;
+        }
+        if (handle_ == Handle::Plane) {
+            const Vector3 a = PlaneAxisA(activePlane_, *part, localSpace_);
+            const Vector3 b = PlaneAxisB(activePlane_, *part, localSpace_);
+            const Vector3 normal = Vector3Normalize(Vector3CrossProduct(a, b));
+            Vector3 hit;
+            if (!RayPlane(ray, center, normal, hit)) return true;
+            const Vector3 delta = Vector3Subtract(hit, startPlaneHit_);
+            part->setPosition(gizmomath::MovePlane(
+                {startTransform_.position, startTransform_.rotation, startTransform_.size}, a, b,
+                delta, IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? 0.0f : moveSnap_));
+            return true;
+        }
+        if (handle_ == Handle::RotateRing) {
+            Vector3 hit;
+            if (!RayPlane(ray, center, axis, hit)) return true;
+            const Vector3 offset = Vector3Subtract(hit, center);
+            if (Vector3LengthSqr(offset) < 1e-5f) return true;
+            const float delta = gizmomath::WrappedAngleDelta(
+                startAngle_, AngleOnPlane(offset, axis));
+            const float snap = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)
+                                   ? 0.0f : rotateSnapDegrees_;
+            part->setRotation(gizmomath::Rotate(
+                {startTransform_.position, startTransform_.rotation, startTransform_.size},
+                axis, delta, snap));
+            return true;
+        }
         return true;
     }
 
-    float parameter = 0.0f;
-    const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
-    if (!AxisPlaneParam(ray, center, axis, viewForward, parameter)) {
-        return true;
-    }
-    const float delta = parameter - startParam_;
+    hoveredHandle_ = gizmomath::HandleId::None;
+    if (part == nullptr || !hovered || !allowInput) return false;
+    const gizmolayout::Layout layout =
+        gizmolayout::Build(*part, mode, camera, viewport, localSpace_);
+    if (!layout.valid) return false;
+
+    int pickedAxis = -1;
+    int pickedSide = 1;
+    int pickedPlane = -1;
+    Handle pickedHandle = Handle::None;
 
     if (mode == ToolMode::Move) {
-        part->setPosition(Vector3Add(startPosition_, Vector3Scale(axis, delta)));
-    } else if (mode == ToolMode::Scale) {
-        if (part->shape() == PartShape::Sphere) {
-            const float diameter = std::max(kMinPartSize, startSize_.x + 2.0f * delta);
-            part->setSize(Vector3{diameter, diameter, diameter});
+        // Prioridade: planos (mais proximos do centro), botoes, depois linhas.
+        pickedPlane = gizmolayout::PickPlane(layout, localMouse);
+        if (pickedPlane >= 0) {
+            pickedHandle = Handle::Plane;
         } else {
-            Vector3 size = startSize_;
-            if (std::fabs(axis.x) > 0.5f) {
-                size.x = startSize_.x + 2.0f * delta;
-            } else if (std::fabs(axis.y) > 0.5f) {
-                size.y = startSize_.y + 2.0f * delta;
+            pickedAxis = gizmolayout::PickAxisButton(layout, localMouse);
+            if (pickedAxis >= 0) {
+                pickedHandle = Handle::Axis;
             } else {
-                size.z = startSize_.z + 2.0f * delta;
+                pickedAxis = gizmolayout::PickAxisLine(layout, localMouse);
+                if (pickedAxis >= 0) pickedHandle = Handle::Axis;
             }
-            part->setSize(size);
         }
+    } else if (mode == ToolMode::Scale) {
+        const gizmomath::HandleId id = gizmolayout::PickScaleHandle(layout, localMouse);
+        if (gizmomath::IsScaleFace(id)) {
+            pickedAxis = gizmomath::HandleAxis(id);
+            pickedSide = gizmomath::HandleSide(id);
+            pickedHandle = Handle::ScaleFace;
+        }
+    } else if (mode == ToolMode::Rotate) {
+        pickedAxis = gizmolayout::PickRotateMarker(layout, localMouse);
+        if (pickedAxis >= 0) {
+            pickedHandle = Handle::RotateRing;
+        } else {
+            pickedAxis = gizmolayout::PickRotateRing(layout, localMouse);
+            if (pickedAxis >= 0) pickedHandle = Handle::RotateRing;
+        }
+    }
+
+    if (pickedHandle == Handle::None) return false;
+    hoveredHandle_ = pickedHandle == Handle::ScaleFace ? gizmomath::ScaleFaceHandleId(pickedAxis, pickedSide)
+                    : pickedHandle == Handle::RotateRing ? RotateHandleId(pickedAxis)
+                    : pickedHandle == Handle::Plane ? PlaneHandleId(pickedPlane)
+                    : pickedHandle == Handle::Axis ? AxisHandleId(pickedAxis)
+                    : gizmomath::HandleId::None;
+    if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return false;
+
+    handle_ = pickedHandle;
+    activeHandle_ = hoveredHandle_;
+    activeAxis_ = pickedHandle == Handle::Plane ? -1 : gizmomath::HandleAxis(activeHandle_);
+    activePlane_ = pickedPlane;
+    draggedPartId_ = part->id();
+    startTransform_ = part->transform();
+    dragging_ = true;
+    consumedLastInput_ = true;
+
+    if (handle_ == Handle::Axis || handle_ == Handle::ScaleFace) {
+        const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, localSpace_);
+        const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
+        if (!AxisParameter(ray, startTransform_.position, axis, viewForward, startParam_)) {
+            cancel(part, false);
+            // O clique era do gizmo: nao pode cair na selecao de Part.
+            consumedLastInput_ = true;
+            return true;
+        }
+    } else if (handle_ == Handle::Plane) {
+        const Vector3 a = PlaneAxisA(activePlane_, *part, localSpace_);
+        const Vector3 b = PlaneAxisB(activePlane_, *part, localSpace_);
+        if (!RayPlane(ray, startTransform_.position, Vector3Normalize(Vector3CrossProduct(a, b)),
+                      startPlaneHit_)) {
+            cancel(part, false);
+            consumedLastInput_ = true;
+            return true;
+        }
+    } else if (handle_ == Handle::RotateRing) {
+        const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, localSpace_);
+        Vector3 hit;
+        if (!RayPlane(ray, startTransform_.position, axis, hit) ||
+            Vector3LengthSqr(Vector3Subtract(hit, startTransform_.position)) < 1e-5f) {
+            cancel(part, false);
+            consumedLastInput_ = true;
+            return true;
+        }
+        startAngle_ = AngleOnPlane(Vector3Subtract(hit, startTransform_.position), axis);
     }
     return true;
 }
 
-void Gizmo::draw(const Part& part, ToolMode mode) const {
-    if (mode == ToolMode::Select) {
-        return;
-    }
-    const Vector3 center = part.position();
-    const float length = AxisLength(part);
+void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& camera,
+                       Rectangle viewport) const {
+    if (mode == ToolMode::Select) return;
+    // Layout puro: o desenho abaixo usa exatamente as mesmas posicoes que o
+    // hit test de update() usa. Nenhuma coordenada invalida e gerada.
+    const gizmolayout::Layout layout =
+        gizmolayout::Build(part, mode, camera, viewport, localSpace_);
+    if (!layout.valid) return;
 
+    // Passe proprio do gizmo, independente da profundidade da cena:
+    //  1. descarrega o batch da cena (nenhum vertice antigo muda de estado);
+    //  2. isola depth test e depth write;
+    //  3. desenha os manipuladores;
+    //  4. descarrega o batch do gizmo AINDA com a profundidade isolada;
+    //  5. restaura o estado.
+    // O passo 4 e obrigatorio: rlgl acumula vertices e so aplica o estado de
+    // profundidade no flush. Restaurar antes do flush fazia a Part ocluir os
+    // controles (primitivas 2D ficam no far plane da projecao ortografica).
+    rlDrawRenderBatchActive();
     rlDisableDepthTest();
+    rlDisableDepthMask();
 
-    if (mode == ToolMode::Rotate) {
-        const float radius = std::clamp(length * 0.85f, 1.8f, 12.0f);
-        constexpr int segments = 48;
+    const Vector2 center = layout.center;
+    const auto highlighted = [this](gizmomath::HandleId id) {
+        return dragging_ ? activeHandle_ == id : hoveredHandle_ == id;
+    };
+
+    // Ordem de desenho: linhas/guias primeiro, depois areas e por ultimo os
+    // botoes com o texto. Assim um elemento desenhado depois nunca cobre o
+    // centro clicavel de outro handle.
+    if (mode == ToolMode::Move) {
         for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
-            Vector3 u;
-            Vector3 v;
-            PerpendicularBasis(kAxes[axisIndex].direction, u, v);
-            const Color color = activeAxis_ == axisIndex ? kActiveColor : kAxes[axisIndex].color;
-            Vector3 previous = Vector3Add(center, Vector3Scale(u, radius));
-            for (int i = 1; i <= segments; ++i) {
-                const float angle = 2.0f * PI * static_cast<float>(i) /
-                                    static_cast<float>(segments);
-                const Vector3 point =
-                    Vector3Add(center, Vector3Add(Vector3Scale(u, std::cos(angle) * radius),
-                                                  Vector3Scale(v, std::sin(angle) * radius)));
-                DrawLine3D(previous, point, color);
-                previous = point;
+            const Color color = highlighted(AxisHandleId(axisIndex))
+                                    ? kHighlight : kAxisColors[axisIndex];
+            DrawLineEx(center, layout.axisButton[static_cast<std::size_t>(axisIndex)], 4.0f,
+                       color);
+        }
+        const char* planeLabels[3] = {"XY", "XZ", "YZ"};
+        for (int plane = 0; plane < 3; ++plane) {
+            const Rectangle box = gizmolayout::PlaneButtonRect(layout, plane);
+            const Vector2 point{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
+            const Color color = highlighted(PlaneHandleId(plane)) ? kHighlight : kPlaneColors[plane];
+            DrawRectangleRounded(box, 0.12f, 3, color);
+            DrawRectangleLinesEx(box, 1.5f, kAxisColors[plane]);
+            DrawText(planeLabels[plane], static_cast<int>(point.x - 7.0f),
+                     static_cast<int>(point.y - 4.0f), 9, Color{255, 255, 255, 255});
+        }
+        for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
+            const Color color = highlighted(AxisHandleId(axisIndex))
+                                    ? kHighlight : kAxisColors[axisIndex];
+            const Rectangle button = gizmolayout::AxisButtonRect(layout, axisIndex);
+            DrawRectangleRounded(button, 0.5f, 8, color);
+            DrawRectangleRoundedLinesEx(button, 0.5f, 8, 1.5f, kOutline);
+            const char label[2] = {static_cast<char>('X' + axisIndex), '\0'};
+            DrawText(label, static_cast<int>(button.x + button.width * 0.5f - 4.0f),
+                     static_cast<int>(button.y + button.height * 0.5f - 6.0f), 12,
+                     Color{255, 255, 255, 255});
+        }
+    } else if (mode == ToolMode::Rotate) {
+        for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
+            const Color color = highlighted(RotateHandleId(axisIndex))
+                                    ? kHighlight : kAxisColors[axisIndex];
+            for (const gizmolayout::Segment& segment : layout.ring[static_cast<std::size_t>(axisIndex)]) {
+                DrawLineEx(segment.a, segment.b, 7.0f, Color{31, 38, 48, 235});
+                DrawLineEx(segment.a, segment.b, highlighted(RotateHandleId(axisIndex)) ? 4.5f : 3.0f,
+                           color);
             }
         }
-        rlEnableDepthTest();
-        return;
-    }
-
-    if (mode == ToolMode::Move) {
-        const float offset = length * 0.24f;
-        const float half = length * 0.075f;
-        for (int i = 0; i < 3; ++i) {
-            const Vector3 c = Vector3Add(
-                center, Vector3Scale(Vector3Add(kPlaneAxisA[i], kPlaneAxisB[i]), offset));
-            const Vector3 a = Vector3Scale(kPlaneAxisA[i], half);
-            const Vector3 b = Vector3Scale(kPlaneAxisB[i], half);
-            const Vector3 p0 = Vector3Subtract(Vector3Subtract(c, a), b);
-            const Vector3 p1 = Vector3Add(Vector3Subtract(c, b), a);
-            const Vector3 p2 = Vector3Add(Vector3Add(c, a), b);
-            const Vector3 p3 = Vector3Add(Vector3Subtract(c, a), b);
-            const Color color = activePlane_ == i ? kActiveColor : kPlaneColor[i];
-            DrawTriangle3D(p0, p1, p2, color);
-            DrawTriangle3D(p0, p2, p3, color);
-            DrawLine3D(p0, p1, Color{235, 238, 245, 230});
-            DrawLine3D(p1, p2, Color{235, 238, 245, 230});
-            DrawLine3D(p2, p3, Color{235, 238, 245, 230});
-            DrawLine3D(p3, p0, Color{235, 238, 245, 230});
+        for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
+            const Vector2 anchor = layout.rotateAnchor[static_cast<std::size_t>(axisIndex)];
+            const Vector2 marker = layout.rotateMarker[static_cast<std::size_t>(axisIndex)];
+            if (layout.rotateAnchorValid[static_cast<std::size_t>(axisIndex)] &&
+                Vector2Distance(anchor, marker) > 3.0f) {
+                DrawLineEx(anchor, marker, 2.0f, Color{31, 38, 48, 235});
+            }
+        }
+        for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
+            const Color color = highlighted(RotateHandleId(axisIndex))
+                                    ? kHighlight : kAxisColors[axisIndex];
+            const Rectangle button = gizmolayout::RotateMarkerRect(layout, axisIndex);
+            DrawRectangleRounded(button, 0.2f, 4, color);
+            DrawRectangleRoundedLinesEx(button, 0.2f, 4, 1.5f, kOutline);
+            const char label[2] = {static_cast<char>('X' + axisIndex), '\0'};
+            DrawText(label, static_cast<int>(button.x + button.width * 0.5f - 4.0f),
+                     static_cast<int>(button.y + button.height * 0.5f - 6.0f), 12,
+                     Color{255, 255, 255, 255});
+        }
+    } else if (mode == ToolMode::Scale) {
+        for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
+            for (int side : {-1, 1}) {
+                const int index = axisIndex * 2 + (side > 0 ? 1 : 0);
+                if (!layout.scaleAnchorValid[static_cast<std::size_t>(index)]) continue;
+                const Vector2 anchor = layout.scaleAnchor[static_cast<std::size_t>(index)];
+                const Vector2 handle = layout.scaleHandle[static_cast<std::size_t>(index)];
+                if (Vector2Distance(anchor, handle) > 3.0f) {
+                    DrawLineEx(anchor, handle, 1.5f, Color{45, 52, 62, 210});
+                }
+            }
+        }
+        for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
+            for (int side : {-1, 1}) {
+                const int index = axisIndex * 2 + (side > 0 ? 1 : 0);
+                const bool highlight =
+                    highlighted(gizmomath::ScaleFaceHandleId(axisIndex, side));
+                const Color color = highlight ? kHighlight : kAxisColors[axisIndex];
+                const Rectangle box = gizmolayout::ScaleHandleRect(layout, index);
+                DrawRectangleRounded(box, 0.18f, 3, color);
+                DrawRectangleLinesEx(box, 1.5f, Color{35, 40, 48, 255});
+                const char label[3] = {static_cast<char>('X' + axisIndex),
+                                       static_cast<char>(side > 0 ? '+' : '-'), '\0'};
+                const int textWidth = MeasureText(label, 11);
+                DrawText(label, static_cast<int>(box.x + box.width * 0.5f - textWidth * 0.5f),
+                         static_cast<int>(box.y + box.height * 0.5f - 5.0f), 11,
+                         Color{255, 255, 255, 255});
+            }
         }
     }
 
-    const float thickness = mode == ToolMode::Scale ? 0.11f : 0.08f;
-    for (int i = 0; i < 3; ++i) {
-        const Vector3 end = Vector3Add(center, Vector3Scale(kAxes[i].direction, length));
-        const Color color = activeAxis_ == i ? kActiveColor : kAxes[i].color;
-        DrawCylinderEx(center, end, thickness, thickness, 6, color);
-        if (mode == ToolMode::Move) {
-            const Vector3 tip = Vector3Add(end, Vector3Scale(kAxes[i].direction, 0.75f));
-            DrawCylinderEx(end, tip, 0.24f, 0.0f, 8, color);
-        } else {
-            DrawCubeV(end, Vector3{0.55f, 0.55f, 0.55f}, color);
-            DrawCubeWiresV(end, Vector3{0.56f, 0.56f, 0.56f}, Color{20, 20, 20, 255});
-        }
-    }
-    if (mode == ToolMode::Scale) {
-        DrawCubeV(center, Vector3{0.4f, 0.4f, 0.4f}, Color{240, 240, 240, 255});
-    }
-
-    rlEnableDepthTest();
+    // Descarrega antes de restaurar: garante que nenhum vertice do gizmo seja
+    // rasterizado com o depth test da cena ativo.
+    rlDrawRenderBatchActive();
+    rlEnableDepthMask();
+    // Estado esperado pela raylib fora do modo 3D (EndMode3D ja desliga o
+    // depth test); nao deixamos o depth test ligado para a UI.
+    rlDisableDepthTest();
 }
 
 }  // namespace loblox

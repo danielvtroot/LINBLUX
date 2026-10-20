@@ -1,6 +1,7 @@
 #include "app/Application.h"
 
 #include <cstdio>
+#include <filesystem>
 
 #include "imgui.h"
 #include "raylib.h"
@@ -33,31 +34,55 @@ bool Application::initialize() {
     imguiReady_ = true;
 
     ImGuiIO& io = ImGui::GetIO();
+    const char* sansFonts[] = {
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+    };
+    for (const char* fontPath : sansFonts) {
+        if (!std::filesystem::exists(fontPath)) continue;
+        if (ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath, 14.0f)) {
+            io.FontDefault = font;
+            break;
+        }
+    }
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    io.IniFilename = nullptr;  // layout deterministico; nada de arquivos extras
+    io.IniFilename = "loblox_imgui.ini";
     io.ConfigWindowsMoveFromTitleBarOnly = true;
 
-    ImGui::StyleColorsDark();
+    ImGui::StyleColorsLight();
     ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowRounding = 4.0f;
-    style.FrameRounding = 3.0f;
-    style.GrabRounding = 3.0f;
-    style.TabRounding = 3.0f;
-    style.ScrollbarRounding = 3.0f;
+    style.WindowRounding = 2.0f;
+    style.FrameRounding = 2.0f;
+    style.GrabRounding = 2.0f;
+    style.TabRounding = 2.0f;
+    style.ScrollbarRounding = 2.0f;
     style.WindowBorderSize = 1.0f;
     style.FrameBorderSize = 0.0f;
-    style.Colors[ImGuiCol_WindowBg] = ImVec4(0.115f, 0.115f, 0.125f, 1.0f);
-    style.Colors[ImGuiCol_TitleBg] = ImVec4(0.09f, 0.09f, 0.10f, 1.0f);
-    style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.13f, 0.13f, 0.15f, 1.0f);
-    style.Colors[ImGuiCol_Header] = ImVec4(0.20f, 0.36f, 0.55f, 1.0f);
-    style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.24f, 0.44f, 0.68f, 1.0f);
-    style.Colors[ImGuiCol_Button] = ImVec4(0.22f, 0.22f, 0.25f, 1.0f);
-    style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.28f, 0.34f, 0.42f, 1.0f);
-    style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.20f, 0.42f, 0.68f, 1.0f);
-    style.Colors[ImGuiCol_Tab] = ImVec4(0.14f, 0.14f, 0.16f, 1.0f);
-    style.Colors[ImGuiCol_TabHovered] = ImVec4(0.24f, 0.42f, 0.62f, 1.0f);
-    style.Colors[ImGuiCol_TabSelected] = ImVec4(0.19f, 0.31f, 0.45f, 1.0f);
-    style.Colors[ImGuiCol_DockingPreview] = ImVec4(0.24f, 0.48f, 0.72f, 0.70f);
+    style.WindowPadding = ImVec2(8.0f, 7.0f);
+    style.FramePadding = ImVec2(6.0f, 4.0f);
+    style.ItemSpacing = ImVec2(6.0f, 5.0f);
+    const ImVec4 colors[] = {
+        ImVec4(0.96f,0.97f,0.98f,1), ImVec4(1,1,1,1), ImVec4(1,1,1,1),
+        ImVec4(0.80f,0.82f,0.85f,1), ImVec4(0.86f,0.87f,0.89f,1),
+        ImVec4(0.14f,0.16f,0.19f,1), ImVec4(0.43f,0.46f,0.50f,1),
+        ImVec4(0.96f,0.97f,0.98f,1), ImVec4(0.98f,0.98f,0.99f,1),
+        ImVec4(0.91f,0.93f,0.95f,1), ImVec4(0.91f,0.93f,0.95f,1),
+        ImVec4(0.88f,0.93f,0.98f,1), ImVec4(0.78f,0.87f,0.96f,1),
+        ImVec4(0.94f,0.96f,0.98f,1), ImVec4(0.90f,0.94f,0.98f,1),
+        ImVec4(0.81f,0.88f,0.96f,1), ImVec4(0.10f,0.43f,0.78f,1),
+        ImVec4(0.08f,0.39f,0.73f,1), ImVec4(0.12f,0.48f,0.84f,1),
+        ImVec4(0.98f,0.98f,0.99f,1), ImVec4(0.85f,0.91f,0.97f,1),
+        ImVec4(0.91f,0.94f,0.98f,1), ImVec4(0.91f,0.94f,0.98f,1),
+        ImVec4(0.16f,0.48f,0.78f,0.28f)};
+    const ImGuiCol slots[] = {ImGuiCol_WindowBg,ImGuiCol_ChildBg,ImGuiCol_PopupBg,
+        ImGuiCol_Border,ImGuiCol_Separator,ImGuiCol_Text,ImGuiCol_TextDisabled,
+        ImGuiCol_TitleBg,ImGuiCol_TitleBgActive,ImGuiCol_FrameBg,ImGuiCol_FrameBgHovered,
+        ImGuiCol_FrameBgActive,ImGuiCol_Header,ImGuiCol_HeaderHovered,ImGuiCol_Button,
+        ImGuiCol_ButtonHovered,ImGuiCol_ButtonActive,ImGuiCol_CheckMark,ImGuiCol_SliderGrab,
+        ImGuiCol_SliderGrabActive,ImGuiCol_Tab,ImGuiCol_TabHovered,ImGuiCol_TabSelected,
+        ImGuiCol_DockingPreview};
+    for (int i = 0; i < IM_ARRAYSIZE(slots); ++i) style.Colors[slots[i]] = colors[i];
 
     scene_.buildDefaultScene();
     physics_.attach(scene_);

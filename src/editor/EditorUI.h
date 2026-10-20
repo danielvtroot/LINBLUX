@@ -37,12 +37,15 @@ public:
 private:
     void buildDockLayout();
     void handleShortcuts();
+    void saveCurrentProject();
+    void finishGizmoEdit();
 
     void drawToolbar();
+    void drawMainMenuBar();
     void drawToolbox();
     void drawViewport();
     void drawExplorer();
-    void drawExplorerNode(Instance* instance);
+    void drawExplorerNode(Instance* instance, const char* filter);
     void drawProperties();
     void drawPartProperties(Part& part);
     void drawLightingProperties();
@@ -67,6 +70,14 @@ private:
 
     Gizmo gizmo_;
     ToolMode tool_ = ToolMode::Select;
+    bool viewportFocused_ = false;
+    InstanceId gizmoEditingId_ = kInvalidInstanceId;
+    bool gizmoLocalSpace_ = false;
+    float moveSnap_ = 1.0f;
+    float scaleSnap_ = 0.5f;
+    float rotateSnapDegrees_ = 15.0f;
+    float cameraMoveSpeed_ = 30.0f;
+    float cameraLookSensitivity_ = 0.0065f;
 
     RenderTexture2D viewport_{};
     bool viewportReady_ = false;
@@ -80,11 +91,14 @@ private:
 
     bool requestSavePopup_ = false;
     bool requestOpenPopup_ = false;
+    bool requestLuaExportPopup_ = false;
+    bool requestLuaImportPopup_ = false;
     std::string dialogError_;
 
     std::function<void()> onSceneLoaded_;
     std::string projectPath_;
     char pathBuffer_[512] = {};
+    char explorerFilter_[128] = {};
 
     std::string status_;
     bool statusIsError_ = false;

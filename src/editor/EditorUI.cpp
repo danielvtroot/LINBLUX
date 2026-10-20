@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <utility>
 
 #include "imgui.h"
@@ -20,6 +22,7 @@
 #include "rendering/SceneRenderer.h"
 #include "scene/Scene.h"
 #include "serialization/ProjectIO.h"
+#include "serialization/SceneLua.h"
 
 namespace loblox {
 
@@ -52,27 +55,34 @@ void DrawIcon(ImDrawList* drawList, ImVec2 center, float size, Icon icon, ImU32 
                                         color);
             break;
         case Icon::Move:
-            drawList->AddLine(ImVec2(center.x - half, center.y), ImVec2(center.x + half, center.y),
-                              color, 1.6f);
-            drawList->AddLine(ImVec2(center.x, center.y - half), ImVec2(center.x, center.y + half),
-                              color, 1.6f);
+            drawList->AddLine(ImVec2(center.x - half * .72f, center.y),
+                              ImVec2(center.x + half * .72f, center.y), color, 2.0f);
+            drawList->AddLine(ImVec2(center.x, center.y - half * .72f),
+                              ImVec2(center.x, center.y + half * .72f), color, 2.0f);
+            drawList->AddLine(ImVec2(center.x - half * .48f, center.y + half * .48f),
+                              ImVec2(center.x + half * .48f, center.y - half * .48f), color, 2.0f);
             drawList->AddTriangleFilled(ImVec2(center.x + half, center.y),
-                                        ImVec2(center.x + half - 4.0f, center.y - 3.0f),
-                                        ImVec2(center.x + half - 4.0f, center.y + 3.0f), color);
+                                        ImVec2(center.x + half * .55f, center.y - half * .25f),
+                                        ImVec2(center.x + half * .55f, center.y + half * .25f), color);
+            drawList->AddTriangleFilled(ImVec2(center.x - half, center.y),
+                                        ImVec2(center.x - half * .55f, center.y - half * .25f),
+                                        ImVec2(center.x - half * .55f, center.y + half * .25f), color);
             drawList->AddTriangleFilled(ImVec2(center.x, center.y - half),
-                                        ImVec2(center.x - 3.0f, center.y - half + 4.0f),
-                                        ImVec2(center.x + 3.0f, center.y - half + 4.0f), color);
+                                        ImVec2(center.x - half * .25f, center.y - half * .55f),
+                                        ImVec2(center.x + half * .25f, center.y - half * .55f), color);
+            drawList->AddTriangleFilled(ImVec2(center.x, center.y + half),
+                                        ImVec2(center.x - half * .25f, center.y + half * .55f),
+                                        ImVec2(center.x + half * .25f, center.y + half * .55f), color);
             break;
         case Icon::Scale:
-            drawList->AddRect(ImVec2(center.x - half, center.y - half),
-                              ImVec2(center.x + half * 0.35f, center.y + half * 0.35f), color,
-                              1.5f);
-            drawList->AddLine(ImVec2(center.x - half * 0.1f, center.y + half * 0.1f),
-                              ImVec2(center.x + half, center.y + half), color, 1.6f);
-            drawList->AddTriangleFilled(ImVec2(center.x + half, center.y + half),
-                                        ImVec2(center.x + half - 5.0f, center.y + half - 1.0f),
-                                        ImVec2(center.x + half - 1.0f, center.y + half - 5.0f),
-                                        color);
+            drawList->AddRect(ImVec2(center.x - half * .55f, center.y - half * .55f),
+                              ImVec2(center.x + half * .55f, center.y + half * .55f), color,
+                              2.0f, 0, 2.0f);
+            for (int sx : {-1, 1}) for (int sy : {-1, 1}) {
+                const ImVec2 p(center.x + sx * half * .82f, center.y + sy * half * .82f);
+                drawList->AddRectFilled(ImVec2(p.x - 2.2f, p.y - 2.2f),
+                                        ImVec2(p.x + 2.2f, p.y + 2.2f), color, 1.0f);
+            }
             break;
         case Icon::Rotate:
             drawList->PathArcTo(center, half * 0.8f, 0.5f, 5.3f, 22);
@@ -83,12 +93,31 @@ void DrawIcon(ImDrawList* drawList, ImVec2 center, float size, Icon icon, ImU32 
                                         color);
             break;
         case Icon::Part:
-            drawList->AddRectFilled(ImVec2(center.x - half * 0.85f, center.y - half * 0.7f),
-                                    ImVec2(center.x + half * 0.85f, center.y + half * 0.85f),
-                                    color, 2.0f);
+            {
+                const float x = half * .48f;
+                const float y = half * .40f;
+                const float z = half * .38f;
+                const ImVec2 front[4] = {{center.x - x, center.y - y + z},
+                                         {center.x + x, center.y - y + z},
+                                         {center.x + x, center.y + y + z},
+                                         {center.x - x, center.y + y + z}};
+                const ImVec2 back[4] = {{center.x - x + z, center.y - y},
+                                        {center.x + x + z, center.y - y},
+                                        {center.x + x + z, center.y + y},
+                                        {center.x - x + z, center.y + y}};
+                for (int i = 0; i < 4; ++i) {
+                    drawList->AddLine(front[i], front[(i + 1) % 4], color, 2.0f);
+                    drawList->AddLine(back[i], back[(i + 1) % 4], color, 2.0f);
+                    drawList->AddLine(front[i], back[i], color, 2.0f);
+                }
+            }
             break;
         case Icon::Sphere:
-            drawList->AddCircleFilled(center, half * 0.85f, color, 18);
+            drawList->AddCircle(center, half * .78f, color, 24, 2.0f);
+            drawList->AddEllipse(center, ImVec2(half * .36f, half * .78f), color,
+                                 0.0f, 24, 1.4f);
+            drawList->AddLine(ImVec2(center.x - half * .68f, center.y),
+                              ImVec2(center.x + half * .68f, center.y), color, 1.4f);
             break;
         case Icon::Spawn:
             drawList->AddRectFilled(ImVec2(center.x - half, center.y + half * 0.2f),
@@ -109,18 +138,18 @@ void DrawIcon(ImDrawList* drawList, ImVec2 center, float size, Icon icon, ImU32 
                                       IM_COL32(90, 150, 235, 255), 12);
             break;
         case Icon::Material: {
-            const float gap = 2.0f;
-            const float cell = (size - gap) * 0.5f;
-            drawList->AddRectFilled(ImVec2(center.x - half, center.y - half),
-                                    ImVec2(center.x - half + cell, center.y - half + cell), color,
-                                    1.0f);
-            drawList->AddRectFilled(ImVec2(center.x - half + cell + gap, center.y - half),
-                                    ImVec2(center.x + half, center.y - half + cell), color, 1.0f);
-            drawList->AddRectFilled(ImVec2(center.x - half, center.y - half + cell + gap),
-                                    ImVec2(center.x - half + cell, center.y + half), color, 1.0f);
-            drawList->AddRectFilled(ImVec2(center.x - half + cell + gap,
-                                           center.y - half + cell + gap),
-                                    ImVec2(center.x + half, center.y + half), color, 1.0f);
+            for (int layer = 0; layer < 3; ++layer) {
+                const float y = center.y - half * .55f + layer * half * .55f;
+                const float inset = layer * half * .20f;
+                drawList->AddLine(ImVec2(center.x - half * .75f + inset, y),
+                                  ImVec2(center.x + half * .75f - inset, y), color, 2.4f);
+                drawList->AddLine(ImVec2(center.x - half * .75f + inset, y + half * .26f),
+                                  ImVec2(center.x + half * .75f - inset, y + half * .26f), color, 2.4f);
+                drawList->AddLine(ImVec2(center.x - half * .75f + inset, y),
+                                  ImVec2(center.x - half * .75f + inset, y + half * .26f), color, 1.5f);
+                drawList->AddLine(ImVec2(center.x + half * .75f - inset, y),
+                                  ImVec2(center.x + half * .75f - inset, y + half * .26f), color, 1.5f);
+            }
             break;
         }
         case Icon::Anchor:
@@ -175,38 +204,40 @@ void DrawIcon(ImDrawList* drawList, ImVec2 center, float size, Icon icon, ImU32 
 bool IconButton(const char* id, Icon icon, const char* label, bool active, const char* tooltip,
                 bool enabled = true) {
     ImGui::PushID(id);
-    ImGuiStyle& style = ImGui::GetStyle();
-    const float iconSize = 15.0f;
     const ImVec2 textSize = ImGui::CalcTextSize(label);
-    const float height = ImGui::GetFrameHeight();
-    const ImVec2 size(textSize.x + iconSize + style.FramePadding.x * 3.0f, height);
+    const float width = std::clamp(textSize.x + 18.0f, 54.0f, 78.0f);
+    const ImVec2 size(width, 62.0f);
     const ImVec2 position = ImGui::GetCursorScreenPos();
 
     ImGui::InvisibleButton("##button", size);
     const bool clicked = ImGui::IsItemClicked() && enabled;
     const bool hovered = ImGui::IsItemHovered();
+    const bool held = ImGui::IsItemActive();
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    ImU32 background = active ? IM_COL32(56, 102, 158, 255)
-                              : hovered ? IM_COL32(66, 66, 74, 255)
-                                        : IM_COL32(48, 48, 54, 255);
-    if (!enabled) {
-        background = IM_COL32(40, 40, 44, 255);
-    }
+    const ImU32 background = active ? IM_COL32(222, 237, 253, 255)
+                              : held ? IM_COL32(210, 229, 250, 255)
+                              : hovered ? IM_COL32(235, 240, 246, 255)
+                                        : IM_COL32(248, 249, 251, 255);
     drawList->AddRectFilled(position, ImVec2(position.x + size.x, position.y + size.y),
-                            background, 4.0f);
+                            background, 5.0f);
     if (active) {
+        drawList->AddRectFilled(ImVec2(position.x + 7.0f, position.y + size.y - 3.0f),
+                                ImVec2(position.x + size.x - 7.0f, position.y + size.y - 1.0f),
+                                IM_COL32(25, 112, 205, 255), 1.0f);
+    } else if (hovered) {
         drawList->AddRect(position, ImVec2(position.x + size.x, position.y + size.y),
-                          IM_COL32(110, 170, 240, 255), 4.0f);
+                          IM_COL32(190, 201, 214, 255), 5.0f);
     }
 
-    const ImU32 foreground = enabled ? IM_COL32(232, 232, 238, 255) : IM_COL32(115, 115, 120, 255);
-    DrawIcon(drawList, ImVec2(position.x + style.FramePadding.x + iconSize * 0.5f,
-                              position.y + size.y * 0.5f),
-             iconSize, icon, foreground);
-    drawList->AddText(ImVec2(position.x + style.FramePadding.x + iconSize + 4.0f,
-                             position.y + (size.y - textSize.y) * 0.5f),
-                      foreground, label);
+    const ImU32 foreground = !enabled ? IM_COL32(160, 166, 174, 255)
+                              : active ? IM_COL32(25, 103, 190, 255)
+                                       : IM_COL32(50, 57, 66, 255);
+    DrawIcon(drawList, ImVec2(position.x + size.x * 0.5f, position.y + 23.0f),
+             22.0f, icon, foreground);
+    const ImVec2 labelPosition(position.x + (size.x - textSize.x) * 0.5f,
+                               position.y + size.y - textSize.y - 7.0f);
+    drawList->AddText(labelPosition, foreground, label);
     if (hovered && tooltip != nullptr) {
         ImGui::SetTooltip("%s", tooltip);
     }
@@ -215,9 +246,14 @@ bool IconButton(const char* id, Icon icon, const char* label, bool active, const
 }
 
 void ToolbarSeparator() {
-    ImGui::SameLine(0.0f, 6.0f);
-    ImGui::TextDisabled("|");
-    ImGui::SameLine(0.0f, 6.0f);
+    ImGui::SameLine(0.0f, 7.0f);
+    const ImVec2 cursor = ImGui::GetCursorScreenPos();
+    const float height = 62.0f;
+    ImGui::Dummy(ImVec2(1.0f, height));
+    ImGui::GetWindowDrawList()->AddLine(
+        ImVec2(cursor.x, cursor.y + 7.0f), ImVec2(cursor.x, cursor.y + height - 7.0f),
+        IM_COL32(202, 208, 216, 255), 1.0f);
+    ImGui::SameLine(0.0f, 7.0f);
 }
 
 ImVec4 ClassColor(InstanceClass instanceClass) {
@@ -243,6 +279,33 @@ const Color kPalette[] = {
     Color{250, 130, 180, 255}, Color{130, 95, 65, 255},  Color{35, 130, 130, 255},
 };
 
+bool ContainsIgnoreCase(const char* value, const char* query) {
+    if (query == nullptr || *query == '\0') return true;
+    if (value == nullptr) return false;
+    for (const char* start = value; *start != '\0'; ++start) {
+        const char* a = start;
+        const char* b = query;
+        while (*a != '\0' && *b != '\0' &&
+               std::tolower(static_cast<unsigned char>(*a)) ==
+                   std::tolower(static_cast<unsigned char>(*b))) {
+            ++a;
+            ++b;
+        }
+        if (*b == '\0') return true;
+    }
+    return false;
+}
+
+bool TreeContains(const Instance* instance, const char* query) {
+    if (instance == nullptr || query == nullptr || *query == '\0') return instance != nullptr;
+    if (ContainsIgnoreCase(instance->name().c_str(), query) ||
+        ContainsIgnoreCase(instance->className(), query)) return true;
+    for (const Instance* child : instance->children()) {
+        if (TreeContains(child, query)) return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 EditorUI::EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera,
@@ -254,11 +317,21 @@ EditorUI::EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera,
       config_(config),
       projectPath_(config.defaultProjectPath) {
     std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
+    cameraMoveSpeed_ = camera_.moveSpeed();
+    cameraLookSensitivity_ = camera_.lookSensitivity();
     camera_.reset();
 }
 
 EditorUI::~EditorUI() {
+    camera_.releaseCapture();
+    finishGizmoEdit();
     unloadViewport();
+}
+
+void EditorUI::finishGizmoEdit() {
+    if (gizmoEditingId_ == kInvalidInstanceId) return;
+    physics_.setPartEditing(gizmoEditingId_, false);
+    gizmoEditingId_ = kInvalidInstanceId;
 }
 
 void EditorUI::setOnSceneLoaded(std::function<void()> callback) {
@@ -297,6 +370,10 @@ void EditorUI::unloadViewport() {
 void EditorUI::buildDockLayout() {
     const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
     const ImGuiID dockId = ImGui::GetID("LobloxDockspace");
+    if (ImGui::DockBuilderGetNode(dockId) != nullptr) {
+        layoutBuilt_ = true;
+        return;
+    }
     ImGui::DockBuilderRemoveNode(dockId);
     ImGui::DockBuilderAddNode(dockId, ImGuiDockNodeFlags_DockSpace);
     ImGui::DockBuilderSetNodeSize(dockId, mainViewport->WorkSize);
@@ -325,36 +402,46 @@ void EditorUI::handleShortcuts() {
     if (io.WantTextInput) {
         return;
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        Part* edited = scene_.findPart(gizmoEditingId_);
+        gizmo_.cancel(edited, true);
+        finishGizmoEdit();
+        camera_.releaseCapture();
+        return;
+    }
+    if (!ImGui::IsAnyItemActive() &&
+        (ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyPressed(ImGuiKey_Backspace))) {
         deleteSelection();
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_F)) {
+    if (viewportFocused_ && !ImGui::IsAnyItemActive() && ImGui::IsKeyPressed(ImGuiKey_F)) {
         focusSelection();
     }
-    if (!io.WantTextInput) {
-        if (ImGui::IsKeyPressed(ImGuiKey_1)) tool_ = ToolMode::Select;
-        if (ImGui::IsKeyPressed(ImGuiKey_2)) tool_ = ToolMode::Move;
-        if (ImGui::IsKeyPressed(ImGuiKey_3)) tool_ = ToolMode::Scale;
-        if (ImGui::IsKeyPressed(ImGuiKey_4)) tool_ = ToolMode::Rotate;
+    if (viewportFocused_ && !ImGui::IsAnyItemActive()) {
+        if (ImGui::IsKeyPressed(ImGuiKey_1)) { tool_ = ToolMode::Select; camera_.releaseCapture(); }
+        if (ImGui::IsKeyPressed(ImGuiKey_2)) { tool_ = ToolMode::Move; camera_.releaseCapture(); }
+        if (ImGui::IsKeyPressed(ImGuiKey_3)) { tool_ = ToolMode::Scale; camera_.releaseCapture(); }
+        if (ImGui::IsKeyPressed(ImGuiKey_4)) { tool_ = ToolMode::Rotate; camera_.releaseCapture(); }
     }
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
-        std::string error;
-        if (projectio::save(scene_, projectPath_, error)) {
-            setStatus("Projeto salvo em " + projectPath_);
-        } else {
-            setStatus("Falha ao salvar: " + error, true);
-        }
+        saveCurrentProject();
     }
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O)) {
         requestOpenPopup_ = true;
         std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-        gizmo_.cancel();
+}
+
+void EditorUI::saveCurrentProject() {
+    std::string error;
+    if (projectio::save(scene_, projectPath_, error)) {
+        setStatus("Projeto salvo em " + projectPath_);
+    } else {
+        setStatus("Falha ao salvar '" + projectPath_ + "': " + error, true);
     }
 }
 
 void EditorUI::draw() {
+    drawMainMenuBar();
     if (!layoutBuilt_) {
         buildDockLayout();
     }
@@ -376,16 +463,87 @@ void EditorUI::draw() {
     drawDialogs();
 }
 
+void EditorUI::drawMainMenuBar() {
+    if (!ImGui::BeginMainMenuBar()) return;
+    ImGui::TextColored(ImVec4(0.10f, 0.43f, 0.78f, 1.0f), "L");
+    ImGui::SameLine(0.0f, 4.0f);
+    ImGui::TextUnformatted("Loblox");
+    ImGui::SameLine(0.0f, 18.0f);
+    if (ImGui::BeginMenu("File")) {
+        if (ImGui::MenuItem("Save Project", "Ctrl+S")) {
+            saveCurrentProject();
+        }
+        if (ImGui::MenuItem("Save Project As...")) {
+            requestSavePopup_ = true;
+            std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
+            dialogError_.clear();
+        }
+        if (ImGui::MenuItem("Open Project...", "Ctrl+O")) {
+            requestOpenPopup_ = true;
+            std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
+            dialogError_.clear();
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Export Scene as Lua...")) {
+            requestLuaExportPopup_ = true;
+            std::string luaPath = projectPath_;
+            const std::size_t extension = luaPath.find_last_of('.');
+            if (extension != std::string::npos) luaPath.resize(extension);
+            luaPath += ".lua";
+            std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", luaPath.c_str());
+            dialogError_.clear();
+        }
+        if (ImGui::MenuItem("Import Scene from Lua...")) {
+            requestLuaImportPopup_ = true;
+            std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", "projects/scene.lua");
+            dialogError_.clear();
+        }
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Home")) {
+        if (ImGui::MenuItem("Select", "1")) { tool_ = ToolMode::Select; gizmo_.cancel(); camera_.releaseCapture(); }
+        if (ImGui::MenuItem("Move", "2")) { tool_ = ToolMode::Move; camera_.releaseCapture(); }
+        if (ImGui::MenuItem("Scale", "3")) { tool_ = ToolMode::Scale; camera_.releaseCapture(); }
+        if (ImGui::MenuItem("Rotate", "4")) { tool_ = ToolMode::Rotate; camera_.releaseCapture(); }
+        if (ImGui::MenuItem("Insert Block")) insertPart(PartShape::Block);
+        if (ImGui::MenuItem("Insert Sphere")) insertPart(PartShape::Sphere);
+        if (ImGui::MenuItem("Insert Spawn")) insertSpawnLocation();
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Model")) {
+        if (ImGui::MenuItem("Anchor", nullptr, false, scene_.selection() && scene_.selection()->isPart())) {
+            auto* part = static_cast<Part*>(scene_.selection());
+            if (part->instanceClass() != InstanceClass::Baseplate) part->setAnchored(!part->anchored());
+        }
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("View")) {
+        ImGui::MenuItem("Toolbox", nullptr, &showToolbox_);
+        ImGui::MenuItem("Explorer", nullptr, &showExplorer_);
+        ImGui::MenuItem("Properties", nullptr, &showProperties_);
+        ImGui::EndMenu();
+    }
+    ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(projectPath_.c_str()).x - 16.0f);
+    ImGui::TextDisabled("%s", projectPath_.c_str());
+    ImGui::EndMainMenuBar();
+}
+
 void EditorUI::drawToolbar() {
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar |
                                    ImGuiWindowFlags_NoScrollWithMouse;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 7.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(7.0f, 6.0f));
     ImGui::Begin("##Toolbar", nullptr, flags);
+    const ImVec2 brandCursor = ImGui::GetCursorScreenPos();
+    ImGui::Dummy(ImVec2(24.0f, ImGui::GetTextLineHeight()));
+    DrawIcon(ImGui::GetWindowDrawList(),
+             ImVec2(brandCursor.x + 11.0f, brandCursor.y + ImGui::GetTextLineHeight() * 0.5f),
+             15.0f, Icon::Part, IM_COL32(0, 162, 255, 255));
+    ImGui::SameLine(0.0f, 3.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(120, 185, 255, 255));
-    ImGui::TextUnformatted("LOBLOX STUDIO");
+    ImGui::TextUnformatted("LOBLOX");
     ImGui::PopStyleColor();
-    ImGui::SameLine(0.0f, 18.0f);
+    ImGui::SameLine(0.0f, 14.0f);
     ImGui::BeginTabBar("##RibbonTabs", ImGuiTabBarFlags_FittingPolicyScroll);
 
     if (ImGui::BeginTabItem("Home")) {
@@ -394,43 +552,135 @@ void EditorUI::drawToolbar() {
                        "Selecionar objetos (1)")) {
             tool_ = ToolMode::Select;
             gizmo_.cancel();
+            camera_.releaseCapture();
         }
         ImGui::SameLine();
         if (IconButton("move", Icon::Move, "Move", tool_ == ToolMode::Move,
-                       "Mover nos eixos X/Y/Z e planos (2)")) tool_ = ToolMode::Move;
+                       "Mover nos eixos X/Y/Z e planos (2)")) { tool_ = ToolMode::Move; camera_.releaseCapture(); }
         ImGui::SameLine();
         if (IconButton("scale", Icon::Scale, "Scale", tool_ == ToolMode::Scale,
-                       "Redimensionar pelo gizmo (3)")) tool_ = ToolMode::Scale;
+                       "Redimensionar pelo gizmo (3)")) { tool_ = ToolMode::Scale; camera_.releaseCapture(); }
         ImGui::SameLine();
         if (IconButton("rotate", Icon::Rotate, "Rotate", tool_ == ToolMode::Rotate,
-                       "Girar pelo gizmo (4)")) tool_ = ToolMode::Rotate;
+                       "Girar pelo gizmo (4)")) { tool_ = ToolMode::Rotate; camera_.releaseCapture(); }
         ToolbarSeparator();
         if (IconButton("part", Icon::Part, "Part", false, "Criar um Block")) insertPart(PartShape::Block);
         ImGui::SameLine();
         if (IconButton("sphere", Icon::Sphere, "Sphere", false, "Criar uma Sphere")) insertPart(PartShape::Sphere);
         ImGui::SameLine();
         if (IconButton("spawnloc", Icon::Spawn, "Spawn", false, "Criar SpawnLocation")) insertSpawnLocation();
+        ToolbarSeparator();
+        Instance* homeSelection = scene_.selection();
+        Part* homePart = homeSelection != nullptr && homeSelection->isPart()
+                             ? static_cast<Part*>(homeSelection) : nullptr;
+        const bool canAnchorHome = homePart != nullptr &&
+                                   homePart->instanceClass() != InstanceClass::Baseplate;
+        ImGui::BeginDisabled(!canAnchorHome);
+        if (IconButton("anchor_home", Icon::Anchor,
+                       homePart != nullptr && homePart->anchored() ? "Unanchor" : "Anchor",
+                       homePart != nullptr && homePart->anchored(), "Ancorar ou soltar a peça",
+                       canAnchorHome)) homePart->setAnchored(!homePart->anchored());
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (IconButton("color_home", Icon::Color, "Color", false,
+                       "Mudar a cor da peça selecionada", homePart != nullptr)) {
+            ImGui::OpenPopup("##color_palette");
+        }
+        ImGui::SameLine();
+        if (IconButton("material_home", Icon::Material, "Material", false,
+                       "Mudar o material da peça selecionada", homePart != nullptr)) {
+            ImGui::OpenPopup("##material_menu");
+        }
+        if (ImGui::BeginPopup("##color_palette")) {
+            if (homePart == nullptr) ImGui::TextDisabled("Selecione uma peça primeiro.");
+            else for (int i = 0; i < static_cast<int>(sizeof(kPalette) / sizeof(kPalette[0])); ++i) {
+                ImGui::PushID(i);
+                const ImVec4 c(kPalette[i].r / 255.0f, kPalette[i].g / 255.0f,
+                               kPalette[i].b / 255.0f, 1.0f);
+                if (ImGui::ColorButton("##home_swatch", c, ImGuiColorEditFlags_NoTooltip,
+                                       ImVec2(26.0f, 22.0f))) {
+                    applyColorToSelection(kPalette[i]);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (i % 6 != 5) ImGui::SameLine();
+                ImGui::PopID();
+            }
+            ImGui::EndPopup();
+        }
+        if (ImGui::BeginPopup("##material_menu")) {
+            if (homePart == nullptr) ImGui::TextDisabled("Selecione uma peça primeiro.");
+            else for (int i = 0; i < PartMaterialCount(); ++i) {
+                if (ImGui::Selectable(PartMaterialName(PartMaterialFromIndex(i)),
+                                      static_cast<int>(homePart->material()) == i)) {
+                    applyMaterialToSelection(i);
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::SameLine();
+        if (IconButton("toolbox_home", Icon::Part, "Toolbox", showToolbox_,
+                       "Mostrar/ocultar Toolbox")) showToolbox_ = !showToolbox_;
+        ImGui::SameLine();
+        if (IconButton("explorer_home", Icon::Explorer, "Explorer", showExplorer_,
+                       "Mostrar/ocultar Explorer")) showExplorer_ = !showExplorer_;
+        ImGui::SameLine();
+        if (IconButton("properties_home", Icon::Properties, "Properties", showProperties_,
+                       "Mostrar/ocultar Properties")) showProperties_ = !showProperties_;
+        ToolbarSeparator();
+        if (IconButton("save_home", Icon::Save, "Save", false, "Salvar projeto (Ctrl+S)")) {
+            requestSavePopup_ = true;
+            std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
+            dialogError_.clear();
+        }
         ImGui::EndTabItem();
     }
 
     if (ImGui::BeginTabItem("Model")) {
         ImGui::Spacing();
+        if (ImGui::Checkbox("Local axes", &gizmoLocalSpace_)) {
+            gizmo_.setLocalSpace(gizmoLocalSpace_);
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(74.0f);
+        ImGui::DragFloat("Move snap", &moveSnap_, 0.1f, 0.0f, 128.0f, "%.2f");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(74.0f);
+        ImGui::DragFloat("Scale snap", &scaleSnap_, 0.05f, 0.0f, 128.0f, "%.2f");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(74.0f);
+        ImGui::DragFloat("Rotate snap", &rotateSnapDegrees_, 1.0f, 0.0f, 180.0f, "%.1f°");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(84.0f);
+        if (ImGui::DragFloat("Camera speed", &cameraMoveSpeed_, 0.5f, 1.0f, 200.0f, "%.0f"))
+            camera_.setNavigationSettings(cameraMoveSpeed_, cameraLookSensitivity_);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(88.0f);
+        if (ImGui::DragFloat("Look sensitivity", &cameraLookSensitivity_, 0.0001f,
+                             0.0005f, 0.03f, "%.4f"))
+            camera_.setNavigationSettings(cameraMoveSpeed_, cameraLookSensitivity_);
+        gizmo_.setSnap(moveSnap_, scaleSnap_, rotateSnapDegrees_);
+        ToolbarSeparator();
         Instance* selection = scene_.selection();
         Part* part = selection != nullptr && selection->isPart() ? static_cast<Part*>(selection) : nullptr;
         const bool canToggleAnchor = part != nullptr &&
                                      part->instanceClass() != InstanceClass::Baseplate;
         ImGui::BeginDisabled(!canToggleAnchor);
-        if (ImGui::Button(part != nullptr && part->anchored() ? "Unanchor" : "Anchor",
-                          ImVec2(105.0f, 0.0f))) {
+        if (IconButton("anchor_model", Icon::Anchor,
+                       part != nullptr && part->anchored() ? "Unanchor" : "Anchor",
+                       part != nullptr && part->anchored(), "Ancorar ou soltar a peça",
+                       canToggleAnchor)) {
             part->setAnchored(!part->anchored());
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
-        if (ImGui::Button("Color")) {
+        if (IconButton("color_model", Icon::Color, "Color", false,
+                       "Mudar a cor da peça selecionada", part != nullptr)) {
             ImGui::OpenPopup("##color_palette");
         }
         ImGui::SameLine();
-        if (ImGui::Button("Material")) {
+        if (IconButton("material_model", Icon::Material, "Material", false,
+                       "Mudar o material da peça selecionada", part != nullptr)) {
             ImGui::OpenPopup("##material_menu");
         }
         if (ImGui::BeginPopup("##color_palette")) {
@@ -464,6 +714,11 @@ void EditorUI::drawToolbar() {
 
     if (ImGui::BeginTabItem("View")) {
         ImGui::Spacing();
+        if (IconButton("toolbox_toggle", Icon::Part, "Toolbox", showToolbox_,
+                       "Show or hide the Toolbox")) {
+            showToolbox_ = !showToolbox_;
+        }
+        ImGui::SameLine();
         if (IconButton("explorer_toggle", Icon::Explorer, "Explorer", showExplorer_,
                        "Mostrar/ocultar Explorer")) {
             showExplorer_ = !showExplorer_;
@@ -476,23 +731,6 @@ void EditorUI::drawToolbar() {
         ImGui::EndTabItem();
     }
 
-    if (ImGui::BeginTabItem("File")) {
-        ImGui::Spacing();
-        if (IconButton("save", Icon::Save, "Save", false, "Salvar projeto (Ctrl+S)")) {
-            requestSavePopup_ = true;
-            std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
-            dialogError_.clear();
-        }
-        ImGui::SameLine();
-        if (IconButton("open", Icon::Open, "Open", false, "Abrir projeto (Ctrl+O)")) {
-            requestOpenPopup_ = true;
-            std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
-            dialogError_.clear();
-        }
-        ImGui::SameLine();
-        ImGui::TextDisabled("%s", projectPath_.c_str());
-        ImGui::EndTabItem();
-    }
     ImGui::EndTabBar();
 
     ImGui::End();
@@ -501,35 +739,43 @@ void EditorUI::drawToolbar() {
 
 void EditorUI::drawToolbox() {
     ImGui::Begin("Toolbox");
-    ImGui::TextDisabled("BUILD");
-    ImGui::TextUnformatted("Inserir objeto");
-    ImGui::Separator();
+    static char search[64] = {};
+    ImGui::TextDisabled("PARTS AND TEMPLATES");
+    ImGui::TextUnformatted("Build a scene");
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputTextWithHint("##toolbox_search", "Search objects...", search, sizeof(search));
+    ImGui::Spacing();
 
-    if (ImGui::Button("Block", ImVec2(-FLT_MIN, 34.0f))) {
-        insertPart(PartShape::Block);
+    if (ContainsIgnoreCase("Block", search)) {
+        if (IconButton("toolbox_block", Icon::Part, "Block", false,
+                       "Insert an anchored block")) insertPart(PartShape::Block);
+        ImGui::SameLine();
     }
-    if (ImGui::Button("Sphere", ImVec2(-FLT_MIN, 34.0f))) {
-        insertPart(PartShape::Sphere);
-    }
-    if (ImGui::Button("SpawnLocation", ImVec2(-FLT_MIN, 34.0f))) {
-        insertSpawnLocation();
+    if (ContainsIgnoreCase("Sphere", search) &&
+        IconButton("toolbox_sphere", Icon::Sphere, "Sphere", false,
+                   "Insert an anchored sphere")) insertPart(PartShape::Sphere);
+    if (ContainsIgnoreCase("SpawnLocation", search)) {
+        if (ContainsIgnoreCase("Block", search) || ContainsIgnoreCase("Sphere", search))
+            ImGui::SameLine();
+        if (IconButton("toolbox_spawn", Icon::Spawn, "Spawn", false,
+                       "Insert a SpawnLocation")) insertSpawnLocation();
     }
 
     ImGui::Spacing();
-    ImGui::TextDisabled("Clique para inserir na frente da camera.");
+    ImGui::SeparatorText("Scene");
+    ImGui::TextDisabled("%d objects", static_cast<int>(scene_.objects().size()));
+    ImGui::SameLine();
+    ImGui::TextDisabled("%d parts", static_cast<int>(scene_.parts().size()));
+    ImGui::TextDisabled("%d physics bodies", static_cast<int>(physics_.bodyCount()));
     ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::TextUnformatted("Cena");
-    ImGui::Text("%d objetos", static_cast<int>(scene_.objects().size()));
-    ImGui::Text("%d pecas", static_cast<int>(scene_.parts().size()));
-    ImGui::Text("%d corpos fisicos", static_cast<int>(physics_.bodyCount()));
-    ImGui::Separator();
-    ImGui::TextWrapped(
-        "RMB + WASD: camera livre\n"
-        "Q/E: descer/subir  |  Alt: acelerar\n"
-        "MMB: deslocar  |  roda: zoom\n"
-        "1-4: Select / Move / Scale / Rotate\n"
-        "Delete: excluir  |  F: focar selecao");
+    if (ImGui::CollapsingHeader("Navigation shortcuts", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::BulletText("WASD / Q E      Move camera");
+        ImGui::BulletText("RMB drag          Orbit / look");
+        ImGui::BulletText("Q / E             Down / Up");
+        ImGui::BulletText("MMB / Wheel  Pan / Zoom");
+        ImGui::BulletText("1 - 4              Select / Move / Scale / Rotate");
+        ImGui::BulletText("F / Delete       Focus / Delete");
+    }
     ImGui::End();
 }
 
@@ -556,11 +802,24 @@ void EditorUI::drawViewport() {
                  ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
     const bool hovered = ImGui::IsItemHovered();
     const ImGuiIO& io = ImGui::GetIO();
-    const bool allowInput = hovered && !io.WantTextInput && !ImGui::IsAnyItemActive();
-
+    const bool clickedViewport = hovered &&
+        (ImGui::IsMouseClicked(ImGuiMouseButton_Left) ||
+         ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
+         ImGui::IsMouseClicked(ImGuiMouseButton_Middle));
+    if (clickedViewport) ImGui::SetWindowFocus();
+    // DockHierarchy: em layout dockado a aba selecionada precisa contar como
+    // foco, senao atalhos de ferramenta/WASD ficam inativos na viewport.
+    viewportFocused_ = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows |
+                                              ImGuiFocusedFlags_DockHierarchy);
+    const bool allowKeyboard = viewportFocused_ && !io.WantTextInput &&
+                               !ImGui::IsAnyItemActive();
+    const bool allowMouse = hovered && !io.WantTextInput && !ImGui::IsAnyItemActive();
+    // O gizmo tem prioridade sobre os controles da camera: enquanto um handle
+    // esta sob o cursor ou em arraste, RMB/MMB/roda nao capturam a navegacao.
     camera_.handleInput(Vector2{static_cast<float>(viewportWidth_),
                                 static_cast<float>(viewportHeight_)},
-                        hovered, !gizmo_.dragging());
+                        hovered, viewportFocused_, allowKeyboard, allowMouse,
+                        gizmo_.dragging() || gizmo_.hoveringHandle(), GetFrameTime());
 
     Instance* selection = scene_.selection();
     Part* selectedPart =
@@ -569,10 +828,17 @@ void EditorUI::drawViewport() {
                                  static_cast<float>(viewportWidth_),
                                  static_cast<float>(viewportHeight_)};
 
+    const bool wasDragging = gizmo_.dragging();
     const bool gizmoConsumed = gizmo_.update(tool_, selectedPart, camera_, viewportRect, hovered,
-                                             allowInput);
+                                             allowMouse);
+    if (!wasDragging && gizmo_.dragging() && selectedPart != nullptr) {
+        gizmoEditingId_ = selectedPart->id();
+        physics_.setPartEditing(gizmoEditingId_, true);
+    } else if (wasDragging && !gizmo_.dragging()) {
+        finishGizmoEdit();
+    }
 
-    if (allowInput && !gizmoConsumed && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    if (allowMouse && !gizmoConsumed && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         const ImVec2 mouse = ImGui::GetMousePos();
         if (mouse.x >= viewportRect.x && mouse.y >= viewportRect.y &&
             mouse.x <= viewportRect.x + viewportRect.width &&
@@ -590,39 +856,40 @@ void EditorUI::drawViewport() {
         }
     }
 
-    if (hovered && !io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F)) {
-        focusSelection();
-    }
-
     BeginTextureMode(viewport_);
     renderer_.drawScene(scene_, camera_, viewportWidth_, viewportHeight_,
                         selection != nullptr ? selection->id() : kInvalidInstanceId);
     if (selectedPart != nullptr && tool_ != ToolMode::Select) {
-        BeginMode3D(camera_.camera());
-        gizmo_.draw(*selectedPart, tool_);
-        EndMode3D();
+        gizmo_.drawOverlay(*selectedPart, tool_, camera_, viewportRect);
     }
     EndTextureMode();
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     char overlay[192];
-    std::snprintf(overlay, sizeof(overlay), "%s  |  %.0f FPS  |  RMB + WASD | Q desce, E sobe",
+    std::snprintf(overlay, sizeof(overlay), "%s  |  %.0f FPS  |  WASD move | RMB look | Q/E vertical",
                   ToolModeName(tool_), ImGui::GetIO().Framerate);
-    drawList->AddText(ImVec2(imagePosition.x + 10.0f, imagePosition.y + 8.0f),
-                      IM_COL32(0, 0, 0, 170), overlay);
-    drawList->AddText(ImVec2(imagePosition.x + 9.0f, imagePosition.y + 7.0f),
-                      IM_COL32(240, 244, 250, 235), overlay);
+    const ImVec2 overlaySize = ImGui::CalcTextSize(overlay);
+    const ImVec2 overlayMin(imagePosition.x + 10.0f, imagePosition.y + 9.0f);
+    drawList->AddRectFilled(overlayMin,
+                            ImVec2(overlayMin.x + overlaySize.x + 16.0f,
+                                   overlayMin.y + overlaySize.y + 10.0f),
+                            IM_COL32(24, 29, 35, 220), 5.0f);
+    drawList->AddText(ImVec2(overlayMin.x + 8.0f, overlayMin.y + 5.0f),
+                      IM_COL32(230, 236, 242, 245), overlay);
 
     if (selectedPart != nullptr) {
         char selectionLabel[128];
         std::snprintf(selectionLabel, sizeof(selectionLabel), "%s (%s)",
                       selectedPart->name().c_str(), selectedPart->className());
-        drawList->AddText(ImVec2(imagePosition.x + 10.0f,
-                                 imagePosition.y + viewportRect.height - 24.0f),
-                          IM_COL32(0, 0, 0, 170), selectionLabel);
-        drawList->AddText(ImVec2(imagePosition.x + 9.0f,
-                                 imagePosition.y + viewportRect.height - 25.0f),
-                          IM_COL32(255, 225, 130, 235), selectionLabel);
+        const ImVec2 selectionSize = ImGui::CalcTextSize(selectionLabel);
+        const ImVec2 selectionMin(imagePosition.x + 10.0f,
+                                  imagePosition.y + viewportRect.height - 31.0f);
+        drawList->AddRectFilled(selectionMin,
+                                ImVec2(selectionMin.x + selectionSize.x + 16.0f,
+                                       selectionMin.y + selectionSize.y + 10.0f),
+                                IM_COL32(24, 29, 35, 220), 5.0f);
+        drawList->AddText(ImVec2(selectionMin.x + 8.0f, selectionMin.y + 5.0f),
+                          IM_COL32(125, 190, 255, 255), selectionLabel);
     }
 
     if (!status_.empty() && ImGui::GetTime() < statusUntil_) {
@@ -652,11 +919,15 @@ void EditorUI::drawViewport() {
     ImGui::PopStyleVar();
 }
 
-void EditorUI::drawExplorerNode(Instance* instance) {
+void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
+    if (instance == nullptr || !TreeContains(instance, filter)) return;
     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
                                ImGuiTreeNodeFlags_OpenOnDoubleClick |
                                ImGuiTreeNodeFlags_SpanAvailWidth |
                                ImGuiTreeNodeFlags_DefaultOpen;
+    if (filter != nullptr && *filter != '\0') {
+        ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+    }
     if (instance->children().empty()) {
         flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
     }
@@ -667,7 +938,32 @@ void EditorUI::drawExplorerNode(Instance* instance) {
     ImGui::PushStyleColor(ImGuiCol_Text, ClassColor(instance->instanceClass()));
     const bool open = ImGui::TreeNodeEx(reinterpret_cast<void*>(
                                             static_cast<intptr_t>(instance->id())),
-                                        flags, "%s", instance->name().c_str());
+                                        flags, "  %s", instance->name().c_str());
+    const ImVec2 rowMin = ImGui::GetItemRectMin();
+    const ImVec2 rowMax = ImGui::GetItemRectMax();
+    const ImVec2 iconCenter(rowMin.x + 22.0f, (rowMin.y + rowMax.y) * 0.5f);
+    const ImVec4 classColor = ClassColor(instance->instanceClass());
+    const ImU32 iconColor = ImGui::ColorConvertFloat4ToU32(classColor);
+    if (instance->instanceClass() == InstanceClass::Lighting) {
+        ImGui::GetWindowDrawList()->AddCircle(iconCenter, 5.0f, iconColor, 16, 1.7f);
+        ImGui::GetWindowDrawList()->AddCircleFilled(
+            ImVec2(iconCenter.x + 1.5f, iconCenter.y - 1.5f), 1.3f, iconColor, 8);
+    } else if (instance->instanceClass() == InstanceClass::Workspace) {
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            ImVec2(iconCenter.x - 5.0f, iconCenter.y - 5.0f),
+            ImVec2(iconCenter.x + 5.0f, iconCenter.y + 5.0f), iconColor, 2.0f);
+        ImGui::GetWindowDrawList()->AddLine(ImVec2(iconCenter.x - 2.5f, iconCenter.y),
+                                            ImVec2(iconCenter.x + 2.5f, iconCenter.y),
+                                            IM_COL32(35, 38, 42, 255), 1.5f);
+    } else {
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            ImVec2(iconCenter.x - 5.0f, iconCenter.y - 4.0f),
+            ImVec2(iconCenter.x + 5.0f, iconCenter.y + 4.0f), iconColor, 1.5f);
+        ImGui::GetWindowDrawList()->AddRect(
+            ImVec2(iconCenter.x - 5.0f, iconCenter.y - 4.0f),
+            ImVec2(iconCenter.x + 5.0f, iconCenter.y + 4.0f),
+            IM_COL32(230, 235, 242, 190), 1.5f);
+    }
     ImGui::PopStyleColor();
 
     if (ImGui::IsItemClicked()) {
@@ -689,7 +985,7 @@ void EditorUI::drawExplorerNode(Instance* instance) {
 
     if (open && !instance->children().empty()) {
         for (Instance* child : instance->children()) {
-            drawExplorerNode(child);
+            drawExplorerNode(child, filter);
         }
         ImGui::TreePop();
     }
@@ -697,11 +993,14 @@ void EditorUI::drawExplorerNode(Instance* instance) {
 
 void EditorUI::drawExplorer() {
     ImGui::Begin("Explorer");
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputTextWithHint("##explorer_filter", "Filter workspace", explorerFilter_,
+                             sizeof(explorerFilter_));
     if (scene_.workspace() != nullptr) {
-        drawExplorerNode(scene_.workspace());
+        drawExplorerNode(scene_.workspace(), explorerFilter_);
     }
     if (scene_.lighting() != nullptr) {
-        drawExplorerNode(scene_.lighting());
+        drawExplorerNode(scene_.lighting(), explorerFilter_);
     }
     ImGui::Separator();
     if (scene_.selection() != nullptr) {
@@ -891,8 +1190,7 @@ void EditorUI::drawProperties() {
     if (selection == nullptr) {
         ImGui::TextDisabled("Nenhum objeto selecionado.");
         ImGui::Separator();
-        ImGui::TextUnformatted("Selecione um objeto na viewport ou no Explorer");
-        ImGui::TextUnformatted("para editar Name, Position, Size, Color e fisica.");
+        ImGui::TextWrapped("Selecione um objeto na viewport ou no Explorer para editar Name, Position, Size, Color e fisica.");
         ImGui::SeparatorText("Projeto");
         ImGui::Text("Objetos: %d", static_cast<int>(scene_.objects().size()));
         ImGui::Text("Pecas: %d", static_cast<int>(scene_.parts().size()));
@@ -917,6 +1215,14 @@ void EditorUI::drawDialogs() {
         ImGui::OpenPopup("Abrir projeto");
         requestOpenPopup_ = false;
     }
+    if (requestLuaExportPopup_) {
+        ImGui::OpenPopup("Exportar cena Lua");
+        requestLuaExportPopup_ = false;
+    }
+    if (requestLuaImportPopup_) {
+        ImGui::OpenPopup("Importar cena Lua");
+        requestLuaImportPopup_ = false;
+    }
 
     ImGui::SetNextWindowSize(ImVec2(520.0f, 0.0f), ImGuiCond_Appearing);
     if (ImGui::BeginPopupModal("Salvar projeto", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -929,13 +1235,16 @@ void EditorUI::drawDialogs() {
         ImGui::Spacing();
         if (ImGui::Button("Salvar", ImVec2(120.0f, 0.0f))) {
             std::string error;
-            if (projectio::save(scene_, pathBuffer_, error)) {
-                projectPath_ = pathBuffer_;
+            std::error_code pathError;
+            const std::filesystem::path chosen = std::filesystem::absolute(pathBuffer_, pathError);
+            const std::string savePath = pathError ? std::string(pathBuffer_) : chosen.string();
+            if (projectio::save(scene_, savePath, error)) {
+                projectPath_ = savePath;
                 dialogError_.clear();
                 setStatus("Projeto salvo em " + projectPath_);
                 ImGui::CloseCurrentPopup();
             } else {
-                dialogError_ = error;
+                dialogError_ = "Falha ao salvar '" + savePath + "': " + error;
             }
         }
         ImGui::SameLine();
@@ -959,9 +1268,13 @@ void EditorUI::drawDialogs() {
         if (ImGui::Button("Abrir", ImVec2(120.0f, 0.0f))) {
             std::string error;
             if (projectio::load(scene_, pathBuffer_, error)) {
-                projectPath_ = pathBuffer_;
+                std::error_code pathError;
+                const std::filesystem::path opened = std::filesystem::absolute(pathBuffer_, pathError);
+                projectPath_ = pathError ? std::string(pathBuffer_) : opened.string();
                 dialogError_.clear();
-                gizmo_.cancel();
+                gizmo_.cancel(nullptr, false);
+                finishGizmoEdit();
+                camera_.releaseCapture();
                 if (onSceneLoaded_) {
                     onSceneLoaded_();
                 }
@@ -975,6 +1288,55 @@ void EditorUI::drawDialogs() {
         if (ImGui::Button("Cancelar", ImVec2(120.0f, 0.0f))) {
             dialogError_.clear();
             ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(540.0f, 0.0f), ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Exportar cena Lua", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted("Exportar cena declarativa (.lua):");
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::InputText("##lua_export_path", pathBuffer_, sizeof(pathBuffer_));
+        ImGui::TextDisabled("Contem apenas dados da cena; nenhum script e executado.");
+        if (!dialogError_.empty()) ImGui::TextColored(ImVec4(0.78f, 0.12f, 0.10f, 1), "%s", dialogError_.c_str());
+        if (ImGui::Button("Exportar", ImVec2(120, 0))) {
+            std::string error;
+            if (scenelua::save(scene_, pathBuffer_, error)) {
+                setStatus("Cena exportada: " + std::string(pathBuffer_));
+                dialogError_.clear();
+                ImGui::CloseCurrentPopup();
+            } else dialogError_ = error;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancelar##lua_export", ImVec2(120, 0))) {
+            dialogError_.clear(); ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(560.0f, 0.0f), ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Importar cena Lua", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted("Importar cena declarativa (.lua):");
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::InputText("##lua_import_path", pathBuffer_, sizeof(pathBuffer_));
+        ImGui::TextWrapped("Aceita somente `return` seguido por tabelas literais do formato loblox-scene. O arquivo nunca e executado.");
+        ImGui::TextDisabled("Uma importacao valida substitui a cena atual.");
+        if (!dialogError_.empty()) ImGui::TextColored(ImVec4(0.78f, 0.12f, 0.10f, 1), "%s", dialogError_.c_str());
+        if (ImGui::Button("Importar", ImVec2(120, 0))) {
+            std::string error;
+            if (scenelua::load(scene_, pathBuffer_, error)) {
+                gizmo_.cancel(nullptr, false);
+                finishGizmoEdit();
+                camera_.releaseCapture();
+                if (onSceneLoaded_) onSceneLoaded_();
+                setStatus("Cena declarativa importada.");
+                dialogError_.clear();
+                ImGui::CloseCurrentPopup();
+            } else dialogError_ = error;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancelar##lua_import", ImVec2(120, 0))) {
+            dialogError_.clear(); ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
     }
@@ -1039,7 +1401,8 @@ void EditorUI::deleteSelection() {
         return;
     }
     const std::string name = selection->name();
-    gizmo_.cancel();
+    gizmo_.cancel(selection->isPart() ? static_cast<Part*>(selection) : nullptr, false);
+    finishGizmoEdit();
     if (scene_.remove(selection)) {
         setStatus("Excluido: " + name);
     } else {
@@ -1058,8 +1421,8 @@ void EditorUI::focusSelection() {
     }
     Part* part = static_cast<Part*>(selection);
     const Vector3 size = part->size();
-    const float radius = std::max(size.x, std::max(size.y, size.z));
-    camera_.focusOn(part->position(), std::max(1.5f, radius));
+    const float radius = 0.5f * Vector3Length(size);
+    camera_.focusOn(part->position(), std::max(0.5f, radius));
 }
 
 }  // namespace loblox
