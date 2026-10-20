@@ -51,23 +51,6 @@ float DistanceToSegment(Vector2 point, Vector2 a, Vector2 b) {
                      (point.y - closest.y) * (point.y - closest.y));
 }
 
-// Parametro t do ponto mais proximo da linha (origin + t*axis) ao raio.
-bool ClosestParamOnAxis(Vector3 rayOrigin, Vector3 rayDirection, Vector3 axisOrigin,
-                        Vector3 axisDirection, float& outT) {
-    const Vector3 w0 = Vector3Subtract(rayOrigin, axisOrigin);
-    const float a = Vector3DotProduct(rayDirection, rayDirection);
-    const float b = Vector3DotProduct(rayDirection, axisDirection);
-    const float c = Vector3DotProduct(axisDirection, axisDirection);
-    const float d = Vector3DotProduct(rayDirection, w0);
-    const float e = Vector3DotProduct(axisDirection, w0);
-    const float denominator = a * c - b * b;
-    if (std::fabs(denominator) < 1e-5f) {
-        return false;
-    }
-    outT = (a * e - b * d) / denominator;
-    return true;
-}
-
 bool RayPlane(Vector3 rayOrigin, Vector3 rayDirection, Vector3 planePoint, Vector3 planeNormal,
               Vector3& hit) {
     const float denominator = Vector3DotProduct(rayDirection, planeNormal);
@@ -80,6 +63,27 @@ bool RayPlane(Vector3 rayOrigin, Vector3 rayDirection, Vector3 planePoint, Vecto
         return false;
     }
     hit = Vector3Add(rayOrigin, Vector3Scale(rayDirection, t));
+    return true;
+}
+
+bool AxisPlaneParam(const Ray& ray, Vector3 center, Vector3 axis, Vector3 viewForward,
+                    float& parameter) {
+    // Plane contains the selected axis and faces the camera. This stays stable
+    // even when the ray is nearly parallel to the axis, where closest-line
+    // dragging becomes undefined.
+    Vector3 normal = Vector3Subtract(viewForward, Vector3Scale(axis,
+                                      Vector3DotProduct(viewForward, axis)));
+    if (Vector3LengthSqr(normal) < 1e-5f) {
+        normal = Vector3CrossProduct(axis, Vector3{0.0f, 1.0f, 0.0f});
+        if (Vector3LengthSqr(normal) < 1e-5f) {
+            normal = Vector3CrossProduct(axis, Vector3{1.0f, 0.0f, 0.0f});
+        }
+    }
+    Vector3 hit;
+    if (!RayPlane(ray.position, ray.direction, center, Vector3Normalize(normal), hit)) {
+        return false;
+    }
+    parameter = Vector3DotProduct(Vector3Subtract(hit, center), axis);
     return true;
 }
 
@@ -203,8 +207,8 @@ bool Gizmo::update(ToolMode mode, Part* part, const EditorCamera& camera, Rectan
         }
 
         float parameter = 0.0f;
-        if (!ClosestParamOnAxis(ray.position, ray.direction, center,
-                                kAxes[bestAxis].direction, parameter)) {
+        const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
+        if (!AxisPlaneParam(ray, center, kAxes[bestAxis].direction, viewForward, parameter)) {
             return false;
         }
 
@@ -249,7 +253,8 @@ bool Gizmo::update(ToolMode mode, Part* part, const EditorCamera& camera, Rectan
     }
 
     float parameter = 0.0f;
-    if (!ClosestParamOnAxis(ray.position, ray.direction, center, axis, parameter)) {
+    const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
+    if (!AxisPlaneParam(ray, center, axis, viewForward, parameter)) {
         return true;
     }
     const float delta = parameter - startParam_;

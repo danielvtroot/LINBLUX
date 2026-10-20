@@ -80,6 +80,8 @@ cmake --build build -j2
 | Selecionar objeto | clique esquerdo na viewport |
 | Mover / redimensionar / girar | escolha a ferramenta e arraste o eixo na viewport |
 | Orbitar câmera | arrastar com o botão direito |
+| Câmera livre | segurar botão direito + `W`, `A`, `S`, `D`; `Q`/`E` descem/sobem |
+| Acelerar câmera livre | `Alt` enquanto move |
 | Deslocar câmera | botão do meio (ou Shift + botão direito) |
 | Zoom | roda do mouse |
 | Focar seleção | `F` |
@@ -87,6 +89,7 @@ cmake --build build -j2
 | Salvar | `Ctrl+S` (ou botão Save) |
 | Abrir | `Ctrl+O` (ou botão Open) |
 | Cancelar arrasto | `Esc` |
+| Ferramentas | `1` Select, `2` Move, `3` Scale, `4` Rotate |
 
 A Baseplate inicial e os serviços Workspace/Lighting são protegidos contra
 exclusão acidental.

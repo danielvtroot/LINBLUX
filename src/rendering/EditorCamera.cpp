@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "raylib.h"
+
 namespace loblox {
 
 namespace {
@@ -64,6 +66,29 @@ void EditorCamera::handleInput(Vector2 viewportSize, bool hovered, bool allowMou
         const float scale = distance_ * 0.0016f;
         target_ = Vector3Subtract(target_, Vector3Scale(right, delta.x * scale));
         target_ = Vector3Add(target_, Vector3Scale(up, delta.y * scale));
+    }
+
+    // Free-fly navigation, matching the common 3D editor convention: hold
+    // RMB to look around, then use WASD and Q/E to move through the scene.
+    if (rightDown && !shift) {
+        Vector3 forward = Vector3Normalize(Vector3Subtract(target_, position()));
+        forward.y = 0.0f;
+        forward = Vector3Normalize(forward);
+        const Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, Vector3{0, 1, 0}));
+        Vector3 movement{0.0f, 0.0f, 0.0f};
+        if (IsKeyDown(KEY_W)) movement = Vector3Add(movement, forward);
+        if (IsKeyDown(KEY_S)) movement = Vector3Subtract(movement, forward);
+        if (IsKeyDown(KEY_D)) movement = Vector3Add(movement, right);
+        if (IsKeyDown(KEY_A)) movement = Vector3Subtract(movement, right);
+        if (IsKeyDown(KEY_E)) movement.y += 1.0f;
+        if (IsKeyDown(KEY_Q)) movement.y -= 1.0f;
+        const float magnitude = Vector3Length(movement);
+        if (magnitude > 0.001f) {
+            const float speed = (IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT)) ? 100.0f : 30.0f;
+            const Vector3 step = Vector3Scale(Vector3Scale(movement, 1.0f / magnitude),
+                                              speed * GetFrameTime());
+            target_ = Vector3Add(target_, step);
+        }
     }
 
     const float wheel = GetMouseWheelMove();

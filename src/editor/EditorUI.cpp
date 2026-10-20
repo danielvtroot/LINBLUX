@@ -331,6 +331,12 @@ void EditorUI::handleShortcuts() {
     if (ImGui::IsKeyPressed(ImGuiKey_F)) {
         focusSelection();
     }
+    if (!io.WantTextInput) {
+        if (ImGui::IsKeyPressed(ImGuiKey_1)) tool_ = ToolMode::Select;
+        if (ImGui::IsKeyPressed(ImGuiKey_2)) tool_ = ToolMode::Move;
+        if (ImGui::IsKeyPressed(ImGuiKey_3)) tool_ = ToolMode::Scale;
+        if (ImGui::IsKeyPressed(ImGuiKey_4)) tool_ = ToolMode::Rotate;
+    }
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
         std::string error;
         if (projectio::save(scene_, projectPath_, error)) {
@@ -530,7 +536,8 @@ void EditorUI::drawToolbar() {
 
 void EditorUI::drawToolbox() {
     ImGui::Begin("Toolbox");
-    ImGui::TextDisabled("Inserir objeto");
+    ImGui::TextDisabled("BUILD");
+    ImGui::TextUnformatted("Inserir objeto");
     ImGui::Separator();
 
     if (ImGui::Button("Block", ImVec2(-FLT_MIN, 34.0f))) {
@@ -553,9 +560,11 @@ void EditorUI::drawToolbox() {
     ImGui::Text("%d corpos fisicos", static_cast<int>(physics_.bodyCount()));
     ImGui::Separator();
     ImGui::TextWrapped(
-        "RMB: orbitar  |  MMB: deslocar\n"
-        "Roda: zoom  |  F: focar selecao\n"
-        "Delete: excluir peca selecionada");
+        "RMB + WASD: camera livre\n"
+        "Q/E: descer/subir  |  Alt: acelerar\n"
+        "MMB: deslocar  |  roda: zoom\n"
+        "1-4: Select / Move / Scale / Rotate\n"
+        "Delete: excluir  |  F: focar selecao");
     ImGui::End();
 }
 
@@ -632,7 +641,7 @@ void EditorUI::drawViewport() {
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     char overlay[192];
-    std::snprintf(overlay, sizeof(overlay), "%s  |  %.0f FPS  |  RMB orbitar, MMB deslocar, roda zoom",
+    std::snprintf(overlay, sizeof(overlay), "%s  |  %.0f FPS  |  RMB + WASD: camera livre",
                   ToolModeName(tool_), ImGui::GetIO().Framerate);
     drawList->AddText(ImVec2(imagePosition.x + 10.0f, imagePosition.y + 8.0f),
                       IM_COL32(0, 0, 0, 170), overlay);

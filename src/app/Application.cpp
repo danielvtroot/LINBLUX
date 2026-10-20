@@ -23,7 +23,7 @@ bool Application::initialize() {
         flags |= FLAG_VSYNC_HINT;
     }
     SetConfigFlags(flags);
-    InitWindow(config_.windowWidth, config_.windowHeight, "Loblox Open-Source");
+    InitWindow(config_.windowWidth, config_.windowHeight, "Loblox Studio");
     windowReady_ = true;
     SetWindowMinSize(900, 560);
     SetExitKey(KEY_NULL);
@@ -53,6 +53,11 @@ bool Application::initialize() {
     style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.24f, 0.44f, 0.68f, 1.0f);
     style.Colors[ImGuiCol_Button] = ImVec4(0.22f, 0.22f, 0.25f, 1.0f);
     style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.28f, 0.34f, 0.42f, 1.0f);
+    style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.20f, 0.42f, 0.68f, 1.0f);
+    style.Colors[ImGuiCol_Tab] = ImVec4(0.14f, 0.14f, 0.16f, 1.0f);
+    style.Colors[ImGuiCol_TabHovered] = ImVec4(0.24f, 0.42f, 0.62f, 1.0f);
+    style.Colors[ImGuiCol_TabSelected] = ImVec4(0.19f, 0.31f, 0.45f, 1.0f);
+    style.Colors[ImGuiCol_DockingPreview] = ImVec4(0.24f, 0.48f, 0.72f, 0.70f);
 
     scene_.buildDefaultScene();
     physics_.attach(scene_);
