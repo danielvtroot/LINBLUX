@@ -31,12 +31,23 @@ public:
     float brightness() const { return brightness_; }
     void setBrightness(float brightness);
 
+    Color fogColor() const { return fogColor_; }
+    void setFogColor(Color color) { fogColor_ = color; }
+
+    // 0 = fog desativada; 1 = opaca a ~1 de distância da câmera.
+    float fogDensity() const { return fogDensity_; }
+    void setFogDensity(float density) {
+        fogDensity_ = std::isfinite(density) ? std::clamp(density, 0.0f, 1.0f) : 0.0f;
+    }
+
 private:
     Color skyColor_{120, 180, 240, 255};
     Color ambientColor_{150, 150, 160, 255};
     Vector3 sunDirection_{-0.45f, -1.0f, -0.35f};
     float sunIntensity_ = 1.0f;
     float brightness_ = 1.0f;
+    Color fogColor_{120, 180, 240, 255};
+    float fogDensity_ = 0.0f;
 };
 
 }  // namespace loblox

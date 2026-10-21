@@ -226,7 +226,8 @@ bool ValidateSchema(const json& root, std::string& error) {
             if (!HasOnlyKeys(object, {"id", "class", "name", "parent"}, error, prefix)) return false;
         } else if (type == "Lighting") {
             if (!HasOnlyKeys(object, {"id", "class", "name", "parent", "skyColor", "ambientColor",
-                                      "sunDirection", "sunIntensity", "brightness"}, error, prefix)) return false;
+                                      "sunDirection", "sunIntensity", "brightness",
+                                      "fogColor", "fogDensity"}, error, prefix)) return false;
         } else if (type == "Part" || type == "Baseplate" || type == "SpawnLocation") {
             if (!HasOnlyKeys(object, {"id", "class", "name", "parent", "shape", "position", "rotation",
                                       "size", "color", "material", "anchored", "canCollide"}, error, prefix)) return false;

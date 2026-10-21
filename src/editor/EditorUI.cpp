@@ -1741,6 +1741,18 @@ void EditorUI::drawLightingProperties() {
     if (ImGui::SliderFloat("Brightness", &brightness, 0.2f, 2.0f, "%.2f")) {
         lighting->setBrightness(brightness);
     }
+    ImGui::SeparatorText("Fog");
+    float fog[3] = {lighting->fogColor().r / 255.0f, lighting->fogColor().g / 255.0f,
+                    lighting->fogColor().b / 255.0f};
+    if (ImGui::ColorEdit3("FogColor", fog)) {
+        lighting->setFogColor(Color{static_cast<unsigned char>(std::lround(fog[0] * 255.0f)),
+                                    static_cast<unsigned char>(std::lround(fog[1] * 255.0f)),
+                                    static_cast<unsigned char>(std::lround(fog[2] * 255.0f)), 255});
+    }
+    float fogDensity = lighting->fogDensity();
+    if (ImGui::SliderFloat("FogDensity", &fogDensity, 0.0f, 1.0f, "%.3f")) {
+        lighting->setFogDensity(fogDensity);
+    }
 }
 
 void EditorUI::drawWorkspaceProperties() {

@@ -51,8 +51,126 @@ void Triangle(Vector3 a, Vector3 b, Vector3 c) {
 // Caixa com sombreamento por face (Lambert simples, custo quase zero).
 // A rotacao e aplicada na CPU: os vertices e as normais passam pelo mesmo
 // quaternion, portanto desenho, selecao e collider compartilham a orientacao.
+// Estado de fog por frame ( câmera + alvo configurados pelo drawScene ).
+// CPU puro: sem shader; funciona igual em editor e Play.
+struct FogState {
+    Vector3 camera{0, 0, 0};
+    Color color{120, 180, 240, 255};
+    float density = 0.0f;
+    bool enabled = false;
+};
+FogState gFog{};
+
+Color ApplyFog(Color color, Vector3 worldPosition) {
+    if (!gFog.enabled || gFog.density <= 0.0f) return color;
+    const float distance = Vector3Distance(gFog.camera, worldPosition);
+    if (distance <= 0.0f) return color;
+    const float amount = 1.0f - std::exp(-gFog.density * distance);
+    const auto blend = [&](unsigned char channel, unsigned char fogChannel) {
+        return static_cast<unsigned char>(
+            std::lround(channel + (static_cast<float>(fogChannel) - channel) * amount));
+    };
+    return Color{blend(color.r, gFog.color.r), blend(color.g, gFog.color.g),
+                 blend(color.b, gFog.color.b), color.a};
+}
+
+// ---------- Skybox: 1 textura por face, quads dentro de BeginMode3D --------
+// Sem cubemap/shader: cada face é um quad ancorado na câmera, depth test off
+// (fundo puro, nunca oculta geometria). Back e Down ausentes ficam cor
+// sólida; o usuário pode colocar os PNGs depois pelo mesmo diretório.
+struct SkyImages {
+    Texture2D front{}, right{}, left{}, up{};
+    Color fallback{120, 180, 240, 255};
+    bool tried = false;
+    bool any = false;
+};
+
+SkyImages& SkyLoader() {
+    static SkyImages sky;
+    if (!sky.tried) {
+        sky.tried = true;
+        const char* names[] = {
+            "SkyboxFt_Frente_1024x1024.png",   // front (+Z)
+            "SkyboxRt_Direita_1024x1024.png",  // right (+X)
+            "SkyboxLf_Esquerda_1024x1024.png", // left (-X)
+            "SkyboxUp_Cima_1024x1024.png",     // top (+Y)
+            "SkyboxBk_Back_1024x1024.png",     // opcional (:futuro)
+            "SkyboxDn_Baixo_1024x1024.png",    // opcional (:futuro)
+        };
+        const char* dirs[] = {"", "../", "../../", "../../../"};
+        const auto isSky = [](const Texture2D& t) { return t.id != 0; };
+        for (int face = 0; face < 6; ++face) {
+            for (const char* dir : dirs) {
+                std::string path = std::string(dir) + "sky1/" + names[face];
+                if (FileExists(path.c_str())) {
+                    Texture2D tex = LoadTexture(path.c_str());
+                    if (tex.id != 0) {
+                        Texture2D* slots[6] = {&sky.front, &sky.right, &sky.left, &sky.up, nullptr, nullptr};
+                        if (face < 4) *slots[face] = tex;
+                        else { sky.fallback = Color{140, 170, 220, 255}; }
+                        break;
+                    }
+                }
+            }
+        }
+        sky.any = isSky(sky.front) || isSky(sky.right) || isSky(sky.left) || isSky(sky.up);
+    }
+    return sky;
+}
+
+// Um quad do skybox: corners em ordem (bl, br, tr, tl); uv idem. Faces sem
+// textura recebem a cor sólida do fallback.
+void DrawSkyQuad(const Vector3 corners[4], const float uv[4][2], bool textured,
+                 const Texture2D& tex, Color solid) {
+    rlSetTexture(textured ? tex.id : 0);
+    rlBegin(RL_QUADS);
+    if (textured) rlColor4ub(255, 255, 255, 255);
+    else rlColor4ub(solid.r, solid.g, solid.b, solid.a);
+    for (int i = 0; i < 4; ++i) rlTexCoord2f(uv[i][0], uv[i][1]), rlVertex3f(corners[i].x, corners[i].y, corners[i].z);
+    rlEnd();
+    rlSetTexture(0);
+}
+
+void DrawSkybox(Vector3 cameraPosition, Color skyColor) {
+    const SkyImages& sky = SkyLoader();
+    if (!sky.any) return;
+    const float d = 450.0f;  // dentro do far plane da câmera padrão
+    const auto V = [&](float x, float y, float z) {
+        return Vector3Add(cameraPosition, Vector3{x, y, z});
+    };
+    // Frente (+Z): o referencial é visto de dentro => mapeia direita=-X.
+    {
+        const Vector3 c[4] = {V(+d, -d, +d), V(-d, -d, +d), V(-d, +d, +d), V(+d, +d, +d)};
+        const float uvp[4][2] = {{0,1},{1,1},{1,0},{0,0}};
+        DrawSkyQuad(c, uvp, sky.front.id != 0, sky.front, skyColor);
+    }
+    {   // Trás (-Z)
+        const Vector3 c[4] = {V(-d, -d, -d), V(+d, -d, -d), V(+d, +d, -d), V(-d, +d, -d)};
+        const float uvp[4][2] = {{0,1},{1,1},{1,0},{0,0}};
+        DrawSkyQuad(c, uvp, false, sky.front, skyColor);
+    }
+    {   // Direita (+X)
+        const Vector3 c[4] = {V(+d, -d, -d), V(+d, -d, +d), V(+d, +d, +d), V(+d, +d, -d)};
+        const float uvp[4][2] = {{0,1},{1,1},{1,0},{0,0}};
+        DrawSkyQuad(c, uvp, sky.right.id != 0, sky.right, skyColor);
+    }
+    {   // Esquerda (-X)
+        const Vector3 c[4] = {V(-d, -d, +d), V(-d, -d, -d), V(-d, +d, -d), V(-d, +d, +d)};
+        const float uvp[4][2] = {{0,1},{1,1},{1,0},{0,0}};
+        DrawSkyQuad(c, uvp, sky.left.id != 0, sky.left, skyColor);
+    }
+    {   // Cima (+Y) e Baixo (-Y): fallback sólido quando não há textura.
+        const Vector3 top[4] = {V(-d, +d, +d), V(+d, +d, +d), V(+d, +d, -d), V(-d, +d, -d)};
+        const float uvp[4][2] = {{0,0},{1,0},{1,1},{0,1}};
+        DrawSkyQuad(top, uvp, sky.up.id != 0, sky.up, skyColor);
+        const Vector3 bottom[4] = {V(-d, -d, -d), V(+d, -d, -d), V(+d, -d, +d), V(-d, -d, +d)};
+        DrawSkyQuad(bottom, uvp, false, sky.up, skyColor);
+    }
+}
+
 void DrawShadedBox(Vector3 center, Vector3 size, Quaternion rotation, Color color,
                    Vector3 lightDirection, float sunIntensity, float brightness) {
+    color = ApplyFog(color, center);
     const Vector3 half = Vector3Scale(size, 0.5f);
     const Vector3 localCorners[8] = {
         {-half.x, -half.y, -half.z}, {half.x, -half.y, -half.z},
@@ -117,6 +235,7 @@ void DrawRotatedBoxWires(Vector3 center, Vector3 size, Quaternion rotation, Colo
 // Esfera facetada com sombreamento por quad. Suficiente para o estilo classico.
 void DrawShadedSphere(Vector3 center, float radius, Color color, Vector3 lightDirection,
                       float sunIntensity, float brightness) {
+    color = ApplyFog(color, center);
     constexpr int rings = 7;
     constexpr int slices = 12;
     rlBegin(RL_TRIANGLES);
@@ -267,6 +386,7 @@ Mesh BuildStudMesh(Vector3 size) {
 // Malha fechada, sem emendas, custo comparável à esfera facetada existente.
 void DrawShadedRoundedBlocky(Vector3 center, Vector3 size, Quaternion rotation, Color color,
                              Vector3 lightDirection, float sunIntensity, float brightness) {
+    color = ApplyFog(color, center);
     constexpr int rings = 6;
     constexpr int slices = 14;
     constexpr float exponent = 0.444f;  // 2/n com n ~4.5
@@ -431,7 +551,8 @@ void SceneRenderer::drawBaseplate(const Part& baseplate, Vector3 lightDirection,
     ensureStudMesh(baseplate);
     const StudMeshEntry& entry = studMeshes_[baseplate.id()];
     if (entry.valid) {
-        studMaterial_.maps[MATERIAL_MAP_DIFFUSE].color = MaterialColor(baseplate);
+        // Fog aplicado ao material cacheado (base é grande: aproxima pelo centro).
+        studMaterial_.maps[MATERIAL_MAP_DIFFUSE].color = ApplyFog(MaterialColor(baseplate), baseplate.position());
         const Matrix transform = MatrixMultiply(
             QuaternionToMatrix(rotation),
             MatrixTranslate(baseplate.position().x, baseplate.position().y,
@@ -530,8 +651,22 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
                                                  : Vector3{-0.45f, -1.0f, -0.35f};
     lightDirection = Vector3Normalize(Vector3Negate(lightDirection));
 
+    // Fog por distância e skybox da câmera: editor e Play passam por aqui.
+    gFog.camera = camera.position;
+    gFog.color = lighting != nullptr ? lighting->fogColor() : sky;
+    gFog.density = lighting != nullptr ? lighting->fogDensity() : 0.0f;
+    gFog.enabled = gFog.density > 0.0f;
+    const bool skyboxReady = SkyLoader().any;
+
     ClearBackground(sky);
-    DrawRectangleGradientV(0, 0, width, height, sky, Shade(sky, 1.22f));
+    if (skyboxReady) {
+        // Skybox: depth test off preserva o fundo puro; geometria cobre depois.
+        rlDisableDepthTest();
+        DrawSkybox(camera.position, sky);
+        rlEnableDepthTest();
+    } else {
+        DrawRectangleGradientV(0, 0, width, height, sky, Shade(sky, 1.22f));
+    }
 
     BeginMode3D(camera);
     rlEnableDepthTest();

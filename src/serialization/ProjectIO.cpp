@@ -52,6 +52,8 @@ struct ParsedLighting {
     Vector3 sunDirection{-0.45f, -1.0f, -0.35f};
     float sunIntensity = 1.0f;
     float brightness = 1.0f;
+    Color fogColor{120, 180, 240, 255};
+    float fogDensity = 0.0f;
 };
 
 bool ReadFloat(const json& value, const char* field, float& out, std::string& error) {
@@ -223,6 +225,18 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
             error = prefix + error;
             return false;
         }
+        // Campos novos são opcionais: projetos v1/v2 carregam sem fog.
+        std::string ignored;
+        if (const json* fog = FindField(value, "fogColor", ignored); fog != nullptr)
+            if (!ReadColor(*fog, "fogColor", lighting.fogColor, error)) {
+                error = prefix + error;
+                return false;
+            }
+        if (const json* fogDensity = FindField(value, "fogDensity", ignored); fogDensity != nullptr)
+            if (!ReadFloat(*fogDensity, "fogDensity", lighting.fogDensity, error)) {
+                error = prefix + error;
+                return false;
+            }
         hasLighting = true;
         return true;
     }
@@ -327,7 +341,10 @@ std::string toJson(const Scene& scene) {
                              lighting.ambientColor().b, lighting.ambientColor().a}},
                            {"sunDirection", {sun.x, sun.y, sun.z}},
                            {"sunIntensity", lighting.sunIntensity()},
-                           {"brightness", lighting.brightness()}});
+                           {"brightness", lighting.brightness()},
+                           {"fogColor", {lighting.fogColor().r, lighting.fogColor().g,
+                                         lighting.fogColor().b, lighting.fogColor().a}},
+                           {"fogDensity", lighting.fogDensity()}});
     }
 
     std::function<void(const Instance*)> append = [&](const Instance* node) {
