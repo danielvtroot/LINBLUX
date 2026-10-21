@@ -7,6 +7,12 @@
 
 namespace loblox {
 
+// Modo de renderização do céu.
+enum class SkyMode {
+    Classic,      // Skybox cúbico (legado)
+    Atmospheric   // Skydome hemisférico com gradiente atmosférico
+};
+
 // Servico de iluminacao/ceu. Guarda apenas configuracao; a renderizacao le
 // estes valores a cada frame (nada de recursos graficos aqui).
 class Lighting : public Instance {
@@ -35,6 +41,26 @@ public:
     bool skyboxEnabled() const { return skyboxEnabled_; }
     void setSkyboxEnabled(bool enabled) { skyboxEnabled_ = enabled; }
 
+    // Modo de céu: Classic (cubo) ou Atmospheric (skydome hemisférico).
+    SkyMode skyMode() const { return skyMode_; }
+    void setSkyMode(SkyMode mode) { skyMode_ = mode; }
+
+    // Cor do horizonte (usada no modo Atmospheric para gradiente vertical).
+    Color horizonColor() const { return horizonColor_; }
+    void setHorizonColor(Color color) { horizonColor_ = color; }
+
+    // Força do efeito atmosférico (0 = desligado, 1 = gradiente forte).
+    float atmosphereStrength() const { return atmosphereStrength_; }
+    void setAtmosphereStrength(float strength) {
+        atmosphereStrength_ = std::isfinite(strength) ? std::clamp(strength, 0.0f, 1.0f) : 0.0f;
+    }
+
+    // Rotação do céu em graus ao redor do eixo Y (apenas modo Atmospheric).
+    float skyRotation() const { return skyRotation_; }
+    void setSkyRotation(float degrees) {
+        skyRotation_ = std::isfinite(degrees) ? degrees : 0.0f;
+    }
+
     Color fogColor() const { return fogColor_; }
     void setFogColor(Color color) { fogColor_ = color; }
 
@@ -53,6 +79,10 @@ private:
     Color fogColor_{120, 180, 240, 255};
     float fogDensity_ = 0.0f;
     bool skyboxEnabled_ = true;
+    SkyMode skyMode_ = SkyMode::Atmospheric;
+    Color horizonColor_{180, 200, 230, 255};
+    float atmosphereStrength_ = 0.6f;
+    float skyRotation_ = 0.0f;
 };
 
 }  // namespace loblox

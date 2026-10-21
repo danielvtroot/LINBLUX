@@ -55,6 +55,10 @@ struct ParsedLighting {
     Color fogColor{120, 180, 240, 255};
     float fogDensity = 0.0f;
     bool skyboxEnabled = true;
+    int skyMode = 1;              // 0=Classic, 1=Atmospheric
+    Color horizonColor{180, 200, 230, 255};
+    float atmosphereStrength = 0.6f;
+    float skyRotation = 0.0f;
 };
 
 bool ReadFloat(const json& value, const char* field, float& out, std::string& error) {
@@ -245,6 +249,32 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
             }
             lighting.skyboxEnabled = skybox->get<bool>();
         }
+        // Novos campos do modo Atmospheric (opcionais, compatíveis com projetos antigos).
+        if (const json* skyMode = FindField(value, "skyMode", ignored); skyMode != nullptr) {
+            if (!skyMode->is_number_integer()) {
+                error = prefix + "'skyMode' deve ser inteiro (0=Classic, 1=Atmospheric)";
+                return false;
+            }
+            lighting.skyMode = std::clamp(skyMode->get<int>(), 0, 1);
+        }
+        if (const json* horizon = FindField(value, "horizonColor", ignored); horizon != nullptr) {
+            if (!ReadColor(*horizon, "horizonColor", lighting.horizonColor, error)) {
+                error = prefix + error;
+                return false;
+            }
+        }
+        if (const json* atmo = FindField(value, "atmosphereStrength", ignored); atmo != nullptr) {
+            if (!ReadFloat(*atmo, "atmosphereStrength", lighting.atmosphereStrength, error)) {
+                error = prefix + error;
+                return false;
+            }
+        }
+        if (const json* skyRot = FindField(value, "skyRotation", ignored); skyRot != nullptr) {
+            if (!ReadFloat(*skyRot, "skyRotation", lighting.skyRotation, error)) {
+                error = prefix + error;
+                return false;
+            }
+        }
         hasLighting = true;
         return true;
     }
@@ -353,7 +383,12 @@ std::string toJson(const Scene& scene) {
                            {"fogColor", {lighting.fogColor().r, lighting.fogColor().g,
                                          lighting.fogColor().b, lighting.fogColor().a}},
                            {"fogDensity", lighting.fogDensity()},
-                           {"skyboxEnabled", lighting.skyboxEnabled()}});
+                           {"skyboxEnabled", lighting.skyboxEnabled()},
+                           {"skyMode", static_cast<int>(lighting.skyMode())},
+                           {"horizonColor", {lighting.horizonColor().r, lighting.horizonColor().g,
+                                             lighting.horizonColor().b, lighting.horizonColor().a}},
+                           {"atmosphereStrength", lighting.atmosphereStrength()},
+                           {"skyRotation", lighting.skyRotation()}});
     }
 
     std::function<void(const Instance*)> append = [&](const Instance* node) {
@@ -580,6 +615,10 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
     staged.lighting()->setFogColor(lighting.fogColor);
     staged.lighting()->setFogDensity(lighting.fogDensity);
     staged.lighting()->setSkyboxEnabled(lighting.skyboxEnabled);
+    staged.lighting()->setSkyMode(static_cast<loblox::SkyMode>(lighting.skyMode));
+    staged.lighting()->setHorizonColor(lighting.horizonColor);
+    staged.lighting()->setAtmosphereStrength(lighting.atmosphereStrength);
+    staged.lighting()->setSkyRotation(lighting.skyRotation);
     for (const auto& value:root["objects"]) if (value["class"]=="Workspace" && value.contains("fallenPartsDestroyHeight")) {
         float height;
         if (version<3 || !ReadFloat(value["fallenPartsDestroyHeight"],"fallenPartsDestroyHeight",height,error) ||

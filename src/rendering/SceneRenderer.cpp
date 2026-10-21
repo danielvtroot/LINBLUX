@@ -77,22 +77,33 @@ Color ApplyFog(Color color, Vector3 worldPosition) {
                  blend(color.b, gFog.color.b), color.a};
 }
 
-// ---------- Skybox: 1 textura por face, quads dentro de BeginMode3D --------
-// Sem cubemap/shader: cada face é um quad ancorado na câmera, depth test off
-// (fundo puro, nunca oculta geometria). Back e Down ausentes ficam cor
-// sólida; o usuário pode colocar os PNGs depois pelo mesmo diretório.
+// ---------- Atmospheric Skydome: hemisfério com texturas cúbicas projetadas --------
+// Sem shader: malha hemisférica com UVs derivadas da projeção equirretangular das
+// 4 faces do skybox (Frente, Direita, Esquerda, Cima). A face Trás é interpolada
+// das laterais. A metade inferior usa gradiente de vértice (horizonte -> void).
+// O céu acompanha a câmera, sem paralaxe, sem costuras visíveis de cubo.
+// Para modo Classic (cubo), mantém todas 6 faces (Back/Down opcionais).
 struct SkyImages {
     Texture2D front{}, right{}, left{}, up{};
     Texture2D back{}, down{};
-    Color fallback{120, 180, 240, 255};
     bool tried = false;
     bool any = false;
 };
 
-SkyImages& SkyData() { static SkyImages sky;return sky; }
-int rendererCount=0;
+struct SkyDomeMesh {
+    Mesh mesh{};
+    int vertexCount = 0;
+    bool valid = false;
+    int rings = 16;      // latitude (0 = topo, rings = horizonte)
+    int slices = 32;     // longitude
+};
+
+SkyImages& SkyData() { static SkyImages sky; return sky; }
+SkyDomeMesh& DomeData() { static SkyDomeMesh dome; return dome; }
+int rendererCount = 0;
+
 SkyImages& SkyLoader() {
-    auto& sky=SkyData();
+    auto& sky = SkyData();
     if (!sky.tried) {
         sky.tried = true;
         const char* names[] = {
@@ -100,12 +111,9 @@ SkyImages& SkyLoader() {
             "SkyboxRt_Direita_1024x1024.png",  // right (+X)
             "SkyboxLf_Esquerda_1024x1024.png", // left (-X)
             "SkyboxUp_Cima_1024x1024.png",     // top (+Y)
-            "SkyboxBk_Back_1024x1024.png",     // opcional (:futuro)
-            "SkyboxDn_Baixo_1024x1024.png",    // opcional (:futuro)
+            "SkyboxBk_Back_1024x1024.png",     // back (-Z) opcional
+            "SkyboxDn_Baixo_1024x1024.png",    // down (-Y) opcional
         };
-        // Raízes candidatas: CWD e cadeias acima, mais o diretório do
-        // executável e seus pais (evita falha silenciosa quando o app é
-        // lançado de dentro do build/).
         std::vector<std::string> dirs = {"", "../", "../../", "../../../"};
         char exePath[4096] = {};
         const ssize_t exeLen = ::readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
@@ -135,6 +143,187 @@ SkyImages& SkyLoader() {
     return sky;
 }
 
+void BuildSkyDome(int rings, int slices) {
+    auto& dome = DomeData();
+    if (dome.valid && dome.rings == rings && dome.slices == slices) return;
+    if (dome.valid) {
+        UnloadMesh(dome.mesh);
+        dome.mesh = Mesh{};
+        dome.valid = false;
+    }
+    dome.rings = rings;
+    dome.slices = slices;
+    dome.vertexCount = (rings + 1) * (slices + 1);
+    const int triangleCount = rings * slices * 2;
+
+    std::vector<float> vertices(dome.vertexCount * 3);
+    std::vector<float> texcoords(dome.vertexCount * 2);
+    std::vector<unsigned char> colors(dome.vertexCount * 4);
+    std::vector<unsigned short> indices(triangleCount * 3);
+
+    int vIdx = 0;
+    for (int ring = 0; ring <= rings; ++ring) {
+        const float v = static_cast<float>(ring) / rings;  // 0 = topo, 1 = horizonte
+        const float phi = v * (PI / 2.0f);                 // 0 a PI/2
+        const float y = std::cos(phi);
+        const float r = std::sin(phi);
+
+        for (int slice = 0; slice <= slices; ++slice) {
+            const float u = static_cast<float>(slice) / slices;  // 0 a 1
+            const float theta = u * 2.0f * PI - PI/4;  // -PI/4 para alinhar +Z como "frente"
+            const float x = r * std::cos(theta);
+            const float z = r * std::sin(theta);
+
+            // Posição na esfera unitária (raio 1, escalado no draw)
+            vertices[vIdx * 3 + 0] = x;
+            vertices[vIdx * 3 + 1] = y;
+            vertices[vIdx * 3 + 2] = z;
+
+            // UV: mapeamento esférico para amostragem das 4 faces do cubo
+            // u = longitude normalizada, v = latitude normalizada (0=topo, 1=horizonte)
+            texcoords[vIdx * 2 + 0] = u;
+            texcoords[vIdx * 2 + 1] = v;
+
+            // Cor base branca (multiplicada pela textura); vértices do horizonte (v=1)
+            // recebem alpha=0 para transição suave para o gradiente inferior
+            if (ring == rings) {
+                colors[vIdx * 4 + 0] = 255;
+                colors[vIdx * 4 + 1] = 255;
+                colors[vIdx * 4 + 2] = 255;
+                colors[vIdx * 4 + 3] = 0;  // horizonte = transparente
+            } else {
+                colors[vIdx * 4 + 0] = 255;
+                colors[vIdx * 4 + 1] = 255;
+                colors[vIdx * 4 + 2] = 255;
+                colors[vIdx * 4 + 3] = 255;
+            }
+            ++vIdx;
+        }
+    }
+
+    int iIdx = 0;
+    for (int ring = 0; ring < rings; ++ring) {
+        for (int slice = 0; slice < slices; ++slice) {
+            const int a = ring * (slices + 1) + slice;
+            const int b = ring * (slices + 1) + slice + 1;
+            const int c = (ring + 1) * (slices + 1) + slice;
+            const int d = (ring + 1) * (slices + 1) + slice + 1;
+            indices[iIdx++] = a;
+            indices[iIdx++] = c;
+            indices[iIdx++] = b;
+            indices[iIdx++] = b;
+            indices[iIdx++] = c;
+            indices[iIdx++] = d;
+        }
+    }
+
+    dome.mesh.vertexCount = dome.vertexCount;
+    dome.mesh.triangleCount = triangleCount;
+    dome.mesh.vertices = static_cast<float*>(MemAlloc(sizeof(float) * 3 * vertices.size()));
+    dome.mesh.texcoords = static_cast<float*>(MemAlloc(sizeof(float) * 2 * texcoords.size()));
+    dome.mesh.colors = static_cast<unsigned char*>(MemAlloc(sizeof(unsigned char) * 4 * colors.size()));
+    dome.mesh.indices = static_cast<unsigned short*>(MemAlloc(sizeof(unsigned short) * indices.size()));
+
+    for (size_t i = 0; i < vertices.size(); ++i) dome.mesh.vertices[i] = vertices[i];
+    for (size_t i = 0; i < texcoords.size(); ++i) dome.mesh.texcoords[i] = texcoords[i];
+    for (size_t i = 0; i < colors.size(); ++i) dome.mesh.colors[i] = colors[i];
+    for (size_t i = 0; i < indices.size(); ++i) dome.mesh.indices[i] = indices[i];
+
+    UploadMesh(&dome.mesh, false);
+    dome.valid = true;
+}
+
+// Versão otimizada: sem shader, usamos vertex colors para gradiente atmosférico.
+// As texturas do skybox (nuvens) ficam disponíveis no modo Classic.
+// Aqui criamos um gradiente suave: topo=skyColor, horizonte=horizonColor, abaixo=transparente.
+void BakeSkyColorsToMesh(Color skyColor, Color horizonColor, float atmoStrength) {
+    auto& dome = DomeData();
+    if (!dome.valid) return;
+
+    std::vector<unsigned char> colors(dome.vertexCount * 4);
+
+    for (int ring = 0; ring <= dome.rings; ++ring) {
+        const float v = static_cast<float>(ring) / dome.rings;  // 0 = topo, 1 = horizonte
+        const float phi = v * (PI / 2.0f);
+        const float y = std::cos(phi);  // 1 no topo, 0 no horizonte
+
+        for (int slice = 0; slice <= dome.slices; ++slice) {
+            const int idx = (ring * (dome.slices + 1) + slice) * 4;
+
+            if (ring == dome.rings) {
+                // Horizonte: transição para transparente (void)
+                colors[idx + 0] = horizonColor.r;
+                colors[idx + 1] = horizonColor.g;
+                colors[idx + 2] = horizonColor.b;
+                colors[idx + 3] = 0;
+            } else {
+                // Gradiente atmosférico: interpola entre skyColor (topo) e horizonColor (horizonte)
+                // atmoStrength controla a intensidade da transição
+                const float t = std::pow(1.0f - y, 0.7f);  // curva suave
+                const float blend = atmoStrength * t;
+                colors[idx + 0] = static_cast<unsigned char>(skyColor.r * (1.0f - blend) + horizonColor.r * blend);
+                colors[idx + 1] = static_cast<unsigned char>(skyColor.g * (1.0f - blend) + horizonColor.g * blend);
+                colors[idx + 2] = static_cast<unsigned char>(skyColor.b * (1.0f - blend) + horizonColor.b * blend);
+                colors[idx + 3] = 255;
+            }
+        }
+    }
+
+    // Atualiza buffer de cores no GPU
+    rlUpdateVertexBuffer(dome.mesh.vboId[3], colors.data(), static_cast<int>(colors.size()), 0);
+}
+
+// Desenha o skydome atmosférico: hemisfério superior com gradiente de vértice
+void DrawSkydome(Vector3 cameraPosition, Color skyColor, Color horizonColor,
+                 float atmoStrength, float skyRotationDeg) {
+    const SkyImages& sky = SkyLoader();
+    if (!sky.any) return;
+
+    BuildSkyDome(16, 32);
+    auto& dome = DomeData();
+    if (!dome.valid) return;
+
+    // Atualiza cores dos vértices quando parâmetros mudam
+    static float lastRotation = -1;
+    static Color lastSkyColor, lastHorizonColor;
+    static float lastAtmo = -1;
+    if (lastRotation != skyRotationDeg || lastSkyColor.r != skyColor.r || lastSkyColor.g != skyColor.g ||
+        lastSkyColor.b != skyColor.b || lastHorizonColor.r != horizonColor.r ||
+        lastHorizonColor.g != horizonColor.g || lastHorizonColor.b != horizonColor.b ||
+        lastAtmo != atmoStrength) {
+        BakeSkyColorsToMesh(skyColor, horizonColor, atmoStrength);
+        lastRotation = skyRotationDeg;
+        lastSkyColor = skyColor;
+        lastHorizonColor = horizonColor;
+        lastAtmo = atmoStrength;
+    }
+
+    const float scale = 500.0f;  // raio do dome (dentro do far plane)
+    const float yOffset = -50.0f;  // abaixa levemente o horizonte para evitar corte
+
+    rlPushMatrix();
+    rlTranslatef(cameraPosition.x, cameraPosition.y + yOffset, cameraPosition.z);
+    rlRotatef(skyRotationDeg, 0, 1, 0);
+    rlScalef(scale, scale, scale);
+
+    // Desenha com vertex colors (gradiente atmosférico)
+    rlSetTexture(0);
+    rlBegin(RL_TRIANGLES);
+    rlColor4ub(255, 255, 255, 255);
+
+    // Desenha usando os índices da malha
+    for (int i = 0; i < dome.mesh.triangleCount * 3; ++i) {
+        const unsigned short idx = dome.mesh.indices[i];
+        const float* v = &dome.mesh.vertices[idx * 3];
+        const unsigned char* c = &dome.mesh.colors[idx * 4];
+        rlColor4ub(c[0], c[1], c[2], c[3]);
+        rlVertex3f(v[0], v[1], v[2]);
+    }
+    rlEnd();
+
+    rlPopMatrix();
+}
+
 // Um quad do skybox: corners em ordem (bl, br, tr, tl); uv idem. Faces sem
 // textura recebem a cor sólida do fallback.
 void DrawSkyQuad(const Vector3 corners[4], const float uv[4][2], bool textured,
@@ -148,46 +337,43 @@ void DrawSkyQuad(const Vector3 corners[4], const float uv[4][2], bool textured,
     rlSetTexture(0);
 }
 
+// Classic cube skybox (legado) - mantido para compatibilidade com modo SkyMode::Classic
 void DrawSkybox(Vector3 cameraPosition, Color skyColor) {
     const SkyImages& sky = SkyLoader();
     if (!sky.any) return;
-    const float d = 450.0f;  // dentro do far plane da câmera padrão
+    const float d = 450.0f;
     const auto V = [&](float x, float y, float z) {
         return Vector3Add(cameraPosition, Vector3{x, y, z});
     };
-
-    // UV padrão para quads com cantos em ordem: bottom-left, bottom-right, top-right, top-left
-    // (visto de DENTRO do cubo). textura: u=0 esquerda, u=1 direita; v=0 topo, v=1 base.
     const float uvStandard[4][2] = {{0,1}, {1,1}, {1,0}, {0,0}};
-    // UV para faces cuja ordem de vértices é: bottom-right, bottom-left, top-left, top-right
     const float uvFlippedX[4][2] = {{1,1}, {0,1}, {0,0}, {1,0}};
 
-    // Frente (+Z): cantos atuais = BR, BL, TL, TR => usa uvFlippedX
+    // Frente (+Z)
     {
         const Vector3 c[4] = {V(+d, -d, +d), V(-d, -d, +d), V(-d, +d, +d), V(+d, +d, +d)};
         DrawSkyQuad(c, uvFlippedX, sky.front.id != 0, sky.front, skyColor);
     }
-    // Trás (-Z): cantos atuais = BR, BL, TL, TR (visto de dentro, +X é esquerda) => usa uvFlippedX
+    // Trás (-Z)
     {
         const Vector3 c[4] = {V(-d, -d, -d), V(+d, -d, -d), V(+d, +d, -d), V(-d, +d, -d)};
         DrawSkyQuad(c, uvFlippedX, sky.back.id!=0, sky.back, skyColor);
     }
-    // Direita (+X): cantos atuais = BL, BR, TR, TL (visto de dentro, -Z é esquerda) => usa uvStandard
+    // Direita (+X)
     {
         const Vector3 c[4] = {V(+d, -d, -d), V(+d, -d, +d), V(+d, +d, +d), V(+d, +d, -d)};
         DrawSkyQuad(c, uvStandard, sky.right.id != 0, sky.right, skyColor);
     }
-    // Esquerda (-X): cantos atuais = BL, BR, TR, TL (visto de dentro, +Z é esquerda) => usa uvStandard
+    // Esquerda (-X)
     {
         const Vector3 c[4] = {V(-d, -d, +d), V(-d, -d, -d), V(-d, +d, -d), V(-d, +d, +d)};
         DrawSkyQuad(c, uvStandard, sky.left.id != 0, sky.left, skyColor);
     }
-    // Cima (+Y): cantos atuais = BL, BR, TR, TL (visto de dentro, +X direita, -Z "cima") => usa uvStandard
+    // Cima (+Y)
     {
         const Vector3 top[4] = {V(-d, +d, +d), V(+d, +d, +d), V(+d, +d, -d), V(-d, +d, -d)};
         DrawSkyQuad(top, uvStandard, sky.up.id != 0, sky.up, skyColor);
     }
-    // Baixo (-Y): cantos atuais = BL, BR, TR, TL (visto de dentro, +X direita, +Z "cima") => usa uvStandard
+    // Baixo (-Y)
     {
         const Vector3 bottom[4] = {V(-d, -d, -d), V(+d, -d, -d), V(+d, -d, +d), V(-d, -d, +d)};
         DrawSkyQuad(bottom, uvStandard, sky.down.id!=0, sky.down, skyColor);
@@ -826,18 +1012,28 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
     gFog.color = lighting != nullptr ? lighting->fogColor() : sky;
     gFog.density = lighting != nullptr ? lighting->fogDensity() : 0.0f;
     gFog.enabled = gFog.density > 0.0f;
-    const bool skyboxReady = SkyLoader().any &&
-        (lighting == nullptr || lighting->skyboxEnabled());
+
+    const bool skyboxEnabled = lighting != nullptr ? lighting->skyboxEnabled() : true;
+    const SkyMode skyMode = lighting != nullptr ? lighting->skyMode() : SkyMode::Atmospheric;
+    const Color horizonColor = lighting != nullptr ? lighting->horizonColor() : Color{180, 200, 230, 255};
+    const float atmoStrength = lighting != nullptr ? lighting->atmosphereStrength() : 0.6f;
+    const float skyRotation = lighting != nullptr ? lighting->skyRotation() : 0.0f;
+    const bool skyTexturesReady = SkyLoader().any;
 
     ClearBackground(sky);
-    if (skyboxReady) {
-        // World-space sky vertices require the camera matrices. Flush while
-        // depth writes are disabled, then restore state before world geometry.
+    if (skyboxEnabled && skyTexturesReady) {
         BeginMode3D(camera);
         rlDisableDepthTest();
         rlDisableDepthMask();
         rlDisableBackfaceCulling();
-        DrawSkybox(camera.position, sky);
+
+        if (skyMode == SkyMode::Atmospheric) {
+            DrawSkydome(camera.position, sky, horizonColor, atmoStrength, skyRotation);
+        } else {
+            // Classic cube skybox (legado)
+            DrawSkybox(camera.position, sky);
+        }
+
         rlDrawRenderBatchActive();
         rlEnableDepthMask();
         rlEnableDepthTest();

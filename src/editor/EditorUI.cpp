@@ -1,5 +1,6 @@
 #include "editor/EditorUI.h"
 #include "editor/StudioTheme.h"
+#include "game/ImageAssets.h"
 
 #include "core/Diagnostics.h"
 
@@ -35,21 +36,10 @@ namespace loblox {
 // usa o fallback vetorial existente.
 const LobloxLogo& LoadLobloxLogo() {
     static LobloxLogo logo;
-    static bool attempted = false;
-    if (!attempted) {
-        attempted = true;
-        for (const char* path : {"loblox.png", "../loblox.png", "../../loblox.png", "../../../loblox.png"}) {
-            if (!FileExists(path)) continue;
-            Texture2D texture = LoadTexture(path);
-            if (texture.id != 0) {
-                logo.id = static_cast<unsigned long long>(texture.id);
-                logo.width = static_cast<float>(texture.width);
-                logo.height = static_cast<float>(texture.height);
-                logo.ok = true;
-                break;
-            }
-        }
-    }
+    static const std::string path=game::BuiltinAssetPath("loblox.png");
+    const Texture2D texture=game::AssetTexture(path);
+    logo.id=texture.id;logo.width=static_cast<float>(texture.width);
+    logo.height=static_cast<float>(texture.height);logo.ok=texture.id!=0;
     return logo;
 }
 
@@ -1757,11 +1747,38 @@ void EditorUI::drawLightingProperties() {
     if (ImGui::SliderFloat("FogDensity", &fogDensity, 0.0f, 1.0f, "%.3f")) {
         lighting->setFogDensity(fogDensity);
     }
+
+    ImGui::SeparatorText("Sky");
     bool skyboxEnabled = lighting->skyboxEnabled();
     if (ImGui::Checkbox("Skybox enabled", &skyboxEnabled)) {
         lighting->setSkyboxEnabled(skyboxEnabled);
         if (!skyboxEnabled)
             ImGui::SetTooltip("O fundo volta para a cor sólida do SkyColor");
+    }
+
+    const char* skyModeNames[] = {"Classic (Cube)", "Atmospheric (Dome)"};
+    int skyMode = static_cast<int>(lighting->skyMode());
+    if (ImGui::Combo("Sky Mode", &skyMode, skyModeNames, IM_ARRAYSIZE(skyModeNames))) {
+        lighting->setSkyMode(static_cast<SkyMode>(skyMode));
+    }
+
+    float horizon[3] = {lighting->horizonColor().r / 255.0f,
+                        lighting->horizonColor().g / 255.0f,
+                        lighting->horizonColor().b / 255.0f};
+    if (ImGui::ColorEdit3("HorizonColor", horizon)) {
+        lighting->setHorizonColor(Color{static_cast<unsigned char>(std::lround(horizon[0] * 255.0f)),
+                                        static_cast<unsigned char>(std::lround(horizon[1] * 255.0f)),
+                                        static_cast<unsigned char>(std::lround(horizon[2] * 255.0f)), 255});
+    }
+
+    float atmoStrength = lighting->atmosphereStrength();
+    if (ImGui::SliderFloat("Atmosphere Strength", &atmoStrength, 0.0f, 1.0f, "%.2f")) {
+        lighting->setAtmosphereStrength(atmoStrength);
+    }
+
+    float skyRot = lighting->skyRotation();
+    if (ImGui::DragFloat("Sky Rotation (deg)", &skyRot, 0.5f, -360.0f, 360.0f, "%.1f")) {
+        lighting->setSkyRotation(skyRot);
     }
 }
 
