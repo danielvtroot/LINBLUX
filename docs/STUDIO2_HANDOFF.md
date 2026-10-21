@@ -33,14 +33,27 @@ Testes: 1.045 checks Studio headless; 1.000 nós create/validate/round-trip em
 passaram; teste GUI novo cobre botões Folder, F2, drag/drop e save/reload.
 A fixture usa press/release entre frames, não xdotool key instantâneo.
 
-Infraestrutura de Script/LocalScript/ModuleScript e containers de scripts
-persistidos está preparada. A VM real e Script Editor estão em implementação;
-isso ainda NÃO comprova execução Lua. Instalada liblua5.4-dev (biblioteca
-runtime 5.4 já existia). Lua é dependência pequena, não Luau/engine Roblox.
+Checkpoint Explorer/Properties: `6bfa1fa` (após baseline `8c003f8`).
+Lua 5.4 real integrado ao Play/Stop: módulos lazy/cacheados, tarefas/eventos,
+validações, handles por ID/geração, source persistido e Script Editor/Output.
+Quota de 8 MiB Lua/100k instruções por resume, limites de tarefas/conexões,
+sem bibliotecas de SO/arquivos/debug/package e sem pcall para capturar quotas.
+Sandbox in-process não é proteção absoluta de código hostil (ver guia).
+Instalada liblua5.4-dev (runtime já existia), sem nova dependência pesada.
+
+Studio headless: 1.082 checks, inclusive loops, OOM, ModuleScript, eventos,
+Destroy, espera e Play/Stop repetidos. ASan/UBSan detect_leaks=1 passou essa
+suíte sem falhas. GUI Studio: 80 checks por xdotool, incluindo código digitado
+na interface → Ctrl+S → Play → transform runtime alterado → Stop → mapa autoral
+intacto → reload do source. Captura: /tmp/loblox-studio-ui-psPuFG/script.png.
+Testes de GUI usam lotes de até 8 caracteres por frame para não lotar a fila
+de caracteres raylib numa fixture síncrona. Não é truncamento do editor real.
 
 Limites atuais: Ctrl+C/V referencia a origem viva, não snapshot independente;
 sem seleção múltipla nem undo/redo ainda. Storage guarda scripts/módulos e
 folders, não Parts físicas fora de Workspace. Rig continua asset de autoria,
 não uma segunda hierarquia de Instances. Visuais/imagens/skybox/vida/Shift Lock
-da missão nova ainda pendentes. Próximo: LuaRuntime + bindings + scheduler,
-Script Editor/Output, teste de Play, erros, loops, módulos e Stop.
+da missão nova ainda pendentes. Script Editor ainda não tem syntax highlight,
+autocomplete ou navegação de busca; linhas/Tab/edição/undo de texto estão reais.
+Próximo: Animator:SetAnimation com IDs locais, Jump asset e scripts padrão,
+depois Health/void/HUD. Guia: docs/STUDIO2_GUIDE.md. Sem push.

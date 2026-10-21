@@ -2,6 +2,8 @@
 #include "scene/Scene.h"
 #include "physics/PhysicsWorld.h"
 #include "imgui.h"
+#include "imgui_internal.h"
+#include "imgui_stdlib.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -57,6 +59,7 @@ void EditorUI::drawInstanceProperties(Instance& object) {
                     if (ImGui::Selectable(label.c_str(),object.parent()==candidate.get())) {
                         std::string error; endGizmoSession(true,"property_parent");
                         if (!scene_.reparent(&object,candidate.get(),error)) setStatus(error,true);
+                        else revealedSelection_=0;
                     }
                     ImGui::PopID();
                 }
@@ -110,7 +113,113 @@ void EditorUI::drawInstanceProperties(Instance& object) {
             ImGui::EndDisabled(); ImGui::EndTable();
         }
     }
+    if (IsScriptClass(object.instanceClass()) && category("Script") && table("Script values")) {
+        auto& script=static_cast<Script&>(object);
+        if (row("Enabled")) ImGui::Checkbox("##Enabled",&script.enabled);
+        if (row("RunContext")) ImGui::TextWrapped("%s",script.instanceClass()==InstanceClass::ModuleScript?"Module: on require":
+            script.instanceClass()==InstanceClass::LocalScript?"Local player (in process)":"Authoritative (in process)");
+        if (row("Source")) { ImGui::Text("%zu bytes",script.source.size());if(ImGui::SmallButton("Open Script Editor"))openScript(script.id()); }
+        ImGui::EndTable();
+    }
     ImGui::PopID();
     if (ImGui::Button("Focus (F)",{-1,0})) focusSelection();
+}
+
+void EditorUI::insertScript(InstanceClass type) {
+    endGizmoSession(true,"insert_script");
+    auto* parent=scene_.selection();
+    if (!parent || parent==scene_.lighting() || IsScriptClass(parent->instanceClass()))
+        parent=scene_.ensureService(type==InstanceClass::ModuleScript?InstanceClass::ReplicatedStorage:InstanceClass::ServerScriptService);
+    if (auto* script=scene_.createScript(type,parent)) { scene_.select(script);openScript(script->id()); }
+    else setStatus("Esse Parent nao aceita scripts.",true);
+}
+void EditorUI::openScript(InstanceId id) {
+    auto* node=scene_.find(id);if(!node || !IsScriptClass(node->instanceClass()))return;
+    if (!scriptDrafts_.count(id)) scriptDrafts_[id].text=static_cast<Script&>(*node).source;
+    activeScript_=requestedScript_=id;showScriptEditor_=true;scene_.select(node);
+}
+bool EditorUI::commitScriptDrafts(std::string& error) {
+    for(const auto& pair:scriptDrafts_) if (pair.second.dirty) {
+        if (pair.second.text.size()>262144) { error="Script excede 256 KiB; reduza o source antes de salvar/Play.";return false; }
+        if (!scene_.find(pair.first)) continue;
+        if (!IsScriptClass(scene_.find(pair.first)->instanceClass())) {error="Script asset mudou de classe";return false;}
+    }
+    for(const auto& pair:scriptDrafts_) if(pair.second.dirty) {
+        if(auto* node=scene_.find(pair.first))static_cast<Script&>(*node).source=pair.second.text;
+    }
+    return true;
+}
+void EditorUI::drawScriptEditor() {
+    if (!ImGui::FindWindowByName("Script Editor")) {
+        if(auto* view=ImGui::FindWindowByName("Viewport");view && view->DockId) {
+            ImGuiID upper;auto lower=ImGui::DockBuilderSplitNode(view->DockId,ImGuiDir_Down,.5f,nullptr,&upper);
+            ImGui::DockBuilderDockWindow("Viewport",upper);ImGui::DockBuilderDockWindow("Script Editor",lower);
+            ImGui::DockBuilderFinish(ImGui::GetID("LobloxDockspace"));
+        }
+    }
+    ImGui::SetNextWindowSize({750,440},ImGuiCond_FirstUseEver);
+    if(!ImGui::Begin("Script Editor",&showScriptEditor_)){ImGui::End();return;}
+    if(ImGui::Button("New Script"))insertScript();
+    ImGui::SameLine();
+    if(ImGui::Button("New Module"))insertScript(InstanceClass::ModuleScript);
+    ImGui::SameLine();
+    if(ImGui::Button("Save All + Project"))saveCurrentProject();
+    ImGui::SameLine();
+    if(ImGui::Button("Play"))startPlay();
+    ImGui::SameLine();if(ImGui::Button("Output"))showOutput_=true;
+    if(ImGui::BeginTabBar("Scripts",ImGuiTabBarFlags_FittingPolicyScroll)) {
+        for(auto it=scriptDrafts_.begin();it!=scriptDrafts_.end();) {
+            auto* object=scene_.find(it->first);
+            if(!object || !IsScriptClass(object->instanceClass())){it=scriptDrafts_.erase(it);continue;}
+            auto& draft=it->second;const auto label=object->name()+(draft.dirty?" *":"")+"###script"+std::to_string(it->first);
+            const bool active=ImGui::BeginTabItem(label.c_str(),nullptr,requestedScript_==it->first?ImGuiTabItemFlags_SetSelected:0);
+            if(requestedScript_==it->first)requestedScript_=0;
+            if(active) {
+                activeScript_=it->first;
+                ImGui::PushID(static_cast<int>(it->first));
+                if(ImGui::SmallButton("Reveal in Explorer"))scene_.select(object);
+                ImGui::SameLine(); if(ImGui::SmallButton("Revert source")){draft.text=static_cast<Script&>(*object).source;draft.dirty=false;}
+                ImGui::SameLine();ImGui::TextDisabled("%zu / 262144 bytes | Lua 5.4",draft.text.size());
+                ImGui::SetNextItemWidth(180);ImGui::InputTextWithHint("##find","Find text",draft.search,sizeof(draft.search));
+                if(*draft.search) {
+                    const auto found=draft.text.find(draft.search);
+                    ImGui::SameLine();if(found==std::string::npos)ImGui::TextDisabled("Not found");
+                    else ImGui::Text("Line %zu",1+static_cast<std::size_t>(std::count(draft.text.begin(),draft.text.begin()+found,'\n')));
+                }
+                const auto origin=ImGui::GetCursorScreenPos();const float height=std::max(100.f,ImGui::GetContentRegionAvail().y-22);
+                ImGui::Dummy({42,height});ImGui::SameLine();
+                if(ImGui::InputTextMultiline("##source",&draft.text,{-1,height},ImGuiInputTextFlags_AllowTabInput))draft.dirty=true;
+                const auto* state=ImGui::GetInputTextState(ImGui::GetItemID());
+                const float scroll=state?state->Scroll.y:0, line=ImGui::GetTextLineHeight();
+                auto* draw=ImGui::GetWindowDrawList();draw->PushClipRect(origin,{origin.x+40,origin.y+height},true);
+                const auto count=1+std::count(draft.text.begin(),draft.text.end(),'\n');
+                for(int i=std::max(0,int(scroll/line));i<count && (i*line-scroll)<height;++i) {
+                    char number[16];std::snprintf(number,sizeof(number),"%d",i+1);
+                    draw->AddText({origin.x+3,origin.y+ImGui::GetStyle().FramePadding.y+i*line-scroll},IM_COL32(130,145,160,255),number);
+                }
+                draw->PopClipRect();ImGui::TextDisabled("Tab indents | Ctrl+Z/Y text undo/redo | Enter inserts line | code executes only in Play");
+                ImGui::PopID();ImGui::EndTabItem();
+            }
+            ++it;
+        }
+        ImGui::EndTabBar();
+    }
+    if(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S,false))saveCurrentProject();
+    ImGui::End();
+}
+void EditorUI::drawOutput() {
+    if (!ImGui::FindWindowByName("Output")) {
+        if(auto* editor=ImGui::FindWindowByName("Script Editor");editor && editor->DockId)
+            ImGui::SetNextWindowDockID(editor->DockId,ImGuiCond_FirstUseEver);
+    }
+    ImGui::SetNextWindowSize({740,230},ImGuiCond_FirstUseEver);
+    if(!ImGui::Begin("Output",&showOutput_)){ImGui::End();return;}
+    ImGui::Text("Lua: %zu KiB / 8192 | %zu / 128 tasks",runtime_.scripts().memoryUsed()/1024,runtime_.scripts().taskCount());
+    ImGui::Separator();
+    for(const auto& message:runtime_.scripts().messages()) {
+        ImGui::PushStyleColor(ImGuiCol_Text,message.error?ImVec4(1,.4f,.35f,1):ImVec4(.7f,.85f,.75f,1));
+        ImGui::TextWrapped("[%s] %s",message.script.c_str(),message.text.c_str());ImGui::PopStyleColor();
+    }
+    ImGui::End();
 }
 } // namespace loblox

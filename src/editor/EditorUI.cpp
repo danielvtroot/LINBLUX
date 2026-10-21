@@ -531,6 +531,7 @@ void EditorUI::handleShortcuts(const EditorInput& input, const InputRoute& route
 bool EditorUI::saveProjectAt(const std::string& path, std::string& error) {
     endGizmoSession(false, "save");
     cancelRigGizmo(false);
+    if (!commitScriptDrafts(error)) return false;
     if (animationDirty_ && !animationSource_.empty()) {
         auto* clip = scene_.gameAssets().findAnimation(animationSource_);
         if (!clip) { error = "Animation asset no longer exists"; return false; }
@@ -539,6 +540,7 @@ bool EditorUI::saveProjectAt(const std::string& path, std::string& error) {
     }
     if (!projectio::save(scene_, path, error)) return false;
     animationDirty_ = false;
+    for (auto& pair:scriptDrafts_) pair.second.dirty=false;
     return true;
 }
 
@@ -582,8 +584,10 @@ void EditorUI::draw() {
         if (showRigEditor_) drawRigEditor();
         if (showAnimationEditor_) drawAnimationEditor();
         if (showGameSettings_) drawGameSettings();
+        if (showScriptEditor_) drawScriptEditor();
     }
     ImGui::EndDisabled();
+    if (showOutput_) drawOutput();
     drawDialogs();
     drawPauseMenu(); // current-frame modal/widgets participate in the same router
     drawViewport(); // UI actions and popup requests are known before routing.
@@ -654,10 +658,22 @@ void EditorUI::drawMainMenuBar() {
         ImGui::MenuItem("Toolbox", nullptr, &showToolbox_);
         ImGui::MenuItem("Explorer", nullptr, &showExplorer_);
         ImGui::MenuItem("Properties", nullptr, &showProperties_);
+        ImGui::MenuItem("Script Editor", nullptr, &showScriptEditor_);
+        ImGui::MenuItem("Output", nullptr, &showOutput_);
+        ImGui::MenuItem("Rig Editor", nullptr, &showRigEditor_);
+        ImGui::MenuItem("Animation Editor", nullptr, &showAnimationEditor_);
         if (ImGui::MenuItem("Reset Layout")) {
             ImGui::DockBuilderRemoveNode(ImGui::GetID("LobloxDockspace"));
             layoutBuilt_ = false; showExplorer_ = showProperties_ = showToolbox_ = true;
         }
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Script")) {
+        if (ImGui::MenuItem("New Script")) insertScript();
+        if (ImGui::MenuItem("New LocalScript")) insertScript(InstanceClass::LocalScript);
+        if (ImGui::MenuItem("New ModuleScript")) insertScript(InstanceClass::ModuleScript);
+        ImGui::MenuItem("Script Editor",nullptr,&showScriptEditor_);
+        ImGui::MenuItem("Output",nullptr,&showOutput_);
         ImGui::EndMenu();
     }
     ImGui::EndDisabled();
@@ -1257,7 +1273,10 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
     if (ImGui::IsItemClicked()) {
         endGizmoSession(true);
         scene_.select(instance);
-        if (ImGui::IsMouseDoubleClicked(0) && !ImGui::IsItemToggledOpen()) renameSelection();
+        if (ImGui::IsMouseDoubleClicked(0)) {
+            if (IsScriptClass(instance->instanceClass())) openScript(instance->id());
+            else if (!ImGui::IsItemToggledOpen()) renameSelection();
+        }
     }
     if (ImGui::BeginDragDropSource()) {
         const auto id = instance->id();
@@ -1275,10 +1294,13 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
     if (ImGui::BeginPopupContextItem("##explorer_context")) {
         ImGui::TextDisabled("%s", instance->className());
         ImGui::Separator();
+        if (IsScriptClass(instance->instanceClass()) && ImGui::MenuItem("Open Script")) openScript(instance->id());
         if (ImGui::MenuItem("Rename", "F2")) { scene_.select(instance); renameSelection(); }
         if (ImGui::MenuItem("Duplicate", "Ctrl+D",false,instance->deletable())) { scene_.select(instance); pendingDuplicate_=true; }
         if (ImGui::MenuItem("Copy", "Ctrl+C",false,instance->deletable())) clipboardId_ = instance->id();
-        if (ImGui::BeginMenu("Insert child (+)", !instance->isPart() && instance != scene_.lighting())) {
+        if (ImGui::BeginMenu("Insert child (+)", !IsScriptClass(instance->instanceClass()) && instance != scene_.lighting())) {
+            if (ImGui::MenuItem("Script")) { scene_.select(instance); pendingInsert_=4; }
+            if (ImGui::MenuItem("ModuleScript")) { scene_.select(instance); pendingInsert_=5; }
             if (ImGui::MenuItem("Folder")) { scene_.select(instance); pendingInsert_=1; }
             if (ImGui::MenuItem("Model")) { scene_.select(instance); pendingInsert_=2; }
             if (ImGui::MenuItem("Part")) { scene_.select(instance); pendingInsert_=3; }
@@ -1320,6 +1342,8 @@ void EditorUI::drawExplorer() {
     if (scene_.lighting() != nullptr) {
         drawExplorerNode(scene_.lighting(), explorerFilter_);
     }
+    for (const auto& object:scene_.objects())
+        if (!object->parent() && object.get()!=scene_.workspace() && object.get()!=scene_.lighting()) drawExplorerNode(object.get(),explorerFilter_);
     for (const auto& rig : scene_.gameAssets().rigs) {
         ImGui::PushID(rig.id.c_str());
         const bool open = ImGui::TreeNodeEx(rig.name.c_str(),
@@ -1339,13 +1363,14 @@ void EditorUI::drawExplorer() {
     if (pendingReparent_.first) {
         std::string error;
         if (!scene_.reparent(scene_.find(pendingReparent_.first),scene_.find(pendingReparent_.second),error)) setStatus(error,true);
-        else { setStatus("Parent atualizado; transform mundial preservado."); checkInvariants("reparent"); }
+        else { revealedSelection_=0; setStatus("Parent atualizado; transform mundial preservado."); checkInvariants("reparent"); }
         pendingReparent_={0,0};
     }
     if (pendingDuplicate_) { pendingDuplicate_=false; duplicateSelection(); }
     if (pendingInsert_) {
         const int action=pendingInsert_; pendingInsert_=0;
-        if (action==3) insertPart(PartShape::Block);
+        if (action==4 || action==5) insertScript(action==4?InstanceClass::Script:InstanceClass::ModuleScript);
+        else if (action==3) insertPart(PartShape::Block);
         else insertContainer(action==1?InstanceClass::Folder:InstanceClass::Model);
     }
     ImGui::Separator();
@@ -1552,7 +1577,8 @@ void EditorUI::drawProperties() {
         ImGui::Text("Arquivo: %s", projectPath_.c_str());
         ImGui::Text("FPS: %.0f", ImGui::GetIO().Framerate);
     } else if (selection->isPart() || selection->instanceClass()==InstanceClass::Folder ||
-               selection->instanceClass()==InstanceClass::Model) {
+               selection->instanceClass()==InstanceClass::Model || IsScriptClass(selection->instanceClass()) ||
+               IsRootServiceClass(selection->instanceClass())) {
         drawInstanceProperties(*selection);
     } else if (selection == scene_.lighting()) {
         drawLightingProperties();
@@ -1638,6 +1664,7 @@ void EditorUI::drawDialogs() {
             std::string error;
             endGizmoSession(true);
             if (projectio::load(scene_, pathBuffer_, error)) {
+                scriptDrafts_.clear();activeScript_=0;
                 cancelRigGizmo(false); selectedRig_.clear(); animationSource_.clear();
                 previewPlaying_ = false; previewPose_ = {}; animationDirty_ = false;
                 std::error_code pathError;

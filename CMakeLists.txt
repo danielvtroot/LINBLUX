@@ -12,6 +12,7 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(RAYLIB REQUIRED raylib)
+pkg_check_modules(LUA REQUIRED IMPORTED_TARGET lua5.4)
 find_package(OpenGL REQUIRED)
 find_package(Threads REQUIRED)
 
@@ -45,6 +46,7 @@ target_link_libraries(loblox_imgui PUBLIC ${RAYLIB_LIBRARIES} OpenGL::GL)
 
 # Camada sem interface: modelo de objetos, cena, fisica e persistencia.
 add_library(loblox_core STATIC
+  src/scripting/LuaRuntime.cpp
   src/game/Rig.cpp
   src/game/GameAssetsIO.cpp
   src/game/Runtime.cpp
@@ -71,7 +73,7 @@ target_include_directories(loblox_core PUBLIC
   ${BULLET_INCLUDE_DIR}
   ${RAYLIB_INCLUDE_DIRS}
 )
-target_link_libraries(loblox_core PUBLIC ${BULLET_LIBRARIES} ${RAYLIB_LIBRARIES} Threads::Threads)
+target_link_libraries(loblox_core PUBLIC ${BULLET_LIBRARIES} ${RAYLIB_LIBRARIES} Threads::Threads PkgConfig::LUA)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(loblox_core PRIVATE -Wall -Wextra)
 endif()

@@ -1,7 +1,8 @@
 # R6, animação e Play local
 
-Implementação própria, original, de um jogador local. Não há execução Lua,
+Implementação própria, original, de um jogador local. Não há execução Luau,
 compatibilidade de assets Roblox, multiplayer, ragdoll ou engine Roblox embutida.
+Scripts Lua 5.4 foram adicionados posteriormente; veja [Studio 2](STUDIO2_GUIDE.md).
 
 ## Testar no notebook
 

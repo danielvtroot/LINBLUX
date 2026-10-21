@@ -8,6 +8,11 @@
 #include "rendering/EditorCamera.h"
 #include "rendering/SceneRenderer.h"
 #include "serialization/ProjectIO.h"
+namespace loblox {
+struct EditorUITestAccess {
+    static game::RuntimeSession& runtime(EditorUI& ui){return ui.runtime_;}
+};
+}
 using namespace loblox;
 int checks=0,failures=0;
 #define CHECK(x) do { ++checks; if (!(x)) { ++failures; std::printf("FAIL %d: %s\n",__LINE__,#x); } } while(false)
@@ -29,6 +34,10 @@ int main() {
         auto mouse=[&](Vector2 p){command("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));};
         auto click=[&](Vector2 p){mouse(p);command("mousedown 1");command("mouseup 1");};
         auto key=[&](const char* name){command(std::string("keydown ")+name);command(std::string("keyup ")+name);};
+        // The test renders synchronously, so drain raylib's bounded character
+        // queue between batches; a real application pumps frames while typing.
+        auto type=[&](const std::string& text){for(std::size_t at=0;at<text.size();at+=8)
+            command("type --clearmodifiers --delay 0 -- '"+text.substr(at,8)+"'");};
         frames(); command("search --name '^Loblox studio regression$' windowfocus --sync");
         auto* window=ImGui::FindWindowByName("Explorer"); CHECK(window);
         if (!window) return 1;
@@ -54,6 +63,33 @@ int main() {
         CHECK(projectio::load(reopened,config.defaultProjectPath,error));
         CHECK(reopened.find(id)->parent()->id()==child->id());
         TakeScreenshot((std::string(directory)+"/explorer.png").c_str());
+        scene.select(nullptr);frames();
+        click({279,9}); // Script menu in the fixed-font menu bar.
+        click({315,30}); // New Script
+        auto* scriptWindow=ImGui::FindWindowByName("Script Editor");CHECK(scriptWindow);
+        if (scriptWindow) {
+            auto* script=scene.selection();CHECK(script && script->instanceClass()==InstanceClass::Script);
+            ImGui::SetWindowDock(scriptWindow,0,ImGuiCond_Always);ImGui::SetWindowPos("Script Editor",{410,175});
+            ImGui::SetWindowSize("Script Editor",{850,590});frames();
+            const Vector2 editorOrigin{scriptWindow->DC.CursorStartPos.x,scriptWindow->DC.CursorStartPos.y};
+            click(Vector2Add(editorOrigin,{110,110})); CHECK(ImGui::GetIO().WantTextInput);
+            command("keydown ctrl");key("a");command("keyup ctrl");
+            // Source was nested: find it through the real hierarchy, not flat name lookup.
+            type("workspace.Folder.Nested.Source.Position = Vector3.new(33, 4, 0)");
+            key("F5");CHECK(!ui.playing()); // focused source consumes editing input
+            command("keydown ctrl");key("s");command("keyup ctrl");
+            CHECK(script && static_cast<Script*>(script)->source.find("Vector3.new(33")!=std::string::npos);
+            TakeScreenshot((std::string(directory)+"/script.png").c_str());
+            click(Vector2Add(editorOrigin,{333,8})); // Play button
+            CHECK(ui.playing());
+            if(ui.playing()) {
+                CHECK(EditorUITestAccess::runtime(ui).scene().findPart(id)->position().x==33);
+                CHECK(part->position().x==20);
+                command("keydown shift");key("F5");command("keyup shift");CHECK(!ui.playing());
+            }
+            CHECK(projectio::load(reopened,config.defaultProjectPath,error));
+            CHECK(script && static_cast<Script*>(reopened.find(script->id()))->source.find("Vector3.new(33")!=std::string::npos);
+        }
     }
     rlImGuiShutdown();CloseWindow();
     std::printf("Studio UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory); return failures?1:0;

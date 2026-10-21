@@ -2,6 +2,7 @@
 
 #include <memory>
 #include "game/Rig.h"
+#include "scripting/LuaRuntime.h"
 #include "scene/Scene.h"
 #include "physics/PhysicsWorld.h"
 
@@ -62,6 +63,10 @@ public:
     RuntimeState state() const { return state_; }
     bool active() const { return state_ != RuntimeState::Editing; }
     const Scene& scene() const { return *scene_; }
+    Scene& mutableScene() { return *scene_; } // validated native bindings, runtime only
+    scripting::LuaRuntime& scripts() { return scripts_; }
+    const scripting::LuaRuntime& scripts() const { return scripts_; }
+    unsigned characterGeneration() const { return respawns_; }
     const Rig& rig() const { return rig_; }
     RigidTransform characterRoot() const;
     const Pose& pose() const { return pose_; }
@@ -100,5 +105,6 @@ private:
     unsigned respawns_ = 0;
     std::string correlation_;
     std::string activeAnimation_;
+    scripting::LuaRuntime scripts_;
 };
 } // namespace loblox::game

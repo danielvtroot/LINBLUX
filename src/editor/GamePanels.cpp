@@ -125,7 +125,9 @@ void EditorUI::startPlay() {
     endGizmoSession(true, "play"); cancelRigGizmo(); camera_.releaseCapture();
     previewPlaying_ = false;
     std::string error;
+    if (!commitScriptDrafts(error)) { setStatus(error,true); return; }
     if (!runtime_.start(scene_, error)) { setStatus(error, true); return; }
+    for (const auto& message:runtime_.scripts().messages()) if (message.error) showOutput_=true;
     pausePage_ = 0; gameplaySkipDelta_ = true;
     ImGui::SetWindowFocus("Viewport");
     setStatus("Play iniciado. WASD, Space, RMB para camera; Esc para menu.");

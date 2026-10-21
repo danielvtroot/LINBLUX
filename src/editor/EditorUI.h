@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <string>
+#include <map>
 
 #include "core/Config.h"
 #include "core/Math.h"
@@ -57,6 +58,11 @@ private:
     void drawExplorerNode(Instance* instance, const char* filter);
     void insertContainer(InstanceClass type, Instance* parent = nullptr);
     void renameSelection();
+    void insertScript(InstanceClass type = InstanceClass::Script);
+    void openScript(InstanceId id);
+    void drawScriptEditor();
+    void drawOutput();
+    bool commitScriptDrafts(std::string& error);
     void drawProperties();
     void drawPartProperties(Part& part);
     void drawInstanceProperties(Instance& instance);
@@ -165,6 +171,11 @@ private:
     std::pair<InstanceId,InstanceId> pendingReparent_{0,0};
     bool pendingDuplicate_ = false;
     int pendingInsert_ = 0;
+    struct ScriptDraft { std::string text; bool dirty=false; char search[128]{}; };
+    std::map<InstanceId,ScriptDraft> scriptDrafts_;
+    InstanceId activeScript_=0;
+    InstanceId requestedScript_=0;
+    bool showScriptEditor_=false, showOutput_=false;
 
     std::string status_;
     bool statusIsError_ = false;

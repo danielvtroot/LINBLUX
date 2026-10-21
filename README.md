@@ -59,7 +59,7 @@ carregamento remoto e sem assets pesados.
   Classic/Follow/primeira pessoa, Esc com Settings/Reset/Resume e Stop (Shift+F5).
 
 O gameplay é um protótipo local, não uma implementação completa do Roblox.
-Não há scripts executáveis, terreno, multiplayer, ragdoll, auto-step de escadas
+Há Lua 5.4 executável no Play, Script Editor e Output; não há terreno, multiplayer, ragdoll, auto-step de escadas
 ou blending de animação por camadas. Limitações e validação no guia acima.
 
 ## Requisitos
@@ -68,13 +68,14 @@ ou blending de animação por camadas. Limitações e validação no guia acima.
 - Compilador C++17, CMake 3.16 ou maior, `pkg-config`.
 - raylib **5.5 ou mais recente** (testado com 6.2).
 - Bullet Physics 3.24 (`libbullet-dev`).
+- Lua 5.4 (`liblua5.4-dev`), sem compatibilidade Luau.
 - OpenGL e X11.
 
 Debian/Ubuntu/Loc-OS (dependências básicas):
 
 ```bash
 sudo apt update
-sudo apt install build-essential cmake pkg-config libbullet-dev \
+sudo apt install build-essential cmake pkg-config libbullet-dev liblua5.4-dev \
   libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev \
   libxinerama-dev
 ```
@@ -163,7 +164,10 @@ No menu File, **Save Project / Open Project** continuam usando o projeto JSON
 nativo. **Export Scene as Lua / Import Scene from Lua** usam o formato
 declarativo `loblox-scene` v1. Ele preserva IDs, pais, objetos, Lighting e
 propriedades de Part, mas não executa Lua e não é um sistema de scripts. O
-runtime Luau permanece planejado para uma etapa separada.
+runtime de gameplay é separado: Lua 5.4 executa assets Script/LocalScript durante
+Play e ModuleScript por require, sem acesso a arquivos do sistema. Consulte
+[Studio 2 e API Lua](docs/STUDIO2_GUIDE.md). JSON v3 preserva Folder/Model,
+hierarquia, scripts e attributes; mapas antigos v1/v2 continuam abrindo.
 
 ## Estrutura
 
@@ -220,7 +224,7 @@ ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1 \
 - A validação foi executada em Xvfb/llvmpipe; não houve teste no Sway/XWayland
   real, em GPU física ou em HD mecânico.
 - Seleção única (sem multi-seleção) e sem undo/redo; Ctrl+D duplica Parts.
-- Gameplay local básico; sem execução de scripts, networking ou multiplayer.
+- Gameplay local com scripts Lua; sem networking ou multiplayer.
 - A interface usa X11/XWayland; não há backend Wayland nativo.
 - Sem sombras dinâmicas ou iluminação global (decisão de desempenho).
 - A FPS depende da GPU; em renderização por software (Xvfb/llvmpipe) o valor

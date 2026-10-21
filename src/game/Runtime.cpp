@@ -174,6 +174,7 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error) {
         respawns_ = 0;
         if (!respawn(error)) { stop(); return false; }
         state_ = RuntimeState::Playing;
+        scripts_.start(*this); // errors are reported; safe native gameplay remains available
         Event("runtime", "start", correlation_, {{"bodies", bodyCount()}, {"rig", rig_.id}});
         return true;
     } catch (const std::exception& e) { error = std::string("Play startup: ") + e.what(); stop(); return false; }
@@ -187,6 +188,7 @@ void RuntimeSession::stop() {
     state_ = RuntimeState::StoppingPlay;
     if (!activeAnimation_.empty()) Event("animation", "stop", correlation_, {{"clip", activeAnimation_}});
     activeAnimation_.clear();
+    scripts_.stop();
     destroyCharacter(); physics_.reset(); scene_.reset();
     accumulator_ = 0; jumpPending_ = false; pose_ = {};
     state_ = RuntimeState::Editing;
@@ -241,6 +243,7 @@ bool RuntimeSession::respawn(std::string& error) {
     camera_.reset(characterRoot().position, settings_);
     camera_.update(1, characterRoot().position, {}, {}, settings_, *this);
     Event("player", respawns_++ ? "respawn" : "spawn", correlation_, {{"x", position().x}, {"y", position().y}, {"z", position().z}});
+    if (scripts_.active()) scripts_.characterAdded();
     error.clear(); return true;
 }
 Vector3 RuntimeSession::position() const { return body_ ? Vec(body_->getWorldTransform().getOrigin()) : Vector3{}; }
@@ -330,6 +333,8 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     if (!std::isfinite(input.movement.x) || !std::isfinite(input.movement.y) ||
         !std::isfinite(input.look.x) || !std::isfinite(input.look.y) || !std::isfinite(input.zoom)) return;
     dt = std::min(dt, .1f);
+    scripts_.update(dt);
+    physics_->syncScene(*scene_);
     camera_.update(dt, characterRoot().position, velocity(), input, settings_, *this);
     const Vector3 desired = camera_.moveDirection(input.movement);
     jumpPending_ = jumpPending_ || input.jump;
