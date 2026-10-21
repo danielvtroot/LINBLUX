@@ -112,6 +112,8 @@ private:
     Pose pose_{};
     float accumulator_ = 0, walkTime_ = 0, idleTime_ = 0, airTime_ = 0, walkWeight_ = 0, yaw_ = 0;
     float rootHeightOffset_ = .1f;
+    float coyoteTime_ = 0;        // tempo restante para pular após sair do chão
+    float jumpBufferTime_ = 0;    // buffer de pulo pressionado no ar
     bool jumpPending_ = false;
     unsigned respawns_ = 0;
     std::string correlation_;

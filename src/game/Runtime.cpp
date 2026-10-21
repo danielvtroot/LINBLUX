@@ -299,9 +299,28 @@ void RuntimeSession::step(float dt, Vector3 desired, bool jump) {
     const float change = (Vector3LengthSqr(desired) > 0 ? settings_.acceleration : settings_.deceleration) * dt;
     if (Vector3Length(difference) > change) difference = Vector3Scale(Vector3Normalize(difference), change);
     speed.x += difference.x; speed.z += difference.z;
-    if (jump && wasGrounded) {
+
+    // Coyote time: tempo de graça após sair do chão
+    if (wasGrounded) {
+        coyoteTime_ = 0.1f; // 100ms de graça após sair do chão
+    } else {
+        coyoteTime_ = std::max(0.f, coyoteTime_ - dt);
+    }
+
+    // Jump buffer: armazena intenção de pular enquanto no ar
+    if (jump) {
+        jumpBufferTime_ = 0.15f; // 150ms de buffer
+    } else {
+        jumpBufferTime_ = std::max(0.f, jumpBufferTime_ - dt);
+    }
+
+    // Pulo: permite pular se estava no chão (coyote time) ou se há buffer de pulo
+    const bool canJump = (coyoteTime_ > 0 || jumpBufferTime_ > 0) && wasGrounded;
+    if (jump && canJump) {
         speed.y = std::sqrt(2 * settings_.gravity * settings_.jumpHeight);
         Event("player", "jump", correlation_);
+        coyoteTime_ = 0;
+        jumpBufferTime_ = 0;
     }
     body_->setLinearVelocity(Bt(speed));
     physics_->syncScene(*scene_);
