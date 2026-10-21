@@ -71,6 +71,7 @@ const char* StateName(HumanoidState state) {
         case HumanoidState::Jumping: return "Jumping";
         case HumanoidState::Freefall: return "Freefall";
         case HumanoidState::Landing: return "Landing";
+        case HumanoidState::Dead: return "Dead";
     }
     return "Unknown";
 }
@@ -174,7 +175,9 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error) {
         respawns_ = 0;
         if (!respawn(error)) { stop(); return false; }
         state_ = RuntimeState::Playing;
+        const bool spawnedDead=health_<=0;
         scripts_.start(*this); // errors are reported; safe native gameplay remains available
+        if(spawnedDead && health_<=0)scripts_.healthChanged(health_,true);
         Event("runtime", "start", correlation_, {{"bodies", bodyCount()}, {"rig", rig_.id}});
         return true;
     } catch (const std::exception& e) { error = std::string("Play startup: ") + e.what(); stop(); return false; }
@@ -215,6 +218,9 @@ bool RuntimeSession::respawn(std::string& error) {
     const btVector3 from(start.x, start.y + 1000, start.z), to(start.x, start.y - 1000, start.z);
     SolidRay ray(from, to, body_.get()); physics_->world_->rayTest(from, to, ray);
     start.y = ray.hasHit() ? ray.m_hitPointWorld.y() + settings_.collisionHeight*.5f + .08f : 20;
+    if (start.y-settings_.collisionHeight*.5f <= scene_->workspace()->fallenPartsDestroyHeight()) {
+        error="Spawn is below FallenPartsDestroyHeight; adjust Workspace or spawn";return false;
+    }
     auto capsule = std::make_unique<btCapsuleShape>(settings_.collisionRadius,
                            settings_.collisionHeight - 2*settings_.collisionRadius);
     btTransform transform; transform.setIdentity(); transform.setOrigin(Bt(start));
@@ -239,7 +245,8 @@ bool RuntimeSession::respawn(std::string& error) {
     capsule_ = std::move(capsule); motion_ = std::move(motion); body_ = std::move(body);
     physics_->world_->addRigidBody(body_.get());
     pose_ = {}; walkTime_ = 0; idleTime_ = 0; airTime_=0; walkWeight_ = 0; accumulator_ = 0; yaw_ = 0; jumpPending_ = false;
-    humanoidState_ = HumanoidState::Idle;
+    health_=respawns_==0?settings_.health:settings_.maxHealth;deadTime_=damageCooldown_=0;
+    humanoidState_ = health_>0?HumanoidState::Idle:HumanoidState::Dead;
     camera_.reset(characterRoot().position, settings_);
     camera_.update(1, characterRoot().position, {}, {}, settings_, *this);
     Event("player", respawns_++ ? "respawn" : "spawn", correlation_, {{"x", position().x}, {"y", position().y}, {"z", position().z}});
@@ -264,6 +271,10 @@ void RuntimeSession::transition(HumanoidState state) {
     humanoidState_ = state;
 }
 void RuntimeSession::step(float dt, Vector3 desired, bool jump) {
+    if (health_<=0) {
+        auto v=body_->getLinearVelocity();v.setX(0);v.setZ(0);body_->setLinearVelocity(v);
+        physics_->world_->stepSimulation(dt,0);physics_->syncFromBodies(*scene_);return;
+    }
     const bool wasGrounded = grounded();
     const Vector3 before = position();
     Vector3 speed = velocity();
@@ -292,7 +303,53 @@ void RuntimeSession::step(float dt, Vector3 desired, bool jump) {
         yaw_ += std::remainder(target-yaw_, 2*PI) * Response(settings_.turnSpeed, dt);
     }
     animate(dt, horizontal);
-    if (position().y < -500) { std::string error; if (!respawn(error)) pause(); }
+    if (position().y < scene_->workspace()->fallenPartsDestroyHeight()) {
+        std::string error;setHealth(0,error);
+    }
+    if (damageCooldown_<=0 && health_>0) {
+        float damage=0;
+        for(int i=0;i<physics_->dispatcher_->getNumManifolds();++i) {
+            const auto* contact=physics_->dispatcher_->getManifoldByIndexInternal(i);
+            const auto* other=contact->getBody0()==body_.get()?contact->getBody1():
+                contact->getBody1()==body_.get()?contact->getBody0():nullptr;
+            if(!other || !other->hasContactResponse())continue;
+            const auto* part=static_cast<const Part*>(other->getUserPointer());
+            if(!part || scene_->findPart(part->id())!=part)continue;
+            bool touching=false;for(int j=0;j<contact->getNumContacts();++j)touching|=contact->getContactPoint(j).getDistance()<=.02f;
+            if(!touching)continue;
+            auto it=part->attributes().find("Damage");
+            if(it!=part->attributes().end()) if(const auto* amount=std::get_if<double>(&it->second))
+                damage=std::max(damage,float(std::clamp(*amount,0.,100000.)));
+        }
+        if(damage>0) { std::string error;takeDamage(damage,error);damageCooldown_=.75f; }
+    }
+}
+bool RuntimeSession::setHealth(float value,std::string& error) {
+    if(!active() || !std::isfinite(value)){error="Health must be finite during Play";return false;}
+    value=std::clamp(value,0.f,settings_.maxHealth);
+    if(health_<=0 && value>0){error="Dead character must respawn before healing";return false;}
+    if(value==health_){error.clear();return true;}
+    const bool died=value==0 && health_>0;health_=value;
+    if(died){
+        transition(HumanoidState::Dead);pose_={};deadTime_=0;jumpPending_=false;
+        if(!activeAnimation_.empty())Event("animation","stop",correlation_,{{"clip",activeAnimation_}});
+        activeAnimation_.clear();
+    }
+    Event("humanoid",died?"died":"health_changed",correlation_,{{"health",health_},{"maxHealth",settings_.maxHealth}});
+    scripts_.healthChanged(health_,died);error.clear();return true;
+}
+bool RuntimeSession::takeDamage(float amount,std::string& error) {
+    if(!std::isfinite(amount)||amount<0){error="Damage must be finite and nonnegative";return false;}
+    return setHealth(health_-amount,error);
+}
+bool RuntimeSession::heal(float amount,std::string& error) {
+    if(!std::isfinite(amount)||amount<0){error="Healing must be finite and nonnegative";return false;}
+    return setHealth(health_+amount,error);
+}
+bool RuntimeSession::resetCharacter(std::string& error) {
+    if(!setHealth(0,error))return false;
+    // Menu reset is immediate; the same health/death transition is used.
+    return respawn(error);
 }
 void RuntimeSession::animate(float dt, float horizontal) {
     const auto& assets = scene_->gameAssets();
@@ -350,6 +407,11 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     dt = std::min(dt, .1f);
     scripts_.update(dt);
     physics_->syncScene(*scene_);
+    damageCooldown_=std::max(0.f,damageCooldown_-dt);
+    if(health_<=0) {
+        deadTime_+=dt;
+        if(deadTime_>=settings_.respawnDelay) { std::string error;if(!respawn(error))pause(); }
+    }
     camera_.update(dt, characterRoot().position, velocity(), input, settings_, *this);
     const Vector3 desired = camera_.moveDirection(input.movement);
     jumpPending_ = jumpPending_ || input.jump;
@@ -361,6 +423,9 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
         accumulator_ = std::max(0.f, accumulator_ - fixed);
         if (state_ != RuntimeState::Playing) break;
     }
+    std::vector<InstanceId> fallen;
+    for(auto* part:scene_->parts()) if(!part->anchored() && part->deletable() && part->position().y<scene_->workspace()->fallenPartsDestroyHeight())fallen.push_back(part->id());
+    for(auto id:fallen)scene_->removeById(id);
 }
 float RuntimeSession::cameraClearance(Vector3 from, Vector3 to, float radius) const {
     if (!physics_ || Vector3Distance(from, to) < .001f) return 1;
@@ -379,7 +444,7 @@ bool RuntimeSession::validate(std::string& error) const {
         error.clear(); return true;
     }
     if (!scene_ || !physics_ || !body_ || bodyCount() != scene_->parts().size()+1 ||
-        !Valid(characterRoot())) { error = "runtime: missing/invalid character or orphan body"; return false; }
+        !Valid(characterRoot()) || !std::isfinite(health_) || health_<0 || health_>settings_.maxHealth) { error = "runtime: missing/invalid character, health or orphan body"; return false; }
     return scene_->validate(error) && physics_->validate(*scene_, error);
 }
 } // namespace loblox::game

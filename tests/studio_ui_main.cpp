@@ -1,6 +1,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <chrono>
+#include <sys/resource.h>
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "rlImGui.h"
@@ -8,6 +10,7 @@
 #include "rendering/EditorCamera.h"
 #include "rendering/SceneRenderer.h"
 #include "serialization/ProjectIO.h"
+#include "core/Diagnostics.h"
 namespace loblox {
 struct EditorUITestAccess {
     static game::RuntimeSession& runtime(EditorUI& ui){return ui.runtime_;}
@@ -19,6 +22,7 @@ int checks=0,failures=0;
 int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-ui-XXXXXX"; const char* directory=mkdtemp(temporary); if(!directory)return 1;
+    diag::configure(std::string(directory)+"/studio.jsonl");
     SetTraceLogLevel(LOG_WARNING); InitWindow(1280,800,"Loblox studio regression");
     if(!IsWindowReady())return 1; SetExitKey(KEY_NULL); SetTargetFPS(60); rlImGuiSetup(true);
     ImGui::GetIO().ConfigFlags|=ImGuiConfigFlags_DockingEnable; ImGui::GetIO().IniFilename=nullptr;
@@ -75,7 +79,7 @@ int main() {
             click(Vector2Add(editorOrigin,{110,110})); CHECK(ImGui::GetIO().WantTextInput);
             command("keydown ctrl");key("a");command("keyup ctrl");
             // Source was nested: find it through the real hierarchy, not flat name lookup.
-            type("workspace.Folder.Nested.Source.Position = Vector3.new(33, 4, 0)");
+            type("workspace.Folder.Nested.Source.Position = Vector3.new(33, 4, 0); game:GetService(\"Players\").CharacterAdded:Connect(function(c) c.Humanoid:TakeDamage(25) end)");
             key("F5");CHECK(!ui.playing()); // focused source consumes editing input
             command("keydown ctrl");key("s");command("keyup ctrl");
             CHECK(script && static_cast<Script*>(script)->source.find("Vector3.new(33")!=std::string::npos);
@@ -84,12 +88,23 @@ int main() {
             CHECK(ui.playing());
             if(ui.playing()) {
                 CHECK(EditorUITestAccess::runtime(ui).scene().findPart(id)->position().x==33);
+                CHECK(EditorUITestAccess::runtime(ui).health()==75);frames(10);
+                TakeScreenshot((std::string(directory)+"/health.png").c_str());
                 CHECK(part->position().x==20);
                 command("keydown shift");key("F5");command("keyup shift");CHECK(!ui.playing());
             }
             CHECK(projectio::load(reopened,config.defaultProjectPath,error));
             CHECK(script && static_cast<Script*>(reopened.find(script->id()))->source.find("Vector3.new(33")!=std::string::npos);
         }
+        // Measure the real Explorer traversal with 1,000 additional visible rows.
+        const auto previousCount=scene.objects().size();
+        for(int i=0;i<1000;++i)scene.createContainer(InstanceClass::Folder,scene.workspace(),"PerfNode"+std::to_string(i));
+        CHECK(scene.objects().size()==previousCount+1000);CHECK(scene.validate(error));
+        const auto started=std::chrono::steady_clock::now();frames(10);
+        struct rusage usage{};getrusage(RUSAGE_SELF,&usage);
+        std::printf("Explorer 1000 added nodes: mean frame %.2f ms; peak RSS %.1f MiB (software fixture)\n",
+            std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count()/10,
+            usage.ru_maxrss/1024.);
     }
     rlImGuiShutdown();CloseWindow();
     std::printf("Studio UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory); return failures?1:0;

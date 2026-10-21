@@ -176,6 +176,7 @@ private:
     InstanceId activeScript_=0;
     InstanceId requestedScript_=0;
     bool showScriptEditor_=false, showOutput_=false;
+    float displayedHealth_=100;
 
     std::string status_;
     bool statusIsError_ = false;

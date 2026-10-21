@@ -122,6 +122,10 @@ struct PlayerSettings {
     std::string walkAnimation = "r6-walk";
     std::string idleAnimation = "r6-idle";
     std::string jumpAnimation; // empty retains the legacy native air-pose fallback
+    float respawnDelay=2;
+    int healthDisplayType=2; // 0=AlwaysOn, 1=WhenDamaged, 2=AlwaysOff
+    float healthDisplayDistance=45;
+    float nameDisplayDistance=0; // local HUD is the default, overhead opt-in
     bool validate(std::string& error) const;
 };
 

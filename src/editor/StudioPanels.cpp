@@ -110,6 +110,14 @@ void EditorUI::drawInstanceProperties(Instance& object) {
             ImGui::BeginDisabled(part.instanceClass()==InstanceClass::Baseplate);
             if (row("Anchored")) { bool value=part.anchored(); if(ImGui::Checkbox("##Anchored",&value)) part.setAnchored(value); }
             if (row("CanCollide")) { bool value=part.canCollide(); if(ImGui::Checkbox("##CanCollide",&value)) part.setCanCollide(value); }
+            if (row("Damage","Contact damage; solid Bullet contact, cooldown 0.75 seconds, runtime only.")) {
+                float amount=0;const auto it=part.attributes().find("Damage");
+                if(it!=part.attributes().end())if(const auto* n=std::get_if<double>(&it->second))amount=float(*n);
+                if(ImGui::InputFloat("##Damage",&amount,1,10,"%.1f",ImGuiInputTextFlags_EnterReturnsTrue)) {
+                    if(std::isfinite(amount)&&amount>=0&&amount<=100000)part.setAttribute("Damage",double(amount));
+                    else setStatus("Damage deve ser finito, entre 0 e 100000.",true);
+                }
+            }
             ImGui::EndDisabled(); ImGui::EndTable();
         }
     }
@@ -119,6 +127,12 @@ void EditorUI::drawInstanceProperties(Instance& object) {
         if (row("RunContext")) ImGui::TextWrapped("%s",script.instanceClass()==InstanceClass::ModuleScript?"Module: on require":
             script.instanceClass()==InstanceClass::LocalScript?"Local player (in process)":"Authoritative (in process)");
         if (row("Source")) { ImGui::Text("%zu bytes",script.source.size());if(ImGui::SmallButton("Open Script Editor"))openScript(script.id()); }
+        if (row("Last runtime")) {
+            const auto& messages=runtime_.scripts().messages();const scripting::Message* latest=nullptr;
+            for(auto it=messages.rbegin();it!=messages.rend();++it)if(it->script==script.name()){latest=&*it;break;}
+            if(latest)ImGui::TextWrapped("%s: %s",latest->error?"Error":"Output",latest->text.c_str());
+            else ImGui::TextWrapped("No output/error in this session");
+        }
         ImGui::EndTable();
     }
     ImGui::PopID();

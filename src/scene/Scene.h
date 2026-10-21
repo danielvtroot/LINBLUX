@@ -23,7 +23,7 @@ class Scene {
 public:
     using RemovalListener = std::function<void(Instance*)>;
 
-    Scene();
+    explicit Scene(InstanceId workspaceId = 1, InstanceId lightingId = 2);
     ~Scene() = default;
 
     Scene(const Scene&) = delete;

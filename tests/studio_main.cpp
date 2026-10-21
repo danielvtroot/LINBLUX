@@ -1,11 +1,14 @@
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
+#include <limits>
 #include <nlohmann/json.hpp>
 #include "scene/Scene.h"
 #include "physics/PhysicsWorld.h"
 #include "serialization/ProjectIO.h"
 #include "serialization/SceneLua.h"
 #include "game/Runtime.h"
+#include "core/Diagnostics.h"
 
 using namespace loblox;
 namespace {
@@ -40,6 +43,15 @@ void Hierarchy() {
     auto invalid=nlohmann::json::parse(json);
     for(auto& object:invalid["objects"]) if(object["id"]==folder->id()) object["parent"]=detail->id();
     CHECK(!projectio::fromJson(loaded,invalid.dump(),error)); CHECK(projectio::toJson(loaded)==json);
+    auto movedIds=nlohmann::json::parse(json);
+    for(auto& object:movedIds["objects"]) {
+        if(object["id"]==1)object["id"]=101;
+        if(object["id"]==2)object["id"]=102;
+        if(object["parent"]==1)object["parent"]=101;
+    }
+    Scene changedIds;CHECK(projectio::fromJson(changedIds,movedIds.dump(),error));
+    CHECK(changedIds.workspace()->id()==101);CHECK(changedIds.lighting()->id()==102);
+    CHECK(changedIds.find(id)->parent()->id()==detail->id());
     bool refused=false; try { scenelua::toLua(scene); } catch(...) { refused=true; } CHECK(refused);
     auto* copy=scene.duplicateTree(*folder); CHECK(copy && copy!=folder);
     CHECK(copy && copy->children().size()==2); CHECK(scene.parts().size()==4);
@@ -153,5 +165,102 @@ end))";
     auto legacy=scene.gameAssets();legacy.player.jumpAnimation.clear();
     CHECK(legacy.findAnimation("r6-jump")!=nullptr);CHECK(scene.validate(error));
 }
+void HealthAndVoid() {
+    Scene scene;scene.buildDefaultScene();scene.gameAssets().createR6();std::string error;
+    auto* script=scene.createScript(InstanceClass::Script,nullptr,"Health.server.lua");
+    script->source=R"(game:GetService("Players").CharacterAdded:Connect(function(character)
+workspace:SetAttribute("spawns", (workspace:GetAttribute("spawns") or 0) + 1)
+local h=character.Humanoid
+h.HealthChanged:Connect(function(value) workspace:SetAttribute("health",value) end)
+h.Died:Connect(function() workspace:SetAttribute("deaths",(workspace:GetAttribute("deaths") or 0)+1) end)
+end))";
+    game::RuntimeSession runtime;CHECK(runtime.start(scene,error));CHECK(runtime.health()==100);
+    CHECK(runtime.takeDamage(25,error));CHECK(runtime.health()==75);runtime.update(0,{});
+    CHECK(std::get<double>(runtime.scene().workspace()->attributes().at("health"))==75);
+    CHECK(runtime.takeDamage(50,error));CHECK(runtime.health()==25);CHECK(runtime.heal(10,error));CHECK(runtime.health()==35);
+    CHECK(!runtime.takeDamage(std::numeric_limits<float>::quiet_NaN(),error));
+    CHECK(!runtime.heal(-1,error));CHECK(runtime.health()==35);
+    CHECK(runtime.takeDamage(100,error));CHECK(runtime.health()==0);CHECK(runtime.humanoidState()==game::HumanoidState::Dead);
+    CHECK(runtime.takeDamage(1,error));runtime.update(0,{});
+    CHECK(std::get<double>(runtime.scene().workspace()->attributes().at("deaths"))==1);
+    CHECK(!runtime.heal(100,error));
+    auto generation=runtime.characterGeneration();runtime.pause();
+    for(int i=0;i<180;++i)runtime.update(1.f/60,{});CHECK(runtime.characterGeneration()==generation);
+    runtime.resume();game::PlayerInput input;input.movement={1,0};const float x=runtime.position().x;
+    runtime.update(.1f,input);CHECK(std::fabs(runtime.position().x-x)<.01f);
+    for(int i=0;i<130;++i)runtime.update(1.f/60,{});
+    CHECK(runtime.characterGeneration()==generation+1);CHECK(runtime.health()==100);
+    CHECK(std::get<double>(runtime.scene().workspace()->attributes().at("spawns"))==2);
+    for(int i=0;i<70;++i){CHECK(runtime.resetCharacter(error));runtime.update(0,{});CHECK(runtime.health()==100);CHECK(runtime.validate(error));}
+    for(const auto& message:runtime.scripts().messages())CHECK(!message.error);
+    CHECK(std::get<double>(runtime.scene().workspace()->attributes().at("deaths"))==71);
+    CHECK(runtime.bodyCount()==scene.parts().size()+1);runtime.stop();
+    Scene hazard;hazard.buildDefaultScene();hazard.gameAssets().createR6();
+    hazard.findPart(4)->setAttribute("Damage",25.);
+    CHECK(runtime.start(hazard,error));for(int i=0;i<30;++i)runtime.update(1.f/60,{});
+    CHECK(runtime.health()==75);runtime.stop();
+    hazard.findPart(4)->setCanCollide(false);
+    CHECK(runtime.start(hazard,error));for(int i=0;i<30;++i)runtime.update(1.f/60,{});
+    CHECK(runtime.health()==100);runtime.stop();
+    Scene voidScene;voidScene.createPart(PartShape::Block,{10,-30,0},{4,4,4},"Falling");
+    voidScene.gameAssets().createR6();voidScene.workspace()->setFallenPartsDestroyHeight(-20);
+    const auto author=projectio::toJson(voidScene);CHECK(runtime.start(voidScene,error));
+    for(int i=0;i<70;++i)runtime.update(1.f/60,{});
+    CHECK(runtime.scene().parts().empty());CHECK(runtime.health()==0);
+    for(int i=0;i<130;++i)runtime.update(1.f/60,{});
+    CHECK(runtime.characterGeneration()>=2);CHECK(projectio::toJson(voidScene)==author);
+    CHECK(runtime.validate(error));runtime.stop();
+    Scene reloaded;CHECK(projectio::fromJson(reloaded,author,error));CHECK(reloaded.workspace()->fallenPartsDestroyHeight()==-20);
+    CHECK(!reloaded.workspace()->setFallenPartsDestroyHeight(std::numeric_limits<float>::infinity()));
+    Scene scripted;scripted.buildDefaultScene();
+    auto* damageScript=scripted.createScript(InstanceClass::Script,nullptr,"Damage.server.lua");
+    damageScript->source=R"(game:GetService("Players").CharacterAdded:Connect(function(character)
+local h=character.Humanoid
+h.Died:Connect(function()workspace:SetAttribute("deaths",(workspace:GetAttribute("deaths") or 0)+1)end)
+assert(h.Health==100 and h.MaxHealth==100)
+h:TakeDamage(25);assert(h.Health==75)
+h:TakeDamage(50);assert(h.Health==25)
+h:Heal(5);assert(h.Health==30)
+h.Health=0;h:TakeDamage(1)
+assert(h.State=="Dead")
+end))";
+    CHECK(runtime.start(scripted,error));runtime.update(0,{});
+    CHECK(runtime.health()==0);
+    CHECK(std::get<double>(runtime.scene().workspace()->attributes().at("deaths"))==1);
+    for(const auto& message:runtime.scripts().messages())CHECK(!message.error);
+    runtime.stop();
 }
-int main() { Hierarchy(); Scripts(); AnimationIds(); std::printf("Studio: %d checks, %d failures\n",checks,failures); return failures?1:0; }
+void PartChildScripts() {
+    Scene scene;scene.buildDefaultScene();
+    auto* part=scene.createPart(PartShape::Block,{20,4,0});part->setAnchored(true);
+    auto* child=scene.createScript(InstanceClass::Script,part,"PartChild.lua");
+    child->source="script.Parent:SetAttribute('childRan', true)";
+    std::string error;Scene loaded;
+    CHECK(projectio::fromJson(loaded,projectio::toJson(scene),error));
+    CHECK(loaded.find(child->id())!=nullptr);
+    game::RuntimeSession runtime;CHECK(runtime.start(scene,error));
+    CHECK(runtime.scene().findPart(part->id())->attributes().count("childRan")==1);
+    CHECK(part->attributes().empty());runtime.stop();
+}
+void NativeCloneBudget() {
+    Scene scene;scene.buildDefaultScene();auto* folder=scene.createContainer(InstanceClass::Folder,nullptr,"Payload");
+    for(int i=0;i<17;++i) {
+        auto* node=scene.createScript(InstanceClass::ModuleScript,folder,"Data"+std::to_string(i));
+        node->source="--"+std::string(262140,'x');
+    }
+    auto* script=scene.createScript(InstanceClass::Script,nullptr,"CloneBudget.lua");
+    script->source="workspace.Payload:Clone()";
+    game::RuntimeSession runtime;std::string error;CHECK(runtime.start(scene,error));
+    bool rejected=false;for(const auto& message:runtime.scripts().messages())
+        rejected|=message.error&&message.text.find("native content budget")!=std::string::npos;
+    CHECK(rejected);CHECK(runtime.scene().objects().size()==scene.objects().size());
+    CHECK(runtime.validate(error));runtime.stop();
+}
+}
+int main() {
+    std::setvbuf(stdout,nullptr,_IOLBF,0);
+    char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
+    if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
+    Hierarchy();Scripts();AnimationIds();HealthAndVoid();PartChildScripts();NativeCloneBudget();
+    std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
+}

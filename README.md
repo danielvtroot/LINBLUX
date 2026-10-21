@@ -57,6 +57,10 @@ carregamento remoto e sem assets pesados.
   SLERP e Walk/Idle originais persistidas no JSON v2.
 - Play (F5), WASD relativo à câmera, pulo/cápsula Bullet, spawn, câmera
   Classic/Follow/primeira pessoa, Esc com Settings/Reset/Resume e Stop (Shift+F5).
+- Folder/Model com hierarquia real, drag-and-drop, Parent e Properties em
+  duas colunas; scripts persistidos no JSON v3 e executados somente em Play.
+- Animações locais `anim://ID`, Jump editável, scripts padrão, Health/Died,
+  HUD, contato Damage e void configurável. [Guia Studio 2](docs/STUDIO2_GUIDE.md).
 
 O gameplay é um protótipo local, não uma implementação completa do Roblox.
 Há Lua 5.4 executável no Play, Script Editor e Output; não há terreno, multiplayer, ragdoll, auto-step de escadas

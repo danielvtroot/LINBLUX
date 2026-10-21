@@ -432,4 +432,13 @@ precedência; sem a flag, o caminho padrão é tentado apenas se for arquivo
 regular. Falhas mantêm a cena padrão e são mostradas na UI/stderr/log. O logger
 `core/Diagnostics` grava JSONL com timestamp UTC, nível, subsistema, evento,
 correlação, entidade, arquivo, duração, resultado, erro e contexto; rotação
-ocorre em 1 MiB e conteúdo de projeto nunca é registrado.
+ocorre em 1 MiB. Source não é registrado automaticamente; prints/erros de Lua
+registram o texto fornecido pelo script. Não imprima segredos nos scripts.
+
+# Extensões Studio 2
+
+Este documento conserva o histórico da arquitetura inicial. A implementação
+atual acrescenta hierarquia Folder/Model, JSON v3 e Lua 5.4 executável em Play,
+além do runtime R6. Contratos e limites atuais: [Studio 2](STUDIO2_GUIDE.md) e
+[R6/Play](R6_PLAY_GUIDE.md). A importação SceneLua continua declarativa e não
+executa os arquivos importados; a VM de gameplay é um subsistema separado.

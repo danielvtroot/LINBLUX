@@ -17,8 +17,9 @@ namespace loblox::scripting {
 namespace {
 enum class Kind { Instance,Game,Players,Player,RunService,AnimationService,Character,Humanoid,Animator,Signal,Connection };
 enum Signal { Spawn=1,Heartbeat,HealthChanged,Died };
-struct Handle { Kind kind; InstanceId id; unsigned generation; };
+struct Handle { Kind kind; InstanceId id; unsigned generation; unsigned avatar=0; };
 constexpr std::size_t kMemoryLimit=8*1024*1024, kTasks=128, kListeners=128;
+constexpr std::size_t kNativeContentLimit=8*1024*1024, kNativeNodes=10000;
 constexpr int kInstructions=100000;
 bool Eq(const char* a,const char* b) { return std::strcmp(a,b)==0; }
 void Require(bool condition,const char* message) { if(!condition) throw std::runtime_error(message); }
@@ -50,9 +51,10 @@ struct LuaRuntime::Impl {
     int instructions=0, frameBudget=0, moduleDepth=0;
     InstanceId executing=0;
     struct Job { lua_State* thread; int ref; int arguments; InstanceId script; double wake; bool done=false; };
-    struct Listener { int signal; int ref; InstanceId script; bool active=true; };
+    struct Listener { int signal; int ref; InstanceId script; unsigned avatar=0; };
     std::deque<Job> jobs;
-    std::vector<Listener> listeners;
+    std::map<InstanceId,Listener> listeners;
+    InstanceId nextConnection=0;
     std::vector<Message> output;
     std::map<InstanceId,int> modules;
     std::set<InstanceId> loading;
@@ -81,6 +83,7 @@ struct LuaRuntime::Impl {
         Require(h && h->generation==generation,"invalid or expired Loblox handle");
         if(h->kind==Kind::Character || h->kind==Kind::Humanoid || h->kind==Kind::Animator)
             Require(h->id==runtime->characterGeneration(),"character was respawned; use the new CharacterAdded handle");
+        if(h->kind==Kind::Signal && h->avatar)Require(h->avatar==runtime->characterGeneration(),"expired character signal");
         return *h;
     }
     Instance& instance(lua_State* L,int index) {
@@ -90,10 +93,25 @@ struct LuaRuntime::Impl {
     void push(lua_State* L,Kind kind,InstanceId id=0) {
         if(kind==Kind::Character || kind==Kind::Humanoid || kind==Kind::Animator)id=runtime->characterGeneration();
         auto* h=static_cast<Handle*>(lua_newuserdatauv(L,sizeof(Handle),0));
-        *h={kind,id,generation}; luaL_setmetatable(L,"Loblox.Handle");
+        *h={kind,id,generation,(kind==Kind::Signal && (id==HealthChanged || id==Died))?runtime->characterGeneration():0}; luaL_setmetatable(L,"Loblox.Handle");
     }
     void pushInstance(lua_State* L,const Instance* object) {
         if(object) push(L,Kind::Instance,object->id()); else lua_pushnil(L);
+    }
+    static std::size_t contentBytes(const Instance& object) {
+        std::size_t bytes=object.name().size();
+        if(IsScriptClass(object.instanceClass()))bytes+=static_cast<const Script&>(object).source.size();
+        for(const auto& pair:object.attributes()) {
+            bytes+=pair.first.size()+sizeof(Instance::Attribute);
+            if(const auto* value=std::get_if<std::string>(&pair.second))bytes+=value->size();
+        }
+        return bytes;
+    }
+    void nativeBudget(std::size_t extraNodes,std::size_t extraBytes) const {
+        const auto& objects=runtime->scene().objects();
+        Require(extraNodes<=kNativeNodes && objects.size()<=kNativeNodes-extraNodes,"native Instance budget exceeded");
+        std::size_t bytes=0;for(const auto& object:objects)bytes+=contentBytes(*object);
+        Require(extraBytes<=kNativeContentLimit && bytes<=kNativeContentLimit-extraBytes,"native content budget exceeded");
     }
     void message(bool error,InstanceId id,const char* text) {
         const auto* object=runtime?runtime->scene().find(id):nullptr;
@@ -175,7 +193,12 @@ struct LuaRuntime::Impl {
         lua_pushnil(L);return 1;
     }
     static int Destroy(lua_State* L) { auto& self=Host(L);auto& object=self.instance(L,1);Require(self.runtime->mutableScene().remove(&object),"cannot destroy protected instance/subtree");return 0; }
-    static int Clone(lua_State* L) { auto& self=Host(L);auto& object=self.instance(L,1);auto* copy=self.runtime->mutableScene().duplicateTree(object);Require(copy,"cannot clone service or unsupported instance");self.pushInstance(L,copy);return 1; }
+    static int Clone(lua_State* L) {
+        auto& self=Host(L);auto& object=self.instance(L,1);std::size_t nodes=0,bytes=0;
+        for(const auto& node:self.runtime->scene().objects())if(object.isAncestorOf(node.get())){++nodes;bytes+=contentBytes(*node);}
+        self.nativeBudget(nodes,bytes+nodes*128); // allow generated unique names too
+        auto* copy=self.runtime->mutableScene().duplicateTree(object);Require(copy,"cannot clone service or unsupported instance");self.pushInstance(L,copy);return 1;
+    }
     static int GetAttribute(lua_State* L) {
         auto& object=Host(L).instance(L,1);const char* key=Text(L,2);const auto it=object.attributes().find(key);
         if(it==object.attributes().end())lua_pushnil(L);
@@ -185,8 +208,15 @@ struct LuaRuntime::Impl {
             else lua_pushlstring(L,value.data(),value.size());},it->second);return 1;
     }
     static int SetAttribute(lua_State* L) {
-        auto& object=Host(L).instance(L,1);const char* key=Text(L,2);bool ok=false;
+        auto& self=Host(L);auto& object=self.instance(L,1);const char* key=Text(L,2);bool ok=false;
         if(lua_isnil(L,3)){object.removeAttribute(key);return 0;}
+        std::size_t before=0,after=std::strlen(key)+sizeof(Instance::Attribute);
+        if(auto it=object.attributes().find(key);it!=object.attributes().end()) {
+            before=it->first.size()+sizeof(Instance::Attribute);
+            if(const auto* value=std::get_if<std::string>(&it->second))before+=value->size();
+        }
+        if(lua_type(L,3)==LUA_TSTRING)after+=lua_rawlen(L,3);
+        self.nativeBudget(0,after>before?after-before:0);
         if(lua_isboolean(L,3))ok=object.setAttribute(key,bool(lua_toboolean(L,3)));
         else if(lua_type(L,3)==LUA_TNUMBER)ok=object.setAttribute(key,Number(L,3));
         else if(lua_type(L,3)==LUA_TSTRING)ok=object.setAttribute(key,std::string(Text(L,3)));
@@ -196,7 +226,7 @@ struct LuaRuntime::Impl {
         auto& self=Host(L);const char* name=Text(L,1);InstanceClass type;
         Require(InstanceClassFromName(name,type),"unknown Instance class");
         auto* parent=lua_gettop(L)>1?&self.instance(L,2):self.runtime->mutableScene().workspace();
-        auto& scene=self.runtime->mutableScene(); Require(scene.objects().size()<10000,"runtime Instance limit reached");
+        auto& scene=self.runtime->mutableScene();self.nativeBudget(1,128);
         Instance* object=nullptr;
         if(type==InstanceClass::Part)object=scene.createPart(PartShape::Block,{});
         else if(type==InstanceClass::Folder || type==InstanceClass::Model)object=scene.createContainer(type,parent);
@@ -209,11 +239,12 @@ struct LuaRuntime::Impl {
         auto& self=Host(L);const auto h=self.handle(L,1);Require(h.kind==Kind::Signal,"expected signal");Require(lua_isfunction(L,2),"Connect requires callback");
         Require(self.listeners.size()<kListeners,"event connection limit reached");
         lua_pushvalue(L,2);const int ref=luaL_ref(L,LUA_REGISTRYINDEX);
-        self.listeners.push_back({int(h.id),ref,self.executing}); self.push(L,Kind::Connection,self.listeners.size());return 1;
+        const auto id=++self.nextConnection;
+        self.listeners.emplace(id,Listener{int(h.id),ref,self.executing,h.avatar}); self.push(L,Kind::Connection,id);return 1;
     }
     static int Disconnect(lua_State* L) {
-        auto& self=Host(L);const auto h=self.handle(L,1);Require(h.kind==Kind::Connection && h.id>0 && h.id<=self.listeners.size(),"invalid connection");
-        auto& listener=self.listeners[h.id-1]; if(listener.active){luaL_unref(L,LUA_REGISTRYINDEX,listener.ref);listener.active=false;}return 0;
+        auto& self=Host(L);const auto h=self.handle(L,1);Require(h.kind==Kind::Connection,"invalid connection");
+        auto it=self.listeners.find(h.id);if(it!=self.listeners.end()){luaL_unref(L,LUA_REGISTRYINDEX,it->second.ref);self.listeners.erase(it);}return 0;
     }
     static int RequireModule(lua_State* L) {
         auto& self=Host(L);auto& object=self.instance(L,1);
@@ -234,6 +265,20 @@ struct LuaRuntime::Impl {
         if (!self.runtime->setAnimation(state,id,error)) throw std::runtime_error(error);
         return 0;
     }
+    static int Damage(lua_State* L) {
+        auto& self=Host(L);Require(self.handle(L,1).kind==Kind::Humanoid,"expected Humanoid");
+        const auto amount=Number(L,2);Require(amount>=0 && amount<=100000,"damage amount must be 0..100000");
+        std::string error;if(!self.runtime->takeDamage(float(amount),error))throw std::runtime_error(error);return 0;
+    }
+    static int Heal(lua_State* L) {
+        auto& self=Host(L);Require(self.handle(L,1).kind==Kind::Humanoid,"expected Humanoid");
+        const auto amount=Number(L,2);Require(amount>=0 && amount<=100000,"heal amount must be 0..100000");
+        std::string error;if(!self.runtime->heal(float(amount),error))throw std::runtime_error(error);return 0;
+    }
+    static int Respawn(lua_State* L) {
+        auto& self=Host(L);Require(self.handle(L,1).kind==Kind::Player,"expected LocalPlayer");
+        std::string error;if(!self.runtime->resetCharacter(error))throw std::runtime_error(error);return 0;
+    }
     static int GetAnimation(lua_State* L) {
         auto& self=Host(L);const char* id=Text(L,2);const auto* clip=self.runtime->scene().gameAssets().findAnimation(id);
         Require(clip,"animation ID not present in this project");
@@ -251,6 +296,7 @@ struct LuaRuntime::Impl {
         if(h.kind==Kind::Animator){METHOD("SetAnimation",SetAnimation)}
         if(h.kind==Kind::AnimationService){METHOD("GetAnimation",GetAnimation)}
         if(h.kind==Kind::Players || h.kind==Kind::Player) {
+            if(h.kind==Kind::Player){METHOD("Respawn",Respawn)}
             if(Eq(key,"CharacterAdded")){self.push(L,Kind::Signal,Spawn);return 1;}
             if(Eq(key,"LocalPlayer")){self.push(L,Kind::Player);return 1;}
             if(Eq(key,"Character")){self.push(L,Kind::Character);return 1;}
@@ -262,6 +308,14 @@ struct LuaRuntime::Impl {
             if(Eq(key,"Name")){lua_pushstring(L,self.runtime->rig().name.c_str());return 1;}
         }
         if(h.kind==Kind::Humanoid) {
+            METHOD("TakeDamage",Damage) METHOD("Heal",Heal)
+            if(Eq(key,"Health")){lua_pushnumber(L,self.runtime->health());return 1;}
+            if(Eq(key,"MaxHealth")){lua_pushnumber(L,self.runtime->settings().maxHealth);return 1;}
+            if(Eq(key,"HealthDisplayType")){const char* values[]{"AlwaysOn","DisplayWhenDamaged","AlwaysOff"};lua_pushstring(L,values[self.runtime->settings().healthDisplayType]);return 1;}
+            if(Eq(key,"HealthDisplayDistance")){lua_pushnumber(L,self.runtime->settings().healthDisplayDistance);return 1;}
+            if(Eq(key,"NameDisplayDistance")){lua_pushnumber(L,self.runtime->settings().nameDisplayDistance);return 1;}
+            if(Eq(key,"HealthChanged")){self.push(L,Kind::Signal,HealthChanged);return 1;}
+            if(Eq(key,"Died")){self.push(L,Kind::Signal,Died);return 1;}
             if(Eq(key,"WalkSpeed")){lua_pushnumber(L,self.runtime->settings().walkSpeed);return 1;}
             if(Eq(key,"JumpHeight")){lua_pushnumber(L,self.runtime->settings().jumpHeight);return 1;}
             if(Eq(key,"AutoRotate")){lua_pushboolean(L,self.runtime->settings().autoRotate);return 1;}
@@ -274,6 +328,9 @@ struct LuaRuntime::Impl {
             if(Eq(key,"Name")){lua_pushlstring(L,object.name().data(),object.name().size());return 1;}
             if(Eq(key,"ClassName")){lua_pushstring(L,object.className());return 1;}
             if(Eq(key,"Parent")){self.pushInstance(L,object.parent());return 1;}
+            if(object.instanceClass()==InstanceClass::Workspace && Eq(key,"FallenPartsDestroyHeight")) {
+                lua_pushnumber(L,self.runtime->scene().workspace()->fallenPartsDestroyHeight());return 1;
+            }
             if(object.isPart()) {
                 const auto& part=static_cast<const Part&>(object);
                 if(Eq(key,"Position")){Vector(L,part.position());return 1;}
@@ -292,16 +349,30 @@ struct LuaRuntime::Impl {
     static int NewIndex(lua_State* L) {
         auto& self=Host(L);const auto h=self.handle(L,1);const char* key=Text(L,2);
         if(h.kind==Kind::Humanoid) {
+            if(Eq(key,"Health")) {const auto value=Number(L,3);Require(std::fabs(value)<=100000,"Health outside range");std::string error;if(!self.runtime->setHealth(float(value),error))throw std::runtime_error(error);return 0;}
             auto settings=self.runtime->settings();
-            if(Eq(key,"WalkSpeed"))settings.walkSpeed=float(Number(L,3));
+            if(Eq(key,"MaxHealth")){settings.maxHealth=float(Number(L,3));settings.health=std::min(settings.health,settings.maxHealth);}
+            else if(Eq(key,"HealthDisplayDistance"))settings.healthDisplayDistance=float(Number(L,3));
+            else if(Eq(key,"NameDisplayDistance"))settings.nameDisplayDistance=float(Number(L,3));
+            else if(Eq(key,"HealthDisplayType")) {
+                const char* type=Text(L,3);Require(Eq(type,"AlwaysOn")||Eq(type,"DisplayWhenDamaged")||Eq(type,"AlwaysOff"),"invalid HealthDisplayType");
+                settings.healthDisplayType=Eq(type,"AlwaysOn")?0:Eq(type,"DisplayWhenDamaged")?1:2;
+            }
+            else if(Eq(key,"WalkSpeed"))settings.walkSpeed=float(Number(L,3));
             else if(Eq(key,"JumpHeight"))settings.jumpHeight=float(Number(L,3));
             else if(Eq(key,"AutoRotate")){Require(lua_isboolean(L,3),"AutoRotate expects boolean");settings.autoRotate=lua_toboolean(L,3);}
             else throw std::runtime_error("unsupported or readonly Humanoid property");
-            std::string error;Require(settings.validate(error),"Humanoid property outside valid limits");self.runtime->settings()=settings;return 0;
+            std::string error;Require(settings.validate(error),"Humanoid property outside valid limits");self.runtime->settings()=settings;
+            if(self.runtime->health()>settings.maxHealth)self.runtime->setHealth(settings.maxHealth,error);
+            return 0;
         }
         Require(h.kind==Kind::Instance,"readonly service property");auto& object=self.instance(L,1);
-        if(Eq(key,"Name")){const char* name=Text(L,3);Require(*name && std::strlen(name)<=128,"Name length must be 1..128");object.setName(name);return 0;}
+        if(Eq(key,"Name")){const char* name=Text(L,3);const auto size=std::strlen(name);Require(*name && size<=128,"Name length must be 1..128");self.nativeBudget(0,size>object.name().size()?size-object.name().size():0);object.setName(name);return 0;}
         if(Eq(key,"Parent")){auto& parent=self.instance(L,3);std::string error;const bool ok=self.runtime->mutableScene().reparent(&object,&parent,error);if(!ok)throw std::runtime_error(error);return 0;}
+        if(object.instanceClass()==InstanceClass::Workspace && Eq(key,"FallenPartsDestroyHeight")) {
+            const auto height=Number(L,3);Require(std::fabs(height)<=100000,"void height outside supported range");
+            self.runtime->mutableScene().workspace()->setFallenPartsDestroyHeight(float(height));return 0;
+        }
         Require(object.isPart(),"unknown or readonly Instance property");auto& part=static_cast<Part&>(object);
         if(Eq(key,"Position"))part.setPosition(ReadVector(L,3));
         else if(Eq(key,"Size")){auto size=ReadVector(L,3);Require(size.x>=kMinPartSize&&size.y>=kMinPartSize&&size.z>=kMinPartSize,"Size below 0.2");part.setSize(size);}
@@ -344,8 +415,9 @@ struct LuaRuntime::Impl {
     }
     void event(int signal,float value=0) {
         if(!state)return;
-        for(const auto& listener:listeners) {
-            if(!listener.active || listener.signal!=signal)continue;
+        for(const auto& pair:listeners) {
+            const auto& listener=pair.second;
+            if(listener.signal!=signal || (listener.avatar && listener.avatar!=runtime->characterGeneration()))continue;
             executing=listener.script; lua_pushcfunction(state,Safe<Emit>);
             lua_pushinteger(state,signal);lua_pushinteger(state,listener.ref);lua_pushnumber(state,value);
             if(lua_pcall(state,3,0,0)!=LUA_OK){message(true,executing,lua_tostring(state,-1));lua_pop(state,1);}
@@ -383,6 +455,15 @@ struct LuaRuntime::Impl {
         if(state)lua_close(state);
         state=nullptr;memory=0;runtime=nullptr;
     }
+    void characterAdded() {
+        if(!state)return;
+        for(auto it=listeners.begin();it!=listeners.end();) {
+            if(it->second.avatar && it->second.avatar!=runtime->characterGeneration()) {
+                luaL_unref(state,LUA_REGISTRYINDEX,it->second.ref);it=listeners.erase(it);
+            } else ++it;
+        }
+        event(Spawn);
+    }
 };
 LuaRuntime::LuaRuntime():impl_(std::make_unique<Impl>()){}
 LuaRuntime::~LuaRuntime(){stop();}
@@ -408,7 +489,7 @@ bool LuaRuntime::start(game::RuntimeSession& runtime) {
 }
 void LuaRuntime::stop(){impl_->close();}
 void LuaRuntime::update(float dt){impl_->event(Heartbeat,dt);impl_->tick(dt);}
-void LuaRuntime::characterAdded(){impl_->event(Spawn);}
+void LuaRuntime::characterAdded(){impl_->characterAdded();}
 void LuaRuntime::healthChanged(float health,bool died){impl_->event(HealthChanged,health);if(died)impl_->event(Died);}
 const std::vector<Message>& LuaRuntime::messages()const{return impl_->output;}
 std::size_t LuaRuntime::memoryUsed()const{return impl_->memory;}

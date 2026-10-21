@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <cmath>
 
 #include "objects/Instance.h"
 
@@ -14,6 +15,13 @@ public:
 
     const char* className() const override { return "Workspace"; }
     InstanceClass instanceClass() const override { return InstanceClass::Workspace; }
+    float fallenPartsDestroyHeight() const { return fallenHeight_; }
+    bool setFallenPartsDestroyHeight(float value) {
+        if (!std::isfinite(value) || value < -100000 || value > 100000) return false;
+        fallenHeight_=value;return true;
+    }
+private:
+    float fallenHeight_=-500;
 };
 
 }  // namespace loblox

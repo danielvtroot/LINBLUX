@@ -12,7 +12,7 @@ class btDefaultMotionState;
 
 namespace loblox::game {
 enum class RuntimeState { Editing, StartingPlay, Playing, Paused, StoppingPlay };
-enum class HumanoidState { Idle, Walking, Jumping, Freefall, Landing };
+enum class HumanoidState { Idle, Walking, Jumping, Freefall, Landing, Dead };
 const char* StateName(HumanoidState state);
 struct PlayerInput {
     Vector2 movement{}; // X=right, Y=forward, relative to horizontal camera
@@ -68,6 +68,11 @@ public:
     const scripting::LuaRuntime& scripts() const { return scripts_; }
     unsigned characterGeneration() const { return respawns_; }
     bool setAnimation(const std::string& state,const std::string& assetId,std::string& error);
+    float health() const { return health_; }
+    bool setHealth(float value,std::string& error);
+    bool takeDamage(float amount,std::string& error);
+    bool heal(float amount,std::string& error);
+    bool resetCharacter(std::string& error);
     const Rig& rig() const { return rig_; }
     RigidTransform characterRoot() const;
     const Pose& pose() const { return pose_; }
@@ -107,5 +112,6 @@ private:
     std::string correlation_;
     std::string activeAnimation_;
     scripting::LuaRuntime scripts_;
+    float health_=100, deadTime_=0, damageCooldown_=0;
 };
 } // namespace loblox::game

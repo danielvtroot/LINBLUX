@@ -295,7 +295,7 @@ std::string toJson(const Scene& scene) {
     // A plain legacy scene stays v1; gameplay assets opt into the v2 schema.
     const auto gameData = game::EncodeAssets(scene.gameAssets());
     const bool hasGame = gameData != game::EncodeAssets(game::GameAssets{});
-    const bool hierarchy = std::any_of(scene.objects().begin(),scene.objects().end(),[](const auto& o) {
+    const bool hierarchy = scene.workspace()->fallenPartsDestroyHeight()!=-500 || std::any_of(scene.objects().begin(),scene.objects().end(),[](const auto& o) {
         return o->instanceClass() == InstanceClass::Folder || o->instanceClass() == InstanceClass::Model ||
             !o->attributes().empty() ||
             IsScriptClass(o->instanceClass()) || (IsRootServiceClass(o->instanceClass()) &&
@@ -358,6 +358,7 @@ std::string toJson(const Scene& scene) {
                            {"material", PartMaterialName(part->material())},
                            {"anchored", part->anchored()},
                            {"canCollide", part->canCollide()}});
+        for (const auto* child : node->children()) append(child);
     };
     for (const auto* child : scene.workspace()->children()) append(child);
     for (const auto& object:scene.objects())
@@ -369,6 +370,8 @@ std::string toJson(const Scene& scene) {
             auto& attrs=entry["attributes"]; attrs=json::object();
             for (const auto& pair:node->attributes()) std::visit([&](const auto& value){attrs[pair.first]=value;},pair.second);
         }
+        if (node==scene.workspace() && scene.workspace()->fallenPartsDestroyHeight()!=-500)
+            entry["fallenPartsDestroyHeight"]=scene.workspace()->fallenPartsDestroyHeight();
     }
     root["objects"] = std::move(objects);
     return root.dump(2) + "\n";
@@ -415,6 +418,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
 
     std::set<InstanceId> ids;
     InstanceId workspaceId = kInvalidInstanceId;
+    InstanceId lightingId = kInvalidInstanceId;
     int workspaceCount = 0;
 
     for (std::size_t i = 0; i < root["objects"].size(); ++i) {
@@ -439,6 +443,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
                 return false;
             }
         }
+        if(object.instanceClass==InstanceClass::Lighting)lightingId=object.id;
         parsed.push_back(object);
     }
 
@@ -474,6 +479,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
     const InstanceId serviceIds[2] = {scene.workspace() != nullptr ? scene.workspace()->id() : 0,
                                       scene.lighting() != nullptr ? scene.lighting()->id() : 0};
     for (const ParsedObject& object : parsed) {
+        if(version>=3)break; // incoming root IDs are preserved in v3
         if (object.instanceClass == InstanceClass::Workspace ||
             object.instanceClass == InstanceClass::Lighting) {
             continue;
@@ -513,7 +519,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
     // --- Validacao concluida: constroi uma cena candidata isolada. ---
     // A cena atual permanece intocada ate que todos os objetos tenham sido
     // criados com sucesso. A troca final e O(1) e nao pode falhar.
-    Scene staged;
+    Scene staged(version>=3?workspaceId:1,version>=3?lightingId:2);
     if (version >= 2 && root.contains("game")) {
         if (!root.contains("game") || !game::DecodeAssets(root["game"], staged.gameAssets(), error)) {
             if (error.empty()) error = "version 2 requires game assets";
@@ -545,6 +551,11 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
     staged.lighting()->setSunDirection(lighting.sunDirection);
     staged.lighting()->setSunIntensity(lighting.sunIntensity);
     staged.lighting()->setBrightness(lighting.brightness);
+    for (const auto& value:root["objects"]) if (value["class"]=="Workspace" && value.contains("fallenPartsDestroyHeight")) {
+        float height;
+        if (version<3 || !ReadFloat(value["fallenPartsDestroyHeight"],"fallenPartsDestroyHeight",height,error) ||
+            !staged.workspace()->setFallenPartsDestroyHeight(height)) {error="invalid v3 FallenPartsDestroyHeight";return false;}
+    }
 
     for (const auto& object:parsed) {
         if (!IsRootServiceClass(object.instanceClass) || object.instanceClass==InstanceClass::Workspace || object.instanceClass==InstanceClass::Lighting) continue;

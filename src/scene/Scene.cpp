@@ -5,6 +5,7 @@
 #include <cmath>
 #include <set>
 #include <utility>
+#include <stdexcept>
 
 namespace loblox {
 
@@ -21,13 +22,14 @@ bool Finite(Quaternion value) {
 }
 }  // namespace
 
-Scene::Scene() {
-    auto workspace = std::make_unique<Workspace>(allocateId());
+Scene::Scene(InstanceId workspaceId,InstanceId lightingId) {
+    if(!workspaceId || !lightingId || workspaceId==lightingId)throw std::invalid_argument("invalid root service IDs");
+    auto workspace = std::make_unique<Workspace>(workspaceId);
     Workspace* workspacePointer = workspace.get();
     adopt(std::move(workspace), nullptr);
     workspace_ = workspacePointer;
 
-    auto lighting = std::make_unique<Lighting>(allocateId(), "Lighting");
+    auto lighting = std::make_unique<Lighting>(lightingId, "Lighting");
     Lighting* lightingPointer = lighting.get();
     adopt(std::move(lighting), nullptr);
     lighting_ = lightingPointer;
@@ -402,7 +404,11 @@ bool Scene::reparent(Instance* object, Instance* parent, std::string& error) {
     error.clear();
     if (!canParent(object,parent)) { error = "Parent invalido: ciclo, servico protegido, classe ou profundidade"; return false; }
     if (object->parent() == parent) return true;
+    const auto previous=object->parent()?object->parent()->id():0;
     parent->attachChild(object);
+    diag::Event event;event.subsystem="scene";event.name="reparent";event.entityId=object->id();
+    event.result="ok";event.context={{"previous_parent",previous},{"parent",parent->id()},{"transform_space","world_preserved"}};
+    diag::log(event);
     return true;
 }
 

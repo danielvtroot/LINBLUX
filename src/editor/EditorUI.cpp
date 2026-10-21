@@ -557,6 +557,7 @@ bool EditorUI::saveCurrentProject() {
 
 void EditorUI::draw() {
     diag::setFrame(++frame_);
+    explorerFocused_=false;
     if (!runtime_.active() && !selectedRig_.empty() && !scene_.gameAssets().findRig(selectedRig_)) {
         cancelRigGizmo(false); selectedRig_.clear(); animationSource_.clear(); previewPlaying_ = false;
     }
@@ -571,13 +572,17 @@ void EditorUI::draw() {
 
     ImGui::BeginDisabled(runtime_.active());
     drawToolbar();
-    if (showToolbox_) {
+    const auto visibleInPlay=[&](const char* name) {
+        const auto* window=ImGui::FindWindowByName(name);
+        return !runtime_.active() || (window && window->DockId!=0);
+    };
+    if (showToolbox_ && visibleInPlay("Toolbox")) {
         drawToolbox();
     }
-    if (showExplorer_) {
+    if (showExplorer_ && visibleInPlay("Explorer")) {
         drawExplorer();
     }
-    if (showProperties_) {
+    if (showProperties_ && visibleInPlay("Properties")) {
         drawProperties();
     }
     if (!runtime_.active()) {
@@ -1550,6 +1555,9 @@ void EditorUI::drawWorkspaceProperties() {
     if (ImGui::InputText("Name", name, sizeof(name))) {
         scene_.workspace()->setName(name);
     }
+    float height=scene_.workspace()->fallenPartsDestroyHeight();
+    if(ImGui::InputFloat("FallenPartsDestroyHeight",&height,10,100,"%.1f",ImGuiInputTextFlags_EnterReturnsTrue) &&
+        !scene_.workspace()->setFallenPartsDestroyHeight(height))setStatus("Void height invalido.",true);
     ImGui::SeparatorText("Projeto");
     ImGui::Text("Objetos: %d", static_cast<int>(scene_.objects().size()));
     ImGui::Text("Pecas: %d", static_cast<int>(scene_.parts().size()));

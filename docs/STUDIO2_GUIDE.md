@@ -79,6 +79,9 @@ API atual:
   Character.Humanoid e Character.Animator. Humanoid: WalkSpeed, JumpHeight,
   AutoRotate, State (readonly). Animator:SetAnimation("Idle"/"Walk"/"Jump", ID)
   valida rig/asset e muda o clip realmente usado pelo controller.
+- Humanoid: Health/MaxHealth, TakeDamage, Heal, HealthChanged, Died,
+  HealthDisplayType, HealthDisplayDistance, NameDisplayDistance.
+  Players.LocalPlayer:Respawn() usa o reset controlado.
 - AnimationService:GetAnimation("anim://id") retorna Id, Name, RigType,
   Duration, Loop e Version do asset local, sem nuvem ou IDs Roblox.
 - RunService.Heartbeat:Connect(callback(dt)), connection:Disconnect().
@@ -111,6 +114,35 @@ Renomear clip não muda o ID. Alterações salvas em keys são usadas no próxim
 Play. ID inválido gera erro sem substituir a associação válida anterior.
 Jump padrão conserva a pose aérea anterior, agora editável; mapas antigos sem
 Jump asset usam a pose nativa. Não há blending de prioridades Action em camadas.
+Scripts de animação têm precedência sobre Game Settings quando chamam
+SetAnimation em CharacterAdded. Edite seus IDs ou desative o script para usar
+somente as atribuições de Game Settings.
+
+## Vida e void
+
+Health/MaxHealth padrão 100, sem regeneração automática. Dano/cura devem ser
+finitos e não negativos; Health é limitada a 0..MaxHealth. Morrer bloqueia
+locomoção/pulo, para a pose de locomoção, emite Died uma vez e respawna após
+Respawn delay de Game Settings. Initial Health vale no primeiro spawn;
+respawn restaura MaxHealth. Cura não revive uma personagem Dead. Reset do menu
+usa a mesma transição de morte, com respawn imediato. Conexões de vida da
+personagem antiga são liberadas ao respawn, sem duplicar eventos a cada reset.
+
+HUD fica no canto inferior da viewport, com número e barra suavizada. Overhead
+health é opt-in: AlwaysOn/DisplayWhenDamaged/AlwaysOff, distâncias em Game
+Settings. Usa cabeça articulada, evita atrás da câmera e consulta obstáculos;
+não é desenhada em primeira pessoa. Painéis flutuantes de edição são ocultos
+durante Play para não cobrir HUD/gameplay, sem perder seu layout autoral.
+
+Part → Properties → Damage configura o attribute numérico Damage. Contato
+Bullet sólido aplica o maior dano entre as Parts tocadas, com cooldown global
+de 0,75 s para evitar múltiplas aplicações nos subpassos. CanCollide=false
+não causa dano. Não existe um evento Touched genérico anunciado como pronto.
+
+Workspace.FallenPartsDestroyHeight (default -500) é editável/persistido e
+acessível em Lua. Abaixo dele, jogador morre e respawna; Parts dinâmicas
+deletáveis são removidas só do runtime, liberando Bullet e invalidando handles.
+Não há chão infinito. Um spawn abaixo do limite é rejeitado com erro.
 
 ## Limites da VM
 
@@ -118,7 +150,10 @@ Lua 5.4 in-process: 8 MiB de alocações Lua, 128 tarefas, 128 conexões,
 64 módulos, profundidade require 16, source 256 KiB/Script, 100.000 instruções
 por resume e 250.000 por tick. Exceder quota termina a tarefa e produz erro;
 não é um orçamento rígido de CPU dentro de funções nativas da biblioteca Lua.
-O limite Lua não inclui todos os objetos nativos/renderer/Bullet.
+O limite Lua não inclui todos os objetos nativos/renderer/Bullet. Bindings de
+criação/Clone/attributes também impõem 10.000 nós e 8 MiB de conteúdo nativo
+(nomes/source/attributes) para limitar expansão; não é medida exata de RSS.
+Clone calcula o custo da subárvore antes de duplicar, incluindo source.
 
 Sem os/io/debug/package/rede, arquivos, load/loadfile/dofile, bytecode,
 coroutine, pcall/xpcall ou string.dump. pcall/xpcall não são expostos para que
@@ -153,6 +188,6 @@ criar Script, digitar exemplo, salvar, Play, conferir efeito/Output, Stop,
 comparar mapa autoral, fechar/reabrir. Capturas/testes automatizados ficam em
 `/tmp/loblox-studio-ui-*`; não são projetos pessoais.
 
-Ainda pendentes nesta missão: Health/void/HUD, Shift Lock, importer/Decal/Texture, nova cabeça/rosto,
+Ainda pendentes nesta missão: Shift Lock, importer/Decal/Texture, nova cabeça/rosto,
 logo integrada, skybox e novos shaders/perfis. Os PNGs originais foram apenas
 inspecionados e preservados; não são apresentados como recursos integrados.

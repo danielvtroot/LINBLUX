@@ -1,5 +1,9 @@
 # Continuidade — R6 e primeiro runtime local — 2026-10-21
 
+Evolução posterior Studio 2: ver [STUDIO2_HANDOFF.md](STUDIO2_HANDOFF.md)
+para hierarquia, Properties, Lua executável, IDs de animação e Health/void.
+O restante deste arquivo conserva a evidência histórica do checkpoint R6.
+
 ## Estado atual: protótipo jogável validado em software, alvo físico pendente
 
 Base desta evolução: `d6f1e95` (Ctrl+D), branch preservado. Sem push.

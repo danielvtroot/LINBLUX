@@ -13,7 +13,7 @@ cmake --build build -j2
 ```
 
 1. Use **Game → Insert R6** (menu superior ou ribbon Game). O rig aparece no
-   Explorer, com seis membros, raiz interna e joints; Walk/Idle são geradas uma
+   Explorer, com seis membros, raiz interna e joints; Walk/Idle/Jump são geradas uma
    única vez como assets do projeto. Novos rigs reutilizam os clips existentes.
 2. No **Rig Editor**, selecione Left Arm e altere Body color/Material.
    **Edit Rig** altera dimensões/attachments/rest; **Pose Rig** altera apenas
@@ -62,8 +62,9 @@ elevar a posição inicial para sua superfície. Abaixo de Y=-500 ocorre respawn
 - `AnimationClip`: versão 1, IDs string estáveis, R6, tracks por índice de junta,
   keys crescentes, quaternion unitário, SLERP, Linear/Smooth/Constant. Sparse
   loops interpolam entre última e primeira key. Walk original de 0,8 s tem
-  contatos opostos e fechamento; Idle é neutra. Jump/Fall usam pose mínima
-  interna, não um asset editável atribuído. Não existe blending por camadas de
+  contatos opostos e fechamento; Idle é neutra. Jump/Fall usam Jump editável
+  quando atribuído, com fallback nativo para mapas antigos sem esse asset.
+  Fall não tem atribuição independente. Não existe blending por camadas de
   prioridades Action; prioridade é metadado e a seleção atual é locomotora.
 - `RuntimeSession`: Editing → StartingPlay → Playing/Paused → StoppingPlay →
   Editing. Cópia profunda por JSON validado uma vez ao iniciar, Scene e Bullet

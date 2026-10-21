@@ -193,6 +193,40 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     auto* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled({image.x+8, image.y+8}, {image.x+viewportWidth_-8.f, image.y+36}, IM_COL32(20,25,30,210), 4);
     dl->AddText({image.x+14, image.y+14}, IM_COL32(235,240,245,255), hint);
+    const float health=runtime_.health(), maximum=runtime_.settings().maxHealth;
+    displayedHealth_=Lerp(displayedHealth_,health,1-std::exp(-10*std::min(GetFrameTime(),.1f)));
+    const float fraction=std::clamp(displayedHealth_/maximum,0.f,1.f);
+    const ImU32 color=health<=0?IM_COL32(220,60,60,255):fraction>.6f?IM_COL32(70,195,105,255):
+        fraction>.25f?IM_COL32(230,190,65,255):IM_COL32(225,70,65,255);
+    const ImVec2 bar{image.x+16,image.y+viewportHeight_-53.f};
+    dl->AddRectFilled({bar.x-6,bar.y-6},{bar.x+218,bar.y+35},IM_COL32(20,25,30,215),5);
+    dl->AddRectFilled(bar,{bar.x+210,bar.y+10},IM_COL32(65,70,75,255),3);
+    dl->AddRectFilled(bar,{bar.x+210*fraction,bar.y+10},color,3);
+    char healthText[80];std::snprintf(healthText,sizeof(healthText),health>0?"Health %.0f / %.0f":"DEAD | Respawning... %.0f / %.0f",health,maximum);
+    dl->AddText({bar.x,bar.y+15},IM_COL32(240,245,250,255),healthText);
+    const auto& settings=runtime_.settings();
+    if (!runtime_.playerCamera().avatarHidden() && (settings.healthDisplayType!=2 || settings.nameDisplayDistance>0)) {
+        const auto head=runtime_.rig().evaluate(runtime_.pose(),runtime_.characterRoot())[game::Head];
+        const auto eye=runtime_.playerCamera().camera();
+        const auto p=Vector3Add(head.position,{0,runtime_.rig().bodies[game::Head].size.y*.5f+.6f,0});
+        const float distance=Vector3Distance(eye.position,p);
+        if (Vector3DotProduct(Vector3Subtract(p,eye.position),Vector3Subtract(eye.target,eye.position))>0 &&
+            runtime_.cameraClearance(eye.position,p,.02f)>.98f) {
+            const auto screen=GetWorldToScreenEx(p,eye,viewportWidth_,viewportHeight_);
+            const ImVec2 at{image.x+screen.x,image.y+screen.y};
+            dl->PushClipRect({image.x,image.y},{image.x+viewportWidth_,image.y+viewportHeight_},true);
+            if (settings.healthDisplayType!=2 && distance<=settings.healthDisplayDistance &&
+                (settings.healthDisplayType==0 || health<maximum)) {
+                dl->AddRectFilled({at.x-38,at.y},{at.x+38,at.y+8},IM_COL32(25,30,35,220),2);
+                dl->AddRectFilled({at.x-37,at.y+1},{at.x-37+74*health/maximum,at.y+7},color,2);
+            }
+            if (distance<=settings.nameDisplayDistance) {
+                const auto size=ImGui::CalcTextSize(runtime_.rig().name.c_str());
+                dl->AddText({at.x-size.x*.5f,at.y-size.y-3},IM_COL32(245,245,245,255),runtime_.rig().name.c_str());
+            }
+            dl->PopClipRect();
+        }
+    }
 }
 void EditorUI::drawPauseMenu() {
     if (runtime_.state() != game::RuntimeState::Paused) {
@@ -213,7 +247,7 @@ void EditorUI::drawPauseMenu() {
             if (ImGui::Button("Settings", {-1, 32})) pausePage_ = 1;
             if (ImGui::Button("Reset Character", {-1, 32})) {
                 std::string error;
-                if (!runtime_.respawn(error)) setStatus(error, true);
+                if (!runtime_.resetCharacter(error)) setStatus(error, true);
             }
             if (ImGui::Button("Controls", {-1, 32})) pausePage_ = 2;
             if (ImGui::Button("Stop Test / Return to Editor", {-1, 32})) { stopPlay(); ImGui::CloseCurrentPopup(); }
@@ -395,6 +429,10 @@ void EditorUI::drawGameSettings() {
     ImGui::SliderFloat("MaxHealth", &p.maxHealth, 1, 10000);
     p.health = std::clamp(p.health, 0.f, p.maxHealth);
     ImGui::SliderFloat("Initial Health", &p.health, 0, p.maxHealth);
+    ImGui::SliderFloat("Respawn delay (s)",&p.respawnDelay,.1f,30);
+    ImGui::Combo("Overhead health",&p.healthDisplayType,"AlwaysOn\0DisplayWhenDamaged\0AlwaysOff\0");
+    ImGui::SliderFloat("Health display distance",&p.healthDisplayDistance,0,500);
+    ImGui::SliderFloat("Name display distance",&p.nameDisplayDistance,0,500);
     ImGui::SliderFloat("Capsule radius", &p.collisionRadius, .2f, 3);
     p.collisionHeight = std::max(p.collisionHeight, p.collisionRadius*2);
     ImGui::SliderFloat("Capsule total height", &p.collisionHeight, 2*p.collisionRadius, 15);

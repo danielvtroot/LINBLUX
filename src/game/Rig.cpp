@@ -228,6 +228,8 @@ bool PlayerSettings::validate(std::string& error) const {
         !Range(acceleration, 1, 500) || !Range(deceleration, 1, 500) ||
         !Range(jumpHeight, .1f, 50) || !Range(gravity, 1, 500) ||
         !Range(maxHealth, 1, 100000) || !Range(health, 0, maxHealth) ||
+        !Range(respawnDelay,.1f,30) || healthDisplayType<0 || healthDisplayType>2 ||
+        !Range(healthDisplayDistance,0,500) || !Range(nameDisplayDistance,0,500) ||
         !Range(collisionRadius, .2f, 3) || !Range(collisionHeight, 2 * collisionRadius, 15) ||
         !Range(minZoom, .1f, 10) || !Range(maxZoom, minZoom, 100) ||
         !Range(cameraDistance, minZoom, maxZoom) || !Range(sensitivity, .0001f, .03f) ||
