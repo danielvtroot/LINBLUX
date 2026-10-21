@@ -37,6 +37,21 @@ no Game Config, evitando referência quebrada e save inválido. Teste físico
 com subida/descida verificou transição e pose neutra, além de persistência e
 proteção de exclusão. Studio/Game headless 2/2 passaram nesta revisão.
 
+Checkpoint Fall: a6c99fe. Rig GUI ampliado passou também ao selecionar as
+ferramentas pelo combo real e ao duplicar/renomear/excluir um rig.
+
+Sky procedural: teste novo detectou duas falhas de pixels antes da correção.
+O quad era passado a DrawMesh com Material{0}, e a direção usava projeção
+esférica independente da câmera. Agora usa clip-space e raios da câmera com
+aspect/FOV reais. Uniforms de nuvens/rotação também estavam sem envio.
+Mantidos shader, atmosfera e configurações; nenhum PNG sky1 é usado.
+Teste com horizonte/zenith/translação/Enabled passou; recursos liberados
+antes do fechamento. Nuvens reduzidas de 15 para 3 camadas de ruído e hash
+inteiro, evitando dezenas de sin() por pixel em software.
+Capturas inspecionadas: `/tmp/loblox-sky-capture-fOFmdv/` e
+`/tmp/loblox-visual-studio-MRynAG/`. O readback da fixture agora corrige Y
+antes de exportar. Essas imagens anteriores não aprovam o hardware real.
+
 Base real: f75e44d, branch fix/unified-3d-gizmos, seis arquivos rastreados
 modificados antes da intervenção. Patch e originais preservados em backup
 externo `studio3-Li2jVGjM`. PNGs, assets e referências permanecem originais.

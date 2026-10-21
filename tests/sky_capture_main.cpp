@@ -1,138 +1,51 @@
-// Comprehensive sky capture test
+// Deterministic production-renderer fixtures; no personal projects are loaded.
 #include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <cmath>
-#include <filesystem>
 #include "raylib.h"
 #include "rendering/SceneRenderer.h"
-#include "rendering/EditorCamera.h"
-#include "core/Diagnostics.h"
-#include "serialization/ProjectIO.h"
 #include "objects/Lighting.h"
 #include "scene/Scene.h"
-#include "physics/PhysicsWorld.h"
-
+#include "core/Diagnostics.h"
 using namespace loblox;
-
+int failures=0,checks=0;
+#define CHECK(x) do{++checks;if(!(x)){++failures;std::fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);}}while(0)
 int main() {
-    char temp[] = "/tmp/loblox-sky-capture-XXXXXX";
-    const char* directory = mkdtemp(temp);
-    if (!directory) return 1;
-
-    diag::configure(std::string(directory) + "/events.jsonl");
-
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    SetTraceLogLevel(LOG_WARNING);
-    InitWindow(1920, 1080, "Loblox Sky Capture");
-    SetWindowPosition(0, 0);
-    SetExitKey(KEY_NULL);
-    SetTargetFPS(60);
-
-    std::printf("Window created\n");
-
-    // Load the default project
-    Scene scene;
-    std::string error;
-    const std::string projectPath = "/home/labubu/projeto/loblox/projects/default.loblox.json";
-    bool loaded = projectio::load(scene, projectPath, error);
-    if (!loaded) {
-        std::fprintf(stderr, "Failed to load project: %s\n", error.c_str());
-        scene.buildDefaultScene();
-    }
-    scene.installDefaultScripts();
-
-    std::printf("Scene built\n");
-
-    // Force Atmospheric mode and configure sky
-    Lighting* lighting = scene.lighting();
-    lighting->setSkyMode(SkyMode::Atmospheric);
-    lighting->setSkyColor(Color{120, 180, 240, 255});
-    lighting->setHorizonColor(Color{180, 200, 230, 255});
-    lighting->setAtmosphereStrength(0.6f);
-    lighting->setSkyRotation(0.0f);
-    lighting->setSkyboxEnabled(true);
-
-    std::printf("Lighting configured (Atmospheric)\n");
-
-    PhysicsWorld physics;
-    physics.attach(scene);
-    std::printf("Physics attached\n");
-
-    EditorCamera camera;
-    std::printf("Camera created\n");
-
-    SceneRenderer* renderer = new SceneRenderer();
-    std::printf("Renderer created\n");
-
-    auto frames = [&](int count = 3) {
-        for (int i = 0; i < count; ++i) {
-            BeginDrawing();
-            ClearBackground(BLACK);
-            renderer->drawScene(scene, camera.camera(), 1920, 1080, kInvalidInstanceId, nullptr, true);
-            EndDrawing();
-        }
-    };
-
-    auto capture = [&](const std::string& name) {
-        frames(2);
-        TakeScreenshot((std::string(directory) + "/" + name + ".png").c_str());
-        std::printf("Captured: %s/%s.png\n", directory, name.c_str());
-    };
-
-    std::printf("Starting frames...\n");
-    frames(10);
-    std::printf("Initial frames done\n");
-
-    // Atmospheric mode captures
-    camera.setOrbit(Vector3{0, 3, 0}, 50.0f, 0.0f, -0.3f);
-    capture("sky_atmospheric_top_down");
-
-    camera.setOrbit(Vector3{0, 3, 0}, 50.0f, 0.0f, 0.0f);
-    capture("sky_atmospheric_horizon");
-
-    camera.setOrbit(Vector3{0, 3, 0}, 50.0f, 0.0f, -1.3f);
-    capture("sky_atmospheric_zenith");
-
-    for (int i = 0; i < 4; ++i) {
-        float yaw = i * PI / 2.0f;
-        camera.setOrbit(Vector3{0, 3, 0}, 50.0f, yaw, 0.0f);
-        capture("sky_atmospheric_yaw_" + std::to_string(i * 90));
-    }
-
-    // Classic mode for comparison
-    lighting->setSkyMode(SkyMode::Classic);
-    frames(5);
-    camera.setOrbit(Vector3{0, 3, 0}, 50.0f, 0.0f, 0.0f);
-    capture("sky_classic_horizon");
-    camera.setOrbit(Vector3{0, 3, 0}, 50.0f, 0.0f, -1.3f);
-    capture("sky_classic_zenith");
-
-    // Restore Atmospheric
-    lighting->setSkyMode(SkyMode::Atmospheric);
-    frames(5);
-
-    // Test with sky rotation
-    lighting->setSkyRotation(45.0f);
-    frames(5);
-    camera.setOrbit(Vector3{0, 3, 0}, 50.0f, 0.0f, 0.0f);
-    capture("sky_atmospheric_rotated_45");
-
-    // Test with atmosphere strength variations
-    lighting->setSkyRotation(0.0f);
-    lighting->setAtmosphereStrength(0.0f);
-    frames(5);
-    camera.setOrbit(Vector3{0, 3, 0}, 50.0f, 0.0f, 0.0f);
-    capture("sky_atmospheric_strength_0");
-
-    lighting->setAtmosphereStrength(1.0f);
-    frames(5);
-    camera.setOrbit(Vector3{0, 3, 0}, 50.0f, 0.0f, 0.0f);
-    capture("sky_atmospheric_strength_1");
-
-    std::printf("\nAll screenshots saved to: %s\n", directory);
-    std::printf("Sky Mode final: %d\n", static_cast<int>(lighting->skyMode()));
-
-    CloseWindow();
-    return 0;
+    char temp[]="/tmp/loblox-sky-capture-XXXXXX";const char* dir=mkdtemp(temp);if(!dir)return 1;
+    diag::configure(std::string(dir)+"/events.jsonl");
+    SetTraceLogLevel(LOG_WARNING);InitWindow(640,360,"Loblox procedural sky regression");SetExitKey(KEY_NULL);
+    {
+        Scene scene;auto* lighting=scene.lighting();lighting->setSkyEnabled(true);
+        lighting->setCloudDensity(0);lighting->setAtmosphereStrength(.3f);
+        SceneRenderer renderer;const auto target=LoadRenderTexture(640,360);
+        auto render=[&](Camera3D camera,const char* name) {
+            BeginDrawing();BeginTextureMode(target);
+            renderer.drawScene(scene,camera,640,360,kInvalidInstanceId,nullptr,false);
+            EndTextureMode();EndDrawing();
+            auto result=LoadImageFromTexture(target.texture);
+            ImageFlipVertical(&result); // RenderTexture readback has OpenGL's bottom-left origin
+            ExportImage(result,(std::string(dir)+"/"+name+".png").c_str());return result;
+        };
+        Camera3D camera{{0,5,0},{0,5,-1},{0,1,0},60,CAMERA_PERSPECTIVE};
+        auto horizon=render(camera,"horizon");
+        const auto top=GetImageColor(horizon,320,50),bottom=GetImageColor(horizon,320,310);
+        CHECK(std::abs(int(top.r)-int(bottom.r))+std::abs(int(top.g)-int(bottom.g))+std::abs(int(top.b)-int(bottom.b))>30);
+        const auto centre=GetImageColor(horizon,320,180);
+        camera.position={300,500,700};camera.target={300,500,699};
+        auto translated=render(camera,"translated");
+        const auto translatedCentre=GetImageColor(translated,320,180);
+        CHECK(std::abs(int(centre.r)-int(translatedCentre.r))<=1);
+        CHECK(std::abs(int(centre.g)-int(translatedCentre.g))<=1);
+        camera.target={300,501,699};auto up=render(camera,"zenith");
+        const auto upCentre=GetImageColor(up,320,180);
+        CHECK(std::abs(int(centre.r)-int(upCentre.r))+std::abs(int(centre.g)-int(upCentre.g))>15);
+        lighting->setCloudDensity(.8f);auto clouds=render(camera,"clouds");
+        lighting->setSkyEnabled(false);auto disabled=render(camera,"disabled");
+        const auto disabledCentre=GetImageColor(disabled,320,180);
+        CHECK(std::abs(int(upCentre.r)-int(disabledCentre.r))+std::abs(int(upCentre.g)-int(disabledCentre.g))>15);
+        for(auto image:{horizon,translated,up,clouds,disabled})UnloadImage(image);
+        UnloadRenderTexture(target);
+    } // renderer releases shader/GPU resources before CloseWindow
+    CloseWindow();std::printf("Sky: %d checks, %d failures; captures %s\n",checks,failures,dir);return failures?1:0;
 }

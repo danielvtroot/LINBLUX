@@ -100,8 +100,9 @@ struct ProceduralSky {
     int locFogDensity = -1;
     int locViewMatrix = -1;
     int locProjMatrix = -1;
-    Mesh quadMesh{};
+    int locForward=-1,locRight=-1,locUp=-1,locLens=-1;
     bool initialized = false;
+    bool attempted = false;
     float timeAccumulator = 0.0f;
 };
 
@@ -121,12 +122,9 @@ uniform mat4 mvp;
 
 void main() {
     fragTexCoord = vertexTexCoord;
-    float u = vertexTexCoord.x * 2.0 - 1.0;
-    float v = vertexTexCoord.y * 2.0 - 1.0;
-    float theta = u * 3.14159265359;
-    float phi = v * 1.57079632679;
-    worldDir = vec3(cos(phi) * sin(theta), sin(phi), cos(phi) * cos(theta));
-    gl_Position = mvp * vec4(vertexPosition, 1.0);
+    fragTexCoord=vertexPosition.xy*.5+.5;
+    worldDir=vec3(0.0);
+    gl_Position=vec4(vertexPosition.xy,0.0,1.0);
 }
 )";
 
@@ -139,6 +137,10 @@ in vec3 worldDir;
 out vec4 fragColor;
 
 uniform vec3 cameraPos;
+uniform vec3 cameraForward;
+uniform vec3 cameraRight;
+uniform vec3 cameraUp;
+uniform vec2 lens;
 uniform vec3 sunDir;
 uniform vec3 sunColor;
 uniform float sunSize;
@@ -160,7 +162,12 @@ uniform vec3 fogColor;
 uniform float fogDensity;
 
 float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    // Integer grid hash avoids dozens of transcendental operations per pixel
+    // on software OpenGL while keeping deterministic procedural clouds.
+    uint n=uint(int(p.x))*1664525u+uint(int(p.y))*1013904223u;
+    n=(n^(n>>16u))*2246822519u;
+    n^=n>>13u;
+    return float(n&0x00ffffffu)/16777215.0;
 }
 
 float noise(vec2 p) {
@@ -196,7 +203,7 @@ vec3 computeSkyColor(vec3 dir, vec3 sunDir, float time) {
         float t = pow(1.0 - elevation, 1.5);
         skyColor = mix(zenithColor, horizonColor, t);
     } else {
-        float t = pow(1.0 + elevation, 2.0);
+        float t = pow(clamp(-elevation,0.0,1.0), .6);
         skyColor = mix(horizonColor, groundColor, t);
     }
     
@@ -204,10 +211,10 @@ vec3 computeSkyColor(vec3 dir, vec3 sunDir, float time) {
     vec3 atmospheric = mix(vec3(0.0), sunColor * 0.3, scatter);
     skyColor += atmospheric;
     
-    float sunDisk = pow(sunDot, 2048.0) * sunIntensity * 1000.0;
+    float sunDisk = smoothstep(cos(sunSize),cos(sunSize*.75),sunDot)*sunIntensity;
     skyColor += sunColor * sunDisk;
     
-    float sunGlow = pow(sunDot, 32.0) * sunIntensity * 10.0;
+    float sunGlow = pow(sunDot, 32.0) * sunIntensity * .16;
     skyColor += sunColor * sunGlow;
     
     return skyColor;
@@ -215,11 +222,12 @@ vec3 computeSkyColor(vec3 dir, vec3 sunDir, float time) {
 
 float cloudNoise(vec2 p, float time, float speed) {
     p += vec2(time * speed * 0.01, 0.0);
-    return fbm(p, 5);
+    return fbm(p, 3);
 }
 
 void main() {
-    vec3 dir = normalize(worldDir);
+    vec2 ndc=fragTexCoord*2.0-1.0;
+    vec3 dir=normalize(cameraForward+ndc.x*lens.x*cameraRight+ndc.y*lens.y*cameraUp);
     
     float rot = skyRotation * 3.14159265359 / 180.0;
     mat3 rotY = mat3(
@@ -235,12 +243,9 @@ void main() {
         vec2 cloudCoord = vec2(dir.x, dir.z) * cloudScale * 10.0;
         float cloudTime = time * cloudSpeed * 0.5;
         
-        float clouds = 0.0;
-        clouds += cloudNoise(cloudCoord * 1.0, cloudTime, 1.0) * 0.5;
-        clouds += cloudNoise(cloudCoord * 2.0 + 100.0, cloudTime, 0.5) * 0.25;
-        clouds += cloudNoise(cloudCoord * 4.0 - 50.0, cloudTime, 0.25) * 0.125;
-        
-        clouds = smoothstep(1.0 - cloudSoftness, 1.0, clouds);
+        float clouds=cloudNoise(cloudCoord,cloudTime,1.0);
+        float coverage=.78-.43*cloudDensity;
+        clouds=smoothstep(coverage,coverage+.06+.20*cloudSoftness,clouds);
         float cloudMask = smoothstep(-0.1, 0.15, dir.y);
         clouds *= cloudMask;
         clouds *= cloudDensity;
@@ -254,7 +259,7 @@ void main() {
     }
     
     if (fogDensity > 0.0) {
-        float fogAmount = fogDensity * smoothstep(0.3, -0.2, dir.y);
+        float fogAmount = fogDensity * (1.0-smoothstep(-0.2,0.3,dir.y));
         color = mix(color, fogColor, fogAmount);
     }
     
@@ -269,37 +274,14 @@ void main() {
 void InitProceduralSky() {
     auto& sky = SkyData();
     if (sky.initialized) return;
+    if(sky.attempted)return;
+    sky.attempted=true;
     
-    // Create fullscreen quad mesh
-    float vertices[] = {
-        -1.0f, -1.0f, 0.0f,  0.0f, 0.0f,
-         1.0f, -1.0f, 0.0f,  1.0f, 0.0f,
-         1.0f,  1.0f, 0.0f,  1.0f, 1.0f,
-        -1.0f,  1.0f, 0.0f,  0.0f, 1.0f
-    };
-    unsigned short indices[] = {0, 1, 2, 0, 2, 3};
-    
-    sky.quadMesh.vertexCount = 4;
-    sky.quadMesh.triangleCount = 2;
-    sky.quadMesh.vertices = (float*)MemAlloc(sizeof(float) * 5 * 4);
-    sky.quadMesh.texcoords = (float*)MemAlloc(sizeof(float) * 2 * 4);
-    sky.quadMesh.indices = (unsigned short*)MemAlloc(sizeof(unsigned short) * 6);
-    
-    for (int i = 0; i < 4; ++i) {
-        sky.quadMesh.vertices[i * 3 + 0] = vertices[i * 5 + 0];
-        sky.quadMesh.vertices[i * 3 + 1] = vertices[i * 5 + 1];
-        sky.quadMesh.vertices[i * 3 + 2] = vertices[i * 5 + 2];
-        sky.quadMesh.texcoords[i * 2 + 0] = vertices[i * 5 + 3];
-        sky.quadMesh.texcoords[i * 2 + 1] = vertices[i * 5 + 4];
-    }
-    for (int i = 0; i < 6; ++i) {
-        sky.quadMesh.indices[i] = indices[i];
-    }
-    UploadMesh(&sky.quadMesh, false);
+    // The sky uses a batched clip-space quad; no mesh or empty Material.
     
     // Load shader from memory
     sky.shader = LoadShaderFromMemory(skyVertexShader, skyFragmentShader);
-    if (sky.shader.id == 0) {
+    if (sky.shader.id == 0 || sky.shader.id==rlGetShaderIdDefault()) {
         // Fallback: shader compilation failed
         sky.initialized = false;
         return;
@@ -326,6 +308,10 @@ void InitProceduralSky() {
     sky.locFogDensity = GetShaderLocation(sky.shader, "fogDensity");
     sky.locViewMatrix = GetShaderLocation(sky.shader, "viewMatrix");
     sky.locProjMatrix = GetShaderLocation(sky.shader, "projMatrix");
+    sky.locForward=GetShaderLocation(sky.shader,"cameraForward");
+    sky.locRight=GetShaderLocation(sky.shader,"cameraRight");
+    sky.locUp=GetShaderLocation(sky.shader,"cameraUp");
+    sky.locLens=GetShaderLocation(sky.shader,"lens");
     
     sky.initialized = true;
 }
@@ -333,27 +319,28 @@ void InitProceduralSky() {
 void UnloadProceduralSky() {
     auto& sky = SkyData();
     if (sky.initialized) {
-        UnloadMesh(sky.quadMesh);
         UnloadShader(sky.shader);
-        sky.initialized = false;
     }
+    sky={};
 }
 
-void DrawProceduralSky(const Camera3D& camera, const Lighting* lighting, float deltaTime) {
+bool DrawProceduralSky(const Camera3D& camera, const Lighting* lighting, float deltaTime,int width,int height) {
     auto& sky = SkyData();
     if (!sky.initialized) {
         InitProceduralSky();
-        if (!sky.initialized) return; // Shader failed to compile
+        if (!sky.initialized) return false; // renderer falls back to a gradient
     }
     
-    if (!lighting || !lighting->skyEnabled()) return;
+    if (!lighting || !lighting->skyEnabled()) return false;
     
     sky.timeAccumulator += deltaTime;
     
     // Prepare matrices
-    Matrix view = MatrixInvert(GetCameraMatrix(camera));
-    Matrix proj = MatrixPerspective(camera.fovy * DEG2RAD, 1.0f, 0.01f, 1000.0f);
-    Matrix mvp = MatrixMultiply(view, proj);
+    const auto forward=Vector3Normalize(Vector3Subtract(camera.target,camera.position));
+    const auto right=Vector3Normalize(Vector3CrossProduct(forward,camera.up));
+    const auto up=Vector3CrossProduct(right,forward);
+    const float tangent=std::tan(camera.fovy*DEG2RAD*.5f);
+    const Vector2 lens{tangent*width/std::max(1,height),tangent};
     
     // Sun direction (normalized, pointing FROM sun TO scene)
     Vector3 sunDir = Vector3Normalize(Vector3Negate(lighting->sunDirection()));
@@ -373,7 +360,10 @@ void DrawProceduralSky(const Camera3D& camera, const Lighting* lighting, float d
     BeginShaderMode(sky.shader);
     
     // Set uniforms
-    SetShaderValueMatrix(sky.shader, sky.locMvp, mvp);
+    SetShaderValue(sky.shader,sky.locForward,&forward.x,SHADER_UNIFORM_VEC3);
+    SetShaderValue(sky.shader,sky.locRight,&right.x,SHADER_UNIFORM_VEC3);
+    SetShaderValue(sky.shader,sky.locUp,&up.x,SHADER_UNIFORM_VEC3);
+    SetShaderValue(sky.shader,sky.locLens,&lens.x,SHADER_UNIFORM_VEC2);
     SetShaderValue(sky.shader, sky.locCameraPos, &camera.position.x, SHADER_UNIFORM_VEC3);
     SetShaderValue(sky.shader, sky.locSunDir, &sunDir.x, SHADER_UNIFORM_VEC3);
     
@@ -416,10 +406,12 @@ void DrawProceduralSky(const Camera3D& camera, const Lighting* lighting, float d
     SetShaderValue(sky.shader, sky.locFogColor, &fogColorNorm.x, SHADER_UNIFORM_VEC3);
     SetShaderValue(sky.shader, sky.locFogDensity, &fogDensity, SHADER_UNIFORM_FLOAT);
     
-    Matrix viewMatrix = MatrixInvert(GetCameraMatrix(camera));
-    Matrix projMatrix = MatrixPerspective(camera.fovy * DEG2RAD, 1.0f, 0.01f, 1000.0f);
-    SetShaderValueMatrix(sky.shader, sky.locViewMatrix, viewMatrix);
-    SetShaderValueMatrix(sky.shader, sky.locProjMatrix, projMatrix);
+    SetShaderValue(sky.shader,sky.locCloudDensity,&cloudDensity,SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sky.shader,sky.locCloudScale,&cloudScale,SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sky.shader,sky.locCloudSpeed,&cloudSpeed,SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sky.shader,sky.locCloudSoftness,&cloudSoftness,SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sky.shader,sky.locSkyRotation,&skyRotation,SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sky.shader,sky.locTime,&sky.timeAccumulator,SHADER_UNIFORM_FLOAT);
     
     // Disable depth test and write for sky
     rlDisableDepthTest();
@@ -427,13 +419,18 @@ void DrawProceduralSky(const Camera3D& camera, const Lighting* lighting, float d
     rlDisableBackfaceCulling();
     
     // Draw fullscreen quad
-    DrawMesh(sky.quadMesh, Material{0}, MatrixIdentity());
+    rlSetTexture(rlGetTextureIdDefault());
+    rlBegin(RL_QUADS);
+    rlVertex3f(-1,-1,0);rlVertex3f(1,-1,0);rlVertex3f(1,1,0);rlVertex3f(-1,1,0);
+    rlEnd();
+    rlDrawRenderBatchActive();
     
     rlEnableDepthMask();
     rlEnableDepthTest();
     rlEnableBackfaceCulling();
     
     EndShaderMode();
+    return true;
 }
 
 void DrawShadedBox(Vector3 center, Vector3 size, Quaternion rotation, Color color,
@@ -1078,9 +1075,8 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
     ClearBackground(sky);
     
     // Desenha o céu procedural (sempre, se habilitado)
-    if (lighting && lighting->skyEnabled()) {
-        DrawProceduralSky(camera, lighting, GetFrameTime());
-    } else {
+    if (!lighting || !lighting->skyEnabled() ||
+        !DrawProceduralSky(camera,lighting,GetFrameTime(),width,height)) {
         // Fallback: gradiente simples
         DrawRectangleGradientV(0, 0, width, height, sky, Shade(sky, 1.22f));
     }
