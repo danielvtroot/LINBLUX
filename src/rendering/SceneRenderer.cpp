@@ -262,6 +262,95 @@ Mesh BuildStudMesh(Vector3 size) {
     return mesh;
 }
 
+
+// Superelipsoide (expoente ~4.5): silhueta de bloco com cantos suavizados.
+// Malha fechada, sem emendas, custo comparável à esfera facetada existente.
+void DrawShadedRoundedBlocky(Vector3 center, Vector3 size, Quaternion rotation, Color color,
+                             Vector3 lightDirection, float sunIntensity, float brightness) {
+    constexpr int rings = 6;
+    constexpr int slices = 14;
+    constexpr float exponent = 0.444f;  // 2/n com n ~4.5
+    const Vector3 half = Vector3Scale(size, 0.5f);
+    const auto blocky = [&](Vector3 d) {
+        Vector3 p;
+        p.x = half.x * std::copysign(std::pow(std::fabs(d.x), exponent), d.x);
+        p.y = half.y * std::copysign(std::pow(std::fabs(d.y), exponent), d.y);
+        p.z = half.z * std::copysign(std::pow(std::fabs(d.z), exponent), d.z);
+        return p;
+    };
+    rlBegin(RL_TRIANGLES);
+    for (int ring = 0; ring < rings; ++ring) {
+        const float v0 = (float)ring / rings, v1 = (float)(ring + 1) / rings;
+        const float phi0 = (v0 - 0.5f) * PI, phi1 = (v1 - 0.5f) * PI;
+        for (int slice = 0; slice < slices; ++slice) {
+            const float u0 = (float)slice / slices, u1 = (float)(slice + 1) / slices;
+            const float theta0 = u0 * 2.0f * PI, theta1 = u1 * 2.0f * PI;
+            const Vector3 d00{std::cos(theta0) * std::cos(phi0), std::sin(phi0),
+                              std::sin(theta0) * std::cos(phi0)};
+            const Vector3 d10{std::cos(theta1) * std::cos(phi0), std::sin(phi0),
+                              std::sin(theta1) * std::cos(phi0)};
+            const Vector3 d01{std::cos(theta0) * std::cos(phi1), std::sin(phi1),
+                              std::sin(theta0) * std::cos(phi1)};
+            const Vector3 d11{std::cos(theta1) * std::cos(phi1), std::sin(phi1),
+                              std::sin(theta1) * std::cos(phi1)};
+            const Vector3 p00 = Vector3Add(center, Vector3RotateByQuaternion(blocky(d00), rotation));
+            const Vector3 p10 = Vector3Add(center, Vector3RotateByQuaternion(blocky(d10), rotation));
+            const Vector3 p01 = Vector3Add(center, Vector3RotateByQuaternion(blocky(d01), rotation));
+            const Vector3 p11 = Vector3Add(center, Vector3RotateByQuaternion(blocky(d11), rotation));
+            Vector3 normal = Vector3Normalize(Vector3CrossProduct(
+                Vector3Subtract(p10, p00), Vector3Subtract(p01, p00)));
+            normal = Vector3RotateByQuaternion(normal, rotation);
+            const float lambert = std::max(0.0f, Vector3DotProduct(normal, lightDirection));
+            const float factor = std::clamp((0.5f + 0.5f * sunIntensity * lambert) * brightness, 0.2f, 1.6f);
+            SetColor4(Shade(color, factor));
+            Triangle(p00, p10, p11);
+            Triangle(p00, p11, p01);
+        }
+    }
+    rlEnd();
+}
+
+// Rosto aplicado a face -Z da cabeca (lazy-load, sem caminho absoluto no
+// projeto; o fallback mantem os olhos minimos se a imagem nao existir).
+Texture2D& FaceTexture() {
+    static Texture2D tex{};
+    static bool attempted = false;
+    if (!attempted) {
+        attempted = true;
+        for (const char* path : {"rosto1.png", "../rosto1.png", "../../rosto1.png", "../../../rosto1.png"}) {
+            if (FileExists(path)) { tex = LoadTexture(path); break; }
+        }
+    }
+    return tex;
+}
+
+void DrawHeadFace(const game::RigidTransform& headWorld, Vector3 headSize) {
+    Texture2D& tex = FaceTexture();
+    const Vector3 half = Vector3Scale(headSize, 0.5f);
+    const float offset = half.z + 0.02f;
+    const Vector3 local[4] = {
+        {-half.x,  half.y, -offset},  // topo-esquerda
+        { half.x,  half.y, -offset},  // topo-direita
+        { half.x, -half.y, -offset},  // baixo-direita
+        {-half.x, -half.y, -offset},  // baixo-esquerda
+    };
+    Vector3 world[4];
+    for (int i = 0; i < 4; ++i) {
+        world[i] = Vector3Add(headWorld.position,
+                              Vector3RotateByQuaternion(local[i], headWorld.rotation));
+    }
+    rlSetTexture(tex.id);
+    rlBegin(RL_QUADS);
+    rlColor4ub(255, 255, 255, 255);
+    const float uv[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+    for (int i = 0; i < 4; ++i) {
+        rlTexCoord2f(uv[i][0], uv[i][1]);
+        rlVertex3f(world[i].x, world[i].y, world[i].z);
+    }
+    rlEnd();
+    rlSetTexture(0);
+}
+
 }  // namespace
 
 SceneRenderer::SceneRenderer() {
@@ -399,16 +488,27 @@ void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float in
     const auto world = rig.evaluate(state.pose, state.root);
     for (int i = 0; i < game::kBodyCount; ++i) {
         const auto& body = rig.bodies[i];
-        DrawShadedBox(world[i].position, body.size, world[i].rotation, MaterialColor(body.color, body.material), light,
-                      body.material == PartMaterial::Neon ? 0.f : intensity,
-                      body.material == PartMaterial::Neon ? 1.4f : brightness);
+        const Color bodyColor = MaterialColor(body.color, body.material);
+        const float bodyIntensity = body.material == PartMaterial::Neon ? 0.f : intensity;
+        const float bodyBrightness = body.material == PartMaterial::Neon ? 1.4f : brightness;
+        if (i == game::Head)
+            DrawShadedRoundedBlocky(world[i].position, body.size, world[i].rotation, bodyColor,
+                                    light, bodyIntensity, bodyBrightness);
+        else
+            DrawShadedBox(world[i].position, body.size, world[i].rotation, bodyColor, light,
+                          bodyIntensity, bodyBrightness);
         if (i == state.selectedBody) DrawRotatedBoxWires(world[i].position,
             Vector3Scale(body.size, 1.02f), world[i].rotation, GOLD);
     }
-    // Original minimal face marks the -Z front without external textures.
-    for (float side : {-1.f, 1.f}) {
-        const auto eye = game::Compose(world[game::Head], {{side*.35f, .08f, -rig.bodies[game::Head].size.z*.5f-.015f}});
-        DrawShadedBox(eye.position, {.13f, .15f, .035f}, eye.rotation, DARKGRAY, light, 0, 1);
+    // Rosto do usuário quando existir; sem arquivo, mantém os olhos mínimos.
+    if (FaceTexture().id != 0) {
+        DrawHeadFace(world[game::Head], rig.bodies[game::Head].size);
+    } else {
+        // Original minimal face marks the -Z front without external textures.
+        for (float side : {-1.f, 1.f}) {
+            const auto eye = game::Compose(world[game::Head], {{side*.35f, .08f, -rig.bodies[game::Head].size.z*.5f-.015f}});
+            DrawShadedBox(eye.position, {.13f, .15f, .035f}, eye.rotation, DARKGRAY, light, 0, 1);
+        }
     }
     if (state.pivots) {
         for (const auto& joint : rig.joints) {

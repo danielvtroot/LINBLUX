@@ -22,6 +22,15 @@ class SceneRenderer;
 class Instance;
 class Part;
 
+// Marca Loblox: textura carregada lazy na raiz do projeto (nunca caminho
+// absoluto da máquina). ok=false = usar o fallback vetorial da toolbar.
+struct LobloxLogo {
+    unsigned long long id = 0;
+    float width = 0, height = 0;
+    bool ok = false;
+};
+const LobloxLogo& LoadLobloxLogo();
+
 class EditorUI {
 public:
     EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera, SceneRenderer& renderer,

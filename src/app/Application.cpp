@@ -28,6 +28,19 @@ bool Application::initialize() {
     }
     SetConfigFlags(flags);
     InitWindow(config_.windowWidth, config_.windowHeight, "Loblox Studio");
+
+    // Ícone da janela: arquivo do projeto, sem alterar os originais. Falha
+    // silenciosa mantém o ícone padrão (não é um recurso essencial).
+    for (const char* path : {"loblox.png", "../loblox.png", "../../loblox.png", "../../../loblox.png"}) {
+        if (FileExists(path)) {
+            Image icon = LoadImage(path);
+            if (icon.data != nullptr) {
+                SetWindowIcon(icon);
+                UnloadImage(icon);
+            }
+            break;
+        }
+    }
     if (!IsWindowReady()) {
         diag::Event event;
         event.level = diag::Level::Error;

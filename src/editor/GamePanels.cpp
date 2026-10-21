@@ -242,6 +242,20 @@ void EditorUI::drawPauseMenu() {
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, {.5f,.5f});
     if (ImGui::BeginPopupModal("Play paused", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         if (pausePage_ == 0) {
+            // Marca como overlay no canto do modal: nada muda o fluxo de
+            // widgets (os alvos de clique do layout ficam nas mesmas posições).
+            const LobloxLogo& logo = LoadLobloxLogo();
+            if (logo.ok) {
+                constexpr float brandSide = 44.0f;
+                const ImVec2 sprite = ImGui::CalcTextSize("LOBLOX / Local playtest");
+                (void)sprite;
+                const ImVec2 windowPos = ImGui::GetWindowPos();
+                const float windowWidth = ImGui::GetWindowWidth();
+                ImGui::GetWindowDrawList()->AddImage(
+                    static_cast<ImTextureID>(logo.id),
+                    ImVec2(windowPos.x + windowWidth - brandSide - 10.0f, windowPos.y + 10.0f),
+                    ImVec2(windowPos.x + windowWidth - 10.0f, windowPos.y + 10.0f + brandSide));
+            }
             ImGui::TextUnformatted("LOBLOX / Local playtest"); ImGui::Separator();
             if (ImGui::Button("Resume", {-1, 32})) { runtime_.resume(); ImGui::CloseCurrentPopup(); ImGui::SetWindowFocus("Viewport"); }
             if (ImGui::Button("Settings", {-1, 32})) pausePage_ = 1;

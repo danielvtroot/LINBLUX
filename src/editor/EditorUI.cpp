@@ -29,6 +29,29 @@
 
 namespace loblox {
 
+// Marca do projeto: carregada uma unica vez, a partir da raiz (caminhos
+// relativos; sem caminho absoluto da maquina). Falha permanece !ok e a UI
+// usa o fallback vetorial existente.
+const LobloxLogo& LoadLobloxLogo() {
+    static LobloxLogo logo;
+    static bool attempted = false;
+    if (!attempted) {
+        attempted = true;
+        for (const char* path : {"loblox.png", "../loblox.png", "../../loblox.png", "../../../loblox.png"}) {
+            if (!FileExists(path)) continue;
+            Texture2D texture = LoadTexture(path);
+            if (texture.id != 0) {
+                logo.id = static_cast<unsigned long long>(texture.id);
+                logo.width = static_cast<float>(texture.width);
+                logo.height = static_cast<float>(texture.height);
+                logo.ok = true;
+                break;
+            }
+        }
+    }
+    return logo;
+}
+
 namespace {
 
 EditorInput ReadEditorInput() {
@@ -848,11 +871,19 @@ void EditorUI::drawToolbar() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 7.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(7.0f, 6.0f));
     ImGui::Begin("##Toolbar", nullptr, flags);
-    const ImVec2 brandCursor = ImGui::GetCursorScreenPos();
-    ImGui::Dummy(ImVec2(24.0f, ImGui::GetTextLineHeight()));
-    DrawIcon(ImGui::GetWindowDrawList(),
-             ImVec2(brandCursor.x + 11.0f, brandCursor.y + ImGui::GetTextLineHeight() * 0.5f),
-             15.0f, Icon::Part, IM_COL32(0, 162, 255, 255));
+    const LobloxLogo& logo = LoadLobloxLogo();
+    if (logo.ok) {
+        // Proporcao preservada (1600x1600 => quadrado); nao estica nem deforma.
+        const float brandHeight = 24.0f;
+        ImGui::Image(static_cast<ImTextureID>(logo.id),
+                     ImVec2(brandHeight * logo.width / logo.height, brandHeight));
+    } else {
+        const ImVec2 brandCursor = ImGui::GetCursorScreenPos();
+        ImGui::Dummy(ImVec2(24.0f, ImGui::GetTextLineHeight()));
+        DrawIcon(ImGui::GetWindowDrawList(),
+                 ImVec2(brandCursor.x + 11.0f, brandCursor.y + ImGui::GetTextLineHeight() * 0.5f),
+                 15.0f, Icon::Part, IM_COL32(0, 162, 255, 255));
+    }
     ImGui::SameLine(0.0f, 3.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(120, 185, 255, 255));
     ImGui::TextUnformatted("LOBLOX");
