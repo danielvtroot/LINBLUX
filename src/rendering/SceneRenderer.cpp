@@ -23,6 +23,9 @@ namespace loblox {
 
 namespace {
 
+// Forward declarations for sky dome functions
+void BuildEquirectangularTexture(const struct SkyImages& sky);
+
 constexpr int kStudSegments = 8;
 constexpr float kStudSpacing = 8.0f;
 constexpr float kStudRadius = 1.15f;
@@ -92,8 +95,10 @@ struct SkyImages {
 
 struct SkyDomeMesh {
     Mesh mesh{};
+    Texture2D equirectangularTex{};
     int vertexCount = 0;
     bool valid = false;
+    bool texReady = false;
     int rings = 16;      // latitude (0 = topo, rings = horizonte)
     int slices = 32;     // longitude
 };
@@ -140,8 +145,119 @@ SkyImages& SkyLoader() {
         }
         sky.any = isSky(sky.front) || isSky(sky.right) || isSky(sky.left) || isSky(sky.up);
     }
+    // Build equirectangular texture from cube faces for atmospheric mode
+    if (sky.any && !DomeData().texReady) {
+        BuildEquirectangularTexture(sky);
+    }
     return sky;
 }
+
+// Converte as 4 faces do cubo (Frente, Direita, Esquerda, Topo) para uma
+// textura equirretangular (panorama 360x180 graus) que pode ser mapeada
+// suavemente no skydome hemisférico.
+// Otimizado: resolução menor + amostragem direta das imagens carregadas.
+void BuildEquirectangularTexture(const SkyImages& sky) {
+    auto& dome = DomeData();
+    if (dome.texReady) return;
+
+    // Resolução reduzida para performance (ainda boa qualidade no dome)
+    const int eqWidth = 1024;
+    const int eqHeight = 512;
+
+    // Carrega as imagens das faces uma vez (CPU) para amostragem rápida
+    Image frontImg = sky.front.id ? LoadImageFromTexture(sky.front) : Image{};
+    Image rightImg = sky.right.id ? LoadImageFromTexture(sky.right) : Image{};
+    Image leftImg = sky.left.id ? LoadImageFromTexture(sky.left) : Image{};
+    Image upImg = sky.up.id ? LoadImageFromTexture(sky.up) : Image{};
+
+    auto sampleFaceImg = [&](const Image& img, float u, float v) -> Color {
+        if (img.data == nullptr) return BLANK;
+        const int texX = static_cast<int>(std::clamp(u, 0.0f, 0.999f) * (img.width - 1));
+        const int texY = static_cast<int>(std::clamp(v, 0.0f, 0.999f) * (img.height - 1));
+        return GetImageColor(img, texX, texY);
+    };
+
+    Image eqImage = GenImageColor(eqWidth, eqHeight, BLANK);
+
+    for (int y = 0; y < eqHeight; ++y) {
+        const float v = static_cast<float>(y) / eqHeight;
+        const float phi = v * PI;
+        const float sinPhi = std::sin(phi);
+        const float cosPhi = std::cos(phi);
+
+        for (int x = 0; x < eqWidth; ++x) {
+            const float u = static_cast<float>(x) / eqWidth;
+            const float theta = u * 2.0f * PI - PI;
+
+            const float dirX = sinPhi * std::cos(theta);
+            const float dirY = cosPhi;
+            const float dirZ = sinPhi * std::sin(theta);
+
+            Vector3 dir = {dirX, dirY, dirZ};
+            Color color = BLANK;
+
+            const float absX = std::fabs(dir.x);
+            const float absY = std::fabs(dir.y);
+            const float absZ = std::fabs(dir.z);
+
+            if (absZ >= absX && absZ >= absY) {
+                if (dir.z > 0 && frontImg.data) {
+                    const float uu = 0.5f - dir.x * 0.5f;
+                    const float vv = 0.5f - dir.y * 0.5f;
+                    color = sampleFaceImg(frontImg, uu, vv);
+                } else if (dir.z < 0) {
+                    // Back face: interpolate from left/right
+                    if (leftImg.data && rightImg.data) {
+                        const float t = (dir.x + 1.0f) * 0.5f;
+                        if (t < 0.5f && leftImg.data) {
+                            const float uu = 0.5f + dir.z * 0.5f;
+                            const float vv = 0.5f - dir.y * 0.5f;
+                            color = sampleFaceImg(leftImg, uu, vv);
+                        } else if (rightImg.data) {
+                            const float uu = 0.5f - dir.z * 0.5f;
+                            const float vv = 0.5f - dir.y * 0.5f;
+                            color = sampleFaceImg(rightImg, uu, vv);
+                        }
+                    }
+                }
+            } else if (absX >= absY) {
+                if (dir.x > 0 && rightImg.data) {
+                    const float uu = 0.5f + dir.z * 0.5f;
+                    const float vv = 0.5f - dir.y * 0.5f;
+                    color = sampleFaceImg(rightImg, uu, vv);
+                } else if (dir.x < 0 && leftImg.data) {
+                    const float uu = 0.5f - dir.z * 0.5f;
+                    const float vv = 0.5f - dir.y * 0.5f;
+                    color = sampleFaceImg(leftImg, uu, vv);
+                }
+            } else if (dir.y > 0 && upImg.data) {
+                const float uu = 0.5f + dir.x * 0.5f;
+                const float vv = 0.5f + dir.z * 0.5f;
+                color = sampleFaceImg(upImg, uu, vv);
+            }
+
+            if (color.a > 0) {
+                ImageDrawPixel(&eqImage, x, y, color);
+            }
+        }
+    }
+
+    // Cleanup temporary images
+    if (frontImg.data) UnloadImage(frontImg);
+    if (rightImg.data) UnloadImage(rightImg);
+    if (leftImg.data) UnloadImage(leftImg);
+    if (upImg.data) UnloadImage(upImg);
+
+    // Cria textura da imagem equirretangular
+    dome.equirectangularTex = LoadTextureFromImage(eqImage);
+    SetTextureWrap(dome.equirectangularTex, TEXTURE_WRAP_CLAMP);
+    SetTextureFilter(dome.equirectangularTex, TEXTURE_FILTER_BILINEAR);
+    UnloadImage(eqImage);
+
+    dome.texReady = true;
+}
+
+// SampleEquirectCubeFace não é mais necessária (lógica inline acima)
 
 void BuildSkyDome(int rings, int slices) {
     auto& dome = DomeData();
@@ -306,21 +422,29 @@ void DrawSkydome(Vector3 cameraPosition, Color skyColor, Color horizonColor,
     rlRotatef(skyRotationDeg, 0, 1, 0);
     rlScalef(scale, scale, scale);
 
-    // Desenha com vertex colors (gradiente atmosférico)
-    rlSetTexture(0);
+    // Bind da textura equirretangular (nuvens do skybox)
+    if (dome.texReady && dome.equirectangularTex.id != 0) {
+        rlSetTexture(dome.equirectangularTex.id);
+    } else {
+        rlSetTexture(0);
+    }
+
     rlBegin(RL_TRIANGLES);
     rlColor4ub(255, 255, 255, 255);
 
-    // Desenha usando os índices da malha
+    // Desenha usando os índices da malha com textura e vertex colors
     for (int i = 0; i < dome.mesh.triangleCount * 3; ++i) {
         const unsigned short idx = dome.mesh.indices[i];
         const float* v = &dome.mesh.vertices[idx * 3];
+        const float* uv = &dome.mesh.texcoords[idx * 2];
         const unsigned char* c = &dome.mesh.colors[idx * 4];
         rlColor4ub(c[0], c[1], c[2], c[3]);
+        rlTexCoord2f(uv[0], uv[1]);
         rlVertex3f(v[0], v[1], v[2]);
     }
     rlEnd();
 
+    rlSetTexture(0);
     rlPopMatrix();
 }
 
