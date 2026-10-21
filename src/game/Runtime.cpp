@@ -114,12 +114,16 @@ void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const Player
     const Vector3 desiredTarget = Compose(bodies[Head], {{0,.08f,0}}).position;
     // Shift Lock: desloca o alvo para o lado direito do avatar (offset moderado)
     // e mantém o alvo estável durante a rotação da câmera.
+    // No Shift Lock, o alvo salta instantaneamente para manter o personagem alinhado à mira.
     Vector3 lockedTarget = desiredTarget;
     if (!firstPerson_ && runtime.shiftLockActive()) {
         const Vector3 right{std::cos(yaw_), 0.f, -std::sin(yaw_)};
         lockedTarget = Vector3Add(lockedTarget, Vector3Scale(right, .6f));
+        // No Shift Lock, travar o alvo instantaneamente para alinhamento perfeito com a mira
+        target_ = lockedTarget;
+    } else {
+        target_ = firstPerson_ ? desiredTarget : Vector3Lerp(target_, lockedTarget, Response(14, dt));
     }
-    target_ = firstPerson_ ? desiredTarget : Vector3Lerp(target_, lockedTarget, Response(14, dt));
     const Vector3 back{std::sin(yaw_) * std::cos(pitch_), std::sin(pitch_),
                        std::cos(yaw_) * std::cos(pitch_)};
     if (!settings.allowFirstPerson && !firstPerson_) {
