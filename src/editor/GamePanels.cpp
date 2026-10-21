@@ -1,4 +1,6 @@
 #include "editor/EditorUI.h"
+#include "editor/StudioTheme.h"
+#include <filesystem>
 
 #include <algorithm>
 #include <cmath>
@@ -30,11 +32,16 @@ bool EditTransform(const char* id, game::RigidTransform& transform, bool positio
     }
     ImGui::PopID(); return changed;
 }
-void CameraSettings(game::PlayerSettings& p) {
+void CameraSettings(game::PlayerSettings& p, float* sensitivityRect = nullptr) {
     const auto previous = p;
     int mode = static_cast<int>(p.cameraMode);
     if (ImGui::Combo("Camera mode", &mode, "Classic\0Follow\0First Person\0")) p.cameraMode = static_cast<game::CameraMode>(mode);
     ImGui::SliderFloat("Mouse sensitivity", &p.sensitivity, .0001f, .02f, "%.4f");
+    if (sensitivityRect) {
+        const auto mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
+        sensitivityRect[0] = mn.x; sensitivityRect[1] = mn.y;
+        sensitivityRect[2] = mx.x; sensitivityRect[3] = mx.y;
+    }
     ImGui::Checkbox("Camera lock", &p.cameraLock);
     ImGui::Checkbox("Enable Shift Lock (Left Shift toggles during Play)", &p.enableShiftLock);
     if (ImGui::IsItemHovered())
@@ -188,6 +195,12 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     }
     gameplaySkipDelta_ = false;
     runtime_.update(GetFrameTime(), input);
+    // Retângulo real do gameplay para o menu Esc (evita coordenadas sobre o
+    // desktop inteiro):
+    gameViewportX_ = image.x;
+    gameViewportY_ = image.y;
+    gameViewportW_ = static_cast<float>(viewportWidth_);
+    gameViewportH_ = static_cast<float>(viewportHeight_);
     BeginTextureMode(viewport_);
     RigRenderState character{&runtime_.rig(), runtime_.pose(), runtime_.characterRoot()};
     renderer_.drawScene(runtime_.scene(), runtime_.playerCamera().camera(), viewportWidth_, viewportHeight_,
@@ -260,55 +273,139 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     }
 }
 void EditorUI::drawPauseMenu() {
-    if (runtime_.state() != game::RuntimeState::Paused) {
-        // Close only our popup, never an unrelated editor modal.
-        if (ImGui::BeginPopupModal("Play paused", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::CloseCurrentPopup(); ImGui::EndPopup(); ImGui::SetWindowFocus("Viewport");
-        }
-        return;
-    }
+    if (runtime_.state() != game::RuntimeState::Paused || gameViewportW_ < 80 || gameViewportH_ < 80) return;
     setGameplayCapture(false);
-    ImGui::OpenPopup("Play paused");
-    ImGui::SetNextWindowSize(ImVec2(460, 0), ImGuiCond_Appearing);
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, {.5f,.5f});
-    if (ImGui::BeginPopupModal("Play paused", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        if (pausePage_ == 0) {
-            // Marca como overlay no canto do modal: nada muda o fluxo de
-            // widgets (os alvos de clique do layout ficam nas mesmas posições).
-            const LobloxLogo& logo = LoadLobloxLogo();
-            if (logo.ok) {
-                constexpr float brandSide = 44.0f;
-                const ImVec2 sprite = ImGui::CalcTextSize("LOBLOX / Local playtest");
-                (void)sprite;
-                const ImVec2 windowPos = ImGui::GetWindowPos();
-                const float windowWidth = ImGui::GetWindowWidth();
-                ImGui::GetWindowDrawList()->AddImage(
-                    static_cast<ImTextureID>(logo.id),
-                    ImVec2(windowPos.x + windowWidth - brandSide - 10.0f, windowPos.y + 10.0f),
-                    ImVec2(windowPos.x + windowWidth - 10.0f, windowPos.y + 10.0f + brandSide));
-            }
-            ImGui::TextUnformatted("LOBLOX / Local playtest"); ImGui::Separator();
-            if (ImGui::Button("Resume", {-1, 32})) { runtime_.resume(); ImGui::CloseCurrentPopup(); ImGui::SetWindowFocus("Viewport"); }
-            if (ImGui::Button("Settings", {-1, 32})) pausePage_ = 1;
-            if (ImGui::Button("Reset Character", {-1, 32})) {
-                std::string error;
-                if (!runtime_.resetCharacter(error)) setStatus(error, true);
-            }
-            if (ImGui::Button("Controls", {-1, 32})) pausePage_ = 2;
-            if (ImGui::Button("Stop Test / Return to Editor", {-1, 32})) { stopPlay(); ImGui::CloseCurrentPopup(); }
-        } else if (pausePage_ == 1) {
-            ImGui::TextDisabled("Camera preferences for this play session");
-            const float previousDistance = runtime_.settings().cameraDistance;
-            CameraSettings(runtime_.settings());
-            if (runtime_.settings().cameraDistance != previousDistance)
-                runtime_.playerCamera().setDistance(runtime_.settings().cameraDistance);
-            if (ImGui::Button("Back")) pausePage_ = 0;
-        } else {
-            ImGui::TextUnformatted("WASD: camera-relative movement\nSpace: jump (ground only)\nRight mouse: orbit camera\nWheel: zoom / first person\nEsc: pause / resume\nShift+F5: return to editor");
-            if (ImGui::Button("Back")) pausePage_ = 0;
-        }
-        ImGui::EndPopup();
+    const ImVec2 origin{gameViewportX_, gameViewportY_};
+    const ImVec2 extent{gameViewportW_, gameViewportH_};
+    const float margin = std::min(16.f, std::min(extent.x, extent.y) * .04f);
+    const float width = std::min(extent.x - margin*2, std::clamp(extent.x*.88f, 540.f, 940.f));
+    const float height = std::min(extent.y - margin*2, std::clamp(extent.y*.86f, 360.f, 690.f));
+    const ImVec2 center{origin.x+extent.x*.5f, origin.y+extent.y*.5f};
+    // Dim only the gameplay image, on its own draw list (not the desktop or
+    // modal dim layer). The panel uses the same current-frame screen rect.
+    if (auto* viewport = ImGui::FindWindowByName("Viewport")) {
+        auto* draw = viewport->DrawList;
+        draw->PushClipRect(origin, {origin.x+extent.x,origin.y+extent.y}, true);
+        draw->AddRectFilled(origin,{origin.x+extent.x,origin.y+extent.y},
+                           ImGui::ColorConvertFloat4ToU32(studio::Colors().overlay));
+        draw->PopClipRect();
     }
+    const auto& p = studio::Colors(); // gameplay remains dark with either Studio theme
+    ImGui::PushStyleColor(ImGuiCol_WindowBg,{p.background.x,p.background.y,p.background.z,.97f});
+    ImGui::PushStyleColor(ImGuiCol_ChildBg,{0,0,0,0});
+    ImGui::PushStyleColor(ImGuiCol_Text,p.text);
+    ImGui::PushStyleColor(ImGuiCol_TextDisabled,p.secondary);
+    ImGui::PushStyleColor(ImGuiCol_Border,p.border);
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,p.raised);
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,p.hover);
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,p.selected);
+    ImGui::PushStyleColor(ImGuiCol_Button,p.raised);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,p.hover);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,p.selected);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{16,14});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,10);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize,{1,1});
+    ImGui::SetNextWindowPos(center,ImGuiCond_Always,{.5f,.5f});
+    ImGui::SetNextWindowSize({width,height},ImGuiCond_Always);
+    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
+    ImGui::Begin("Play paused",nullptr,flags);
+    const auto& logo=LoadLobloxLogo();
+    if(logo.ok) {
+        ImGui::Image(static_cast<ImTextureID>(logo.id),{34.f*logo.width/logo.height,34});
+        ImGui::SameLine(0,10);
+    }
+    ImGui::BeginGroup();
+    ImGui::TextUnformatted("LOBLOX");
+    ImGui::TextDisabled("Local playtest paused");
+    ImGui::EndGroup();
+    ImGui::Spacing();
+    const auto remember=[](float* rect) {
+        const auto lo=ImGui::GetItemRectMin(),hi=ImGui::GetItemRectMax();
+        rect[0]=lo.x;rect[1]=lo.y;rect[2]=hi.x;rect[3]=hi.y;
+    };
+    const char* tabs[]{"Game","Settings","Controls","About"};
+    const float tabWidth=(ImGui::GetContentRegionAvail().x-18)/4;
+    for(int i=0;i<4;++i) {
+        if(i) ImGui::SameLine(0,6);
+        if(pausePage_==i) ImGui::PushStyleColor(ImGuiCol_Button,p.selected);
+        const bool clicked=ImGui::Button(tabs[i],{tabWidth,32});
+        if(pausePage_==i) ImGui::PopStyleColor();
+        if(i==1) remember(pauseTabRect_);
+        if(clicked) pausePage_=i;
+    }
+    ImGui::Separator();
+    const bool narrow=width<430;
+    const float footerHeight=narrow?118.f:42.f;
+    const float contentHeight=std::max(1.f,ImGui::GetContentRegionAvail().y-footerHeight-10);
+    ImGui::BeginChild("##PauseContent",{0,contentHeight},ImGuiChildFlags_None);
+    if(pausePage_==0) {
+        ImGui::Spacing();
+        ImGui::TextUnformatted("Your game");
+        ImGui::Separator();
+        ImGui::TextWrapped("%s", std::filesystem::path(projectPath_).filename().string().c_str());
+        ImGui::Spacing();
+        ImGui::TextUnformatted("Local player");
+        ImGui::TextWrapped("%s",runtime_.rig().name.c_str());
+        ImGui::Text("Health  %.0f / %.0f",runtime_.health(),runtime_.settings().maxHealth);
+        ImGui::Spacing();
+        ImGui::TextWrapped("The game is paused. Resume to keep playing, respawn at the spawn point, or return to your map in the Studio.");
+    } else if(pausePage_==1) {
+        auto& settings=runtime_.settings();
+        const auto previous=settings;
+        ImGui::TextDisabled("Camera preferences for this play session");
+        if(ImGui::BeginTable("##PauseSettings",2,ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_RowBg)) {
+            ImGui::TableSetupColumn("Setting",0,.44f);
+            ImGui::TableSetupColumn("Value",0,.56f);
+            const auto row=[](const char* label) {
+                ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::AlignTextToFramePadding();
+                ImGui::TextWrapped("%s",label);ImGui::TableNextColumn();ImGui::SetNextItemWidth(-1);
+            };
+            row("Camera mode"); int mode=static_cast<int>(settings.cameraMode);
+            if(ImGui::Combo("##mode",&mode,"Classic\0Follow\0First Person\0")) settings.cameraMode=static_cast<game::CameraMode>(mode);
+            row("Mouse sensitivity");
+            ImGui::SliderFloat("##sensitivity",&settings.sensitivity,.0001f,.02f,"%.4f");
+            remember(pauseSensitivityRect_);
+            row("Enable Shift Lock");ImGui::Checkbox("##shift",&settings.enableShiftLock);
+            row("Camera lock");ImGui::Checkbox("##lock",&settings.cameraLock);
+            row("First person zoom");ImGui::Checkbox("##first",&settings.allowFirstPerson);
+            row("Camera distance");ImGui::SliderFloat("##distance",&settings.cameraDistance,settings.minZoom,settings.maxZoom,"%.1f");
+            ImGui::EndTable();
+        }
+        std::string error;
+        if(!settings.validate(error)) settings=previous;
+        if(settings.cameraDistance!=previous.cameraDistance) runtime_.playerCamera().setDistance(settings.cameraDistance);
+    } else if(pausePage_==2) {
+        const char* keys[]{"W A S D","Space","Right mouse","Scroll","Left Shift","Esc","Shift + F5"};
+        const char* help[]{"Move relative to the camera","Jump from the ground","Orbit the camera","Zoom / first person",
+            "Toggle Shift Lock when enabled","Pause / resume","Stop and return to Studio"};
+        for(int i=0;i<7;++i) { ImGui::TextUnformatted(keys[i]);ImGui::SameLine(120);ImGui::TextWrapped("%s",help[i]); }
+    } else {
+        if(logo.ok) ImGui::Image(static_cast<ImTextureID>(logo.id),{80.f*logo.width/logo.height,80});
+        ImGui::TextUnformatted("Loblox Studio");
+        ImGui::TextWrapped("An open-source editor and local game engine.");
+        ImGui::Spacing();ImGui::TextDisabled("C++17 / Lua 5.4 / Bullet / raylib");
+    }
+    ImGui::EndChild();
+    ImGui::Spacing();
+    const float buttonWidth=narrow?ImGui::GetContentRegionAvail().x:(ImGui::GetContentRegionAvail().x-16)/3;
+    const float buttonHeight=narrow?34.f:42.f;
+    // Defer lifecycle actions until all widgets have been drawn.
+    const bool stop=ImGui::Button("Stop Test",{buttonWidth,buttonHeight});
+    if(!narrow) ImGui::SameLine(0,8);
+    const bool reset=ImGui::Button("Respawn",{buttonWidth,buttonHeight});
+    remember(pauseResetRect_);
+    if(!narrow) ImGui::SameLine(0,8);
+    ImGui::PushStyleColor(ImGuiCol_Button,{.10f,.37f,.76f,1});
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,{.16f,.46f,.88f,1});
+    const bool resume=ImGui::Button("Resume",{buttonWidth,buttonHeight});
+    ImGui::PopStyleColor(2);
+    ImGui::End();
+    ImGui::PopStyleVar(3);ImGui::PopStyleColor(11);
+    if(stop) stopPlay();
+    else if(reset) { std::string error; if(!runtime_.resetCharacter(error)) setStatus(error,true); }
+    else if(resume) { runtime_.resume();ImGui::SetWindowFocus("Viewport"); }
 }
 
 void EditorUI::drawRigEditor() {

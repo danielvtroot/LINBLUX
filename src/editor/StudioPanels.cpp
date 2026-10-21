@@ -355,8 +355,9 @@ void EditorUI::drawInstanceProperties(Instance& object) {
                 double t = 0.0;
                 if (const auto it = part.attributes().find("decal_transparency"); it != part.attributes().end())
                     if (const auto* v = std::get_if<double>(&it->second)) t = *v;
-                if (ImGui::SliderFloat("##decal_transparency", (float*)&t, 0, 1, "%.2f"))
-                    part.setAttribute("decal_transparency", t);
+                float transparency=static_cast<float>(t);
+                if (ImGui::SliderFloat("##decal_transparency", &transparency, 0, 1, "%.2f"))
+                    part.setAttribute("decal_transparency", static_cast<double>(transparency));
             }
             if (row("Decal Rotation")) {
                 static const char* turns[4] = {"0","90","180","270"};

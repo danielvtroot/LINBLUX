@@ -1,4 +1,5 @@
 #include "app/Application.h"
+#include "editor/StudioTheme.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -79,39 +80,7 @@ bool Application::initialize() {
     io.IniFilename = "loblox_imgui.ini";
     io.ConfigWindowsMoveFromTitleBarOnly = true;
 
-    ImGui::StyleColorsLight();
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowRounding = 2.0f;
-    style.FrameRounding = 2.0f;
-    style.GrabRounding = 2.0f;
-    style.TabRounding = 2.0f;
-    style.ScrollbarRounding = 2.0f;
-    style.WindowBorderSize = 1.0f;
-    style.FrameBorderSize = 0.0f;
-    style.WindowPadding = ImVec2(8.0f, 7.0f);
-    style.FramePadding = ImVec2(6.0f, 4.0f);
-    style.ItemSpacing = ImVec2(6.0f, 5.0f);
-    const ImVec4 colors[] = {
-        ImVec4(0.96f,0.97f,0.98f,1), ImVec4(1,1,1,1), ImVec4(1,1,1,1),
-        ImVec4(0.80f,0.82f,0.85f,1), ImVec4(0.86f,0.87f,0.89f,1),
-        ImVec4(0.14f,0.16f,0.19f,1), ImVec4(0.43f,0.46f,0.50f,1),
-        ImVec4(0.96f,0.97f,0.98f,1), ImVec4(0.98f,0.98f,0.99f,1),
-        ImVec4(0.91f,0.93f,0.95f,1), ImVec4(0.91f,0.93f,0.95f,1),
-        ImVec4(0.88f,0.93f,0.98f,1), ImVec4(0.78f,0.87f,0.96f,1),
-        ImVec4(0.94f,0.96f,0.98f,1), ImVec4(0.90f,0.94f,0.98f,1),
-        ImVec4(0.81f,0.88f,0.96f,1), ImVec4(0.10f,0.43f,0.78f,1),
-        ImVec4(0.08f,0.39f,0.73f,1), ImVec4(0.12f,0.48f,0.84f,1),
-        ImVec4(0.98f,0.98f,0.99f,1), ImVec4(0.85f,0.91f,0.97f,1),
-        ImVec4(0.91f,0.94f,0.98f,1), ImVec4(0.91f,0.94f,0.98f,1),
-        ImVec4(0.16f,0.48f,0.78f,0.28f)};
-    const ImGuiCol slots[] = {ImGuiCol_WindowBg,ImGuiCol_ChildBg,ImGuiCol_PopupBg,
-        ImGuiCol_Border,ImGuiCol_Separator,ImGuiCol_Text,ImGuiCol_TextDisabled,
-        ImGuiCol_TitleBg,ImGuiCol_TitleBgActive,ImGuiCol_FrameBg,ImGuiCol_FrameBgHovered,
-        ImGuiCol_FrameBgActive,ImGuiCol_Header,ImGuiCol_HeaderHovered,ImGuiCol_Button,
-        ImGuiCol_ButtonHovered,ImGuiCol_ButtonActive,ImGuiCol_CheckMark,ImGuiCol_SliderGrab,
-        ImGuiCol_SliderGrabActive,ImGuiCol_Tab,ImGuiCol_TabHovered,ImGuiCol_TabSelected,
-        ImGuiCol_DockingPreview};
-    for (int i = 0; i < IM_ARRAYSIZE(slots); ++i) style.Colors[slots[i]] = colors[i];
+    studio::Apply();
 
     scene_.buildDefaultScene();
 

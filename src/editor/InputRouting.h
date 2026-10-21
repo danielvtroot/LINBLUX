@@ -61,7 +61,7 @@ inline InputRoute RouteInput(const EditorInput& input, const InputContext& ctx) 
             return {paused ? InputOwner::UI : InputOwner::Pause, "game_focus_lost"};
         if (paused) {
             if (input.escape && !ctx.text && !ctx.widget)
-                return {ctx.menuDepth > 0 ? InputOwner::Back : InputOwner::Resume, "escape"};
+                return {InputOwner::Resume, "escape"}; // ESC fecha o menu em qualquer aba
             return {InputOwner::UI, "pause_menu"};
         }
         if (ctx.popup || ctx.text || ctx.widget) return {InputOwner::UI, "game_ui"};

@@ -1,4 +1,5 @@
 #include "editor/EditorUI.h"
+#include "editor/StudioTheme.h"
 
 #include "core/Diagnostics.h"
 
@@ -327,8 +328,8 @@ bool IconButton(const char* id, Icon icon, const char* label, bool active, const
                 bool enabled = true) {
     ImGui::PushID(id);
     const ImVec2 textSize = ImGui::CalcTextSize(label);
-    const float width = std::clamp(textSize.x + 18.0f, 54.0f, 78.0f);
-    const ImVec2 size(width, 62.0f);
+    const float width = std::max(textSize.x + 16.0f, 54.0f);
+    const ImVec2 size(width, std::clamp(ImGui::GetContentRegionAvail().y, 44.f, 62.f));
     const ImVec2 position = ImGui::GetCursorScreenPos();
 
     ImGui::InvisibleButton("##button", size);
@@ -337,26 +338,23 @@ bool IconButton(const char* id, Icon icon, const char* label, bool active, const
     const bool held = ImGui::IsItemActive();
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    const ImU32 background = active ? IM_COL32(222, 237, 253, 255)
-                              : held ? IM_COL32(210, 229, 250, 255)
-                              : hovered ? IM_COL32(235, 240, 246, 255)
-                                        : IM_COL32(248, 249, 251, 255);
+    const auto& palette=studio::Colors(studio::Light());
+    const ImU32 background = ImGui::GetColorU32(active || held ? ImGuiCol_Header :
+        hovered ? ImGuiCol_ButtonHovered : ImGuiCol_WindowBg);
     drawList->AddRectFilled(position, ImVec2(position.x + size.x, position.y + size.y),
                             background, 5.0f);
     if (active) {
         drawList->AddRectFilled(ImVec2(position.x + 7.0f, position.y + size.y - 3.0f),
                                 ImVec2(position.x + size.x - 7.0f, position.y + size.y - 1.0f),
-                                IM_COL32(25, 112, 205, 255), 1.0f);
+                                ImGui::ColorConvertFloat4ToU32(palette.accent), 1.0f);
     } else if (hovered) {
         drawList->AddRect(position, ImVec2(position.x + size.x, position.y + size.y),
-                          IM_COL32(190, 201, 214, 255), 5.0f);
+                          ImGui::GetColorU32(ImGuiCol_Border), 5.0f);
     }
 
-    const ImU32 foreground = !enabled ? IM_COL32(160, 166, 174, 255)
-                              : active ? IM_COL32(25, 103, 190, 255)
-                                       : IM_COL32(50, 57, 66, 255);
-    DrawIcon(drawList, ImVec2(position.x + size.x * 0.5f, position.y + 23.0f),
-             22.0f, icon, foreground);
+    const ImU32 foreground = ImGui::GetColorU32(!enabled ? palette.disabled : palette.text);
+    DrawIcon(drawList, ImVec2(position.x + size.x * 0.5f, position.y + size.y*.33f),
+             std::min(22.f,size.y*.40f), icon, foreground);
     const ImVec2 labelPosition(position.x + (size.x - textSize.x) * 0.5f,
                                position.y + size.y - textSize.y - 7.0f);
     drawList->AddText(labelPosition, foreground, label);
@@ -374,7 +372,7 @@ void ToolbarSeparator() {
     ImGui::Dummy(ImVec2(1.0f, height));
     ImGui::GetWindowDrawList()->AddLine(
         ImVec2(cursor.x, cursor.y + 7.0f), ImVec2(cursor.x, cursor.y + height - 7.0f),
-        IM_COL32(202, 208, 216, 255), 1.0f);
+        ImGui::GetColorU32(ImGuiCol_Separator), 1.0f);
     ImGui::SameLine(0.0f, 7.0f);
 }    ImVec4 ClassColor(InstanceClass instanceClass) {
     switch (instanceClass) {
@@ -651,7 +649,8 @@ void EditorUI::buildDockLayout() {
 
     ImGuiID center = dockId;
     const ImGuiID top =
-        ImGui::DockBuilderSplitNode(center, ImGuiDir_Up, 0.15f, nullptr, &center);
+        ImGui::DockBuilderSplitNode(center, ImGuiDir_Up, 120.f/mainViewport->WorkSize.y, nullptr, &center);
+    ImGui::DockBuilderGetNode(top)->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
     const ImGuiID left =
         ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.19f, nullptr, &center);
     ImGuiID right =
@@ -770,8 +769,8 @@ void EditorUI::draw() {
     ImGui::EndDisabled();
     if (showOutput_) drawOutput();
     drawDialogs();
-    drawPauseMenu(); // current-frame modal/widgets participate in the same router
     drawViewport(); // UI actions and popup requests are known before routing.
+    drawPauseMenu(); // current-frame gameplay rect; Paused already owns input
 }
 
 void EditorUI::drawMainMenuBar() {
@@ -847,6 +846,8 @@ void EditorUI::drawMainMenuBar() {
             ImGui::DockBuilderRemoveNode(ImGui::GetID("LobloxDockspace"));
             layoutBuilt_ = false; showExplorer_ = showProperties_ = showToolbox_ = true;
         }
+        bool light=studio::Light();
+        if (ImGui::MenuItem("Light theme",nullptr,&light)) studio::Apply(light);
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Script")) {
@@ -860,8 +861,12 @@ void EditorUI::drawMainMenuBar() {
     }
     ImGui::EndDisabled();
     drawGameToolbar();
-    ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(projectPath_.c_str()).x - 16.0f);
-    ImGui::TextDisabled("%s", projectPath_.c_str());
+    const std::string projectName=std::filesystem::path(projectPath_).filename().string();
+    const float projectX=ImGui::GetWindowWidth()-ImGui::CalcTextSize(projectName.c_str()).x-16;
+    if(projectX>ImGui::GetCursorPosX()+20) {
+        ImGui::SameLine(projectX);ImGui::TextDisabled("%s",projectName.c_str());
+        if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s",projectPath_.c_str());
+    }
     ImGui::EndMainMenuBar();
 }
 
@@ -1458,7 +1463,6 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
         flags |= ImGuiTreeNodeFlags_Selected;
     }
 
-    ImGui::PushStyleColor(ImGuiCol_Text, ClassColor(instance->instanceClass()));
     const bool open = ImGui::TreeNodeEx(reinterpret_cast<void*>(
                                             static_cast<intptr_t>(instance->id())),
                                         flags, "  %s", instance->name().c_str());
@@ -1468,28 +1472,13 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
     const ImVec4 classColor = ClassColor(instance->instanceClass());
     const ImU32 iconColor = ImGui::ColorConvertFloat4ToU32(classColor);
     DrawClassIcon(ImGui::GetWindowDrawList(), iconCenter, instance->instanceClass(), iconColor);
-    // Decal/Texture da Part aparecem como linhas visuais logo abaixo do nó
-    // (atributos persistidos v3; sem classes fictícias de instância).
-    if (instance->isPart()) {
-        const Part* part = static_cast<const Part*>(instance);
-        const auto assetFace = [&](const char* imageKey, const char* faceKey, const char* label) {
-            const auto image = part->attributes().find(imageKey);
-            if (image == part->attributes().end()) return;
-            std::string face = "Front";
-            if (const auto it = part->attributes().find(faceKey); it != part->attributes().end())
-                if (const auto* v = std::get_if<std::string>(&it->second)) face = *v;
-            ImGui::TextDisabled("   %s (%s)", label, face.c_str());
-        };
-        assetFace("decal_image", "decal_face", "Decal");
-        assetFace("texture_image", "texture_face", "Texture");
-    }
+    // Keep the tree item as LastItem until click/context/drag processing ends.
+    // Drawing attribute labels here used to steal all interaction from the Part.
     // Indicador de destino de arrasto: contorno realce no no sob o cursor.
     if (ImGui::IsItemHovered() && ImGui::IsDragDropActive()) {
         ImGui::GetWindowDrawList()->AddRect(rowMin, rowMax, IM_COL32(120, 200, 255, 255), 3.0f,
                                             0, 2.0f);
     }
-    ImGui::PopStyleColor();
-
     if (ImGui::IsItemClicked()) {
         endGizmoSession(true);
         scene_.select(instance);
@@ -1811,14 +1800,9 @@ void EditorUI::drawProperties() {
             if (ImGui::Button("Open Rig Editor")) showRigEditor_ = true;
             ImGui::End(); return;
         }
-        ImGui::TextDisabled("Nenhum objeto selecionado.");
-        ImGui::Separator();
-        ImGui::TextWrapped("Selecione um objeto na viewport ou no Explorer para editar Name, Position, Size, Color e fisica.");
-        ImGui::SeparatorText("Projeto");
-        ImGui::Text("Objetos: %d", static_cast<int>(scene_.objects().size()));
-        ImGui::Text("Pecas: %d", static_cast<int>(scene_.parts().size()));
-        ImGui::Text("Arquivo: %s", projectPath_.c_str());
-        ImGui::Text("FPS: %.0f", ImGui::GetIO().Framerate);
+        ImGui::Spacing();
+        ImGui::TextUnformatted("Properties");
+        ImGui::TextWrapped("Select an object in the Explorer or viewport to edit its properties.");
     } else if (selection->isPart() || selection->instanceClass()==InstanceClass::Folder ||
                selection->instanceClass()==InstanceClass::Model || IsScriptClass(selection->instanceClass()) ||
                IsRootServiceClass(selection->instanceClass())) {

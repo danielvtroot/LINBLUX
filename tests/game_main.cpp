@@ -73,7 +73,7 @@ void InputTests() {
     ctx.text = false; CHECK(RouteInput(input,ctx).owner == InputOwner::Pause);
     ctx.mode = InputMode::Paused; ctx.popup = true;
     CHECK(RouteInput(input,ctx).owner == InputOwner::Resume);
-    ctx.menuDepth = 1; CHECK(RouteInput(input,ctx).owner == InputOwner::Back);
+    ctx.menuDepth = 1; CHECK(RouteInput(input,ctx).owner == InputOwner::Resume);
     ctx.text = ctx.widget = true; CHECK(RouteInput(input,ctx).owner == InputOwner::UI);
     input.stop = true; CHECK(RouteInput(input,ctx).owner == InputOwner::Stop);
     input = {}; ctx = {}; ctx.windowFocused = true; ctx.mode = InputMode::Playing;

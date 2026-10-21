@@ -45,6 +45,20 @@ struct EditorUITestAccess {
         ui.showRigEditor_ = false;
     }
     static void hidePanels(EditorUI& ui) { ui.showAnimationEditor_ = false; ui.showRigEditor_ = false; }
+    static ImVec2 rectCenter(const float (&r)[4]) { return {(r[0]+r[2])*.5f, (r[1]+r[3])*.5f}; }
+    static void dumpPauseRects(EditorUI& ui) {
+        std::printf("DBG rects: tab %g %g %g %g | slider %g %g %g %g | reset %g %g %g %g\n",
+            ui.pauseTabRect_[0],ui.pauseTabRect_[1],ui.pauseTabRect_[2],ui.pauseTabRect_[3],
+            ui.pauseSensitivityRect_[0],ui.pauseSensitivityRect_[1],ui.pauseSensitivityRect_[2],ui.pauseSensitivityRect_[3],
+            ui.pauseResetRect_[0],ui.pauseResetRect_[1],ui.pauseResetRect_[2],ui.pauseResetRect_[3]);
+    }
+    static ImVec2 pauseTabSettings(EditorUI& ui) { return rectCenter(ui.pauseTabRect_); }
+    static ImVec2 pauseSlider(EditorUI& ui) {
+        const float (&r)[4] = ui.pauseSensitivityRect_;
+        // Clica no campo do DragFloat, longe do rótulo à direita.
+        return {r[0] + std::min(60.0f, (r[2]-r[0])*.35f), (r[1]+r[3])*.5f};
+    }
+    static ImVec2 pauseReset(EditorUI& ui) { return rectCenter(ui.pauseResetRect_); }
     static void saveAsDialog(EditorUI& ui, const std::string& path) {
         ui.requestSavePopup_ = true;
         std::snprintf(ui.pathBuffer_,sizeof(ui.pathBuffer_),"%s",path.c_str());
@@ -194,18 +208,24 @@ int main() {
         auto paused = runtime.position(); command("keydown w"); frames(10); command("keyup w");
         CHECK(NearlyEqual(runtime.position(),paused));
         TakeScreenshot((std::string(directory)+"/pause.png").c_str());
-        auto* menu = ImGui::FindWindowByName("Play paused");
-        const float pausedZoom = runtime.playerCamera().distance();
-        command("click 4"); CHECK(NearlyEqual(runtime.playerCamera().distance(), pausedZoom));
-        click({menu->DC.CursorStartPos.x+100,menu->DC.CursorStartPos.y+73});
-        number({menu->DC.CursorStartPos.x+100,menu->DC.CursorStartPos.y+49},"0.006");
-        CHECK(NearlyEqual(runtime.settings().sensitivity,.006f,.00001f));
-        key("Escape"); CHECK(runtime.state() == game::RuntimeState::Paused); // settings -> main menu
-        // Reset is a real menu click; it must retain exactly one capsule.
-        click({menu->DC.CursorStartPos.x+100, menu->DC.CursorStartPos.y+109});
-        CHECK(std::hypot(runtime.position().x,runtime.position().z) < .01f);
-        CHECK(runtime.bodyCount() == scene.parts().size()+1);
-        key("Escape"); CHECK(runtime.state() == game::RuntimeState::Playing);
+    auto* menu = ImGui::FindWindowByName("Play paused");
+    const float pausedZoom = runtime.playerCamera().distance();
+    command("click 4"); CHECK(NearlyEqual(runtime.playerCamera().distance(), pausedZoom));
+    // O próprio menu captura os rects reais (aba/slider/botão) durante o
+    // desenho; os cliques miram o centro real do widget.
+    EditorUITestAccess::dumpPauseRects(ui);
+    const ImVec2 ts = EditorUITestAccess::pauseTabSettings(ui);
+    click({ts.x, ts.y}); // aba Settings
+    frames(1);
+    const ImVec2 sl = EditorUITestAccess::pauseSlider(ui);
+    number({sl.x, sl.y}, "0.006"); // slider Sensibilidade
+    CHECK(NearlyEqual(runtime.settings().sensitivity, .006f, .00001f));
+    // Reset é um clique real no botão do rodapé; mantém exatamente uma capsula.
+    const ImVec2 rs = EditorUITestAccess::pauseReset(ui);
+    click({rs.x, rs.y});
+    CHECK(std::hypot(runtime.position().x, runtime.position().z) < .01f);
+    CHECK(runtime.bodyCount() == scene.parts().size() + 1);
+    key("Escape"); CHECK(runtime.state() == game::RuntimeState::Playing); // ESC fecha em qualquer aba
         frames(25);
         command("keydown space"); CHECK(runtime.velocity().y > 0 || runtime.humanoidState() == game::HumanoidState::Jumping);
         command("keyup space");

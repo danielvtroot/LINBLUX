@@ -123,6 +123,10 @@ private:
     bool gameplaySkipDelta_ = true;
     Vector2 gameplayRestoreCursor_{};
     int pausePage_ = 0;
+    // Rects do menu Esc capturados no desenho (min.x,min.y,max.x,max.y); o
+    // harness de teste usa o centro real dos widgets em vez de adivinhar
+    // coordenadas de leiaute.
+    float pauseTabRect_[4] = {}, pauseSensitivityRect_[4] = {}, pauseResetRect_[4] = {};
     bool showRigEditor_ = false, showAnimationEditor_ = false, showGameSettings_ = false;
     enum class RigContext { Edit, Pose, Animation };
     RigContext rigContext_ = RigContext::Edit;
@@ -157,6 +161,11 @@ private:
     bool viewportReady_ = false;
     int viewportWidth_ = 0;
     int viewportHeight_ = 0;
+
+    // Retângulo real da imagem de gameplay (para o menu Esc responder à
+    // viewport do jogo, não ao desktop inteiro).
+    float gameViewportX_ = 0, gameViewportY_ = 0;
+    float gameViewportW_ = 0, gameViewportH_ = 0;
 
     bool layoutBuilt_ = false;
     bool showToolbox_ = true;
