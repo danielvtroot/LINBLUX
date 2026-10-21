@@ -76,8 +76,11 @@ API atual:
   Transparency. Vector3.new e Color3.fromRGB retornam tabelas X/Y/Z validadas.
   Não há operadores aritméticos de Vector3 nem CFrame.
 - Players.LocalPlayer.Character; Players/LocalPlayer.CharacterAdded;
-  Character.Humanoid e Character.Animator (reservado até completar animações
-  por ID). Humanoid: WalkSpeed, JumpHeight, AutoRotate, State (readonly).
+  Character.Humanoid e Character.Animator. Humanoid: WalkSpeed, JumpHeight,
+  AutoRotate, State (readonly). Animator:SetAnimation("Idle"/"Walk"/"Jump", ID)
+  valida rig/asset e muda o clip realmente usado pelo controller.
+- AnimationService:GetAnimation("anim://id") retorna Id, Name, RigType,
+  Duration, Loop e Version do asset local, sem nuvem ou IDs Roblox.
 - RunService.Heartbeat:Connect(callback(dt)), connection:Disconnect().
 - task.spawn(function, ...), task.wait(segundos), print/warn,
   require(ModuleScript). Módulos não podem yieldar durante require.
@@ -88,6 +91,26 @@ Output mostra prints/erros com Script, arquivo/linha e traceback. JSONL também
 registra script.output/script.error. Mensagens ficam limitadas a 256 × 2048
 bytes. Stop cancela tarefas/conexões, fecha a VM e conserva mensagens no Output.
 Novo Play usa uma VM limpa e a cópia runtime; nunca executa no editor.
+
+Projetos novos recebem R6/Idle/Walk/Jump e os scripts Game.server.lua e
+CharacterAnimations.server.lua. Mapas existentes não são sobrescritos ao
+abrir: Script → Install default game scripts é opt-in e preserva scripts com
+esses nomes. A engine nativa cuida de spawn/movimento/respawn; o script padrão
+apenas configura animações por ID. Exemplo:
+
+```lua
+game:GetService("Players").CharacterAdded:Connect(function(character)
+    character.Animator:SetAnimation("Idle", "anim://r6-idle")
+    character.Animator:SetAnimation("Walk", "anim://r6-walk")
+    character.Animator:SetAnimation("Jump", "anim://r6-jump")
+end)
+```
+
+Animation Editor → Copy ID copia o URI estável; hover mostra ID, rig e duração.
+Renomear clip não muda o ID. Alterações salvas em keys são usadas no próximo
+Play. ID inválido gera erro sem substituir a associação válida anterior.
+Jump padrão conserva a pose aérea anterior, agora editável; mapas antigos sem
+Jump asset usam a pose nativa. Não há blending de prioridades Action em camadas.
 
 ## Limites da VM
 
@@ -130,7 +153,6 @@ criar Script, digitar exemplo, salvar, Play, conferir efeito/Output, Stop,
 comparar mapa autoral, fechar/reabrir. Capturas/testes automatizados ficam em
 `/tmp/loblox-studio-ui-*`; não são projetos pessoais.
 
-Ainda pendentes nesta missão: APIs de animação por ID completas, scripts
-padrão, Health/void/HUD, Shift Lock, importer/Decal/Texture, nova cabeça/rosto,
+Ainda pendentes nesta missão: Health/void/HUD, Shift Lock, importer/Decal/Texture, nova cabeça/rosto,
 logo integrada, skybox e novos shaders/perfis. Os PNGs originais foram apenas
 inspecionados e preservados; não são apresentados como recursos integrados.

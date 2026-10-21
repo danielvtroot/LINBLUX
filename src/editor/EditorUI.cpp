@@ -672,6 +672,7 @@ void EditorUI::drawMainMenuBar() {
         if (ImGui::MenuItem("New Script")) insertScript();
         if (ImGui::MenuItem("New LocalScript")) insertScript(InstanceClass::LocalScript);
         if (ImGui::MenuItem("New ModuleScript")) insertScript(InstanceClass::ModuleScript);
+        if (ImGui::MenuItem("Install default game scripts")) scene_.installDefaultScripts();
         ImGui::MenuItem("Script Editor",nullptr,&showScriptEditor_);
         ImGui::MenuItem("Output",nullptr,&showOutput_);
         ImGui::EndMenu();

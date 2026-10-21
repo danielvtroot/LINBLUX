@@ -384,6 +384,7 @@ void EditorUI::drawGameSettings() {
         ImGui::EndCombo();
     }
     AnimationChoice("Walk animation", p.walkAnimation, a); AnimationChoice("Idle animation", p.idleAnimation, a);
+    AnimationChoice("Jump animation",p.jumpAnimation,a);
     ImGui::SliderFloat("WalkSpeed (units/s)", &p.walkSpeed, .1f, 100);
     ImGui::SliderFloat("Turn response", &p.turnSpeed, .1f, 50);
     ImGui::SliderFloat("Acceleration", &p.acceleration, 1, 500);
@@ -431,6 +432,10 @@ void EditorUI::drawAnimationEditor() {
             }
         ImGui::EndCombo();
     }
+    ImGui::SameLine();
+    const std::string animationUri="anim://"+animationDraft_.id;
+    if (ImGui::SmallButton("Copy ID")) { ImGui::SetClipboardText(animationUri.c_str());setStatus("ID copiado: "+animationUri); }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nRig: %s | %.3f s",animationUri.c_str(),animationDraft_.rigType.c_str(),animationDraft_.duration);
     if (ImGui::Button("New")) {
         if (animationDirty_) setStatus("Save or revert the current animation first.", true);
         else {

@@ -64,6 +64,7 @@ nlohmann::json EncodeAssets(const GameAssets& a) {
         {"cameraDistance", p.cameraDistance}, {"sensitivity", p.sensitivity},
         {"allowFirstPerson", p.allowFirstPerson}, {"cameraLock", p.cameraLock},
         {"walkAnimation", p.walkAnimation}, {"idleAnimation", p.idleAnimation}};
+    if (!p.jumpAnimation.empty()) j["player"]["jumpAnimation"]=p.jumpAnimation;
     return j;
 }
 bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& error) {
@@ -126,6 +127,7 @@ bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& erro
         out.cameraMode = static_cast<CameraMode>(ReadInt(p.at("cameraMode"), 0, 2));
         out.allowFirstPerson = p.at("allowFirstPerson").get<bool>(); out.cameraLock = p.at("cameraLock").get<bool>();
         out.walkAnimation = p.at("walkAnimation").get<std::string>(); out.idleAnimation = p.at("idleAnimation").get<std::string>();
+        out.jumpAnimation=p.value("jumpAnimation",std::string());
         if (!a.validate(error)) return false;
         assets = std::move(a); error.clear(); return true;
     } catch (const std::exception& e) { error = std::string("game assets: ") + e.what(); return false; }

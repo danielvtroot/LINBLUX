@@ -127,5 +127,31 @@ print("Game task completed")
     CHECK(runtime.scripts().taskCount()>0);CHECK(runtime.validate(error));
     runtime.stop();CHECK(runtime.scripts().taskCount()==0);CHECK(runtime.validate(error));
 }
+void AnimationIds() {
+    Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();std::string error;
+    auto* service=scene.service(InstanceClass::ServerScriptService);CHECK(service && service->children().size()==2);
+    auto* animations=static_cast<Script*>(service->children()[1]);
+    auto edited=game::MakeWalk(65);edited.id="custom-walk";edited.name="My Walk";
+    scene.gameAssets().animations.push_back(edited);
+    animations->source=R"(game:GetService("Players").CharacterAdded:Connect(function(character)
+character.Animator:SetAnimation("Walk", "anim://custom-walk")
+character.Animator:SetAnimation("Jump", "anim://r6-jump")
+local info = game:GetService("AnimationService"):GetAnimation("anim://custom-walk")
+assert(info.Id == "anim://custom-walk" and info.RigType == "R6" and math.abs(info.Duration - 0.8) < 0.0001)
+end))";
+    const auto source=animations->source;scene.installDefaultScripts();CHECK(animations->source==source);CHECK(service->children().size()==2);
+    game::RuntimeSession runtime;CHECK(runtime.start(scene,error));CHECK(runtime.settings().walkAnimation=="anim://custom-walk");
+    CHECK(runtime.settings().jumpAnimation=="anim://r6-jump");
+    for(const auto& message:runtime.scripts().messages())CHECK(!message.error);
+    CHECK(!runtime.setAnimation("Walk","anim://missing",error));CHECK(runtime.settings().walkAnimation=="anim://custom-walk");
+    CHECK(!runtime.setAnimation("Dance","anim://custom-walk",error));
+    CHECK(runtime.scene().gameAssets().findAnimation(runtime.settings().walkAnimation)->sample(0)[game::LeftHip].rotation.x==edited.sample(0)[game::LeftHip].rotation.x);
+    runtime.stop();
+    Scene reopened;CHECK(projectio::fromJson(reopened,projectio::toJson(scene),error));
+    auto* restored=static_cast<Script*>(reopened.find(animations->id()));CHECK(restored && restored->source==source);
+    CHECK(runtime.start(reopened,error));CHECK(runtime.settings().walkAnimation=="anim://custom-walk");runtime.stop();
+    auto legacy=scene.gameAssets();legacy.player.jumpAnimation.clear();
+    CHECK(legacy.findAnimation("r6-jump")!=nullptr);CHECK(scene.validate(error));
 }
-int main() { Hierarchy(); Scripts(); std::printf("Studio: %d checks, %d failures\n",checks,failures); return failures?1:0; }
+}
+int main() { Hierarchy(); Scripts(); AnimationIds(); std::printf("Studio: %d checks, %d failures\n",checks,failures); return failures?1:0; }

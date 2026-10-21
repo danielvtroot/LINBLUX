@@ -198,6 +198,17 @@ Pose BlendPose(const Pose& a, const Pose& b, float alpha) {
     for (int i = 0; i < kJointCount; ++i) out[i] = Mix(a[i], b[i], std::clamp(alpha, 0.f, 1.f));
     return out;
 }
+AnimationClip MakeJump() {
+    AnimationClip clip=MakeIdle();clip.id="r6-jump";clip.name="R6_Jump";
+    clip.duration=.5f;clip.loop=false;clip.priority=AnimationPriority::Movement;
+    // Preserve the approved native air pose, now as an editable asset.
+    Pose pose{};pose[LeftShoulder].rotation=QuaternionFromEuler(0,0,-.35f);
+    pose[RightShoulder].rotation=QuaternionFromEuler(0,0,.35f);
+    pose[LeftHip].rotation=QuaternionFromEuler(-.15f,0,0);
+    pose[RightHip].rotation=QuaternionFromEuler(.15f,0,0);
+    for(int j=0;j<kJointCount;++j) {clip.setKey(j,{0,pose[j]});clip.setKey(j,{clip.duration,pose[j]});}
+    return clip;
+}
 void Animator::play(const AnimationClip& clip, bool restart) {
     if (restart || clip_ != &clip) time_ = 0;
     clip_ = &clip; paused_ = false;
@@ -234,6 +245,8 @@ Rig& GameAssets::createR6() {
     if (defaultRig.empty()) defaultRig = rigs.back().id;
     if (!findAnimation("r6-walk")) animations.push_back(MakeWalk());
     if (!findAnimation("r6-idle")) animations.push_back(MakeIdle());
+    if (!findAnimation("r6-jump")) animations.push_back(MakeJump());
+    if (player.jumpAnimation.empty()) player.jumpAnimation="r6-jump";
     diag::Event event; event.subsystem = "rig"; event.name = "create";
     event.context = {{"rig", rigs.back().id}}; event.result = "ok"; diag::log(event);
     return rigs.back();
@@ -247,11 +260,13 @@ const Rig* GameAssets::findRig(const std::string& id) const {
     return nullptr;
 }
 AnimationClip* GameAssets::findAnimation(const std::string& id) {
-    for (auto& c : animations) if (c.id == id) return &c;
+    const auto key=id.rfind("anim://",0)==0?id.substr(7):id;
+    for (auto& c : animations) if (c.id == key) return &c;
     return nullptr;
 }
 const AnimationClip* GameAssets::findAnimation(const std::string& id) const {
-    for (const auto& c : animations) if (c.id == id) return &c;
+    const auto key=id.rfind("anim://",0)==0?id.substr(7):id;
+    for (const auto& c : animations) if (c.id == key) return &c;
     return nullptr;
 }
 bool GameAssets::validate(std::string& error) const {
@@ -266,7 +281,8 @@ bool GameAssets::validate(std::string& error) const {
     if (!player.validate(error)) return false;
     const bool reservedDefaults = rigs.empty() && animations.empty() &&
         player.walkAnimation == "r6-walk" && player.idleAnimation == "r6-idle";
-    if (((!defaultRig.empty() || !rigs.empty()) && !findRig(defaultRig)) || (!reservedDefaults &&
+    if ((!player.jumpAnimation.empty() && !findAnimation(player.jumpAnimation)) ||
+        ((!defaultRig.empty() || !rigs.empty()) && !findRig(defaultRig)) || (!reservedDefaults &&
         (!findAnimation(player.walkAnimation) || !findAnimation(player.idleAnimation)))) {
         error = "game: missing default rig or animation reference"; return false;
     }

@@ -134,6 +134,7 @@ bool Application::initialize() {
         }
     }
 
+    if (!projectLoaded) scene_.installDefaultScripts();
     physics_.attach(scene_);
     physics_.setGravity(Vector3{0.0f, config_.gravity, 0.0f});
     physics_.setFixedStep(config_.physicsFixedStep, config_.physicsMaxSubSteps);

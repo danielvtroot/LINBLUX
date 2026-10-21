@@ -147,8 +147,13 @@ def main():
     document = run(missing, default, document, benchmark=True)
     assert not missing.exists()
     assert {o["class"] for o in document["objects"]} >= {"Baseplate", "SpawnLocation"}
+    # Keep the fixture in the writer's preorder: Workspace descendants before
+    # additional root services. Compare the complete saved document strictly.
+    insert_at = next((i for i, o in enumerate(document["objects"])
+                      if o["parent"] == 0 and o["class"] not in ("Workspace", "Lighting")),
+                     len(document["objects"]))
     for index in range(2):
-        document["objects"].append(dict(id=20 + index, parent=1, name=f"RestartPart{index}",
+        document["objects"].insert(insert_at + index, dict(id=20 + index, parent=1, name=f"RestartPart{index}",
             **{"class": "Part"}, shape="Block", position=[8 * index, 12, -3],
             rotation=[15, 30, 45], size=[8, 2, 4], color=[70, 160, 90, 255],
             material="Wood", anchored=True, canCollide=bool(index)))

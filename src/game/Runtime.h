@@ -67,6 +67,7 @@ public:
     scripting::LuaRuntime& scripts() { return scripts_; }
     const scripting::LuaRuntime& scripts() const { return scripts_; }
     unsigned characterGeneration() const { return respawns_; }
+    bool setAnimation(const std::string& state,const std::string& assetId,std::string& error);
     const Rig& rig() const { return rig_; }
     RigidTransform characterRoot() const;
     const Pose& pose() const { return pose_; }
@@ -99,7 +100,7 @@ private:
     PlayerSettings settings_;
     PlayerCamera camera_;
     Pose pose_{};
-    float accumulator_ = 0, walkTime_ = 0, idleTime_ = 0, walkWeight_ = 0, yaw_ = 0;
+    float accumulator_ = 0, walkTime_ = 0, idleTime_ = 0, airTime_ = 0, walkWeight_ = 0, yaw_ = 0;
     float rootHeightOffset_ = .1f;
     bool jumpPending_ = false;
     unsigned respawns_ = 0;

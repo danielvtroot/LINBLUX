@@ -55,5 +55,13 @@ folders, não Parts físicas fora de Workspace. Rig continua asset de autoria,
 não uma segunda hierarquia de Instances. Visuais/imagens/skybox/vida/Shift Lock
 da missão nova ainda pendentes. Script Editor ainda não tem syntax highlight,
 autocomplete ou navegação de busca; linhas/Tab/edição/undo de texto estão reais.
-Próximo: Animator:SetAnimation com IDs locais, Jump asset e scripts padrão,
-depois Health/void/HUD. Guia: docs/STUDIO2_GUIDE.md. Sem push.
+Lua/editor checkpoint: `cc21833`, CTest 10/10. Animator:SetAnimation e IDs
+anim:// estão implementados e cobertos por 1.099 checks headless. Jump agora
+é asset editável, com a mesma pose aérea padrão. Novos projetos recebem R6 e
+scripts padrão; projetos carregados não são alterados, instalação é opt-in.
+Restart encontrou apenas ordem global da fixture após adicionar serviços:
+IDs, objetos e game eram iguais, mas Parts appended no final não eram preorder.
+A fixture agora insere Parts antes dos serviços, mantendo comparação estrita
+do documento inteiro e a ordem real dos filhos. Restart corrigido passou os
+6 processos; os outros 9 testes haviam passado na mesma revisão de produção.
+Próximo: Health/void/HUD. Guia: docs/STUDIO2_GUIDE.md. Sem push.

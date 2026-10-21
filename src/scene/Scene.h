@@ -31,6 +31,7 @@ public:
 
     // Cria a cena inicial: Baseplate + SpawnLocation dentro do Workspace.
     void buildDefaultScene();
+    void installDefaultScripts(); // explicit opt-in for old maps; never overwrites existing names
 
     Workspace* workspace() const { return workspace_; }
     Lighting* lighting() const { return lighting_; }

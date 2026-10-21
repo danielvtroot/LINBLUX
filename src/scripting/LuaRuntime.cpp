@@ -15,7 +15,7 @@
 
 namespace loblox::scripting {
 namespace {
-enum class Kind { Instance,Game,Players,Player,RunService,Character,Humanoid,Animator,Signal,Connection };
+enum class Kind { Instance,Game,Players,Player,RunService,AnimationService,Character,Humanoid,Animator,Signal,Connection };
 enum Signal { Spawn=1,Heartbeat,HealthChanged,Died };
 struct Handle { Kind kind; InstanceId id; unsigned generation; };
 constexpr std::size_t kMemoryLimit=8*1024*1024, kTasks=128, kListeners=128;
@@ -152,6 +152,7 @@ struct LuaRuntime::Impl {
         auto& self=Host(L);const char* name=Text(L,2);
         if(Eq(name,"Players")) self.push(L,Kind::Players);
         else if(Eq(name,"RunService")) self.push(L,Kind::RunService);
+        else if(Eq(name,"AnimationService")) self.push(L,Kind::AnimationService);
         else {
             InstanceClass type; Require(InstanceClassFromName(name,type)&&IsRootServiceClass(type),"unsupported service; no networking services exist");
             auto* object=self.runtime->mutableScene().ensureService(type); Require(object,"service unavailable");self.pushInstance(L,object);
@@ -227,12 +228,28 @@ struct LuaRuntime::Impl {
         if(status!=LUA_OK)throw std::runtime_error(lua_tostring(L,-1));
         lua_pushvalue(L,-1);self.modules[object.id()]=luaL_ref(L,LUA_REGISTRYINDEX);return 1;
     }
+    static int SetAnimation(lua_State* L) {
+        auto& self=Host(L);Require(self.handle(L,1).kind==Kind::Animator,"expected Animator");
+        const char* state=Text(L,2);const char* id=Text(L,3);std::string error;
+        if (!self.runtime->setAnimation(state,id,error)) throw std::runtime_error(error);
+        return 0;
+    }
+    static int GetAnimation(lua_State* L) {
+        auto& self=Host(L);const char* id=Text(L,2);const auto* clip=self.runtime->scene().gameAssets().findAnimation(id);
+        Require(clip,"animation ID not present in this project");
+        lua_createtable(L,0,7);const auto uri="anim://"+clip->id;
+        lua_pushlstring(L,uri.data(),uri.size());lua_setfield(L,-2,"Id");lua_pushstring(L,clip->name.c_str());lua_setfield(L,-2,"Name");
+        lua_pushstring(L,clip->rigType.c_str());lua_setfield(L,-2,"RigType");lua_pushnumber(L,clip->duration);lua_setfield(L,-2,"Duration");
+        lua_pushboolean(L,clip->loop);lua_setfield(L,-2,"Loop");lua_pushinteger(L,clip->version);lua_setfield(L,-2,"Version");return 1;
+    }
     static int Index(lua_State* L) {
         auto& self=Host(L);const auto h=self.handle(L,1);const char* key=Text(L,2);
 #define METHOD(name,fn) if(Eq(key,name)){lua_pushcfunction(L,Safe<fn>);return 1;}
         if(h.kind==Kind::Game){METHOD("GetService",GetService)}
         if(h.kind==Kind::Signal){METHOD("Connect",Connect)}
         if(h.kind==Kind::Connection){METHOD("Disconnect",Disconnect)}
+        if(h.kind==Kind::Animator){METHOD("SetAnimation",SetAnimation)}
+        if(h.kind==Kind::AnimationService){METHOD("GetAnimation",GetAnimation)}
         if(h.kind==Kind::Players || h.kind==Kind::Player) {
             if(Eq(key,"CharacterAdded")){self.push(L,Kind::Signal,Spawn);return 1;}
             if(Eq(key,"LocalPlayer")){self.push(L,Kind::Player);return 1;}

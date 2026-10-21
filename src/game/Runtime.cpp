@@ -238,7 +238,7 @@ bool RuntimeSession::respawn(std::string& error) {
     destroyCharacter();
     capsule_ = std::move(capsule); motion_ = std::move(motion); body_ = std::move(body);
     physics_->world_->addRigidBody(body_.get());
-    pose_ = {}; walkTime_ = 0; idleTime_ = 0; walkWeight_ = 0; accumulator_ = 0; yaw_ = 0; jumpPending_ = false;
+    pose_ = {}; walkTime_ = 0; idleTime_ = 0; airTime_=0; walkWeight_ = 0; accumulator_ = 0; yaw_ = 0; jumpPending_ = false;
     humanoidState_ = HumanoidState::Idle;
     camera_.reset(characterRoot().position, settings_);
     camera_.update(1, characterRoot().position, {}, {}, settings_, *this);
@@ -301,8 +301,9 @@ void RuntimeSession::animate(float dt, float horizontal) {
     const bool walking = humanoidState_ == HumanoidState::Walking;
     const bool airborne = humanoidState_ == HumanoidState::Jumping || humanoidState_ == HumanoidState::Freefall;
     static const std::string airPose = "R6_AirPose";
-    const std::string& desiredClip = airborne ? airPose : walking ? settings_.walkAnimation : settings_.idleAnimation;
+    const std::string& desiredClip = airborne ? (settings_.jumpAnimation.empty()?airPose:settings_.jumpAnimation) : walking ? settings_.walkAnimation : settings_.idleAnimation;
     if (activeAnimation_ != desiredClip) {
+        if (airborne) airTime_=0;
         if (!activeAnimation_.empty()) Event("animation", "stop", correlation_, {{"clip", activeAnimation_}});
         activeAnimation_ = desiredClip;
         Event("animation", "play", correlation_, {{"clip", activeAnimation_}});
@@ -310,6 +311,7 @@ void RuntimeSession::animate(float dt, float horizontal) {
     walkWeight_ = Lerp(walkWeight_, walking ? 1.f : 0.f, Response(14, dt));
     if (walking) walkTime_ += dt * std::clamp(horizontal / 16.f, 0.f, 4.f);
     if (!airborne) idleTime_ += dt;
+    else airTime_ += dt;
     Pose target = BlendPose(idle ? idle->sample(idleTime_) : Pose{}, walk ? walk->sample(walkTime_) : Pose{}, walkWeight_);
     if (airborne) {
         target = {};
@@ -317,8 +319,21 @@ void RuntimeSession::animate(float dt, float horizontal) {
         target[RightShoulder].rotation = QuaternionFromEuler(0, 0, .35f);
         target[LeftHip].rotation = QuaternionFromEuler(-.15f, 0, 0);
         target[RightHip].rotation = QuaternionFromEuler(.15f, 0, 0);
+        if (const auto* jump=assets.findAnimation(settings_.jumpAnimation)) target=jump->sample(airTime_);
     }
     pose_ = BlendPose(pose_, target, Response(20, dt));
+}
+bool RuntimeSession::setAnimation(const std::string& state,const std::string& id,std::string& error) {
+    const auto* clip=scene_?scene_->gameAssets().findAnimation(id):nullptr;
+    if (!clip || clip->rigType!="R6" || !clip->validate(error)) {
+        error="Animation asset missing, invalid or incompatible with R6: "+id;return false;
+    }
+    const std::string uri="anim://"+clip->id;
+    if (state=="Idle") settings_.idleAnimation=uri;
+    else if (state=="Walk") settings_.walkAnimation=uri;
+    else if (state=="Jump") settings_.jumpAnimation=uri;
+    else {error="Animation state must be Idle, Walk or Jump";return false;}
+    error.clear();return true;
 }
 void RuntimeSession::update(float dt, const PlayerInput& input) {
     if (state_ != RuntimeState::Playing || !body_ || !std::isfinite(dt) || dt < 0) return;

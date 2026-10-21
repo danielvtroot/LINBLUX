@@ -79,6 +79,7 @@ struct AnimationClip {
 };
 AnimationClip MakeWalk(float amplitudeDegrees = 30, float duration = 0.8f);
 AnimationClip MakeIdle();
+AnimationClip MakeJump();
 Pose BlendPose(const Pose& from, const Pose& to, float alpha);
 
 class Animator {
@@ -120,6 +121,7 @@ struct PlayerSettings {
     bool cameraLock = false;
     std::string walkAnimation = "r6-walk";
     std::string idleAnimation = "r6-idle";
+    std::string jumpAnimation; // empty retains the legacy native air-pose fallback
     bool validate(std::string& error) const;
 };
 

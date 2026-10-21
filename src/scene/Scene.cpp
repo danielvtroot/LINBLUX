@@ -40,6 +40,34 @@ void Scene::buildDefaultScene() {
     createBaseplate();
     createSpawnLocation();
 }
+void Scene::installDefaultScripts() {
+    if (gameAssets_.rigs.empty()) gameAssets_.createR6();
+    if (!gameAssets_.findAnimation("r6-jump")) gameAssets_.animations.push_back(game::MakeJump());
+    if (gameAssets_.player.jumpAnimation.empty()) gameAssets_.player.jumpAnimation="r6-jump";
+    auto* service=ensureService(InstanceClass::ServerScriptService);
+    const auto insert=[&](const char* name,const char* source) {
+        for(auto* child:service->children())if(child->name()==name)return;
+        if(auto* script=createScript(InstanceClass::Script,service,name))script->source=source;
+    };
+    insert("Game.server.lua",R"(-- Native controller owns spawn, movement and respawn; no duplicate spawns here.
+local Players = game:GetService("Players")
+Players.CharacterAdded:Connect(function(character)
+    print("Spawned", character.Name)
+    -- Customize this map here. Project defaults are in Game Settings.
+end)
+)");
+    insert("CharacterAnimations.server.lua",R"(local Players = game:GetService("Players")
+local IDLE = "anim://r6-idle"
+local WALK = "anim://r6-walk"
+local JUMP = "anim://r6-jump"
+Players.CharacterAdded:Connect(function(character)
+    local animator = character.Animator
+    animator:SetAnimation("Idle", IDLE)
+    animator:SetAnimation("Walk", WALK)
+    animator:SetAnimation("Jump", JUMP)
+end)
+)");
+}
 
 bool Scene::isService(const Instance* object) const {
     return object && IsRootServiceClass(object->instanceClass());
