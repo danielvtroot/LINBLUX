@@ -1,18 +1,70 @@
 # Studio 2 — continuidade
 
-## Etapa A — frontend profissional (checkpoint parcial)
+## Rodada B–G (checkpoints)
 
-Commit `a8bb7ef` nesta rodada: Explorer com ícone vetorial próprio por classe
-(Workspace/Lighting/Baseplate/SpawnLocation/Part/Folder/Model/páginas de
-Script/LocalScript/ModuleScript com badge/serviços com badge), realce do
-destino de drag-and-drop no nó sob o cursor, tamanhos iniciais mais
-confortáveis para Explorer/Properties (350×620/330×560 first-use). Lógica de
-hierarquia, reparent e seleção preservada. Build Release OK; CTest 10/10.
-Validação visual GUI ainda pendente (sem ambiente de GUI nesta rodada).
+Missão frontend concluída até o limite desta sessão. Commits (branch
+fix/unified-3d-gizmos, sem push):
 
-Pendente da Etapa A: ribbon/agrupamento de ferramentas, tooltips da barra,
-busca do Explorer já existe (nome ou classe). Próximo passo sugerido:
-melhorar organização/toolbar e depois partir para Script Editor (Etapa B).
+- `a8bb7ef` (Etapa A) ícones por classe no Explorer, drag-target highlight.
+- `e89deb2` (Etapa A) ribbon reorganizada: abas Avatar/Script; Game só
+  Play/Stop/Settings, Stop desabilitado fora do Play.
+- `217fa00` (Etapa B) Script Editor: tokenizador Lua por frame desenha o
+  código (texto nativo transparente com seleção/undo nativos preservados),
+  caret próprio, indentação automática no Enter, barra vermelha e
+  contagem de erros de runtime por script e mensagens clicáveis no Output
+  que abrem o script.
+- `ab418f8` (Etapa C) loblox.png na toolbar/ícone da janela/menu Esc
+  (proporção preservada); cabeça vira superelipsoide fechado (2/n, n≈4.5)
+  com Lambert por quad; rosto1.png desenhado como quad na face -Z da
+  cabeça acompanhando a rotação (fallback: olhos mínimos).
+- `6c2d548` (Etapa D) skybox um quad por face ancorado na câmera (sem
+  shader/cubemap): 4 faces do sky1/ + Back/Down opcionais (cor sólida);
+  fog por distância no Lighting (fogColor/fogDensity persistidos
+  opcionalmente, leitura tolerante v1/v2), aplicado no sombreamento CPU
+  e no material cacheado da base; Properties com FogColor/FogDensity.
+- `4f1d424` (Etapa E) importador portátil assets/ (assets dir relativo ao
+  executável, id FNV-1a do conteúdo) e Decal/Texture na Part como
+  atributos persistidos do JSON v3: decal_image/decal_face (6 faces)/
+  decal_transparency/decal_rotation (0/90/180/270)/decal_tint (RRGGBB),
+  texture_image/texture_face/texture_transparency/texture_repeat_u/v/
+  texture_offset_u/v; quads acompanham Position/Rotation/Size com offset
+  0.02 contra z-fight; Properties com Importar/Face/Transparência/Rotação/
+  Tint; Explorer mostra linhas Decal/Texture sob a Part; acessível de Lua
+  pelos bindings de atributos já existentes.
+- `5ae4add` (Etapa F) Shift Lock real: enableShiftLock nas Game Settings
+  (persistido opcionalmente), Left Shift alterna durante Play; personagem
+  alinhado à câmera (pipeline cameraLock), target com offset direito
+  moderado, cursor capturado, badge SHIFT LOCK ON/OFF + retículo próprio;
+  Esc pausa (captura liberada), Stop/respawn nunca deixam lock preso.
+  HUD do Play ganha logo inline 18 px.
+
+Validação desta rodada: build incremental limpo (sem erros/warnings),
+CTest 10/10 após cada etapa, `git diff --check` OK, fixtures críticos
+(loblox_game_ui 208 checks, editor_restart) passam. Assets originais do
+usuário preservados (loblox.png, rosto1.png, sky1/ nunca foram alterados,
+carga por caminhos relativos ao executável).
+
+Limitações registradas com transparência:
+1. Captura real de GUI ainda não validada neste ambiente: rodar
+   `tests/run_sway_input.sh` recusa root e a sessão Wayland do labubu
+   só autoriza o dono (Invalid MIT-MAGIC-COOKIE); tentativa sway headless
+   como labubu caiu no XWayland (broken pipe). Recomendado: o usuário abre
+   o Studio e confere visualmente (Explorer/ribbon/logo, cabeça/rosto,
+   skybox, decal, Shift Lock: Shift→Esc→Resume→Shift→Stop).
+2. Decal/Texture são atributos da Part (1 decal + 1 texture por Part),
+   não instâncias filhas independentes no Explorer-reparent: modelo
+   enxuto e persistente, substituto futuro por classes próprias quando
+   houver espaço (Lua continua via atributos existentes).
+3. Autocomplete no Script Editor não implementado (etapa B inscrita como
+   pendente); scroll horizontal não aplicável (multiline com wrap própria);
+   fonte é a padrão monoespaçada do ImGui.
+4. Rosto por Properties ainda não exposto (futuro: selector de face nos
+   Scripts/cabeça, sem sobrescrever rigs existentes).
+5. Fog não aplicável a quads texturados (faces de decal/textura) nesta
+   versão.
+
+Próximo comando: `./build/loblox` para conferência visual pelo usuário;
+`ctest --test-dir build --output-on-failure -j2` para regressão.
 
 ## Estado do checkpoint final desta rodada
 
