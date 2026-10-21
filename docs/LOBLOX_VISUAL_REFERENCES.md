@@ -51,6 +51,27 @@ Settings (retângulo da aba igual a zero). Capturas do binário real em
 
 ## Estado
 
+Retomada após Nemotron: commits até 7afd682 auditados; nove arquivos reabertos.
+O usuário escolheu céu procedural como modo principal. A proposta anterior
+de sky1/cubemap foi substituída; os PNGs permanecem intactos, sem uso padrão.
+Menus/layout/paleta do checkpoint 2adcf45 foram preservados.
+
+Correções verificadas: gizmos reais do rig (mesmo proxy no desenho/picking,
+solver bind/rest/pose e transação cancelável), Fall vazio independente, sky
+procedural realmente desenhado (teste de pixels falhava antes), comandos de
+rig no Explorer e realce Lua com espaços/scroll/caret alinhados.
+
+Capturas do aplicativo principal, e não de mockups:
+`/tmp/loblox-resume-app-wJgzIHbF/{studio,play,pause}.png`, 1366×768.
+Foram abertas: ribbon legível; HUD com logo/menu; Esc centralizado dentro do
+mundo, sem cobrir Explorer/ribbon. Fixtures do renderer/UI de produção:
+`/tmp/loblox-visual-studio-pSRc15/{r6-front,script,pause-settings-1366}.png` e
+`/tmp/loblox-rig-input-hNb6l6/{Move,Rotate,Scale}.png`, também examinadas.
+O rosto mantém a razão da imagem original e a frente -Z. Proporções 2×1×1
+da cabeça autoral foram preservadas; equivalência da silhueta clássica ainda
+não foi aprovada pelo usuário. Shaders avançados e autocomplete não estão
+concluídos. Não declarar equivalência integral com Roblox Studio.
+
 Documento de trabalho: screenshots posteriores e resultados devem acompanhar
 cada checkpoint. Referência visual não equivale a aprovação do usuário, e
 Xvfb/llvmpipe não equivale à GPU/DPI do notebook.

@@ -25,6 +25,8 @@ struct EditorUITestAccess {
     static int page(EditorUI& ui) { return ui.pausePage_; }
     static bool captured(EditorUI& ui) { return ui.gameplayCapture_; }
     static void script(EditorUI& ui, InstanceId id) { ui.openScript(id); }
+    static void hideScript(EditorUI& ui) { ui.showScriptEditor_=false; }
+    static void animation(EditorUI& ui) {ui.openAnimation(ui.scene_.gameAssets().player.walkAnimation);ui.showRigEditor_=false;}
 };
 }
 using namespace loblox;
@@ -42,7 +44,7 @@ int main() {
     if(FileExists(font)) io.FontDefault=io.Fonts->AddFontFromFileTTF(font,14);
     studio::Apply();
     {
-        Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();
+        Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();scene.gameAssets().player.enableShiftLock=true;
         auto* folder=scene.createContainer(InstanceClass::Folder,nullptr,"Buildings");
         auto* model=scene.createContainer(InstanceClass::Model,folder,"House");
         auto* part=scene.createPart(PartShape::Block,{9,3,0},{7,6,1},"Wall");part->setAnchored(true);
@@ -57,6 +59,20 @@ int main() {
         auto capture=[&](const std::string& name){frames();TakeScreenshot((std::string(directory)+"/"+name+".png").c_str());};
         frames(5);event("search --name '^Loblox visual acceptance$' windowfocus --sync");
         capture("studio-1366");
+        for(const char* label:{"Avatar","Script","Home"}) {
+            auto* toolbar=ImGui::FindWindowByName("##Toolbar");
+            auto* bar=GImGui->TabBars.GetByKey(toolbar->GetID("##RibbonTabs"));CHECK(bar);
+            if(bar)for(auto& tab:bar->Tabs)if(std::string(ImGui::TabBarGetTabName(bar,&tab))==label) {
+                const ImVec2 at{bar->BarRect.Min.x+tab.Offset+tab.Width*.5f,bar->BarRect.Min.y+ImGui::GetTextLineHeight()*.5f};
+                click(at);capture(std::string("ribbon-")+label);break;
+            }
+        }
+        const auto& rig=scene.gameAssets().rigs.front();
+        part->setPosition({25,3,0});
+        camera.setOrbit(Vector3Add(rig.root.position,{0,1,0}),12,PI,0);
+        scene.select(nullptr);capture("r6-front");
+        camera.setOrbit(Vector3Add(rig.root.position,{0,1,0}),12,PI+.45f,.12f);
+        capture("r6-perspective");camera.reset();part->setPosition({9,3,0});scene.select(part);
         CHECK(projectio::save(scene,config.defaultProjectPath,error));
         const auto original=projectio::toJson(scene);
         for(auto size:{ImVec2{1280,720},ImVec2{1366,768},ImVec2{1600,900},ImVec2{1920,1080}}) {
@@ -65,6 +81,13 @@ int main() {
             auto& runtime=EditorUITestAccess::runtime(ui);
             CHECK(runtime.state()==game::RuntimeState::Playing);
             capture("hud-"+std::to_string(int(size.x)));
+            if(size.x==1280) {
+                const auto image=EditorUITestAccess::viewport(ui);
+                click({image.x+40,image.y+30});CHECK(runtime.state()==game::RuntimeState::Paused);
+                key("Escape");CHECK(runtime.state()==game::RuntimeState::Playing);
+                key("Shift_L");CHECK(runtime.shiftLockActive());CHECK(EditorUITestAccess::captured(ui));
+                capture("shift-lock");
+            }
             key("Escape");CHECK(runtime.state()==game::RuntimeState::Paused);
             const auto vp=EditorUITestAccess::viewport(ui);auto* menu=ImGui::FindWindowByName("Play paused");
             CHECK(menu!=nullptr);CHECK(vp.x>0 && vp.y>0);
@@ -89,6 +112,17 @@ int main() {
             CHECK(projectio::toJson(scene)==original);
         }
         CHECK(scene.validate(error));
+        SetWindowSize(1366,768);frames();
+        for(const auto& node:scene.objects()) if(IsScriptClass(node->instanceClass())) {
+            EditorUITestAccess::script(ui,node->id());frames();capture("script");
+            EditorUITestAccess::hideScript(ui);break;
+        }
+        EditorUITestAccess::animation(ui);frames();
+        if(auto* panel=ImGui::FindWindowByName("Animation Editor")) {
+            ImGui::SetWindowDock(panel,0,ImGuiCond_Always);
+            ImGui::SetWindowPos("Animation Editor",{270,410});ImGui::SetWindowSize("Animation Editor",{715,345});
+            capture("animation-editor");
+        }
     }
     rlImGuiShutdown();CloseWindow();
     std::printf("Visual Studio: %d checks, %d failures; captures: %s\n",checks,failures,directory);

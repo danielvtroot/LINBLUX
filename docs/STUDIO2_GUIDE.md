@@ -1,5 +1,26 @@
 # Studio 2 — recursos disponíveis e limites
 
+## Atualização Studio 3
+
+As seções abaixo também registram contratos históricos. No estado atual,
+novos R6 têm Idle/Walk/Jump e **Fall vazio**, com ID próprio e sem keyframes.
+Game Settings configura os quatro estados; projetos anteriores podem criar
+Fall pelo botão correspondente. Queda sem clip usa pose neutra. Scripts de
+animação personalizados continuam disponíveis, mas CharacterAnimations não
+é mais gerado automaticamente.
+
+Rig Editor usa a mesma ferramenta ativa da ribbon: Move e Rotate funcionam
+em Edit/Pose; Scale altera proporções somente em Edit Rig. Desenho e picking
+compartilham proxy/layout. Esc, troca de ferramenta, modal ou perda de foco
+cancelam o drag e restauram o snapshot. Esc em Play abre menu contido na
+viewport. O botão logo/menu da HUD abre o mesmo menu.
+
+Script Editor tem highlighting, fonte monoespaçada, scroll horizontal/vertical,
+Go to Line/Go to Match e Ctrl+S; autocomplete ainda pendente. Shift Lock é
+habilitado no Game Config e alternado com Left Shift durante Play. Céu
+principal é procedural e configurável em Lighting; sky1 não é usado como
+default. Ver [handoff atual](STUDIO3_HANDOFF.md) para testes e limites.
+
 ## Explorer e Properties
 
 Home → Insert Folder/Model ou botões + do Explorer criam agrupadores reais.

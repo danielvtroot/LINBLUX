@@ -1,5 +1,6 @@
 #include "app/Application.h"
 #include "editor/StudioTheme.h"
+#include "game/ImageAssets.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -30,18 +31,6 @@ bool Application::initialize() {
     SetConfigFlags(flags);
     InitWindow(config_.windowWidth, config_.windowHeight, "Loblox Studio");
 
-    // Ícone da janela: arquivo do projeto, sem alterar os originais. Falha
-    // silenciosa mantém o ícone padrão (não é um recurso essencial).
-    for (const char* path : {"loblox.png", "../loblox.png", "../../loblox.png", "../../../loblox.png"}) {
-        if (FileExists(path)) {
-            Image icon = LoadImage(path);
-            if (icon.data != nullptr) {
-                SetWindowIcon(icon);
-                UnloadImage(icon);
-            }
-            break;
-        }
-    }
     if (!IsWindowReady()) {
         diag::Event event;
         event.level = diag::Level::Error;
@@ -56,6 +45,11 @@ bool Application::initialize() {
         return false;
     }
     windowReady_ = true;
+    const auto iconPath=game::BuiltinAssetPath("loblox.png");
+    if(!iconPath.empty()) {
+        Image icon=LoadImage(iconPath.c_str());
+        if(icon.data){SetWindowIcon(icon);UnloadImage(icon);}
+    }
     SetWindowMinSize(900, 560);
     SetExitKey(KEY_NULL);
     SetTargetFPS(config_.targetFps);
@@ -122,6 +116,7 @@ bool Application::initialize() {
     physics_.setFixedStep(config_.physicsFixedStep, config_.physicsMaxSubSteps);
 
     renderer_ = std::make_unique<SceneRenderer>();
+    // Keep allocation and constructor built against the same frozen UI header.
     ui_ = std::make_unique<EditorUI>(scene_, physics_, camera_, *renderer_, config_);
     ui_->setOnSceneLoaded([this]() { physics_.rebuildAll(scene_); });
     if (projectLoaded) {

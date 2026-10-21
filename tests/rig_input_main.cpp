@@ -25,12 +25,19 @@ struct EditorUITestAccess {
     static bool dragging(EditorUI& ui) { return ui.rigGizmo_.dragging(); }
     static game::Pose pose(EditorUI& ui) { return ui.previewPose_; }
     static bool save(EditorUI& ui,const std::string& path,std::string& error) {return ui.saveProjectAt(path,error);}
+    static Rectangle toolControl(EditorUI& ui) {return ui.rigToolControl_;}
+    static ToolMode tool(EditorUI& ui) {return ui.tool_;}
+    static void showPanel(EditorUI& ui) {ui.showRigEditor_=true;}
+    static void rename(EditorUI& ui) {ui.renameSelection();}
+    static void duplicate(EditorUI& ui) {ui.duplicateSelection();}
+    static void remove(EditorUI& ui) {ui.deleteSelection();}
 };
 }
 using namespace loblox;
 int checks=0,failures=0;
 #define CHECK(x) do {++checks;if(!(x)){++failures;std::fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);}} while(0)
 int main() {
+    std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temp[]="/tmp/loblox-rig-input-XXXXXX";const char* dir=mkdtemp(temp);if(!dir)return 1;
     diag::configure(std::string(dir)+"/events.jsonl");
     SetTraceLogLevel(LOG_WARNING);InitWindow(1366,768,"Loblox rig regression");SetWindowPosition(0,0);
@@ -49,12 +56,25 @@ int main() {
         auto event=[&](const std::string& args){CHECK(std::system(("xdotool "+args).c_str())==0);frames();};
         auto key=[&](const char* key){event(std::string("keydown ")+key);event(std::string("keyup ")+key);};
         auto mouse=[&](Vector2 p){event("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));};
+        auto click=[&](Vector2 p){mouse(p);event("mousedown 1");event("mouseup 1");};
         auto viewport=[&](){auto* w=ImGui::FindWindowByName("Viewport");return Rectangle{w->InnerRect.Min.x,w->InnerRect.Min.y,w->InnerRect.GetWidth(),w->InnerRect.GetHeight()};};
         auto screenshot=[&](const std::string& name){TakeScreenshot((std::string(dir)+"/"+name+".png").c_str());};
         frames(5);event("search --name '^Loblox rig regression$' windowfocus --sync");
         const auto originalClips=scene.gameAssets().animations;
         for(auto mode:{ToolMode::Move,ToolMode::Rotate,ToolMode::Scale}) {
             EditorUITestAccess::setup(ui,id,mode);frames();
+            EditorUITestAccess::showPanel(ui);frames();
+            ImGui::SetWindowDock(ImGui::FindWindowByName("Rig Editor"),0,ImGuiCond_Always);
+            ImGui::SetWindowPos("Rig Editor",{3,145});ImGui::SetWindowSize("Rig Editor",{295,610});frames();
+            const auto combo=EditorUITestAccess::toolControl(ui);click({combo.x+35,combo.y+combo.height/2});
+            CHECK(!GImGui->OpenPopupStack.empty());
+            if(!GImGui->OpenPopupStack.empty()) {
+                auto* popup=GImGui->OpenPopupStack.back().Window;
+                CHECK(popup);
+                const int index=mode==ToolMode::Rotate?0:mode==ToolMode::Move?1:2;
+                if(popup)click({popup->DC.CursorStartPos.x+30,popup->DC.CursorStartPos.y+index*ImGui::GetTextLineHeightWithSpacing()+ImGui::GetTextLineHeight()/2});
+            }
+            CHECK(EditorUITestAccess::tool(ui)==mode);
             auto& current=*scene.gameAssets().findRig(id);
             auto before=projectio::toJson(scene);
             auto world=current.evaluate({},current.root);
@@ -70,6 +90,7 @@ int main() {
                 if(mode==ToolMode::Scale) at=layout.scaleHandle[axis*2+1];
                 at=Vector2Add(at,{vp.x,vp.y});
                 const auto cameraBefore=camera.position();
+                const auto torsoBefore=current.evaluate({},current.root)[game::Torso];
                 const auto start=current.evaluate({},current.root)[game::RightArm];const auto size=current.bodies[game::RightArm].size;
                 auto direction=layout.axisDirection[axis];
                 if(mode==ToolMode::Rotate)direction={1,.6f};
@@ -80,6 +101,8 @@ int main() {
                 if(mode==ToolMode::Rotate)CHECK(!NearlyEqual(moved.rotation,start.rotation,.001f));
                 if(mode==ToolMode::Scale)CHECK(!NearlyEqual(current.bodies[game::RightArm].size,size,.001f));
                 CHECK(NearlyEqual(camera.position(),cameraBefore));
+                CHECK(NearlyEqual(current.evaluate({},current.root)[game::Torso].position,torsoBefore.position));
+                CHECK(NearlyEqual(current.evaluate({},current.root)[game::Torso].rotation,torsoBefore.rotation));
                 key("Escape");event("mouseup 1");CHECK(!EditorUITestAccess::dragging(ui));
                 CHECK(projectio::toJson(scene)==before);
                 if(axis==count-1) {
@@ -90,6 +113,31 @@ int main() {
                 }
             }
         }
+        // Domain limits must not move the opposite face, even with a huge drag.
+        EditorUITestAccess::setup(ui,id,ToolMode::Scale);camera.setOrbit({0,6,0},45,.65f,.32f);frames();
+        for(float pixels:{500.f,-500.f}) {
+            const auto before=projectio::toJson(scene);const auto vp=viewport();
+            const auto layout=gizmolayout::Build(EditorUITestAccess::proxy(ui),ToolMode::Scale,camera,vp,false);
+            const auto at=Vector2Add(layout.scaleHandle[1],{vp.x,vp.y});
+            const auto start=rig.evaluate({},rig.root)[game::RightArm];const auto startSize=rig.bodies[game::RightArm].size;
+            const auto direction=gizmomath::Axis(0,start.rotation,true);
+            const auto fixed=Vector3Subtract(start.position,Vector3Scale(direction,startSize.x*.5f));
+            mouse(at);event("mousedown 1");CHECK(EditorUITestAccess::dragging(ui));
+            mouse(Vector2Add(at,Vector2Scale(layout.axisDirection[0],pixels)));
+            const auto current=rig.evaluate({},rig.root)[game::RightArm];const auto size=rig.bodies[game::RightArm].size;
+            CHECK(size.x>=.2f && size.x<=10);
+            CHECK(NearlyEqual(Vector3Subtract(current.position,Vector3Scale(direction,size.x*.5f)),fixed,.01f));
+            key("Escape");event("mouseup 1");CHECK(projectio::toJson(scene)==before);
+        }
+        camera.setOrbit({0,6,0},12,.65f,.32f);
+        // Tool changes cancel the same transaction as Esc (including all binds).
+        EditorUITestAccess::setup(ui,id,ToolMode::Move);frames();
+        const auto beforeSwitch=projectio::toJson(scene);const auto vp=viewport();
+        const auto switchLayout=gizmolayout::Build(EditorUITestAccess::proxy(ui),ToolMode::Move,camera,vp,false);
+        const auto switchAt=Vector2Add(switchLayout.axisButton[0],{vp.x,vp.y});
+        mouse(switchAt);event("mousedown 1");CHECK(EditorUITestAccess::dragging(ui));
+        mouse(Vector2Add(switchAt,Vector2Scale(switchLayout.axisDirection[0],25)));key("3");event("mouseup 1");
+        CHECK(!EditorUITestAccess::dragging(ui));CHECK(projectio::toJson(scene)==beforeSwitch);
         std::string error;CHECK(scene.validate(error));
         CHECK(EditorUITestAccess::save(ui,config.defaultProjectPath,error));Scene loaded;
         CHECK(projectio::load(loaded,config.defaultProjectPath,error));CHECK(projectio::toJson(loaded)==projectio::toJson(scene));
@@ -97,6 +145,11 @@ int main() {
         for(int i=0;i<120;++i)runtime.update(1.f/60,{});
         CHECK(runtime.validate(error));runtime.stop();
         CHECK(scene.gameAssets().animations.size()==originalClips.size());
+        EditorUITestAccess::duplicate(ui);CHECK(scene.gameAssets().rigs.size()==2);
+        EditorUITestAccess::rename(ui);frames();event("keydown ctrl");key("a");event("keyup ctrl");
+        event("type --delay 0 RenamedRig");key("Return");
+        CHECK(scene.gameAssets().rigs.back().name=="RenamedRig");
+        EditorUITestAccess::remove(ui);CHECK(scene.gameAssets().rigs.size()==1);CHECK(scene.validate(error));
     }
     rlImGuiShutdown();CloseWindow();std::printf("Rig input: %d checks, %d failures; captures %s\n",checks,failures,dir);return failures?1:0;
 }

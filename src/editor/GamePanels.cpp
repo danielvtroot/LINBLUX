@@ -58,9 +58,10 @@ void CameraSettings(game::PlayerSettings& p, float* sensitivityRect = nullptr) {
         ImGui::TextColored({1,.3f,.2f,1}, "Camera settings rejected: finite, in-range values required.");
     }
 }
-void AnimationChoice(const char* label, std::string& id, const game::GameAssets& assets) {
+void AnimationChoice(const char* label, std::string& id, const game::GameAssets& assets,bool optional=false) {
     auto* current = assets.findAnimation(id);
-    if (ImGui::BeginCombo(label, current ? current->name.c_str() : "Missing")) {
+    if (ImGui::BeginCombo(label, current ? current->name.c_str() : optional?"None (native fallback)":"Missing")) {
+        if(optional && ImGui::Selectable("None (native fallback)",id.empty()))id.clear();
         for (const auto& clip : assets.animations)
             if (ImGui::Selectable(clip.name.c_str(), clip.id == id)) id = clip.id;
         ImGui::EndCombo();
@@ -94,6 +95,7 @@ void EditorUI::openAnimation(const std::string& id) {
     animationDraft_ = *clip; animationSource_ = id; animationDirty_ = false;
     timelineDragJoint_ = -1;
     rigContext_ = RigContext::Animation; previewTime_ = 0; previewPlaying_ = false;
+    if(tool_==ToolMode::Scale || tool_==ToolMode::Select)setTool(ToolMode::Rotate,"animation_context");
     previewPose_ = animationDraft_.sample(0); showAnimationEditor_ = true;
 }
 bool EditorUI::saveAnimation() {
@@ -163,9 +165,14 @@ void EditorUI::setGameplayCapture(bool capture) {
     event.context = {{"context", "gameplay"}, {"captured", capture}}; diag::log(event);
 }
 void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context, Vector2 image) {
+    const Rectangle menuButton{image.x+12,image.y+12,78,38};
+    const bool menuHovered=context.hovered && !gameplayCapture_ && CheckCollisionPointRec(raw.mouse,menuButton);
+    EditorInput gameInput=raw;
+    if(menuHovered && raw.leftPressed)gameInput.escape=true; // HUD action enters the same Pause/Resume router
+    if(menuHovered)context.hovered=false;
     context.mode = runtime_.state() == game::RuntimeState::Paused ? InputMode::Paused : InputMode::Playing;
     context.menuDepth = pausePage_;
-    const InputRoute route = RouteInput(raw, context);
+    const InputRoute route = RouteInput(gameInput, context);
     if (traceInput_ && (raw.escape || raw.stop || raw.jump || raw.rightPressed || raw.leftPressed || raw.wheel != 0)) {
         diag::Event e; e.subsystem = "input"; e.name = "dispatch";
         e.context = {{"consumer", InputOwnerName(route.owner)}, {"reason", route.reason},
@@ -207,19 +214,17 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     renderer_.drawScene(runtime_.scene(), runtime_.playerCamera().camera(), viewportWidth_, viewportHeight_,
         kInvalidInstanceId, runtime_.playerCamera().avatarHidden() ? nullptr : &character, false);
     EndTextureMode();
-    const char* hint = runtime_.state() == game::RuntimeState::Paused ? "PAUSED | Esc to resume" :
-        "PLAY | WASD move | Space jump | RMB look | Wheel zoom | Esc menu | Shift+F5 stop";
     auto* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled({image.x+8, image.y+8}, {image.x+viewportWidth_-8.f, image.y+36}, IM_COL32(20,25,30,210), 4);
+    dl->AddRectFilled({menuButton.x,menuButton.y},{menuButton.x+menuButton.width,menuButton.y+menuButton.height},
+        menuHovered?IM_COL32(54,68,88,245):IM_COL32(20,25,33,235),8);
     const LobloxLogo& brand = LoadLobloxLogo();
-    float hintX = image.x+14, hintY = image.y+14;
     if (brand.ok) {
-        // Marca 18 px inline na barra, proporção preservada.
         dl->AddImage(static_cast<ImTextureID>(brand.id),
-                     ImVec2(image.x+12, image.y+11), ImVec2(image.x+12+18.f*brand.width/brand.height, image.y+11+18.f));
-        hintX += 12.f + 18.f; hintY = image.y+16;
+                     {menuButton.x+5,menuButton.y+4},{menuButton.x+5+30.f*brand.width/brand.height,menuButton.y+34});
     }
-    dl->AddText({hintX, hintY}, IM_COL32(235,240,245,255), hint);
+    for(int i=0;i<3;++i)dl->AddLine({menuButton.x+47,menuButton.y+12+i*7.f},
+        {menuButton.x+65,menuButton.y+12+i*7.f},IM_COL32(238,243,250,255),2);
+    if(menuHovered)ImGui::SetTooltip("Game menu (Esc)");
     // Shift Lock: indicador de estado + retículo próprio no centro quando ativo.
     if (runtime_.settings().enableShiftLock) {
         const ImVec2 badge = ImGui::CalcTextSize(shiftLocked ? "SHIFT LOCK: ON" : "SHIFT LOCK: OFF");
@@ -433,7 +438,10 @@ void EditorUI::drawRigEditor() {
     int mode = rigContext_ == RigContext::Edit ? 0 : 1;
     if (ImGui::RadioButton("Edit Rig", mode == 0)) { cancelRigGizmo(); rigContext_ = RigContext::Edit; previewPlaying_ = false; previewPose_ = {}; }
     ImGui::SameLine();
-    if (ImGui::RadioButton("Pose Rig", mode == 1)) { cancelRigGizmo(); rigContext_ = RigContext::Pose; previewPlaying_ = false; }
+    if (ImGui::RadioButton("Pose Rig", mode == 1)) {
+        cancelRigGizmo();rigContext_=RigContext::Pose;previewPlaying_=false;
+        if(tool_==ToolMode::Scale)setTool(ToolMode::Rotate,"rig_pose_context");
+    }
     ImGui::Checkbox("Show joint pivots / gizmo", &showJointPivots_);
     if (ImGui::Button("Reset pose")) { cancelRigGizmo(); previewPose_ = {}; previewPlaying_ = false; }
     ImGui::SameLine();
@@ -579,7 +587,21 @@ bool EditorUI::updateRigGizmo(const EditorInput& input,const InputRoute& route,R
             rig->bodies=drag.initial.bodies;rig->joints=drag.initial.joints;
             rig->restPose=drag.initial.restPose;
             auto size=jointProxy_.size();
+            const auto rawSize=size;
             size={std::clamp(size.x,.2f,10.f),std::clamp(size.y,.2f,10.f),std::clamp(size.z,.2f,10.f)};
+            const auto startBody=drag.initial.evaluate({},drag.initial.root)[body];
+            const auto delta=Vector3Subtract(jointProxy_.position(),startBody.position);
+            auto centre=jointProxy_.position();
+            const float old[]{drag.initial.bodies[body].size.x,drag.initial.bodies[body].size.y,drag.initial.bodies[body].size.z};
+            const float raw[]{rawSize.x,rawSize.y,rawSize.z},limited[]{size.x,size.y,size.z};
+            for(int axis=0;axis<3;++axis)if(std::fabs(raw[axis]-old[axis])>.00001f) {
+                const auto direction=gizmomath::Axis(axis,startBody.rotation,true);
+                const float ratio=(limited[axis]-old[axis])/(raw[axis]-old[axis]);
+                centre=Vector3Add(centre,Vector3Scale(direction,Vector3DotProduct(delta,direction)*(ratio-1)));
+            }
+            // Clamp both size and centre: the opposite face must stay fixed at
+            // the rig's 10-unit limit, just as at the generic minimum size.
+            jointProxy_.setPosition(centre);
             jointProxy_.setSize(size);
             rig->resizeBody(body,size); // resizeBody already updates every attachment once
         }
@@ -616,7 +638,7 @@ void EditorUI::drawGameSettings() {
         ImGui::EndCombo();
     }
     AnimationChoice("Walk animation", p.walkAnimation, a); AnimationChoice("Idle animation", p.idleAnimation, a);
-    AnimationChoice("Jump animation", p.jumpAnimation, a); AnimationChoice("Fall animation", p.fallAnimation, a);
+    AnimationChoice("Jump animation", p.jumpAnimation, a,true); AnimationChoice("Fall animation", p.fallAnimation, a,true);
     if(p.fallAnimation.empty() && ImGui::Button("Create empty Fall animation")) {
         if(!a.findAnimation("r6-fall"))a.animations.push_back(game::MakeFall());
         p.fallAnimation="r6-fall";

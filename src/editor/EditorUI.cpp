@@ -766,7 +766,9 @@ void EditorUI::draw() {
 
 void EditorUI::drawMainMenuBar() {
     if (!ImGui::BeginMainMenuBar()) return;
-    ImGui::TextColored(ImVec4(0.10f, 0.43f, 0.78f, 1.0f), "L");
+    const auto& headerLogo=LoadLobloxLogo();
+    if(headerLogo.ok)ImGui::Image(static_cast<ImTextureID>(headerLogo.id),{18.f*headerLogo.width/headerLogo.height,18});
+    else ImGui::TextUnformatted("L");
     ImGui::SameLine(0.0f, 4.0f);
     ImGui::TextUnformatted("Loblox");
     ImGui::SameLine(0.0f, 18.0f);
@@ -1540,8 +1542,8 @@ void EditorUI::drawExplorer() {
         if (!object->parent() && object.get()!=scene_.workspace() && object.get()!=scene_.lighting()) drawExplorerNode(object.get(),explorerFilter_);
     for (const auto& rig : scene_.gameAssets().rigs) {
         ImGui::PushID(rig.id.c_str());
-        const bool open = ImGui::TreeNodeEx(rig.name.c_str(),
-            ImGuiTreeNodeFlags_DefaultOpen | (rig.id == selectedRig_ ? ImGuiTreeNodeFlags_Selected : 0));
+        const bool open = ImGui::TreeNodeEx("##rig_root",
+            ImGuiTreeNodeFlags_DefaultOpen | (rig.id == selectedRig_ ? ImGuiTreeNodeFlags_Selected : 0),"%s",rig.name.c_str());
         if (ImGui::IsItemClicked()) selectRig(rig.id);
         
         // Context menu for rig
@@ -1567,6 +1569,7 @@ void EditorUI::drawExplorer() {
     revealedSelection_ = scene_.selection() ? scene_.selection()->id() : 0;
     if (pendingDelete_) { scene_.select(scene_.find(pendingDelete_)); pendingDelete_=0; deleteSelection(); }
     if (!pendingDeleteRigId_.empty()) {
+        cancelRigGizmo();previewPlaying_=false;
         const std::string rigId = pendingDeleteRigId_;
         pendingDeleteRigId_.clear();
         if (scene_.gameAssets().removeRig(rigId)) {
@@ -1899,16 +1902,17 @@ void EditorUI::drawProperties() {
 }
 
 void EditorUI::drawDialogs() {
-    if (renameId_) ImGui::OpenPopup("Rename instance");
+    if (renameId_ || !renameRigId_.empty()) ImGui::OpenPopup("Rename instance");
     if (ImGui::BeginPopupModal("Rename instance",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
         if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
         const bool enter=ImGui::InputText("Name",renameBuffer_,sizeof(renameBuffer_),ImGuiInputTextFlags_EnterReturnsTrue);
         if (enter || ImGui::Button("Rename")) {
             if (auto* node=scene_.find(renameId_); node && renameBuffer_[0]) node->setName(renameBuffer_);
-            renameId_=0; ImGui::CloseCurrentPopup();
+            if(auto* rig=scene_.gameAssets().findRig(renameRigId_);rig && renameBuffer_[0])rig->name=renameBuffer_;
+            renameId_=0;renameRigId_.clear(); ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine(); if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape,false)) {
-            renameId_=0; ImGui::CloseCurrentPopup();
+            renameId_=0;renameRigId_.clear(); ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
     }
@@ -2108,6 +2112,13 @@ void EditorUI::applyMaterialToSelection(int materialIndex) {
 }
 
 void EditorUI::duplicateSelection() {
+    if(auto* rig=scene_.gameAssets().findRig(selectedRig_)) {
+        cancelRigGizmo();auto copy=*rig;
+        copy.id="rig-"+diag::newCorrelationId();copy.name=copy.name.substr(0,122)+" Copy";
+        copy.root.position.x+=5;
+        const auto id=copy.id;scene_.gameAssets().rigs.push_back(std::move(copy));
+        selectRig(id);checkInvariants("duplicate_rig");setStatus("Rig duplicated");return;
+    }
     Instance* selection = scene_.selection();
     if (!selection) return;
     endGizmoSession(false, "duplicate");
@@ -2123,6 +2134,10 @@ void EditorUI::duplicateSelection() {
 }
 
 void EditorUI::renameSelection() {
+    if(auto* rig=scene_.gameAssets().findRig(selectedRig_)) {
+        cancelRigGizmo();renameId_=0;renameRigId_=rig->id;
+        std::snprintf(renameBuffer_,sizeof(renameBuffer_),"%s",rig->name.c_str());return;
+    }
     auto* selected=scene_.selection(); if (!selected) return;
     endGizmoSession(true,"rename"); renameId_=selected->id();
     std::snprintf(renameBuffer_,sizeof(renameBuffer_),"%s",selected->name().c_str());
@@ -2138,6 +2153,7 @@ void EditorUI::insertContainer(InstanceClass type, Instance* parent) {
 void EditorUI::deleteSelection() {
     // Check if a rig is selected (rigs are not Instances, handled separately)
     if (!selectedRig_.empty()) {
+        cancelRigGizmo();previewPlaying_=false;
         endGizmoSession(true, "delete");
         const std::string name = selectedRig_;
         if (scene_.gameAssets().removeRig(selectedRig_)) {

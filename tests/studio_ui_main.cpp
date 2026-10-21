@@ -14,6 +14,8 @@
 namespace loblox {
 struct EditorUITestAccess {
     static game::RuntimeSession& runtime(EditorUI& ui){return ui.runtime_;}
+    static Vector2 sourceField(EditorUI& ui){const auto r=ui.scriptSourceControl_;return {r.x+50,r.y+12};}
+    static void lightingFilter(EditorUI& ui){ui.showScriptEditor_=false;ui.showOutput_=false;std::snprintf(ui.explorerFilter_,sizeof(ui.explorerFilter_),"Lighting");}
 };
 }
 using namespace loblox;
@@ -76,7 +78,7 @@ int main() {
             ImGui::SetWindowDock(scriptWindow,0,ImGuiCond_Always);ImGui::SetWindowPos("Script Editor",{410,175});
             ImGui::SetWindowSize("Script Editor",{850,590});frames();
             const Vector2 editorOrigin{scriptWindow->DC.CursorStartPos.x,scriptWindow->DC.CursorStartPos.y};
-            click(Vector2Add(editorOrigin,{110,110})); CHECK(ImGui::GetIO().WantTextInput);
+            click(EditorUITestAccess::sourceField(ui)); CHECK(ImGui::GetIO().WantTextInput);
             command("keydown ctrl");key("a");command("keyup ctrl");
             // Source was nested: find it through the real hierarchy, not flat name lookup.
             type("workspace.Folder.Nested.Source.Position = Vector3.new(33, 4, 0); game:GetService(\"Players\").CharacterAdded:Connect(function(c) c.Humanoid:TakeDamage(25) end)");
@@ -96,7 +98,25 @@ int main() {
             CHECK(projectio::load(reopened,config.defaultProjectPath,error));
             CHECK(script && static_cast<Script*>(reopened.find(script->id()))->source.find("Vector3.new(33")!=std::string::npos);
         }
+        // The real Lighting row must reach its own Properties, not the generic
+        // root-service inspector. Its right-click owns exactly one popup ID.
+        EditorUITestAccess::lightingFilter(ui);frames();
+        auto* lightExplorer=ImGui::FindWindowByName("Explorer");
+        const Vector2 lightAt{lightExplorer->DC.CursorStartPos.x+45,
+            lightExplorer->DC.CursorStartPos.y+2*ImGui::GetFrameHeightWithSpacing()+ImGui::GetTextLineHeight()*.5f};
+        click(lightAt);CHECK(scene.selection()==scene.lighting());
+        mouse(lightAt);command("mousedown 3");command("mouseup 3");
+        CHECK(GImGui->OpenPopupStack.Size==1);
+        if(GImGui->OpenPopupStack.Size==1) {
+            const std::string popup="##explorer_context_"+std::to_string(scene.lighting()->id());
+            CHECK(GImGui->OpenPopupStack[0].PopupId==ImHashStr(popup.c_str(),0,lightExplorer->ID));
+        }
+        key("Escape");
+        TakeScreenshot((std::string(directory)+"/lighting-properties.png").c_str());
         // Measure the real Explorer traversal with 1,000 additional visible rows.
+        // Clear the filter through normal text input before measuring.
+        click({lightExplorer->DC.CursorStartPos.x+60,lightExplorer->DC.CursorStartPos.y+ImGui::GetFrameHeightWithSpacing()+ImGui::GetFrameHeight()*.5f});
+        command("keydown ctrl");key("a");command("keyup ctrl");key("BackSpace");key("Return");
         const auto previousCount=scene.objects().size();
         for(int i=0;i<1000;++i)scene.createContainer(InstanceClass::Folder,scene.workspace(),"PerfNode"+std::to_string(i));
         CHECK(scene.objects().size()==previousCount+1000);CHECK(scene.validate(error));
