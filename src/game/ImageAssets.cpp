@@ -7,9 +7,11 @@
 #include <filesystem>
 #include <fstream>
 #include <unordered_map>
+#include <unistd.h>
 
 namespace loblox::game {
 namespace {
+std::unordered_map<std::string, Texture2D> textureCache;
 std::string Fnv1aHex(const std::string& data) {
     std::uint64_t hash = 1469598103934665603ULL;
     for (unsigned char byte : data) {
@@ -30,6 +32,22 @@ std::string LowerExt(const std::filesystem::path& path) {
 }  // namespace
 
 std::string AssetsDir() { return "assets"; }
+
+std::string BuiltinAssetPath(const std::string& relativePath) {
+    std::vector<std::filesystem::path> roots{std::filesystem::current_path()};
+    char buffer[4096]{};const auto count=readlink("/proc/self/exe",buffer,sizeof(buffer)-1);
+    if(count>0) { buffer[count]=0;roots.push_back(std::filesystem::path(buffer).parent_path()); }
+    for(auto root:roots) for(int i=0;i<4 && !root.empty();++i,root=root.parent_path()) {
+        std::error_code ec;const auto candidate=root/relativePath;
+        if(std::filesystem::is_regular_file(candidate,ec)) return candidate.string();
+    }
+    return {};
+}
+
+void ClearImageTextures() {
+    for(const auto& entry:textureCache) if(entry.second.id) UnloadTexture(entry.second);
+    textureCache.clear();
+}
 
 bool ImportImageTo(const std::string& assetsDir, const std::string& sourcePath,
                    std::string& outAssetPath, std::string& error) {
@@ -109,12 +127,15 @@ std::string ResolveImagePath(const std::string& assetsDir, const std::string& as
 }
 
 Texture2D AssetTexture(const std::string& relativePath) {
-    static std::unordered_map<std::string, Texture2D> cache;
-    const auto it = cache.find(relativePath);
-    if (it != cache.end()) return it->second;
+    if(relativePath.empty())return {};
+    const auto it = textureCache.find(relativePath);
+    if (it != textureCache.end()) return it->second;
     Texture2D tex{};
-    if (std::filesystem::exists(relativePath)) tex = LoadTexture(relativePath.c_str());
-    cache.emplace(relativePath, tex);
+    if (std::filesystem::exists(relativePath)) {
+        tex = LoadTexture(relativePath.c_str());
+        if(tex.id)SetTextureFilter(tex,TEXTURE_FILTER_BILINEAR);
+    }
+    textureCache.emplace(relativePath, tex);
     return tex;
 }
 

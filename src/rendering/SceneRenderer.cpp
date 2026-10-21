@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -81,13 +83,16 @@ Color ApplyFog(Color color, Vector3 worldPosition) {
 // sólida; o usuário pode colocar os PNGs depois pelo mesmo diretório.
 struct SkyImages {
     Texture2D front{}, right{}, left{}, up{};
+    Texture2D back{}, down{};
     Color fallback{120, 180, 240, 255};
     bool tried = false;
     bool any = false;
 };
 
+SkyImages& SkyData() { static SkyImages sky;return sky; }
+int rendererCount=0;
 SkyImages& SkyLoader() {
-    static SkyImages sky;
+    auto& sky=SkyData();
     if (!sky.tried) {
         sky.tried = true;
         const char* names[] = {
@@ -98,17 +103,28 @@ SkyImages& SkyLoader() {
             "SkyboxBk_Back_1024x1024.png",     // opcional (:futuro)
             "SkyboxDn_Baixo_1024x1024.png",    // opcional (:futuro)
         };
-        const char* dirs[] = {"", "../", "../../", "../../../"};
+        // Raízes candidatas: CWD e cadeias acima, mais o diretório do
+        // executável e seus pais (evita falha silenciosa quando o app é
+        // lançado de dentro do build/).
+        std::vector<std::string> dirs = {"", "../", "../../", "../../../"};
+        char exePath[4096] = {};
+        const ssize_t exeLen = ::readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
+        if (exeLen > 0) {
+            exePath[exeLen] = 0;
+            std::filesystem::path dir = std::filesystem::path(exePath).parent_path();
+            for (int i = 0; i < 3 && !dir.empty(); ++i, dir = dir.parent_path())
+                dirs.push_back(dir.string() + "/");
+        }
         const auto isSky = [](const Texture2D& t) { return t.id != 0; };
         for (int face = 0; face < 6; ++face) {
-            for (const char* dir : dirs) {
-                std::string path = std::string(dir) + "sky1/" + names[face];
+            for (const std::string& dirName : dirs) {
+                const std::string path = dirName + "sky1/" + names[face];
                 if (FileExists(path.c_str())) {
-                    Texture2D tex = LoadTexture(path.c_str());
+                    Texture2D tex = game::AssetTexture(path);
                     if (tex.id != 0) {
-                        Texture2D* slots[6] = {&sky.front, &sky.right, &sky.left, &sky.up, nullptr, nullptr};
-                        if (face < 4) *slots[face] = tex;
-                        else { sky.fallback = Color{140, 170, 220, 255}; }
+                        SetTextureWrap(tex, TEXTURE_WRAP_CLAMP);
+                        Texture2D* slots[6] = {&sky.front, &sky.right, &sky.left, &sky.up, &sky.back, &sky.down};
+                        *slots[face] = tex;
                         break;
                     }
                 }
@@ -139,33 +155,42 @@ void DrawSkybox(Vector3 cameraPosition, Color skyColor) {
     const auto V = [&](float x, float y, float z) {
         return Vector3Add(cameraPosition, Vector3{x, y, z});
     };
-    // Frente (+Z): o referencial é visto de dentro => mapeia direita=-X.
+
+    // UV padrão para quads com cantos em ordem: bottom-left, bottom-right, top-right, top-left
+    // (visto de DENTRO do cubo). textura: u=0 esquerda, u=1 direita; v=0 topo, v=1 base.
+    const float uvStandard[4][2] = {{0,1}, {1,1}, {1,0}, {0,0}};
+    // UV para faces cuja ordem de vértices é: bottom-right, bottom-left, top-left, top-right
+    const float uvFlippedX[4][2] = {{1,1}, {0,1}, {0,0}, {1,0}};
+
+    // Frente (+Z): cantos atuais = BR, BL, TL, TR => usa uvFlippedX
     {
         const Vector3 c[4] = {V(+d, -d, +d), V(-d, -d, +d), V(-d, +d, +d), V(+d, +d, +d)};
-        const float uvp[4][2] = {{0,1},{1,1},{1,0},{0,0}};
-        DrawSkyQuad(c, uvp, sky.front.id != 0, sky.front, skyColor);
+        DrawSkyQuad(c, uvFlippedX, sky.front.id != 0, sky.front, skyColor);
     }
-    {   // Trás (-Z)
+    // Trás (-Z): cantos atuais = BR, BL, TL, TR (visto de dentro, +X é esquerda) => usa uvFlippedX
+    {
         const Vector3 c[4] = {V(-d, -d, -d), V(+d, -d, -d), V(+d, +d, -d), V(-d, +d, -d)};
-        const float uvp[4][2] = {{0,1},{1,1},{1,0},{0,0}};
-        DrawSkyQuad(c, uvp, false, sky.front, skyColor);
+        DrawSkyQuad(c, uvFlippedX, sky.back.id!=0, sky.back, skyColor);
     }
-    {   // Direita (+X)
+    // Direita (+X): cantos atuais = BL, BR, TR, TL (visto de dentro, -Z é esquerda) => usa uvStandard
+    {
         const Vector3 c[4] = {V(+d, -d, -d), V(+d, -d, +d), V(+d, +d, +d), V(+d, +d, -d)};
-        const float uvp[4][2] = {{0,1},{1,1},{1,0},{0,0}};
-        DrawSkyQuad(c, uvp, sky.right.id != 0, sky.right, skyColor);
+        DrawSkyQuad(c, uvStandard, sky.right.id != 0, sky.right, skyColor);
     }
-    {   // Esquerda (-X)
+    // Esquerda (-X): cantos atuais = BL, BR, TR, TL (visto de dentro, +Z é esquerda) => usa uvStandard
+    {
         const Vector3 c[4] = {V(-d, -d, +d), V(-d, -d, -d), V(-d, +d, -d), V(-d, +d, +d)};
-        const float uvp[4][2] = {{0,1},{1,1},{1,0},{0,0}};
-        DrawSkyQuad(c, uvp, sky.left.id != 0, sky.left, skyColor);
+        DrawSkyQuad(c, uvStandard, sky.left.id != 0, sky.left, skyColor);
     }
-    {   // Cima (+Y) e Baixo (-Y): fallback sólido quando não há textura.
+    // Cima (+Y): cantos atuais = BL, BR, TR, TL (visto de dentro, +X direita, -Z "cima") => usa uvStandard
+    {
         const Vector3 top[4] = {V(-d, +d, +d), V(+d, +d, +d), V(+d, +d, -d), V(-d, +d, -d)};
-        const float uvp[4][2] = {{0,0},{1,0},{1,1},{0,1}};
-        DrawSkyQuad(top, uvp, sky.up.id != 0, sky.up, skyColor);
+        DrawSkyQuad(top, uvStandard, sky.up.id != 0, sky.up, skyColor);
+    }
+    // Baixo (-Y): cantos atuais = BL, BR, TR, TL (visto de dentro, +X direita, +Z "cima") => usa uvStandard
+    {
         const Vector3 bottom[4] = {V(-d, -d, -d), V(+d, -d, -d), V(+d, -d, +d), V(-d, -d, +d)};
-        DrawSkyQuad(bottom, uvp, false, sky.up, skyColor);
+        DrawSkyQuad(bottom, uvStandard, sky.down.id!=0, sky.down, skyColor);
     }
 }
 
@@ -387,45 +412,34 @@ Mesh BuildStudMesh(Vector3 size) {
 // Malha fechada, sem emendas, custo comparável à esfera facetada existente.
 void DrawShadedRoundedBlocky(Vector3 center, Vector3 size, Quaternion rotation, Color color,
                              Vector3 lightDirection, float sunIntensity, float brightness) {
-    color = ApplyFog(color, center);
-    constexpr int rings = 6;
-    constexpr int slices = 14;
-    constexpr float exponent = 0.444f;  // 2/n com n ~4.5
-    const Vector3 half = Vector3Scale(size, 0.5f);
-    const auto blocky = [&](Vector3 d) {
-        Vector3 p;
-        p.x = half.x * std::copysign(std::pow(std::fabs(d.x), exponent), d.x);
-        p.y = half.y * std::copysign(std::pow(std::fabs(d.y), exponent), d.y);
-        p.z = half.z * std::copysign(std::pow(std::fabs(d.z), exponent), d.z);
-        return p;
-    };
+    const Vector3 half=Vector3Scale(size,.5f);
+    const float radius=std::min({size.x,size.y,size.z})*.16f;
+    const Vector3 core{half.x-radius,half.y-radius,half.z-radius};
+    // A rounded box with planar face centres and curved edge/corner normals.
+    // No polar triangles, trigonometry per frame, or double rotation of normals.
+    const Vector3 normals[]={{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}};
+    const Vector3 axes[]={{0,1,0},{0,-1,0},{0,0,1},{0,0,-1},{1,0,0},{-1,0,0}};
+    const auto extent=[&](Vector3 axis){return std::fabs(axis.x)*half.x+std::fabs(axis.y)*half.y+std::fabs(axis.z)*half.z;};
+    color=ApplyFog(color,center);
     rlBegin(RL_TRIANGLES);
-    for (int ring = 0; ring < rings; ++ring) {
-        const float v0 = (float)ring / rings, v1 = (float)(ring + 1) / rings;
-        const float phi0 = (v0 - 0.5f) * PI, phi1 = (v1 - 0.5f) * PI;
-        for (int slice = 0; slice < slices; ++slice) {
-            const float u0 = (float)slice / slices, u1 = (float)(slice + 1) / slices;
-            const float theta0 = u0 * 2.0f * PI, theta1 = u1 * 2.0f * PI;
-            const Vector3 d00{std::cos(theta0) * std::cos(phi0), std::sin(phi0),
-                              std::sin(theta0) * std::cos(phi0)};
-            const Vector3 d10{std::cos(theta1) * std::cos(phi0), std::sin(phi0),
-                              std::sin(theta1) * std::cos(phi0)};
-            const Vector3 d01{std::cos(theta0) * std::cos(phi1), std::sin(phi1),
-                              std::sin(theta0) * std::cos(phi1)};
-            const Vector3 d11{std::cos(theta1) * std::cos(phi1), std::sin(phi1),
-                              std::sin(theta1) * std::cos(phi1)};
-            const Vector3 p00 = Vector3Add(center, Vector3RotateByQuaternion(blocky(d00), rotation));
-            const Vector3 p10 = Vector3Add(center, Vector3RotateByQuaternion(blocky(d10), rotation));
-            const Vector3 p01 = Vector3Add(center, Vector3RotateByQuaternion(blocky(d01), rotation));
-            const Vector3 p11 = Vector3Add(center, Vector3RotateByQuaternion(blocky(d11), rotation));
-            Vector3 normal = Vector3Normalize(Vector3CrossProduct(
-                Vector3Subtract(p10, p00), Vector3Subtract(p01, p00)));
-            normal = Vector3RotateByQuaternion(normal, rotation);
-            const float lambert = std::max(0.0f, Vector3DotProduct(normal, lightDirection));
-            const float factor = std::clamp((0.5f + 0.5f * sunIntensity * lambert) * brightness, 0.2f, 1.6f);
-            SetColor4(Shade(color, factor));
-            Triangle(p00, p10, p11);
-            Triangle(p00, p11, p01);
+    for(int face=0;face<6;++face) {
+        const auto n=normals[face],u=axes[face],v=Vector3CrossProduct(n,u);
+        const float eu=extent(u),ev=extent(v);
+        const float us[]{-eu,-eu+radius,eu-radius,eu};
+        const float vs[]{-ev,-ev+radius,ev-radius,ev};
+        const auto vertex=[&](int x,int y) {
+            const auto p=Vector3Add(Vector3Scale(n,extent(n)),Vector3Add(Vector3Scale(u,us[x]),Vector3Scale(v,vs[y])));
+            const Vector3 anchor{std::clamp(p.x,-core.x,core.x),std::clamp(p.y,-core.y,core.y),std::clamp(p.z,-core.z,core.z)};
+            const auto normal=Vector3Normalize(Vector3Subtract(p,anchor));
+            const auto position=Vector3Add(anchor,Vector3Scale(normal,radius));
+            const auto worldNormal=Vector3RotateByQuaternion(normal,rotation);
+            const float lambert=std::max(0.f,Vector3DotProduct(worldNormal,lightDirection));
+            SetColor4(Shade(color,std::clamp((.60f+.40f*sunIntensity*lambert)*brightness,.2f,1.6f)));
+            Vertex(Vector3Add(center,Vector3RotateByQuaternion(position,rotation)));
+        };
+        for(int x=0;x<3;++x)for(int y=0;y<3;++y) {
+            vertex(x,y);vertex(x+1,y);vertex(x+1,y+1);
+            vertex(x,y);vertex(x+1,y+1);vertex(x,y+1);
         }
     }
     rlEnd();
@@ -583,35 +597,40 @@ void DrawPartSkins(const Part& part, const std::string& assetsDir) {
 
 Texture2D& FaceTexture() {
     static Texture2D tex{};
-    static bool attempted = false;
-    if (!attempted) {
-        attempted = true;
-        for (const char* path : {"rosto1.png", "../rosto1.png", "../../rosto1.png", "../../../rosto1.png"}) {
-            if (FileExists(path)) { tex = LoadTexture(path); break; }
-        }
-    }
+    static const auto path=game::BuiltinAssetPath("rosto1.png");
+    tex=game::AssetTexture(path);
     return tex;
 }
 
 void DrawHeadFace(const game::RigidTransform& headWorld, Vector3 headSize) {
     Texture2D& tex = FaceTexture();
+    if (tex.id == 0) return;
     const Vector3 half = Vector3Scale(headSize, 0.5f);
+    // Decal centralizado com o ASPECTO da imagem preservado dentro da face
+    // frontal (não esticada até a silhueta inteira):
+    const float faceW = headSize.x, faceH = headSize.y;
+    const float imageAspect = float(tex.width) / float(std::max(1, tex.height));
+    float quadW = faceW, quadH = faceW / imageAspect;
+    if (quadH > faceH) { quadH = faceH; quadW = faceH * imageAspect; }
+    quadW *= 0.92f; quadH *= 0.92f;
     const float offset = half.z + 0.02f;
     const Vector3 local[4] = {
-        {-half.x,  half.y, -offset},  // topo-esquerda
-        { half.x,  half.y, -offset},  // topo-direita
-        { half.x, -half.y, -offset},  // baixo-direita
-        {-half.x, -half.y, -offset},  // baixo-esquerda
+        {-quadW * .5f,  quadH * .5f, -offset},  // topo-esquerda
+        { quadW * .5f,  quadH * .5f, -offset},  // topo-direita
+        { quadW * .5f, -quadH * .5f, -offset},  // baixo-direita
+        {-quadW * .5f, -quadH * .5f, -offset},  // baixo-esquerda
     };
     Vector3 world[4];
     for (int i = 0; i < 4; ++i) {
         world[i] = Vector3Add(headWorld.position,
                               Vector3RotateByQuaternion(local[i], headWorld.rotation));
     }
+    // Face -Z: o observador na frente olha para +Z, então +X aparece à ESQUERDA;
+    // mapear u de +X -> -X deixa a imagem sem espelhamento.
+    const float uv[4][2] = {{1, 0}, {0, 0}, {0, 1}, {1, 1}};
     rlSetTexture(tex.id);
     rlBegin(RL_QUADS);
     rlColor4ub(255, 255, 255, 255);
-    const float uv[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
     for (int i = 0; i < 4; ++i) {
         rlTexCoord2f(uv[i][0], uv[i][1]);
         rlVertex3f(world[i].x, world[i].y, world[i].z);
@@ -623,6 +642,7 @@ void DrawHeadFace(const game::RigidTransform& headWorld, Vector3 headSize) {
 }  // namespace
 
 SceneRenderer::SceneRenderer() {
+    ++rendererCount;
     studMaterial_ = LoadMaterialDefault();
 }
 
@@ -631,6 +651,7 @@ SceneRenderer::~SceneRenderer() {
     // LoadMaterialDefault allocates the maps even though shader/texture are
     // shared defaults. UnloadMaterial preserves those defaults and frees maps.
     UnloadMaterial(studMaterial_);
+    if(--rendererCount==0) { game::ClearImageTextures();SkyData()={}; }
 }
 
 Color SceneRenderer::MaterialColor(const Part& part) {
@@ -810,10 +831,18 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
 
     ClearBackground(sky);
     if (skyboxReady) {
-        // Skybox: depth test off preserva o fundo puro; geometria cobre depois.
+        // World-space sky vertices require the camera matrices. Flush while
+        // depth writes are disabled, then restore state before world geometry.
+        BeginMode3D(camera);
         rlDisableDepthTest();
+        rlDisableDepthMask();
+        rlDisableBackfaceCulling();
         DrawSkybox(camera.position, sky);
+        rlDrawRenderBatchActive();
+        rlEnableDepthMask();
         rlEnableDepthTest();
+        rlEnableBackfaceCulling();
+        EndMode3D();
     } else {
         DrawRectangleGradientV(0, 0, width, height, sky, Shade(sky, 1.22f));
     }

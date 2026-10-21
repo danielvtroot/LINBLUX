@@ -15,6 +15,9 @@ struct ImageAsset {
 
 // assets/ padrão na raiz do executável (caminho relativo, portátil).
 std::string AssetsDir();
+// Bundled user assets can be found when launching from a different CWD.
+std::string BuiltinAssetPath(const std::string& relativePath);
+void ClearImageTextures(); // call before closing the graphics context
 
 // Copia o arquivo para assets/ com ID estável. Não altera o original.
 bool ImportImageTo(const std::string& assetsDir, const std::string& sourcePath,
