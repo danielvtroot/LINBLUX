@@ -1468,6 +1468,21 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
     const ImVec4 classColor = ClassColor(instance->instanceClass());
     const ImU32 iconColor = ImGui::ColorConvertFloat4ToU32(classColor);
     DrawClassIcon(ImGui::GetWindowDrawList(), iconCenter, instance->instanceClass(), iconColor);
+    // Decal/Texture da Part aparecem como linhas visuais logo abaixo do nó
+    // (atributos persistidos v3; sem classes fictícias de instância).
+    if (instance->isPart()) {
+        const Part* part = static_cast<const Part*>(instance);
+        const auto assetFace = [&](const char* imageKey, const char* faceKey, const char* label) {
+            const auto image = part->attributes().find(imageKey);
+            if (image == part->attributes().end()) return;
+            std::string face = "Front";
+            if (const auto it = part->attributes().find(faceKey); it != part->attributes().end())
+                if (const auto* v = std::get_if<std::string>(&it->second)) face = *v;
+            ImGui::TextDisabled("   %s (%s)", label, face.c_str());
+        };
+        assetFace("decal_image", "decal_face", "Decal");
+        assetFace("texture_image", "texture_face", "Texture");
+    }
     // Indicador de destino de arrasto: contorno realce no no sob o cursor.
     if (ImGui::IsItemHovered() && ImGui::IsDragDropActive()) {
         ImGui::GetWindowDrawList()->AddRect(rowMin, rowMax, IM_COL32(120, 200, 255, 255), 3.0f,

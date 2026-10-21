@@ -49,6 +49,7 @@ add_library(loblox_core STATIC
   src/scripting/LuaRuntime.cpp
   src/game/Rig.cpp
   src/game/GameAssetsIO.cpp
+  src/game/ImageAssets.cpp
   src/game/Runtime.cpp
   src/core/Diagnostics.cpp
   src/objects/Instance.cpp

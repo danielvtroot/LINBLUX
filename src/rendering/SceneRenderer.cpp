@@ -10,6 +10,7 @@
 #include "raymath.h"
 #include "rlgl.h"
 
+#include "game/ImageAssets.h"
 #include "objects/Baseplate.h"
 #include "objects/Lighting.h"
 #include "objects/SpawnLocation.h"
@@ -432,6 +433,154 @@ void DrawShadedRoundedBlocky(Vector3 center, Vector3 size, Quaternion rotation, 
 
 // Rosto aplicado a face -Z da cabeca (lazy-load, sem caminho absoluto no
 // projeto; o fallback mantem os olhos minimos se a imagem nao existir).
+// ---------- Decal/Texture da Part (atributos v3, sem classes novas) ----------
+// Atributos lidos: decal_image/decal_face/decal_transparency/decal_rotation/
+// decal_tint e texture_image/texture_face/texture_transparency/
+// texture_repeat_u/texture_repeat_v/texture_offset_u/texture_offset_v.
+// Quad acompanha Position/Rotation/Size da Part automaticamente (usa a
+// transform dela). Fog não se aplica a quads texturados nesta versão.
+namespace skins {
+struct FaceDef {
+    const char* name;
+    Vector3 normal;      // local
+    Vector3 uAxis;       // local: direção do u da imagem
+    Vector3 vAxis;       // local: direção do v (para cima da imagem)
+    float wExt;          // extensão do quad no eixo u
+    float hExt;          // extensão do quad no eixo v
+};
+const FaceDef kFaces[6] = {
+    {"Front",  {0, 0, -1}, {1, 0, 0},  {0, 1, 0}, 1, 1},
+    {"Back",   {0, 0,  1}, {-1, 0, 0}, {0, 1, 0}, 1, 1},
+    {"Left",   {-1, 0, 0}, {0, 0, -1}, {0, 1, 0}, 1, 1},
+    {"Right",  {1, 0,  0}, {0, 0, 1},  {0, 1, 0}, 1, 1},
+    {"Top",    {0, 1,  0}, {1, 0, 0},  {0, 0, -1},1, 1},
+    {"Bottom", {0, -1, 0}, {-1, 0, 0}, {0, 0, 1}, 1, 1},
+};
+int FaceIndex(const std::string& face) {
+    for (int i = 0; i < 6; ++i) if (face == kFaces[i].name) return i;
+    return -1;
+}
+const std::string* FindText(const Part& part, const char* key) {
+    const auto it = part.attributes().find(key);
+    if (it == part.attributes().end()) return nullptr;
+    return std::get_if<std::string>(&it->second);
+}
+bool FindNumber(const Part& part, const char* key, double& out) {
+    const auto it = part.attributes().find(key);
+    if (it == part.attributes().end()) return false;
+    if (const auto* value = std::get_if<double>(&it->second)) {
+        if (!std::isfinite(*value)) return false;
+        out = *value; return true;
+    }
+    return false;
+}
+Color Tint(const std::string* hex) {
+    if (hex == nullptr || hex->size() < 6) return Color{255, 255, 255, 255};
+    const auto channel = [&](int i) {
+        const auto hexDigit = [](char c) {
+            if (c >= '0' && c <= '9') return c - '0';
+            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+            if (c >= 'A' && c <= 'f') return c - 'A' + 10;
+            return 0;
+        };
+        return static_cast<unsigned char>(hexDigit((*hex)[i]) * 16 + hexDigit((*hex)[i + 1]));
+    };
+    return Color{channel(0), channel(2), channel(4), 255};
+}
+void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
+              Color tint, Vector2 repeatUv, Vector2 offsetUv, int rotation, float sizeScale) {
+    const Quaternion rotationQuat = part.rotation();
+    const Vector3 half = Vector3Scale(part.size(), 0.5f);
+    const FaceDef& def = kFaces[face];
+    // Extensões reais no plano da face.
+    const float w = std::fabs(def.uAxis.x) > 0.5f ? half.x :
+                    std::fabs(def.uAxis.z) > 0.5f ? half.z : def.wExt;
+    const float h = std::fabs(def.vAxis.y) > 0.5f ? half.y :
+                    std::fabs(def.vAxis.z) > 0.5f ? half.z : def.hExt;
+    // Centro local: face do box + offset para fora (anti z-fight).
+    const float faceHalf = std::fabs(def.normal.x) > 0.5f ? half.x :
+                           std::fabs(def.normal.y) > 0.5f ? half.y : half.z;
+    const Vector3 centerLocal =
+        Vector3Add(Vector3Scale(def.normal, faceHalf + 0.02f),
+                   Vector3{0, 0, 0});
+    (void)sizeScale;
+    const auto rotateUv = [&](float u, float v) {
+        // Rotaciona base uv (0..1) por quarter-turns em torno do centro.
+        u = (u - 0.5f) * repeatUv.x + offsetUv.x;
+        v = (v - 0.5f) * repeatUv.y + offsetUv.y;
+        for (int turns = (rotation % 360 + 360) % 360 / 90; turns > 0; --turns) {
+            const float next = v;
+            v = -u;
+            u = next;
+        }
+        return std::pair<float, float>{u + 0.5f, v + 0.5f};
+    };
+    // Cantos locais: bl, br, tr, tl ao longo de u/v.
+    const Vector3 local[4] = {
+        centerLocal - Vector3Scale(def.uAxis, w) - Vector3Scale(def.vAxis, h),
+        centerLocal + Vector3Scale(def.uAxis, w) - Vector3Scale(def.vAxis, h),
+        centerLocal + Vector3Scale(def.uAxis, w) + Vector3Scale(def.vAxis, h),
+        centerLocal - Vector3Scale(def.uAxis, w) + Vector3Scale(def.vAxis, h),
+    };
+    const float cornerUv[4][2] = {{0, 1}, {1, 1}, {1, 0}, {0, 0}};
+    Vector3 world[4];
+    for (int i = 0; i < 4; ++i) {
+        world[i] = Vector3Add(part.position(),
+                              Vector3RotateByQuaternion(local[i], rotationQuat));
+    }
+    rlSetTexture(tex.id);
+    rlBegin(RL_QUADS);
+    rlColor4ub(tint.r, tint.g, tint.b, static_cast<unsigned char>(lround(std::clamp(alpha, 0.0f, 1.0f) * 255.0f)));
+    for (int i = 0; i < 4; ++i) {
+        const auto uv = rotateUv(cornerUv[i][0], cornerUv[i][1]);
+        rlTexCoord2f(uv.first, uv.second);
+        rlVertex3f(world[i].x, world[i].y, world[i].z);
+    }
+    rlEnd();
+    rlSetTexture(0);
+}
+void DrawLayer(const Part& part, const char* imageKey, const char* faceKey,
+               const char* alphaKey, const char* tintKey, const char* rotationKey,
+               const char* repeatUKey, const char* repeatVKey, const char* offsetUKey,
+               const char* offsetVKey, const std::string& assetsDir) {
+    const std::string* image = FindText(part, imageKey);
+    if (image == nullptr || image->empty()) return;
+    int face = 0;
+    if (const std::string* faceName = FindText(part, faceKey)) {
+        const int index = FaceIndex(*faceName);
+        if (index >= 0) face = index;
+    }
+    double alpha = 1.0f;
+    FindNumber(part, alphaKey, alpha);
+    double rotation = 0.0f;
+    FindNumber(part, rotationKey, rotation);
+    double repeatU = 1.0, repeatV = 1.0, offsetU = 0.0, offsetV = 0.0;
+    FindNumber(part, repeatUKey, repeatU);
+    FindNumber(part, repeatVKey, repeatV);
+    FindNumber(part, offsetUKey, offsetU);
+    FindNumber(part, offsetVKey, offsetV);
+    const Vector2 repeat{static_cast<float>(std::clamp(repeatU, 0.05, 64.0)),
+                         static_cast<float>(std::clamp(repeatV, 0.05, 64.0))};
+    const Vector2 offset{static_cast<float>(std::clamp(offsetU, -16.0, 16.0)),
+                         static_cast<float>(std::clamp(offsetV, -16.0, 16.0))};
+    const std::string relative = game::ResolveImagePath(assetsDir, *image);
+    if (relative.empty()) return;
+    const Texture2D tex = game::AssetTexture(relative);
+    if (tex.id == 0) return;
+    DrawQuad(part, face, tex, static_cast<float>(1.0f - std::clamp(alpha, 0.0, 1.0)),
+             Tint(FindText(part, tintKey)), repeat, offset, (int)std::lround(rotation), 1.0f);
+}
+}  // namespace skins
+
+void DrawPartSkins(const Part& part, const std::string& assetsDir) {
+    skins::DrawLayer(part, "decal_image", "decal_face", "decal_transparency",
+                     "decal_tint", "decal_rotation", nullptr, nullptr, nullptr, nullptr,
+                     assetsDir);
+    skins::DrawLayer(part, "texture_image", "texture_face", "texture_transparency",
+                     nullptr, nullptr, "texture_repeat_u", "texture_repeat_v",
+                     "texture_offset_u", "texture_offset_v", assetsDir);
+}
+
 Texture2D& FaceTexture() {
     static Texture2D tex{};
     static bool attempted = false;
@@ -701,6 +850,9 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
             DrawShadedBox(part->position(), part->size(), part->rotation(),
                           MaterialColor(*part), lightDirection, sunIntensity, brightness);
         }
+        // Decal/Texture da Part (atributos persistidos); assets são relativos
+        // ao executável (`assets/`), conforme ImageAssets.
+        DrawPartSkins(*part, game::AssetsDir());
 
         if (part->id() == selectedId) {
             drawSelection(*part);

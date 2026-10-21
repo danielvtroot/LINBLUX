@@ -1,4 +1,5 @@
 #include "editor/EditorUI.h"
+#include "game/ImageAssets.h"
 #include "scene/Scene.h"
 #include "physics/PhysicsWorld.h"
 #include "imgui.h"
@@ -313,6 +314,84 @@ void EditorUI::drawInstanceProperties(Instance& object) {
                 ImGui::EndCombo();
             }
             ImGui::EndTable();
+        }
+        if (category("Decal & Texture") && table("Decal values")) {
+            // Importador portátil: assets/<id>.<ext> relativos ao executável.
+            static char importPath[512] = {};
+            auto importPopup = [&]() {
+                if (ImGui::BeginPopup("##import_image")) {
+                    if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+                    ImGui::InputTextWithHint("##import_path", "Path ou colhe o caminho (.png/.jpg)", importPath, sizeof(importPath));
+                    if (ImGui::Button("Importar") && importPath[0]) {
+                        std::string usable, err;
+                        if (game::ImportImageTo(game::AssetsDir(), importPath, usable, err)) {
+                            ImGui::CloseCurrentPopup();
+                            setStatus("Imagem importada: " + usable);
+                        } else setStatus(err, true);
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Cancelar")) ImGui::CloseCurrentPopup();
+                    ImGui::EndPopup();
+                }
+            };
+            if (row("Decal Image", "Imagem aplicada-textura; ID estável, sem caminho absoluto.")) {
+                const auto id = part.attributes().find("decal_image");
+                if (ImGui::SmallButton("Importar...")) ImGui::OpenPopup("##import_image");
+                ImGui::SameLine();
+                ImGui::TextUnformatted(id != part.attributes().end() && std::get_if<std::string>(&id->second) ? std::get<std::string>(id->second).c_str() : "(nenhum)");
+                importPopup();
+            }
+            if (row("Decal Face")) {
+                int face = 0; const char* faces[6] = {"Front","Back","Left","Right","Top","Bottom"};
+                if (const auto it = part.attributes().find("decal_face"); it != part.attributes().end())
+                    if (const auto* txt = std::get_if<std::string>(&it->second))
+                        for (int f = 0; f < 6; ++f) if (*txt == faces[f]) face = f;
+                if (ImGui::BeginCombo("##decal_face", faces[face])) {
+                    for (int f = 0; f < 6; ++f) if (ImGui::Selectable(faces[f])) part.setAttribute("decal_face", std::string(faces[f]));
+                    ImGui::EndCombo();
+                }
+            }
+            if (row("Decal Transparency")) {
+                double t = 0.0;
+                if (const auto it = part.attributes().find("decal_transparency"); it != part.attributes().end())
+                    if (const auto* v = std::get_if<double>(&it->second)) t = *v;
+                if (ImGui::SliderFloat("##decal_transparency", (float*)&t, 0, 1, "%.2f"))
+                    part.setAttribute("decal_transparency", t);
+            }
+            if (row("Decal Rotation")) {
+                static const char* turns[4] = {"0","90","180","270"};
+                double deg = 0.0;
+                if (const auto it = part.attributes().find("decal_rotation"); it != part.attributes().end())
+                    if (const auto* v = std::get_if<double>(&it->second)) deg = *v;
+                int idx = (int)((int)std::lround(deg)) % 360;
+                if (idx < 0) { idx += 360; }
+                idx = idx / 90;
+                if (ImGui::BeginCombo("##decal_rotation", turns[idx])) {
+                    for (int t = 0; t < 4; ++t) if (ImGui::Selectable(turns[t])) part.setAttribute("decal_rotation", (double)(t * 90));
+                    ImGui::EndCombo();
+                }
+            }
+            if (row("Decal Tint")) {
+                std::string hex = "FFFFFF";
+                if (const auto it = part.attributes().find("decal_tint"); it != part.attributes().end())
+                    if (const auto* v = std::get_if<std::string>(&it->second)) hex = *v;
+                const auto channel = [&hex](std::size_t offset) {
+                    const int byte = hex.size() >= offset + 2 ? std::stoi(hex.substr(offset, 2), nullptr, 16) : 255;
+                    return std::clamp(byte, 0, 255) / 255.0f;
+                };
+                float tintValue[3] = {channel(0), channel(2), channel(4)};
+                if (ImGui::ColorEdit3("##decal_tint", tintValue)) {
+                    char hexOut[8]; std::snprintf(hexOut,sizeof(hexOut),"%02X%02X%02X",
+                        (int)std::lround(tintValue[0]*255),(int)std::lround(tintValue[1]*255),(int)std::lround(tintValue[2]*255));
+                    part.setAttribute("decal_tint", std::string(hexOut));
+                }
+            }
+            ImGui::EndTable();
+            static std::vector<game::ImageAsset> assetsCache;
+            static double lastScan = -1.0;
+            const double now = ImGui::GetTime();
+            if (lastScan < 0.0 || now - lastScan > 2.0) { assetsCache = game::ListImages(game::AssetsDir()); lastScan = now; }
+            ImGui::TextDisabled("Imagens em %s: %zu", game::AssetsDir().c_str(), assetsCache.size());
         }
         if (category("Behavior") && table("Behavior values")) {
             ImGui::BeginDisabled(part.instanceClass()==InstanceClass::Baseplate);
