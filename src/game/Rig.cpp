@@ -259,9 +259,14 @@ bool GameAssets::validate(std::string& error) const {
     std::set<std::string> ids;
     for (const auto& r : rigs) if (!r.validate(error) || !ids.insert(r.id).second) { if (error.empty()) error = "duplicate rig id"; return false; }
     ids.clear();
+    std::size_t keys = 0;
+    for (const auto& clip : animations) for (const auto& track : clip.tracks) keys += track.size();
+    if (keys > 100000) { error = "game: project keyframe budget exceeded"; return false; }
     for (const auto& c : animations) if (!c.validate(error) || !ids.insert(c.id).second) { if (error.empty()) error = "duplicate animation id"; return false; }
     if (!player.validate(error)) return false;
-    if (((!defaultRig.empty() || !rigs.empty()) && !findRig(defaultRig)) || (!rigs.empty() &&
+    const bool reservedDefaults = rigs.empty() && animations.empty() &&
+        player.walkAnimation == "r6-walk" && player.idleAnimation == "r6-idle";
+    if (((!defaultRig.empty() || !rigs.empty()) && !findRig(defaultRig)) || (!reservedDefaults &&
         (!findAnimation(player.walkAnimation) || !findAnimation(player.idleAnimation)))) {
         error = "game: missing default rig or animation reference"; return false;
     }

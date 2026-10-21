@@ -14,18 +14,22 @@ struct EditorInput {
     bool middlePressed = false, middleDown = false;
     bool escape = false, shift = false, modified = false;
     bool save = false, open = false, remove = false, focus = false, duplicate = false;
+    bool play = false, stop = false, jump = false;
     int tool = -1;
 };
 
+enum class InputMode { Editing, Playing, Paused };
 struct InputContext {
     bool windowFocused = false;
     bool viewportVisible = false, hovered = false, focused = false;
     bool popup = false, text = false, widget = false;
     bool keyboardCaptured = false;
     bool transforming = false, navigating = false;
+    InputMode mode = InputMode::Editing;
+    int menuDepth = 0;
 };
 
-enum class InputOwner { UI, Cancel, Transform, Camera, Viewport };
+enum class InputOwner { UI, Cancel, Transform, Camera, Viewport, Gameplay, Pause, Resume, Back, Stop };
 struct InputRoute {
     InputOwner owner = InputOwner::UI;
     const char* reason = "outside_viewport";
@@ -39,11 +43,31 @@ inline const char* InputOwnerName(InputOwner owner) {
         case InputOwner::Transform: return "transform";
         case InputOwner::Camera: return "camera";
         case InputOwner::Viewport: return "viewport";
+        case InputOwner::Gameplay: return "gameplay";
+        case InputOwner::Pause: return "pause";
+        case InputOwner::Resume: return "resume";
+        case InputOwner::Back: return "menu_back";
+        case InputOwner::Stop: return "stop";
     }
     return "ui";
 }
 
 inline InputRoute RouteInput(const EditorInput& input, const InputContext& ctx) {
+    if (ctx.mode != InputMode::Editing) {
+        if (input.stop && ctx.windowFocused) return {InputOwner::Stop, "stop_play"};
+        const bool paused = ctx.mode == InputMode::Paused;
+        if (!ctx.windowFocused || !ctx.viewportVisible)
+            return {paused ? InputOwner::UI : InputOwner::Pause, "game_focus_lost"};
+        if (paused) {
+            if (input.escape && !ctx.text && !ctx.widget)
+                return {ctx.menuDepth > 0 ? InputOwner::Back : InputOwner::Resume, "escape"};
+            return {InputOwner::UI, "pause_menu"};
+        }
+        if (ctx.popup || ctx.text || ctx.widget) return {InputOwner::UI, "game_ui"};
+        if (input.escape) return {InputOwner::Pause, "escape"};
+        return {ctx.focused ? InputOwner::Gameplay : InputOwner::UI,
+                ctx.focused ? "gameplay" : "game_viewport_unfocused"};
+    }
     if (!ctx.windowFocused || !ctx.viewportVisible || ctx.popup || ctx.text || ctx.widget) {
         const char* reason = !ctx.windowFocused ? "window_focus_lost" :
             !ctx.viewportVisible ? "viewport_hidden" : ctx.popup ? "popup" :

@@ -4,6 +4,9 @@
 #include <cstdlib>
 #include <filesystem>
 #include <string>
+#include <chrono>
+#include <vector>
+#include <sys/resource.h>
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "rlImGui.h"
@@ -28,17 +31,33 @@ struct EditorUITestAccess {
     static game::Pose preview(EditorUI& ui) { return ui.previewPose_; }
     static game::RuntimeSession& runtime(EditorUI& ui) { return ui.runtime_; }
     static bool captured(EditorUI& ui) { return ui.gameplayCapture_; }
-    static void draft(EditorUI& ui) {
+    static void sharedGizmoSettings(EditorUI& ui, bool local, float snap) {
+        ui.gizmoLocalSpace_ = local; ui.rotateSnapDegrees_ = snap;
+    }
+    static bool local(EditorUI& ui) { return ui.rigGizmo_.localSpace(); }
+    static float rotateSnap(EditorUI& ui) { return ui.rigGizmo_.rotateSnapDegrees(); }
+    static int selectedBody(EditorUI& ui) { return ui.selectedRigBody_; }
+    static int selectedJoint(EditorUI& ui) { return ui.selectedJoint_; }
+    static float time(EditorUI& ui) { return ui.previewTime_; }
+    static const game::AnimationClip& draft(EditorUI& ui) { return ui.animationDraft_; }
+    static void animation(EditorUI& ui) {
         ui.openAnimation("r6-walk");
-        ui.animationDraft_.setKey(game::RightShoulder, {.25f, {{}, QuatFromEulerDegrees({55, 0, 0})}});
-        ui.animationDirty_ = true; ui.showAnimationEditor_ = false; ui.showRigEditor_ = false;
+        ui.showRigEditor_ = false;
+    }
+    static void hidePanels(EditorUI& ui) { ui.showAnimationEditor_ = false; ui.showRigEditor_ = false; }
+    static void saveAsDialog(EditorUI& ui, const std::string& path) {
+        ui.requestSavePopup_ = true;
+        std::snprintf(ui.pathBuffer_,sizeof(ui.pathBuffer_),"%s",path.c_str());
     }
 };
 }
 using namespace loblox;
+unsigned long InputTestRootWindow();
 int checks = 0, failures = 0;
 #define CHECK(x) do { ++checks; if (!(x)) { ++failures; std::fprintf(stderr,"FAIL %d: %s\n", __LINE__, #x); } } while (0)
 int main() {
+    std::setvbuf(stdout,nullptr,_IOLBF,0); // preserve results before a possible driver LSan exit
+    CHECK(SceneRenderer::MaterialColor(WHITE,PartMaterial::Metal).b == 255);
     char temporary[] = "/tmp/loblox-game-ui-XXXXXX";
     const char* directory = mkdtemp(temporary); if (!directory) return 1;
     diag::configure(std::string(directory)+"/game.jsonl");
@@ -67,20 +86,37 @@ int main() {
         auto mouse = [&](Vector2 p) { command("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y))); };
         auto key = [&](const char* k) { command(std::string("keydown ")+k); command(std::string("keyup ")+k); };
         auto click = [&](Vector2 p) { mouse(p); command("mousedown 1"); command("mouseup 1"); };
+        auto number = [&](Vector2 p, const char* text) {
+            command("keydown ctrl"); click(p); command("keyup ctrl");
+            if (!ui.playing()) { key("F5"); CHECK(!ui.playing()); }
+            command("keydown ctrl"); key("a"); command("keyup ctrl");
+            command(std::string("type --delay 0 ")+text); key("Return");
+        };
         auto viewport = [&]() {
             auto* w = ImGui::FindWindowByName("Viewport");
             return Rectangle{w->InnerRect.Min.x,w->InnerRect.Min.y,w->InnerRect.GetWidth(),w->InnerRect.GetHeight()};
         };
         frames(5); command("search --name '^Loblox game regression$' windowfocus --sync");
         EditorUITestAccess::rigPanel(ui); frames();
+        ImGui::SetWindowDock(ImGui::FindWindowByName("Rig Editor"),0,ImGuiCond_Always);
+        ImGui::SetWindowSize("Rig Editor",{390,550});
         ImGui::SetWindowPos("Rig Editor", {80,180}); frames();
         auto* panel = ImGui::FindWindowByName("Rig Editor");
         click({panel->DC.CursorStartPos.x+35, panel->DC.CursorStartPos.y+9});
         CHECK(scene.gameAssets().rigs.size() == 1);
         if (scene.gameAssets().rigs.empty()) { TakeScreenshot((std::string(directory)+"/insert-failed.png").c_str()); return 1; }
         CHECK(scene.gameAssets().animations.size() == 2);
-        scene.gameAssets().rigs[0].bodies[game::LeftArm].color = {210,50,140,255}; // asset fixture
+        // Fixed-font/window fixture; body list and first color component.
+        const Vector2 rigOrigin{panel->DC.CursorStartPos.x,panel->DC.CursorStartPos.y};
+        click(Vector2Add(rigOrigin,{40,285}));
+        CHECK(EditorUITestAccess::selectedBody(ui) == game::LeftArm);
+        number(Vector2Add(rigOrigin,{40,355}),"210");
+        CHECK(scene.gameAssets().rigs[0].bodies[game::LeftArm].color.r == 210);
         EditorUITestAccess::pose(ui); frames();
+        EditorUITestAccess::sharedGizmoSettings(ui,true,7.5f); frames();
+        CHECK(EditorUITestAccess::local(ui));
+        CHECK(NearlyEqual(EditorUITestAccess::rotateSnap(ui),7.5f));
+        EditorUITestAccess::sharedGizmoSettings(ui,false,15); frames();
         camera.focusOn(scene.gameAssets().rigs[0].root.position, 5); frames();
         const auto initialRest = scene.gameAssets().rigs[0].restPose;
         const auto initialCamera = camera.position();
@@ -94,8 +130,41 @@ int main() {
         CHECK(std::fabs(Vector4DotProduct(EditorUITestAccess::preview(ui)[game::RightShoulder].rotation, QuaternionIdentity())) < .9999f);
         CHECK(NearlyEqual(scene.gameAssets().rigs[0].restPose[game::RightShoulder].rotation, initialRest[game::RightShoulder].rotation));
         CHECK(NearlyEqual(camera.position(), initialCamera));
-        // Preview and key editing feed the same saved asset loaded by Play.
-        EditorUITestAccess::draft(ui); frames();
+        // Real numeric editing, track selection and Insert/Update button.
+        EditorUITestAccess::animation(ui); frames();
+        TakeScreenshot((std::string(directory)+"/animation-docked.png").c_str());
+        ImGui::SetWindowDock(ImGui::FindWindowByName("Animation Editor"),0,ImGuiCond_Always);
+        ImGui::SetWindowPos("Animation Editor",{20,160});
+        ImGui::SetWindowSize("Animation Editor",{960,620}); frames();
+        auto* animation = ImGui::FindWindowByName("Animation Editor");
+        const Vector2 animationOrigin{animation->DC.CursorStartPos.x,animation->DC.CursorStartPos.y};
+        TakeScreenshot((std::string(directory)+"/animation-before.png").c_str());
+        number(Vector2Add(animationOrigin,{60,216}),"0.25");
+        CHECK(NearlyEqual(EditorUITestAccess::time(ui),.25f,.001f));
+        click(Vector2Add(animationOrigin,{60,325}));
+        CHECK(EditorUITestAccess::selectedJoint(ui) == game::RightShoulder);
+        number(Vector2Add(animationOrigin,{35,458}),"55");
+        CHECK(NearlyEqual(EulerDegreesFromQuat(EditorUITestAccess::preview(ui)[game::RightShoulder].rotation).x,55,.01f));
+        click(Vector2Add(animationOrigin,{60,504}));
+        CHECK(NearlyEqual(EulerDegreesFromQuat(EditorUITestAccess::draft(ui).sample(.25f)[game::RightShoulder].rotation).x,55,.01f));
+        // Retiming owns mouse/keyboard exclusively and Escape restores the key.
+        const float timelineWidth = animation->ContentRegionRect.GetWidth()-153;
+        const Vector2 diamond = Vector2Add(animationOrigin,{153+timelineWidth*.25f/.8f,325});
+        mouse(diamond); command("mousedown 1"); mouse(Vector2Add(diamond,{timelineWidth*.05f/.8f,0}));
+        CHECK(NearlyEqual(EditorUITestAccess::time(ui),.3f,.001f));
+        key("Escape"); command("mouseup 1");
+        CHECK(NearlyEqual(EulerDegreesFromQuat(EditorUITestAccess::draft(ui).sample(.25f)[game::RightShoulder].rotation).x,55,.01f));
+        TakeScreenshot((std::string(directory)+"/animation-edited.png").c_str());
+        EditorUITestAccess::hidePanels(ui); frames();
+        const std::string copyPath = std::string(directory)+"/authored-copy.json";
+        EditorUITestAccess::saveAsDialog(ui,copyPath); frames();
+        auto* saveDialog = ImGui::FindWindowByName("Salvar projeto");
+        click({saveDialog->DC.CursorStartPos.x+40,saveDialog->DC.CursorStartPos.y+53});
+        Scene copy; std::string copyError;
+        CHECK(projectio::load(copy,copyPath,copyError));
+        const auto* copiedClip = copy.gameAssets().findAnimation("r6-walk");
+        CHECK(copiedClip && NearlyEqual(EulerDegreesFromQuat(copiedClip->sample(.25f)[game::RightShoulder].rotation).x,55,.01f));
+        ui.setProjectPath(config.defaultProjectPath);
         v = viewport(); click({v.x+v.width*.5f,v.y+v.height*.75f});
         command("keydown ctrl"); key("s"); command("keyup ctrl");
         CHECK(std::filesystem::exists(config.defaultProjectPath));
@@ -107,6 +176,16 @@ int main() {
         key("F5"); CHECK(ui.playing());
         auto& runtime = EditorUITestAccess::runtime(ui);
         frames(30); CHECK(runtime.grounded());
+        std::vector<double> frameTimes;
+        for (int i = 0; i < 30; ++i) {
+            const auto began = std::chrono::steady_clock::now(); frames(1);
+            frameTimes.push_back(std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-began).count());
+        }
+        std::sort(frameTimes.begin(),frameTimes.end());
+        struct rusage usage{}; getrusage(RUSAGE_SELF,&usage);
+        std::printf("Play fixture: median %.2f ms, p95 %.2f ms; peak RSS %.1f MiB (software, capped 60)\n",
+            frameTimes[15],frameTimes[28],usage.ru_maxrss/1024.);
+        CHECK(NearlyEqual(EulerDegreesFromQuat(runtime.scene().gameAssets().findAnimation("r6-walk")->sample(.25f)[game::RightShoulder].rotation).x,55,.01f));
         auto start = runtime.position(); command("keydown w"); frames(12); command("keyup w");
         CHECK(runtime.position().z < start.z-1);
         CHECK(NearlyEqual(camera.position(),editorEye));
@@ -115,13 +194,21 @@ int main() {
         auto paused = runtime.position(); command("keydown w"); frames(10); command("keyup w");
         CHECK(NearlyEqual(runtime.position(),paused));
         TakeScreenshot((std::string(directory)+"/pause.png").c_str());
-        // Reset is a real menu click; it must retain exactly one capsule.
         auto* menu = ImGui::FindWindowByName("Play paused");
+        const float pausedZoom = runtime.playerCamera().distance();
+        command("click 4"); CHECK(NearlyEqual(runtime.playerCamera().distance(), pausedZoom));
+        click({menu->DC.CursorStartPos.x+100,menu->DC.CursorStartPos.y+73});
+        number({menu->DC.CursorStartPos.x+100,menu->DC.CursorStartPos.y+49},"0.006");
+        CHECK(NearlyEqual(runtime.settings().sensitivity,.006f,.00001f));
+        key("Escape"); CHECK(runtime.state() == game::RuntimeState::Paused); // settings -> main menu
+        // Reset is a real menu click; it must retain exactly one capsule.
         click({menu->DC.CursorStartPos.x+100, menu->DC.CursorStartPos.y+109});
+        CHECK(std::hypot(runtime.position().x,runtime.position().z) < .01f);
         CHECK(runtime.bodyCount() == scene.parts().size()+1);
         key("Escape"); CHECK(runtime.state() == game::RuntimeState::Playing);
         frames(25);
-        key("space"); CHECK(runtime.velocity().y > 0 || runtime.humanoidState() == game::HumanoidState::Jumping);
+        command("keydown space"); CHECK(runtime.velocity().y > 0 || runtime.humanoidState() == game::HumanoidState::Jumping);
+        command("keyup space");
         frames(70); CHECK(runtime.grounded());
         v = viewport(); mouse({v.x+v.width*.5f,v.y+v.height*.6f}); command("mousedown 3");
         CHECK(EditorUITestAccess::captured(ui));
@@ -135,6 +222,11 @@ int main() {
         CHECK(runtime.state() == game::RuntimeState::Paused);
         key("Escape"); frames(); CHECK(runtime.state() == game::RuntimeState::Playing);
         TakeScreenshot((std::string(directory)+"/play.png").c_str());
+        command("windowfocus "+std::to_string(InputTestRootWindow()));
+        CHECK(runtime.state() == game::RuntimeState::Paused);
+        CHECK(!EditorUITestAccess::captured(ui));
+        command("search --name '^Loblox game regression$' windowfocus --sync");
+        key("Escape"); CHECK(runtime.state() == game::RuntimeState::Playing);
         command("keydown shift"); key("F5"); command("keyup shift");
         CHECK(!ui.playing()); CHECK(!EditorUITestAccess::captured(ui)); CHECK(runtime.validate(error));
         CHECK(projectio::toJson(scene) == authoring);

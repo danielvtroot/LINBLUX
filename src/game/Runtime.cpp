@@ -35,7 +35,12 @@ struct SolidSweep : btCollisionWorld::ClosestConvexResultCallback {
     }
 };
 struct Overlap : btCollisionWorld::ContactResultCallback {
+    const btCollisionObject* ignored = nullptr;
     bool overlapping = false;
+    bool needsCollision(btBroadphaseProxy* proxy) const override {
+        const auto* object = static_cast<const btCollisionObject*>(proxy->m_clientObject);
+        return object != ignored && object->hasContactResponse() && ContactResultCallback::needsCollision(proxy);
+    }
     btScalar addSingleResult(btManifoldPoint& point, const btCollisionObjectWrapper* a, int, int,
                               const btCollisionObjectWrapper* b, int, int) override {
         if (a->getCollisionObject()->hasContactResponse() && b->getCollisionObject()->hasContactResponse() &&
@@ -166,34 +171,37 @@ void RuntimeSession::resume() {
 }
 bool RuntimeSession::respawn(std::string& error) {
     if (!physics_) { error = "No runtime physics"; return false; }
-    destroyCharacter();
+    if (!settings_.validate(error)) return false;
     Part* spawn = nullptr;
     for (Part* part : scene_->parts()) if (part->instanceClass() == InstanceClass::SpawnLocation &&
         part->canCollide() && (!spawn || part->id() < spawn->id())) spawn = part;
     Vector3 start = spawn ? spawn->position() : Vector3{};
     // Vertical query chooses a solid surface, including obstacles above a spawn.
     const btVector3 from(start.x, start.y + 1000, start.z), to(start.x, start.y - 1000, start.z);
-    SolidRay ray(from, to, nullptr); physics_->world_->rayTest(from, to, ray);
+    SolidRay ray(from, to, body_.get()); physics_->world_->rayTest(from, to, ray);
     start.y = ray.hasHit() ? ray.m_hitPointWorld.y() + settings_.collisionHeight*.5f + .08f : 20;
-    capsule_ = std::make_unique<btCapsuleShape>(settings_.collisionRadius,
+    auto capsule = std::make_unique<btCapsuleShape>(settings_.collisionRadius,
                            settings_.collisionHeight - 2*settings_.collisionRadius);
     btTransform transform; transform.setIdentity(); transform.setOrigin(Bt(start));
-    motion_ = std::make_unique<btDefaultMotionState>(transform);
-    btVector3 inertia; capsule_->calculateLocalInertia(1, inertia);
-    btRigidBody::btRigidBodyConstructionInfo info(1, motion_.get(), capsule_.get(), inertia);
+    auto motion = std::make_unique<btDefaultMotionState>(transform);
+    btVector3 inertia; capsule->calculateLocalInertia(1, inertia);
+    btRigidBody::btRigidBodyConstructionInfo info(1, motion.get(), capsule.get(), inertia);
     info.m_friction = 0; info.m_restitution = 0;
-    body_ = std::make_unique<btRigidBody>(info);
-    body_->setAngularFactor({0, 0, 0}); body_->setActivationState(DISABLE_DEACTIVATION);
-    body_->setCcdMotionThreshold(.2f); body_->setCcdSweptSphereRadius(settings_.collisionRadius * .8f);
+    auto body = std::make_unique<btRigidBody>(info);
+    body->setAngularFactor({0, 0, 0}); body->setActivationState(DISABLE_DEACTIVATION);
+    body->setCcdMotionThreshold(.2f); body->setCcdSweptSphereRadius(settings_.collisionRadius * .8f);
     // Resolve a cramped spawn deterministically, never teleport a running body each frame.
     bool clear = false;
     for (int attempt = 0; attempt < 64; ++attempt) {
-        Overlap overlap; physics_->world_->contactTest(body_.get(), overlap);
+        Overlap overlap; overlap.ignored = body_.get(); physics_->world_->contactTest(body.get(), overlap);
         if (!overlap.overlapping) { clear = true; break; }
-        transform.getOrigin().setY(transform.getOrigin().y()+.5f); body_->setWorldTransform(transform);
+        transform.getOrigin().setY(transform.getOrigin().y()+.5f); body->setWorldTransform(transform);
     }
-    if (!clear) { destroyCharacter(); error = "Spawn is obstructed: cannot place character capsule"; return false; }
-    motion_->setWorldTransform(body_->getWorldTransform());
+    if (!clear) { error = "Spawn is obstructed: cannot place character capsule"; return false; }
+    // Only replace the old avatar after the candidate is collision-safe.
+    motion->setWorldTransform(body->getWorldTransform());
+    destroyCharacter();
+    capsule_ = std::move(capsule); motion_ = std::move(motion); body_ = std::move(body);
     physics_->world_->addRigidBody(body_.get());
     pose_ = {}; walkTime_ = 0; idleTime_ = 0; walkWeight_ = 0; accumulator_ = 0; yaw_ = 0; jumpPending_ = false;
     humanoidState_ = HumanoidState::Idle;
@@ -278,6 +286,16 @@ void RuntimeSession::animate(float dt, float horizontal) {
 }
 void RuntimeSession::update(float dt, const PlayerInput& input) {
     if (state_ != RuntimeState::Playing || !body_ || !std::isfinite(dt) || dt < 0) return;
+    std::string settingsError;
+    if (!settings_.validate(settingsError)) {
+        diag::Event event; event.level = diag::Level::Error;
+        event.subsystem = "runtime"; event.name = "validation_error";
+        event.correlationId = correlation_; event.error = settingsError; event.result = "rejected";
+        diag::log(event);
+        pause(); return;
+    }
+    if (!std::isfinite(input.movement.x) || !std::isfinite(input.movement.y) ||
+        !std::isfinite(input.look.x) || !std::isfinite(input.look.y) || !std::isfinite(input.zoom)) return;
     dt = std::min(dt, .1f);
     camera_.update(dt, characterRoot().position, velocity(), input, settings_, *this);
     const Vector3 desired = camera_.moveDirection(input.movement);

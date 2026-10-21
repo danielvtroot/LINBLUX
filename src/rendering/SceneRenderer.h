@@ -37,6 +37,7 @@ public:
 
     // Cor final da Part considerando o material escolhido.
     static Color MaterialColor(const Part& part);
+    static Color MaterialColor(Color color, PartMaterial material);
 
 private:
     struct StudMeshEntry {

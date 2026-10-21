@@ -3,6 +3,7 @@
 #include <limits>
 #include <cstdlib>
 #include "core/Diagnostics.h"
+#include "editor/InputRouting.h"
 
 #include "game/Rig.h"
 #include "game/GameAssetsIO.h"
@@ -59,6 +60,27 @@ void RigTests() {
     CHECK(!rig.validate(error));
     rig = MakeR6(); rig.joints[1].parentAnchor.rotation.w = 0;
     CHECK(!rig.validate(error));
+}
+void InputTests() {
+    EditorInput input;
+    InputContext ctx; ctx.windowFocused = ctx.viewportVisible = ctx.focused = ctx.hovered = true;
+    ctx.mode = InputMode::Playing;
+    CHECK(RouteInput(input,ctx).owner == InputOwner::Gameplay);
+    ctx.popup = true; CHECK(RouteInput(input,ctx).owner == InputOwner::UI);
+    ctx.popup = false; ctx.widget = true; CHECK(RouteInput(input,ctx).owner == InputOwner::UI);
+    ctx.widget = false; ctx.text = true; input.escape = true;
+    CHECK(RouteInput(input,ctx).owner == InputOwner::UI);
+    ctx.text = false; CHECK(RouteInput(input,ctx).owner == InputOwner::Pause);
+    ctx.mode = InputMode::Paused; ctx.popup = true;
+    CHECK(RouteInput(input,ctx).owner == InputOwner::Resume);
+    ctx.menuDepth = 1; CHECK(RouteInput(input,ctx).owner == InputOwner::Back);
+    ctx.text = ctx.widget = true; CHECK(RouteInput(input,ctx).owner == InputOwner::UI);
+    input.stop = true; CHECK(RouteInput(input,ctx).owner == InputOwner::Stop);
+    input = {}; ctx = {}; ctx.windowFocused = true; ctx.mode = InputMode::Playing;
+    CHECK(RouteInput(input,ctx).owner == InputOwner::Pause);
+    ctx.viewportVisible = true; CHECK(RouteInput(input,ctx).owner == InputOwner::UI);
+    ctx.focused = true; ctx.windowFocused = false;
+    CHECK(RouteInput(input,ctx).owner == InputOwner::Pause);
 }
 void AnimationTests() {
     auto walk = MakeWalk();
@@ -131,6 +153,12 @@ void PersistenceTests() {
     Scene loaded;
     CHECK(projectio::fromJson(loaded, saved, error));
     CHECK(projectio::toJson(loaded) == saved);
+    auto malformed = nlohmann::json::parse(saved); malformed["format"] = 42;
+    CHECK(!projectio::fromJson(loaded, malformed.dump(), error));
+    CHECK(projectio::toJson(loaded) == saved);
+    malformed = nlohmann::json::parse(saved); malformed["version"] = 4294967298ULL;
+    CHECK(!projectio::fromJson(loaded, malformed.dump(), error));
+    CHECK(projectio::toJson(loaded) == saved);
     CHECK(loaded.gameAssets().rigs[0].bodies[LeftArm].color.r == RED.r);
     CHECK(NearlyEqual(loaded.gameAssets().player.walkSpeed, 18));
     auto invalid = nlohmann::json::parse(saved);
@@ -156,6 +184,8 @@ void PersistenceTests() {
     CHECK(projectio::fromJson(loaded, projectio::toJson(legacy), error));
     CHECK(loaded.gameAssets().rigs.empty());
     CHECK(loaded.gameAssets().player.validate(error));
+    loaded.gameAssets().player.walkAnimation = "missing-without-rig";
+    CHECK(!loaded.validate(error));
 }
 void Advance(RuntimeSession& runtime, float seconds, PlayerInput input = {}, float step = 1.f/60) {
     for (int i = 0; i < static_cast<int>(seconds/step+.5f); ++i) {
@@ -211,6 +241,16 @@ void RuntimeTests() {
     for (int i = 0; i < 20; ++i) { CHECK(runtime.respawn(error)); CHECK(runtime.validate(error)); }
     CHECK(runtime.bodyCount() == author.parts().size()+1);
     CHECK(projectio::toJson(author) == original);
+    const auto resetPosition = runtime.position();
+    runtime.settings().collisionHeight = -1;
+    CHECK(!runtime.respawn(error));
+    CHECK(NearlyEqual(runtime.position(), resetPosition));
+    CHECK(runtime.bodyCount() == author.parts().size()+1);
+    runtime.settings().collisionHeight = 5.8f;
+    PlayerInput invalidInput; invalidInput.movement.x = std::numeric_limits<float>::quiet_NaN();
+    runtime.update(.1f, invalidInput);
+    CHECK(NearlyEqual(runtime.position(),resetPosition));
+    CHECK(runtime.validate(error));
     runtime.stop(); CHECK(runtime.bodyCount() == 0); CHECK(runtime.validate(error));
     for (int i = 0; i < 10; ++i) {
         CHECK(runtime.start(author, error)); Advance(runtime, .1f); runtime.stop();
@@ -243,6 +283,11 @@ void RuntimeTests() {
     zoom.zoom = -100; runtime.update(.016f, zoom);
     CHECK(!runtime.playerCamera().firstPerson());
     CHECK(runtime.playerCamera().distance() <= runtime.settings().maxZoom);
+    runtime.settings().cameraMode = game::CameraMode::Follow;
+    const float followYaw = runtime.playerCamera().yaw();
+    PlayerInput strafe; strafe.movement = {1,0}; Advance(runtime,3,strafe);
+    CHECK(std::fabs(std::remainder(runtime.playerCamera().yaw()-followYaw,2*PI)) > .1f);
+    CHECK(Valid({runtime.playerCamera().camera().position}));
     runtime.stop();
     // CanCollide=false does not block the capsule or the camera sweep.
     auto* ghost = flat.createPart(PartShape::Block, {0, 4, -8}, {30, 8, 1}, "Ghost wall");
@@ -269,7 +314,7 @@ int main(int argc, char** argv) {
         if (!projectio::save(scene, argv[2], error)) { std::fprintf(stderr,"%s\n",error.c_str()); return 1; }
         return 0;
     }
-    RigTests(); AnimationTests(); PersistenceTests(); RuntimeTests();
+    RigTests(); InputTests(); AnimationTests(); PersistenceTests(); RuntimeTests();
     std::printf("Game: %d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_stdlib.h"
 #include "core/Diagnostics.h"
 #include "rendering/EditorCamera.h"
@@ -13,15 +14,24 @@
 namespace loblox {
 namespace {
 bool EditTransform(const char* id, game::RigidTransform& transform, bool position = true) {
+    const auto before = transform;
     ImGui::PushID(id);
     bool changed = position && ImGui::DragFloat3("Position", &transform.position.x, .02f, -10000, 10000);
     auto degrees = EulerDegreesFromQuat(transform.rotation);
     if (ImGui::DragFloat3("Rotation (degrees)", &degrees.x, .5f, -360, 360)) {
         transform.rotation = QuaternionNormalize(QuatFromEulerDegrees(degrees)); changed = true;
     }
+    if (changed && !game::Valid(transform)) {
+        transform = before; changed = false;
+        ImGui::TextColored({1,.3f,.2f,1}, "Transform rejected: use finite values and a valid quaternion.");
+        diag::Event event; event.level = diag::Level::Warning;
+        event.subsystem = "rig"; event.name = "validation_error";
+        event.error = "nonfinite UI transform rejected"; event.context = {{"field", id}}; diag::log(event);
+    }
     ImGui::PopID(); return changed;
 }
 void CameraSettings(game::PlayerSettings& p) {
+    const auto previous = p;
     int mode = static_cast<int>(p.cameraMode);
     if (ImGui::Combo("Camera mode", &mode, "Classic\0Follow\0First Person\0")) p.cameraMode = static_cast<game::CameraMode>(mode);
     ImGui::SliderFloat("Mouse sensitivity", &p.sensitivity, .0001f, .02f, "%.4f");
@@ -32,6 +42,11 @@ void CameraSettings(game::PlayerSettings& p) {
     p.maxZoom = std::max(p.minZoom, p.maxZoom);
     p.cameraDistance = std::clamp(p.cameraDistance, p.minZoom, p.maxZoom);
     ImGui::SliderFloat("Initial distance", &p.cameraDistance, p.minZoom, p.maxZoom);
+    std::string error;
+    if (!p.validate(error)) {
+        p = previous;
+        ImGui::TextColored({1,.3f,.2f,1}, "Camera settings rejected: finite, in-range values required.");
+    }
 }
 void AnimationChoice(const char* label, std::string& id, const game::GameAssets& assets) {
     auto* current = assets.findAnimation(id);
@@ -70,23 +85,15 @@ void EditorUI::openAnimation(const std::string& id) {
     rigContext_ = RigContext::Animation; previewTime_ = 0; previewPlaying_ = false;
     previewPose_ = animationDraft_.sample(0); showAnimationEditor_ = true;
 }
-void EditorUI::saveAnimation() {
+bool EditorUI::saveAnimation() {
     std::string error;
-    if (!animationDraft_.validate(error)) { setStatus(error, true); return; }
+    if (!animationDraft_.validate(error)) { setStatus(error, true); return false; }
     auto* asset = scene_.gameAssets().findAnimation(animationSource_);
-    if (!asset) { setStatus("Animation asset no longer exists", true); return; }
+    if (!asset) { setStatus("Animation asset no longer exists", true); return false; }
     animationDirty_ = true;
-    saveCurrentProject();
+    return saveCurrentProject();
 }
 void EditorUI::drawGameToolbar() {
-    const bool text = ImGui::GetIO().WantTextInput || ImGui::IsAnyItemActive();
-    if (IsWindowFocused() && !text && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopup)) {
-        if (ImGui::IsKeyPressed(ImGuiKey_F5, false)) {
-            if (ImGui::GetIO().KeyShift) stopPlay(); else if (!runtime_.active()) startPlay();
-        }
-    }
-    // Stop remains accessible with pause modal/text focus; never a character action.
-    if (runtime_.active() && ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_F5, false)) stopPlay();
     if (ImGui::BeginMenu("Game")) {
         ImGui::BeginDisabled(runtime_.active());
         if (ImGui::MenuItem("Insert R6")) insertR6();
@@ -142,28 +149,35 @@ void EditorUI::setGameplayCapture(bool capture) {
     diag::Event event; event.subsystem = "camera"; event.name = "capture_change";
     event.context = {{"context", "gameplay"}, {"captured", capture}}; diag::log(event);
 }
-void EditorUI::drawGameplayViewport(bool hovered, bool focused, bool blocked, Vector2 image) {
-    const bool escape = ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !ImGui::GetIO().WantTextInput;
-    if (!IsWindowFocused()) { runtime_.pause(); setGameplayCapture(false); }
-    else if (escape) {
-        if (runtime_.state() == game::RuntimeState::Playing) { runtime_.pause(); pausePage_ = 0; }
-        else if (pausePage_ != 0) pausePage_ = 0;
-        else { runtime_.resume(); ImGui::SetWindowFocus("Viewport"); }
+void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context, Vector2 image) {
+    context.mode = runtime_.state() == game::RuntimeState::Paused ? InputMode::Paused : InputMode::Playing;
+    context.menuDepth = pausePage_;
+    const InputRoute route = RouteInput(raw, context);
+    if (traceInput_ && (raw.escape || raw.stop || raw.jump || raw.rightPressed || raw.leftPressed || raw.wheel != 0)) {
+        diag::Event e; e.subsystem = "input"; e.name = "dispatch";
+        e.context = {{"consumer", InputOwnerName(route.owner)}, {"reason", route.reason},
+                     {"mode", "play"}, {"tool", ToolModeName(tool_)}}; diag::log(e);
+    }
+    if (route.owner == InputOwner::Stop) { stopPlay(); return; }
+    if (route.owner == InputOwner::Pause) {
+        runtime_.pause(); pausePage_ = 0;
         setGameplayCapture(false);
+    } else if (route.owner == InputOwner::Back) pausePage_ = 0;
+    else if (route.owner == InputOwner::Resume) {
+        runtime_.resume(); ImGui::SetWindowFocus("Viewport");
     }
     game::PlayerInput input;
-    const bool owns = runtime_.state() == game::RuntimeState::Playing && !blocked && focused && IsWindowFocused();
+    const bool owns = route.owner == InputOwner::Gameplay;
     const bool wantsCapture = owns && (runtime_.playerCamera().firstPerson() || runtime_.settings().cameraLock ||
-        ((hovered || gameplayCapture_) && ImGui::IsMouseDown(ImGuiMouseButton_Right)));
+        (context.hovered && raw.rightPressed) || (gameplayCapture_ && raw.rightDown));
     setGameplayCapture(wantsCapture);
     if (owns) {
-        if (!ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyAlt && !ImGui::GetIO().KeySuper) {
-            input.movement = {float(ImGui::IsKeyDown(ImGuiKey_D)) - float(ImGui::IsKeyDown(ImGuiKey_A)),
-                              float(ImGui::IsKeyDown(ImGuiKey_W)) - float(ImGui::IsKeyDown(ImGuiKey_S))};
-            input.jump = ImGui::IsKeyPressed(ImGuiKey_Space, false);
+        if (!raw.modified) {
+            input.movement = {raw.movement.x, raw.movement.z};
+            input.jump = raw.jump;
         }
-        if (gameplayCapture_ && !gameplaySkipDelta_) input.look = GetMouseDelta();
-        if (hovered || gameplayCapture_) input.zoom = ImGui::GetIO().MouseWheel;
+        if (gameplayCapture_ && !gameplaySkipDelta_) input.look = raw.delta;
+        if (context.hovered || gameplayCapture_) input.zoom = raw.wheel;
     }
     gameplaySkipDelta_ = false;
     runtime_.update(GetFrameTime(), input);
@@ -217,6 +231,10 @@ void EditorUI::drawPauseMenu() {
 }
 
 void EditorUI::drawRigEditor() {
+    if (!ImGui::FindWindowByName("Rig Editor")) {
+        if (auto* properties = ImGui::FindWindowByName("Properties"))
+            ImGui::SetNextWindowDockID(properties->DockId, ImGuiCond_FirstUseEver);
+    }
     ImGui::SetNextWindowSize({390, 550}, ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Rig Editor", &showRigEditor_)) { ImGui::End(); return; }
     if (ImGui::Button("Create R6")) insertR6();
@@ -254,7 +272,8 @@ void EditorUI::drawRigEditor() {
         if (selectedRigBody_ >= 0) {
             auto& body = rig->bodies[selectedRigBody_];
             float color[]{body.color.r/255.f, body.color.g/255.f, body.color.b/255.f};
-            if (ImGui::ColorEdit3("Body color", color)) body.color = {
+            if (ImGui::ColorEdit3("Body color", color) && std::isfinite(color[0]) &&
+                std::isfinite(color[1]) && std::isfinite(color[2])) body.color = {
                 static_cast<unsigned char>(color[0]*255), static_cast<unsigned char>(color[1]*255), static_cast<unsigned char>(color[2]*255), 255};
             int material = static_cast<int>(body.material);
             if (ImGui::BeginCombo("Material", PartMaterialName(body.material))) {
@@ -313,6 +332,8 @@ void EditorUI::cancelRigGizmo(bool restore) {
 }
 bool EditorUI::updateRigGizmo(const EditorInput& input, const InputRoute& route, Rectangle viewport,
                              bool hovered, bool blocked) {
+    rigGizmo_.setLocalSpace(gizmoLocalSpace_);
+    rigGizmo_.setSnap(moveSnap_, scaleSnap_, rotateSnapDegrees_);
     auto* rig = scene_.gameAssets().findRig(selectedRig_);
     if (!rig || tool_ != ToolMode::Rotate || !showJointPivots_ || blocked || input.escape) {
         const bool consumed = rigGizmo_.dragging(); cancelRigGizmo(); return consumed;
@@ -344,9 +365,14 @@ bool EditorUI::updateRigGizmo(const EditorInput& input, const InputRoute& route,
 }
 
 void EditorUI::drawGameSettings() {
+    if (!ImGui::FindWindowByName("Game Settings")) {
+        if (auto* properties = ImGui::FindWindowByName("Properties"))
+            ImGui::SetNextWindowDockID(properties->DockId, ImGuiCond_FirstUseEver);
+    }
     ImGui::SetNextWindowSize({420, 540}, ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Game Settings", &showGameSettings_)) { ImGui::End(); return; }
     auto& a = scene_.gameAssets(); auto& p = a.player;
+    const auto previousSettings = p;
     if (a.rigs.empty()) {
         ImGui::TextWrapped("No character asset yet. Play uses a temporary R6; create one to customize and save it.");
         if (ImGui::Button("Create default R6")) insertR6();
@@ -370,11 +396,22 @@ void EditorUI::drawGameSettings() {
     p.collisionHeight = std::max(p.collisionHeight, p.collisionRadius*2);
     ImGui::SliderFloat("Capsule total height", &p.collisionHeight, 2*p.collisionRadius, 15);
     ImGui::SeparatorText("Project camera defaults"); CameraSettings(p);
+    std::string error;
+    if (!p.validate(error)) { p = previousSettings; setStatus(error, true); }
     if (ImGui::Button("Save game settings")) saveCurrentProject();
     ImGui::End();
 }
 
 void EditorUI::drawAnimationEditor() {
+    if (!ImGui::FindWindowByName("Animation Editor")) {
+        if (auto* view = ImGui::FindWindowByName("Viewport"); view && view->DockId != 0) {
+            ImGuiID upper;
+            const ImGuiID lower = ImGui::DockBuilderSplitNode(view->DockId, ImGuiDir_Down, .5f, nullptr, &upper);
+            ImGui::DockBuilderDockWindow("Viewport", upper);
+            ImGui::DockBuilderDockWindow("Animation Editor", lower);
+            ImGui::DockBuilderFinish(ImGui::GetID("LobloxDockspace"));
+        }
+    }
     ImGui::SetNextWindowSize({800, 600}, ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Animation Editor", &showAnimationEditor_)) { ImGui::End(); return; }
     auto& assets = scene_.gameAssets();
@@ -406,19 +443,26 @@ void EditorUI::drawAnimationEditor() {
     }
     ImGui::SameLine(); if (ImGui::Button("Save Animation + Project")) saveAnimation();
     ImGui::SameLine(); if (ImGui::Button("Revert")) openAnimation(animationSource_);
-    ImGui::SameLine(); if (ImGui::Button("Use as Walk")) { saveAnimation(); assets.player.walkAnimation = animationSource_; saveCurrentProject(); }
-    animationDirty_ |= ImGui::InputText("Name", &animationDraft_.name);
-    float duration = animationDraft_.duration;
-    if (ImGui::DragFloat("Duration (s)", &duration, .05f, .05f, 120, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
-        const float scale = duration/animationDraft_.duration;
-        for (auto& track : animationDraft_.tracks) for (auto& key : track) key.time *= scale;
-        previewTime_ *= scale; animationDraft_.duration = duration; animationDirty_ = true;
+    ImGui::SameLine(); if (ImGui::Button("Use as Walk") && saveAnimation()) {
+        assets.player.walkAnimation = animationSource_; saveCurrentProject();
     }
-    if (ImGui::SliderInt("Authoring FPS", &animationDraft_.fps, 1, 120)) animationDirty_ = true;
-    if (ImGui::Checkbox("Loop", &animationDraft_.loop)) animationDirty_ = true;
-    int priority = static_cast<int>(animationDraft_.priority);
-    if (ImGui::Combo("Priority", &priority, "Idle\0Movement\0Action\0")) {
-        animationDraft_.priority = static_cast<game::AnimationPriority>(priority); animationDirty_ = true;
+    const bool compact = ImGui::IsWindowDocked();
+    if (!compact || ImGui::CollapsingHeader("Clip settings: name / duration / FPS / loop / priority")) {
+        animationDirty_ |= ImGui::InputText("Name", &animationDraft_.name);
+        float duration = animationDraft_.duration;
+        if (ImGui::DragFloat("Duration (s)", &duration, .05f, .05f, 120, "%.2f", ImGuiSliderFlags_AlwaysClamp) &&
+            std::isfinite(duration) && duration >= .05f && duration <= 120) {
+            const float scale = duration/animationDraft_.duration;
+            for (auto& track : animationDraft_.tracks) for (auto& key : track) key.time *= scale;
+            previewTime_ *= scale; animationDraft_.duration = duration; animationDirty_ = true;
+        }
+        if (ImGui::SliderInt("Authoring FPS", &animationDraft_.fps, 1, 120)) animationDirty_ = true;
+        animationDraft_.fps = std::clamp(animationDraft_.fps, 1, 240);
+        if (ImGui::Checkbox("Loop", &animationDraft_.loop)) animationDirty_ = true;
+        int priority = static_cast<int>(animationDraft_.priority);
+        if (ImGui::Combo("Priority", &priority, "Idle\0Movement\0Action\0")) {
+            animationDraft_.priority = static_cast<game::AnimationPriority>(priority); animationDirty_ = true;
+        }
     }
     auto* rig = assets.findRig(selectedRig_);
     if (!rig) { ImGui::TextDisabled("Select a rig in Explorer to preview."); ImGui::End(); return; }
@@ -436,9 +480,11 @@ void EditorUI::drawAnimationEditor() {
         }
         previewPose_ = animationDraft_.sample(previewTime_);
     }
+    if (compact) ImGui::SetNextItemWidth(std::max(100.f, ImGui::GetContentRegionAvail().x-280));
     bool seek = ImGui::SliderFloat("Time / scrub", &previewTime_, 0, animationDraft_.duration, "%.3f s");
+    if (compact) { ImGui::SameLine(); ImGui::SetNextItemWidth(70); }
     seek |= ImGui::InputFloat("Exact time (s)", &previewTime_, 0, 0, "%.3f");
-    previewTime_ = std::clamp(previewTime_, 0.f, animationDraft_.duration);
+    previewTime_ = std::isfinite(previewTime_) ? std::clamp(previewTime_, 0.f, animationDraft_.duration) : 0;
     if (seek) {
         cancelRigGizmo(); previewPlaying_ = false; rigContext_ = RigContext::Animation;
         previewPose_ = animationDraft_.sample(previewTime_);

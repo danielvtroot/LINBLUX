@@ -43,7 +43,8 @@ private:
     friend struct EditorUITestAccess;
     void buildDockLayout();
     void handleShortcuts(const EditorInput& input, const InputRoute& route);
-    void saveCurrentProject();
+    bool saveCurrentProject();
+    bool saveProjectAt(const std::string& path, std::string& error);
     void setTool(ToolMode tool, const char* source = "toolbar");
     void endGizmoSession(bool restoreTransform, const char* reason = "ui_action");
     void checkInvariants(const char* operation);
@@ -67,11 +68,11 @@ private:
     void startPlay();
     void stopPlay();
     void setGameplayCapture(bool capture);
-    void drawGameplayViewport(bool hovered, bool focused, bool blocked, Vector2 imagePosition);
+    void drawGameplayViewport(const EditorInput& input, InputContext context, Vector2 imagePosition);
     void insertR6();
     void selectRig(const std::string& id, int body = -1);
     void openAnimation(const std::string& id);
-    void saveAnimation();
+    bool saveAnimation();
     void cancelRigGizmo(bool restore = true);
     bool updateRigGizmo(const EditorInput& input, const InputRoute& route, Rectangle viewport,
                         bool hovered, bool blocked);

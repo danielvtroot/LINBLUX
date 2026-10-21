@@ -1,8 +1,9 @@
-# Continuidade — R6 e primeiro runtime local — 2026-10-20
+# Continuidade — R6 e primeiro runtime local — 2026-10-21
 
-## Missão atual (em execução)
+## Estado atual: protótipo jogável implementado, validação final em execução
 
 Base desta evolução: `d6f1e95` (Ctrl+D), branch preservado. Sem push.
+Checkpoint vertical: `d8965ab`; checkpoint seguinte: consultar `git log -1`.
 `src/game/Rig.*`: R6 original Y-up/frente -Z, seis corpos visuais,
 HumanoidRootPart interno, seis juntas com anchors/rest separados da pose;
 SLERP, tracks/keyframes, Walk original de 0,8 s e Idle editáveis.
@@ -21,10 +22,14 @@ Lua declarativo v1 recusa exportar gameplay para não perder assets.
 Prévia trabalha numa cópia de animação; Save Animation ou Ctrl+S atualiza
 asset/projeto. Novos rigs não sobrescrevem a caminhada já personalizada.
 
-Checkpoint funcional: CTest Release 8/8 passou; novo headless 219 checks e nova GUI
-102 checks passaram (Xvfb/llvmpipe). GUI usa eventos X11 reais para criação,
-drag de junta, F5/WASD/Space/Esc/reset/zoom/Stop; nesse checkpoint a alteração
-do keyframe é preparada pela fixture, ainda não toda digitada pela GUI.
+CTest Release 8/8 passou. GUI agora edita cor, tempo 0,25 s e Right Shoulder
+55 graus por eventos reais, insere key, cancela retiming com Esc, usa Save As,
+Ctrl+S, Play/WASD/Space, pausa/Settings/reset/zoom/perda de foco e Stop.
+Core cobre também Follow e referências inválidas sem rig. Save As antes
+ignorava o draft: agora passa pelo mesmo helper de Ctrl+S/Save Animation.
+Use as Walk respeita falha de save. Gizmo do rig compartilha Local/Snap.
+F5/Esc/gameplay usam o mesmo snapshot/RouteInput após UI/modais do frame atual.
+Respawn é transacional, preservando a cápsula anterior se o candidato falhar.
 Screenshots inspecionadas em `/tmp/loblox-game-ui-*`. O restart Xvfb
 intermitente falhou ao conectar ao display entre processos; `-noreset`
 eliminou a falha na repetição. Restart agora cobre 6 processos, incluindo
@@ -32,8 +37,15 @@ salvar/fechar/reabrir R6, Walk modificada e configurações do Player.
 
 Comandos: `cmake -E env TMPDIR=$PWD/build/compiler-tmp cmake --build build -j2`;
 `ctest --test-dir build --output-on-failure -j2`.
-Próximo: concluir automação de edição pela GUI, executar Debug/sanitizers,
-Sway privado e registrar limites/performance. Sway físico ainda não validado.
+Debug limpo passou 8/8 antes das últimas ampliações; repetir na versão final.
+ASan/UBSan headless passaram; gráfico acusa ~194 KB GLX/Mesa, também reproduzidos
+por prova mínima InitWindow/CloseWindow. Não houve suppressions/desativação de
+leaks. Sway privado passou 200 checks; repetir com as novas regressões.
+Próximo: rodada final Debug/sanitizers/Sway privado e registrar resultados.
+Sway físico/GPU/DPI/3 GB reais continuam pendentes. Guia e limites completos:
+`docs/R6_PLAY_GUIDE.md`. Sem auto-step, camadas Action, preferências pessoais
+persistentes, Jump/Fall assets atribuíveis, Play Here/F8 ou quality/fullscreen
+no menu. Esses itens não são apresentados como implementados.
 
 ## Histórico de estabilização preservado
 

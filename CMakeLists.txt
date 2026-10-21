@@ -76,14 +76,17 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(loblox_core PRIVATE -Wall -Wextra)
 endif()
 
-add_executable(loblox
-  src/main.cpp
-  src/app/Application.cpp
+add_library(loblox_editor STATIC
   src/rendering/SceneRenderer.cpp
   src/editor/EditorUI.cpp
   src/editor/GamePanels.cpp
 )
-target_link_libraries(loblox PRIVATE loblox_core loblox_imgui ${RAYLIB_LIBRARIES} OpenGL::GL)
+target_link_libraries(loblox_editor PUBLIC loblox_core loblox_imgui OpenGL::GL)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(loblox_editor PRIVATE -Wall -Wextra)
+endif()
+add_executable(loblox src/main.cpp src/app/Application.cpp)
+target_link_libraries(loblox PRIVATE loblox_editor)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(loblox PRIVATE -Wall -Wextra)
 endif()
@@ -102,11 +105,8 @@ add_test(NAME loblox_help COMMAND loblox --help)
 
 # Regressao grafica dos gizmos: renderiza em RenderTexture e confere pixel e
 # hit test. Sem contexto grafico o executavel retorna 77 (SKIP).
-add_executable(loblox_gizmo_visual_tests
-  tests/gizmo_visual_main.cpp
-  src/rendering/SceneRenderer.cpp
-)
-target_link_libraries(loblox_gizmo_visual_tests PRIVATE loblox_core)
+add_executable(loblox_gizmo_visual_tests tests/gizmo_visual_main.cpp)
+target_link_libraries(loblox_gizmo_visual_tests PRIVATE loblox_editor)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(loblox_gizmo_visual_tests PRIVATE -Wall -Wextra)
 endif()
@@ -119,16 +119,14 @@ if(XVFB_RUN_EXECUTABLE)
   find_program(XDOTOOL_EXECUTABLE xdotool)
   find_package(X11 QUIET)
   if(XDOTOOL_EXECUTABLE AND X11_FOUND)
-    add_executable(loblox_game_ui_tests tests/game_ui_main.cpp
-      src/editor/EditorUI.cpp src/editor/GamePanels.cpp src/rendering/SceneRenderer.cpp)
-    target_link_libraries(loblox_game_ui_tests PRIVATE loblox_core loblox_imgui OpenGL::GL)
+    add_executable(loblox_game_ui_tests tests/game_ui_main.cpp tests/x11_focus.cpp)
+    target_link_libraries(loblox_game_ui_tests PRIVATE loblox_editor X11::X11)
     add_test(NAME loblox_game_ui
       COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset"
               $<TARGET_FILE:loblox_game_ui_tests>)
     set_tests_properties(loblox_game_ui PROPERTIES TIMEOUT 240 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
-    add_executable(loblox_editor_input_tests tests/editor_input_main.cpp
-      tests/x11_focus.cpp src/editor/EditorUI.cpp src/editor/GamePanels.cpp src/rendering/SceneRenderer.cpp)
-    target_link_libraries(loblox_editor_input_tests PRIVATE loblox_core loblox_imgui OpenGL::GL X11::X11)
+    add_executable(loblox_editor_input_tests tests/editor_input_main.cpp tests/x11_focus.cpp)
+    target_link_libraries(loblox_editor_input_tests PRIVATE loblox_editor X11::X11)
     add_test(NAME loblox_editor_input
       COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset"
               $<TARGET_FILE:loblox_editor_input_tests>)

@@ -276,11 +276,13 @@ SceneRenderer::~SceneRenderer() {
 }
 
 Color SceneRenderer::MaterialColor(const Part& part) {
-    Color color = part.color();
+    return MaterialColor(part.color(), part.material());
+}
+Color SceneRenderer::MaterialColor(Color color, PartMaterial material) {
     const float r = static_cast<float>(color.r) / 255.0f;
     const float g = static_cast<float>(color.g) / 255.0f;
     const float b = static_cast<float>(color.b) / 255.0f;
-    switch (part.material()) {
+    switch (material) {
         case PartMaterial::SmoothPlastic:
             return color;
         case PartMaterial::Plastic:
@@ -293,7 +295,7 @@ Color SceneRenderer::MaterialColor(const Part& part) {
             const float gray = 0.45f + 0.55f * (r + g + b) / 3.0f;
             return Shade(Color{static_cast<unsigned char>(gray * 255.0f),
                                static_cast<unsigned char>(gray * 255.0f),
-                               static_cast<unsigned char>(gray * 258.0f), color.a},
+                               static_cast<unsigned char>(std::min(255.0f, gray * 258.0f)), color.a},
                          1.05f);
         }
         case PartMaterial::Concrete:
@@ -397,7 +399,7 @@ void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float in
     const auto world = rig.evaluate(state.pose, state.root);
     for (int i = 0; i < game::kBodyCount; ++i) {
         const auto& body = rig.bodies[i];
-        DrawShadedBox(world[i].position, body.size, world[i].rotation, body.color, light,
+        DrawShadedBox(world[i].position, body.size, world[i].rotation, MaterialColor(body.color, body.material), light,
                       body.material == PartMaterial::Neon ? 0.f : intensity,
                       body.material == PartMaterial::Neon ? 1.4f : brightness);
         if (i == state.selectedBody) DrawRotatedBoxWires(world[i].position,

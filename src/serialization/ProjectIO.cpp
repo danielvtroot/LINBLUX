@@ -344,6 +344,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         return false;
     }
 
+    try {
     if (!root.is_object()) {
         error = "raiz do projeto deve ser um objeto JSON";
         return false;
@@ -356,12 +357,13 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         error = "campo 'version' ausente ou invalido";
         return false;
     }
-    const int version = root["version"].get<int>();
-    if (version < 1 || version > kFormatVersion) {
-        error = "versao nao suportada: " + std::to_string(version) +
+    const double versionNumber = root["version"].get<double>();
+    if (versionNumber < 1 || versionNumber > kFormatVersion) {
+        error = "versao nao suportada: " + root["version"].dump() +
                 " (suportada ate " + std::to_string(kFormatVersion) + ")";
         return false;
     }
+    const int version = root["version"].get<int>();
     if (!root.contains("objects") || !root["objects"].is_array()) {
         error = "campo 'objects' ausente ou invalido";
         return false;
@@ -541,6 +543,10 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
     }
     scene.replaceContentsFrom(staged);
     return true;
+    } catch (const std::exception& exception) {
+        error = std::string("projeto invalido: ") + exception.what();
+        return false;
+    }
 }
 
 bool writeFileAtomically(const std::string& path, const std::string& content,

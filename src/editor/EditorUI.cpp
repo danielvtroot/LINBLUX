@@ -46,6 +46,9 @@ EditorInput ReadEditorInput() {
     input.escape = ImGui::IsKeyPressed(ImGuiKey_Escape, false);
     input.shift = io.KeyShift;
     input.modified = io.KeyCtrl || io.KeyAlt || io.KeySuper;
+    input.play = !input.modified && !input.shift && ImGui::IsKeyPressed(ImGuiKey_F5, false);
+    input.stop = !input.modified && input.shift && ImGui::IsKeyPressed(ImGuiKey_F5, false);
+    input.jump = !input.modified && ImGui::IsKeyPressed(ImGuiKey_Space, false);
     input.save = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false);
     input.open = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O, false);
     input.duplicate = io.KeyCtrl && !io.KeyShift && !io.KeyAlt && !io.KeySuper &&
@@ -479,6 +482,7 @@ void EditorUI::buildDockLayout() {
 }
 
 void EditorUI::handleShortcuts(const EditorInput& input, const InputRoute& route) {
+    if ((route.globalKeys || route.editorKeys) && input.play) startPlay();
     if ((route.editorKeys || route.globalKeys) && input.duplicate) {
         duplicateSelection();
     }
@@ -502,19 +506,28 @@ void EditorUI::handleShortcuts(const EditorInput& input, const InputRoute& route
     }
 }
 
-void EditorUI::saveCurrentProject() {
+bool EditorUI::saveProjectAt(const std::string& path, std::string& error) {
     endGizmoSession(false, "save");
-    std::string error;
+    cancelRigGizmo(false);
     if (animationDirty_ && !animationSource_.empty()) {
         auto* clip = scene_.gameAssets().findAnimation(animationSource_);
-        if (!clip || !animationDraft_.validate(error)) { setStatus("Animacao nao salva: " + error, true); return; }
+        if (!clip) { error = "Animation asset no longer exists"; return false; }
+        if (!animationDraft_.validate(error)) { error = "Animacao nao salva: " + error; return false; }
         *clip = animationDraft_;
     }
-    if (projectio::save(scene_, projectPath_, error)) {
-        animationDirty_ = false;
+    if (!projectio::save(scene_, path, error)) return false;
+    animationDirty_ = false;
+    return true;
+}
+
+bool EditorUI::saveCurrentProject() {
+    std::string error;
+    if (saveProjectAt(projectPath_, error)) {
         setStatus("Projeto salvo em " + projectPath_);
+        return true;
     } else {
         setStatus("Falha ao salvar '" + projectPath_ + "': " + error, true);
+        return false;
     }
 }
 
@@ -550,8 +563,8 @@ void EditorUI::draw() {
     }
     ImGui::EndDisabled();
     drawDialogs();
+    drawPauseMenu(); // current-frame modal/widgets participate in the same router
     drawViewport(); // UI actions and popup requests are known before routing.
-    drawPauseMenu();
 }
 
 void EditorUI::drawMainMenuBar() {
@@ -899,10 +912,12 @@ void EditorUI::drawToolbox() {
 }
 
 void EditorUI::drawViewport() {
+    const EditorInput input = ReadEditorInput();
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     const bool visible = ImGui::Begin("Viewport", nullptr,
                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     if (!visible) {
+        if (runtime_.active() && input.stop && IsWindowFocused()) stopPlay();
         if (runtime_.state() == game::RuntimeState::Playing) runtime_.pause();
         setGameplayCapture(false);
         endGizmoSession(true, "viewport_hidden");
@@ -942,7 +957,6 @@ void EditorUI::drawViewport() {
         ImVec2(0, 1), ImVec2(1, 0));
     const bool hovered = ImGui::IsItemHovered();
     const ImGuiIO& io = ImGui::GetIO();
-    const EditorInput input = ReadEditorInput();
     const bool clickedViewport = hovered &&
         (input.leftPressed || input.rightPressed || input.middlePressed);
     if (clickedViewport) ImGui::SetWindowFocus();
@@ -960,8 +974,7 @@ void EditorUI::drawViewport() {
     context.transforming = transform_.active();
     context.navigating = camera_.cursorCaptured();
     if (runtime_.active()) {
-        drawGameplayViewport(hovered, viewportFocused_, context.popup || context.widget,
-                             {imagePosition.x, imagePosition.y});
+        drawGameplayViewport(input, context, {imagePosition.x, imagePosition.y});
         ImGui::End(); ImGui::PopStyleVar(); return;
     }
     context.transforming = context.transforming || rigGizmo_.dragging();
@@ -972,12 +985,16 @@ void EditorUI::drawViewport() {
         camera_.releaseCapture();
     }
     handleShortcuts(input, route);
+    if (runtime_.active()) {
+        drawGameplayViewport(input, context, {imagePosition.x, imagePosition.y});
+        ImGui::End(); ImGui::PopStyleVar(); return;
+    }
     const auto traceDispatch = [&](const char* consumer, const char* outcome) {
       if (traceInput_) {
         const bool mouseEvent = input.leftPressed || input.rightPressed || input.middlePressed ||
             ImGui::IsMouseReleased(0) || ImGui::IsMouseReleased(1) || ImGui::IsMouseReleased(2);
         const bool keyEvent = input.tool >= 0 || input.save || input.open || input.escape ||
-            input.remove || input.focus || input.duplicate;
+            input.remove || input.focus || input.duplicate || input.play || input.stop;
         if (mouseEvent || keyEvent || input.wheel != 0 || route.owner == InputOwner::Cancel) {
             diag::Event event;
             event.subsystem = "input";
@@ -1502,7 +1519,7 @@ void EditorUI::drawDialogs() {
             std::error_code pathError;
             const std::filesystem::path chosen = std::filesystem::absolute(pathBuffer_, pathError);
             const std::string savePath = pathError ? std::string(pathBuffer_) : chosen.string();
-            if (projectio::save(scene_, savePath, error)) {
+            if (saveProjectAt(savePath, error)) {
                 projectPath_ = savePath;
                 dialogError_.clear();
                 setStatus("Projeto salvo em " + projectPath_);
@@ -1697,7 +1714,10 @@ void EditorUI::deleteSelection() {
 
 void EditorUI::focusSelection() {
     // Enquadrar move a camera; nunca durante um arraste do gizmo.
-    if (transform_.active()) return;
+    if (transform_.active() || rigGizmo_.dragging()) return;
+    if (auto* rig = scene_.gameAssets().findRig(selectedRig_)) {
+        camera_.focusOn(rig->root.position, 5); return;
+    }
     Instance* selection = scene_.selection();
     if (selection == nullptr) {
         return;

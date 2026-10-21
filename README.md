@@ -2,10 +2,12 @@
 
 Validação de controles, atalhos, diagnóstico e procedimento manual em Sway:
 [Entrada e validação integrada](docs/INPUT_AND_VALIDATION.md).
+Personagem, animação e teste de jogo local:
+[Guia R6 / Animation Editor / Play](docs/R6_PLAY_GUIDE.md).
 
 Editor 3D nativo para Linux, inspirado no Roblox Studio clássico. Esta é a
-**fundação 0.3**: viewport 3D real, física 3D contínua, hierarquia de objetos,
-painel de propriedades, ferramentas de construção e salvamento em JSON.
+**fundação 0.3 com protótipo de gameplay local**: viewport 3D, física Bullet,
+construção, R6 articulado, animações editáveis e Play isolado da cena autoral.
 
 O projeto foi pensado para um notebook modesto (3 GB de RAM, HD mecânico,
 Sway/Wayland com XWayland): interface nativa em C++, sem Electron, sem
@@ -18,7 +20,8 @@ carregamento remoto e sem assets pesados.
 - Câmera de editor orbital e livre: `WASD` move sem RMB, `Q/E` sobe/desce,
   `Shift` acelera; RMB captura/oculta o cursor para olhar; MMB faz pan, roda
   aproxima ao foco e `F` enquadra a seleção.
-- Física Bullet 3D rodando continuamente (sem botão Play/Stop):
+- Física Bullet 3D no editor; durante Play, a autoria congela e uma cópia
+  independente do mapa executa a simulação:
   - peças ancoradas ficam estáticas e servem de apoio;
   - peças soltas caem, colidem e repousam sobre a Baseplate/outras peças;
   - `Anchored` e `CanCollide` afetam o mundo físico imediatamente;
@@ -49,8 +52,15 @@ carregamento remoto e sem assets pesados.
   inicialização, persistência e transformação.
 - Testes automatizados headless e gráficos via CTest.
 
-Não há botão Play, Test ou Stop nesta etapa, nem personagem R6, scripts,
-terreno ou multiplayer.
+- R6 original com seis membros visuais, raiz interna e juntas hierárquicas.
+- Rig Editor e Animation Editor dockáveis, prévia, timeline, keyframes,
+  SLERP e Walk/Idle originais persistidas no JSON v2.
+- Play (F5), WASD relativo à câmera, pulo/cápsula Bullet, spawn, câmera
+  Classic/Follow/primeira pessoa, Esc com Settings/Reset/Resume e Stop (Shift+F5).
+
+O gameplay é um protótipo local, não uma implementação completa do Roblox.
+Não há scripts executáveis, terreno, multiplayer, ragdoll, auto-step de escadas
+ou blending de animação por camadas. Limitações e validação no guia acima.
 
 ## Requisitos
 
@@ -133,6 +143,8 @@ atingir 1 MiB, mantendo um backup `.1`.
 | Abrir | `Ctrl+O` (ou botão Open) |
 | Cancelar arrasto / soltar captura | `Esc` |
 | Ferramentas | `1` Select, `2` Move, `3` Scale, `4` Rotate |
+| Iniciar Play / retornar ao editor | `F5` / `Shift+F5` |
+| Jogar | `WASD`, `Space`, RMB, scroll; `Esc` abre o menu |
 
 A Baseplate inicial e os serviços Workspace/Lighting são protegidos contra
 exclusão acidental.
@@ -207,8 +219,8 @@ ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1 \
   padrão salvo por `Ctrl+S`, não uma lista de arquivos recentes.
 - A validação foi executada em Xvfb/llvmpipe; não houve teste no Sway/XWayland
   real, em GPU física ou em HD mecânico.
-- Seleção única (sem multi-seleção), sem undo/redo e sem duplicar.
-- Sem personagem, animações, scripts ou modo de jogo.
+- Seleção única (sem multi-seleção) e sem undo/redo; Ctrl+D duplica Parts.
+- Gameplay local básico; sem execução de scripts, networking ou multiplayer.
 - A interface usa X11/XWayland; não há backend Wayland nativo.
 - Sem sombras dinâmicas ou iluminação global (decisão de desempenho).
 - A FPS depende da GPU; em renderização por software (Xvfb/llvmpipe) o valor
