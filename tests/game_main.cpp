@@ -128,7 +128,7 @@ void AnimationTests() {
     walk.tracks[0][1].time = 0;
     CHECK(!walk.validate(error));
     GameAssets assets; auto id = assets.createR6().id;
-    CHECK(assets.animations.size() == 3);
+    CHECK(assets.animations.size() == 4);
     assets.animations[0].name = "My edited walk";
     assets.createR6();
     CHECK(assets.animations[0].name == "My edited walk");

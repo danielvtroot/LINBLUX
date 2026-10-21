@@ -391,11 +391,22 @@ void RuntimeSession::animate(float dt, float horizontal) {
     const auto* idle = assets.findAnimation(settings_.idleAnimation);
     const auto* walk = assets.findAnimation(settings_.walkAnimation);
     const bool walking = humanoidState_ == HumanoidState::Walking;
-    const bool airborne = humanoidState_ == HumanoidState::Jumping || humanoidState_ == HumanoidState::Freefall;
+    const bool jumping = humanoidState_ == HumanoidState::Jumping;
+    const bool falling = humanoidState_ == HumanoidState::Freefall;
+    const bool airborne = jumping || falling;
     static const std::string airPose = "R6_AirPose";
-    const std::string& desiredClip = airborne ? (settings_.jumpAnimation.empty()?airPose:settings_.jumpAnimation) : walking ? settings_.walkAnimation : settings_.idleAnimation;
+    std::string desiredClip;
+    if (falling) {
+        desiredClip = settings_.fallAnimation.empty()?"R6_NeutralFall":settings_.fallAnimation;
+    } else if (jumping) {
+        desiredClip = settings_.jumpAnimation.empty() ? airPose : settings_.jumpAnimation;
+    } else if (walking) {
+        desiredClip = settings_.walkAnimation;
+    } else {
+        desiredClip = settings_.idleAnimation;
+    }
     if (activeAnimation_ != desiredClip) {
-        if (airborne) airTime_=0;
+        if (airborne) airTime_ = 0;
         if (!activeAnimation_.empty()) Event("animation", "stop", correlation_, {{"clip", activeAnimation_}});
         activeAnimation_ = desiredClip;
         Event("animation", "play", correlation_, {{"clip", activeAnimation_}});
@@ -407,11 +418,17 @@ void RuntimeSession::animate(float dt, float horizontal) {
     Pose target = BlendPose(idle ? idle->sample(idleTime_) : Pose{}, walk ? walk->sample(walkTime_) : Pose{}, walkWeight_);
     if (airborne) {
         target = {};
-        target[LeftShoulder].rotation = QuaternionFromEuler(0, 0, -.35f);
-        target[RightShoulder].rotation = QuaternionFromEuler(0, 0, .35f);
-        target[LeftHip].rotation = QuaternionFromEuler(-.15f, 0, 0);
-        target[RightHip].rotation = QuaternionFromEuler(.15f, 0, 0);
-        if (const auto* jump=assets.findAnimation(settings_.jumpAnimation)) target=jump->sample(airTime_);
+        if (falling) {
+            if (const auto* fall = assets.findAnimation(settings_.fallAnimation)) target = fall->sample(airTime_);
+        } else if (jumping) {
+            if (const auto* jump = assets.findAnimation(settings_.jumpAnimation)) target = jump->sample(airTime_);
+            else {
+                target[LeftShoulder].rotation=QuaternionFromEuler(0,0,-.35f);
+                target[RightShoulder].rotation=QuaternionFromEuler(0,0,.35f);
+                target[LeftHip].rotation=QuaternionFromEuler(-.15f,0,0);
+                target[RightHip].rotation=QuaternionFromEuler(.15f,0,0);
+            }
+        }
     }
     pose_ = BlendPose(pose_, target, Response(20, dt));
 }
@@ -424,7 +441,8 @@ bool RuntimeSession::setAnimation(const std::string& state,const std::string& id
     if (state=="Idle") settings_.idleAnimation=uri;
     else if (state=="Walk") settings_.walkAnimation=uri;
     else if (state=="Jump") settings_.jumpAnimation=uri;
-    else {error="Animation state must be Idle, Walk or Jump";return false;}
+    else if (state=="Fall") settings_.fallAnimation=uri;
+    else {error="Animation state must be Idle, Walk, Jump or Fall";return false;}
     error.clear();return true;
 }
 void RuntimeSession::update(float dt, const PlayerInput& input) {

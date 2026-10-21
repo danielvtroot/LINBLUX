@@ -558,7 +558,7 @@ bool EditorUI::updateRigGizmo(const EditorInput& input,const InputRoute& route,R
     // Capture before Gizmo::update edits the proxy. Both drawing and hit testing
     // consume jointProxy_; pose coordinates are solved through the same bind chain.
     RigDrag initial;
-    if(!rigDrag_) initial={selectedRig_,{},tool_,rigContext_,selectedJoint_,selectedRigBody_,
+    if(!rigDrag_ && input.leftPressed) initial={selectedRig_,{},tool_,rigContext_,selectedJoint_,selectedRigBody_,
                            *rig,previewPose_,base};
     GizmoInput gi{input.mouse,input.leftPressed,input.leftDown,IsWindowFocused(),input.shift};
     const auto result=rigGizmo_.update(tool_,&jointProxy_,camera_,viewport,hovered,
@@ -617,6 +617,10 @@ void EditorUI::drawGameSettings() {
     }
     AnimationChoice("Walk animation", p.walkAnimation, a); AnimationChoice("Idle animation", p.idleAnimation, a);
     AnimationChoice("Jump animation", p.jumpAnimation, a); AnimationChoice("Fall animation", p.fallAnimation, a);
+    if(p.fallAnimation.empty() && ImGui::Button("Create empty Fall animation")) {
+        if(!a.findAnimation("r6-fall"))a.animations.push_back(game::MakeFall());
+        p.fallAnimation="r6-fall";
+    }
     ImGui::SliderFloat("WalkSpeed (units/s)", &p.walkSpeed, .1f, 100);
     ImGui::SliderFloat("Turn response", &p.turnSpeed, .1f, 50);
     ImGui::SliderFloat("Acceleration", &p.acceleration, 1, 500);
@@ -690,24 +694,13 @@ void EditorUI::drawAnimationEditor() {
         assets.player.walkAnimation = animationSource_; saveCurrentProject();
     }
     ImGui::SameLine(); if (ImGui::Button("Delete")) {
-        if (assets.animations.size() <= 1) {
-            setStatus("Nao e possivel excluir a unica animacao.", true);
-        } else {
-            std::string deletedId = animationSource_;
-            size_t deletedIndex = 0;
-            for (size_t i = 0; i < assets.animations.size(); ++i) {
-                if (assets.animations[i].id == animationSource_) { deletedIndex = i; break; }
-            }
-            assets.animations.erase(assets.animations.begin() + deletedIndex);
-            if (!assets.animations.empty()) {
-                openAnimation(assets.animations[std::min(deletedIndex, assets.animations.size() - 1)].id);
-            } else {
-                animationSource_.clear();
-                animationDraft_ = game::AnimationClip{};
-            }
-            animationDirty_ = false;
-            saveCurrentProject();
-            setStatus("Animacao excluida.");
+        std::string error;
+        if(!assets.removeAnimation(animationSource_,error))setStatus(error,true);
+        else {
+            cancelRigGizmo();previewPlaying_=false;animationDirty_=false;
+            if(!assets.animations.empty())openAnimation(assets.animations.front().id);
+            else {animationSource_.clear();animationDraft_={};previewPose_={};}
+            setStatus("Animation deleted. Save the project to persist this change.");
         }
     }
     const bool compact = ImGui::IsWindowDocked();

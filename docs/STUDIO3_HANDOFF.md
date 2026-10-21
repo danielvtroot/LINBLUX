@@ -29,6 +29,14 @@ plano; Material{0} e matrizes do fullscreen exigem investigação), face frontal
 Classes Decal/Texture em Instance.h são rascunho local preexistente sem ligação
 com Scene/IO; preservadas, não anunciadas como recurso disponível.
 
+Checkpoint rig: 25e8704. Fall agora tem asset novo r6-fall vazio (sem keys),
+ID persistido separado, SetAnimation("Fall") e fallback neutro exclusivo.
+Projetos existentes não recebem script automático; scripts customizados são
+preservados. Exclusão de clips atribuídos informa erro e pede reassociação
+no Game Config, evitando referência quebrada e save inválido. Teste físico
+com subida/descida verificou transição e pose neutra, além de persistência e
+proteção de exclusão. Studio/Game headless 2/2 passaram nesta revisão.
+
 Base real: f75e44d, branch fix/unified-3d-gizmos, seis arquivos rastreados
 modificados antes da intervenção. Patch e originais preservados em backup
 externo `studio3-Li2jVGjM`. PNGs, assets e referências permanecem originais.

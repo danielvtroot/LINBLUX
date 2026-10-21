@@ -121,7 +121,7 @@ int main() {
         click({panel->DC.CursorStartPos.x+35, panel->DC.CursorStartPos.y+9});
         CHECK(scene.gameAssets().rigs.size() == 1);
         if (scene.gameAssets().rigs.empty()) { TakeScreenshot((std::string(directory)+"/insert-failed.png").c_str()); return 1; }
-        CHECK(scene.gameAssets().animations.size() == 3);
+        CHECK(scene.gameAssets().animations.size() == 4);
         // Fixed-font/window fixture; body list and first color component.
         const Vector2 rigOrigin{panel->DC.CursorStartPos.x,panel->DC.CursorStartPos.y};
         click(EditorUITestAccess::bodyRow(ui,game::LeftArm));

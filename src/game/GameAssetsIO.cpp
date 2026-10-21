@@ -65,6 +65,7 @@ nlohmann::json EncodeAssets(const GameAssets& a) {
         {"allowFirstPerson", p.allowFirstPerson}, {"cameraLock", p.cameraLock},
         {"walkAnimation", p.walkAnimation}, {"idleAnimation", p.idleAnimation}};
     if (!p.jumpAnimation.empty()) j["player"]["jumpAnimation"]=p.jumpAnimation;
+    if (!p.fallAnimation.empty()) j["player"]["fallAnimation"]=p.fallAnimation;
     if (p.respawnDelay!=2) j["player"]["respawnDelay"]=p.respawnDelay;
     if (p.healthDisplayType!=2) j["player"]["healthDisplayType"]=p.healthDisplayType;
     if (p.healthDisplayDistance!=45) j["player"]["healthDisplayDistance"]=p.healthDisplayDistance;
@@ -133,6 +134,7 @@ bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& erro
         out.allowFirstPerson = p.at("allowFirstPerson").get<bool>(); out.cameraLock = p.at("cameraLock").get<bool>();
         out.walkAnimation = p.at("walkAnimation").get<std::string>(); out.idleAnimation = p.at("idleAnimation").get<std::string>();
         out.jumpAnimation=p.value("jumpAnimation",std::string());
+        out.fallAnimation=p.value("fallAnimation",std::string());
         out.respawnDelay=p.value("respawnDelay",2.f);out.healthDisplayType=p.contains("healthDisplayType")?ReadInt(p.at("healthDisplayType"),0,2):2;
         out.healthDisplayDistance=p.value("healthDisplayDistance",45.f);out.nameDisplayDistance=p.value("nameDisplayDistance",0.f);
         out.enableShiftLock=p.value("enableShiftLock",false);

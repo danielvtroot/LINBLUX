@@ -80,6 +80,7 @@ struct AnimationClip {
 AnimationClip MakeWalk(float amplitudeDegrees = 30, float duration = 0.8f);
 AnimationClip MakeIdle();
 AnimationClip MakeJump();
+AnimationClip MakeFall(); // independent asset with no authored keys
 Pose BlendPose(const Pose& from, const Pose& to, float alpha);
 
 class Animator {
@@ -123,6 +124,7 @@ struct PlayerSettings {
     std::string walkAnimation = "r6-walk";
     std::string idleAnimation = "r6-idle";
     std::string jumpAnimation; // empty retains the legacy native air-pose fallback
+    std::string fallAnimation; // empty uses fallback pose during fall
     float respawnDelay=2;
     int healthDisplayType=2; // 0=AlwaysOn, 1=WhenDamaged, 2=AlwaysOff
     float healthDisplayDistance=45;
@@ -137,6 +139,7 @@ struct GameAssets {
     std::string defaultRig;
     PlayerSettings player;
     Rig& createR6();
+    bool removeAnimation(const std::string& id,std::string& error);
     Rig* findRig(const std::string& id);
     const Rig* findRig(const std::string& id) const;
     bool removeRig(const std::string& id);

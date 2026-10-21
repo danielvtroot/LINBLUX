@@ -243,6 +243,33 @@ void PartChildScripts() {
     CHECK(runtime.scene().findPart(part->id())->attributes().count("childRan")==1);
     CHECK(part->attributes().empty());runtime.stop();
 }
+void IndependentFall() {
+    Scene scene;scene.buildDefaultScene();scene.gameAssets().createR6();std::string error;
+    auto& assets=scene.gameAssets();auto* fall=assets.findAnimation(assets.player.fallAnimation);
+    CHECK(fall && fall->id!="r6-jump");if(!fall)return;
+    for(const auto& track:fall->tracks)CHECK(track.empty());
+    CHECK(!assets.removeAnimation(fall->id,error));
+    auto unused=game::MakeFall();unused.id="unused-fall";assets.animations.push_back(unused);
+    CHECK(assets.removeAnimation("unused-fall",error));CHECK(assets.validate(error));
+    game::RuntimeSession runtime;CHECK(runtime.start(scene,error));
+    for(int i=0;i<120;++i)runtime.update(1.f/60,{});
+    CHECK(runtime.grounded());game::PlayerInput input;input.jump=true;runtime.update(1.f/60,input);
+    bool sawJump=false,sawFall=false;int fallingFrames=0;
+    for(int i=0;i<90;++i) {
+        runtime.update(1.f/60,{});
+        if(runtime.humanoidState()==game::HumanoidState::Jumping)sawJump=true;
+        if(runtime.humanoidState()==game::HumanoidState::Freefall) {
+            sawFall=true;
+            if(++fallingFrames==14)CHECK(NearlyEqual(runtime.pose()[game::LeftShoulder].rotation,QuaternionIdentity(),.02f));
+        }
+    }
+    CHECK(sawJump && sawFall && fallingFrames>=14);runtime.stop();
+    assets.findAnimation(assets.player.fallAnimation)->setKey(game::LeftShoulder,{0,{{0,0,0},QuaternionFromEuler(.4f,0,0)}});
+    Scene loaded;CHECK(projectio::fromJson(loaded,projectio::toJson(scene),error));
+    CHECK(loaded.gameAssets().player.fallAnimation==assets.player.fallAnimation);
+    CHECK(runtime.start(loaded,error));CHECK(runtime.setAnimation("Fall","anim://r6-fall",error));runtime.stop();
+    assets.player.fallAnimation="anim://missing";CHECK(!assets.validate(error));
+}
 void NativeCloneBudget() {
     Scene scene;scene.buildDefaultScene();auto* folder=scene.createContainer(InstanceClass::Folder,nullptr,"Payload");
     for(int i=0;i<17;++i) {
@@ -262,6 +289,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Scripts();AnimationIds();HealthAndVoid();PartChildScripts();NativeCloneBudget();
+    Hierarchy();Scripts();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();NativeCloneBudget();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

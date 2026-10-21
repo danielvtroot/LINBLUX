@@ -209,6 +209,11 @@ AnimationClip MakeJump() {
     for(int j=0;j<kJointCount;++j) {clip.setKey(j,{0,pose[j]});clip.setKey(j,{clip.duration,pose[j]});}
     return clip;
 }
+AnimationClip MakeFall() {
+    AnimationClip clip;clip.id="r6-fall";clip.name="R6_Fall";
+    clip.duration=.8f;clip.loop=true;clip.priority=AnimationPriority::Movement;
+    return clip;
+}
 void Animator::play(const AnimationClip& clip, bool restart) {
     if (restart || clip_ != &clip) time_ = 0;
     clip_ = &clip; paused_ = false;
@@ -248,10 +253,21 @@ Rig& GameAssets::createR6() {
     if (!findAnimation("r6-walk")) animations.push_back(MakeWalk());
     if (!findAnimation("r6-idle")) animations.push_back(MakeIdle());
     if (!findAnimation("r6-jump")) animations.push_back(MakeJump());
+    if (!findAnimation("r6-fall")) animations.push_back(MakeFall());
     if (player.jumpAnimation.empty()) player.jumpAnimation="r6-jump";
+    if (player.fallAnimation.empty()) player.fallAnimation="r6-fall";
     diag::Event event; event.subsystem = "rig"; event.name = "create";
     event.context = {{"rig", rigs.back().id}}; event.result = "ok"; diag::log(event);
     return rigs.back();
+}
+bool GameAssets::removeAnimation(const std::string& id,std::string& error) {
+    const auto* clip=findAnimation(id);
+    if(!clip) {error="Animation no longer exists";return false;}
+    for(const auto* reference:{&player.idleAnimation,&player.walkAnimation,&player.jumpAnimation,&player.fallAnimation})
+        if(findAnimation(*reference)==clip) {error="Animation is assigned in Game Config. Choose another clip there before deleting it.";return false;}
+    const std::string key=clip->id;
+    animations.erase(std::remove_if(animations.begin(),animations.end(),[&](const auto& value){return value.id==key;}),animations.end());
+    error.clear();return true;
 }
 bool GameAssets::removeRig(const std::string& id) {
     for (auto it = rigs.begin(); it != rigs.end(); ++it) {
@@ -295,7 +311,8 @@ bool GameAssets::validate(std::string& error) const {
     if (!player.validate(error)) return false;
     const bool reservedDefaults = rigs.empty() && animations.empty() &&
         player.walkAnimation == "r6-walk" && player.idleAnimation == "r6-idle";
-    if ((!player.jumpAnimation.empty() && !findAnimation(player.jumpAnimation)) ||
+    if ((!player.fallAnimation.empty() && !findAnimation(player.fallAnimation)) ||
+        (!player.jumpAnimation.empty() && !findAnimation(player.jumpAnimation)) ||
         ((!defaultRig.empty() || !rigs.empty()) && !findRig(defaultRig)) || (!reservedDefaults &&
         (!findAnimation(player.walkAnimation) || !findAnimation(player.idleAnimation)))) {
         error = "game: missing default rig or animation reference"; return false;
