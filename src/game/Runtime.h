@@ -31,6 +31,7 @@ public:
     float pitch() const { return pitch_; }
     float distance() const { return requestedDistance_; }
     bool firstPerson() const { return firstPerson_; }
+    bool avatarHidden() const { return firstPerson_ || avatarOccluded_; }
     void setDistance(float value) { if (std::isfinite(value)) requestedDistance_ = value; }
     Vector3 moveDirection(Vector2 input) const;
 private:
@@ -41,6 +42,7 @@ private:
     float followDelay_ = 0;
     CameraMode previousMode_ = CameraMode::Classic;
     bool firstPerson_ = false;
+    bool avatarOccluded_ = false; // geometry-derived visibility, not a control mode
 };
 
 // Owns its Scene, PhysicsWorld and one capsule. Lifetime: capsule -> physics -> scene.

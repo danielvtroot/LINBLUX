@@ -283,6 +283,16 @@ void RuntimeTests() {
     zoom.zoom = -100; runtime.update(.016f, zoom);
     CHECK(!runtime.playerCamera().firstPerson());
     CHECK(runtime.playerCamera().distance() <= runtime.settings().maxZoom);
+    runtime.settings().allowFirstPerson = false;
+    zoom.zoom = 100; runtime.update(0,zoom);
+    const auto head = runtime.rig().evaluate(runtime.pose(),runtime.characterRoot())[Head];
+    const auto cameraInHead = Compose(Inverse(head),{runtime.playerCamera().camera().position}).position;
+    const auto headHalf = Vector3Scale(runtime.rig().bodies[Head].size,.5f);
+    CHECK(!runtime.playerCamera().firstPerson());
+    CHECK(std::fabs(cameraInHead.x) > headHalf.x || std::fabs(cameraInHead.y) > headHalf.y ||
+          std::fabs(cameraInHead.z) > headHalf.z);
+    runtime.settings().allowFirstPerson = true;
+    zoom.zoom = -100; runtime.update(.016f,zoom);
     runtime.settings().cameraMode = game::CameraMode::Follow;
     const float followYaw = runtime.playerCamera().yaw();
     PlayerInput strafe; strafe.movement = {1,0}; Advance(runtime,3,strafe);
@@ -298,6 +308,28 @@ void RuntimeTests() {
     runtime.stop(); ghost->setCanCollide(true);
     CHECK(runtime.start(flat, error));
     CHECK(runtime.cameraClearance({0, 4, 0}, {0, 4, -10}, .25f) < .8f);
+    runtime.stop();
+    // Eye height follows edited proportions, not a hard-coded torso offset.
+    flat.gameAssets().rigs[0].resizeBody(Torso,{2,4,1});
+    flat.gameAssets().rigs[0].resizeBody(Head,{2,2,1});
+    flat.gameAssets().player.collisionHeight = 9;
+    flat.gameAssets().player.cameraMode = game::CameraMode::FirstPerson;
+    CHECK(runtime.start(flat,error)); Advance(runtime,.5f);
+    const auto tallHead = runtime.rig().evaluate(runtime.pose(),runtime.characterRoot())[Head];
+    CHECK(Vector3Distance(runtime.playerCamera().camera().position,tallHead.position) < .2f);
+    CHECK(runtime.playerCamera().avatarHidden());
+    runtime.stop();
+    // A side wall can force the camera into the wide head, even though the
+    // narrow collision capsule itself fits. Hide the avatar, not the wall,
+    // without forcing first-person controls or rotating the character.
+    Scene side; side.createBaseplate({0,-.5f,0},{200,1,200}); side.gameAssets().createR6();
+    auto* sideWall = side.createPart(PartShape::Block,{1.3f,5,0},{.2f,10,30}); sideWall->setAnchored(true);
+    CHECK(runtime.start(side,error)); Advance(runtime,.5f);
+    PlayerInput sideLook; sideLook.look.x = -PI/(2*runtime.settings().sensitivity);
+    runtime.update(.016f,sideLook);
+    CHECK(!runtime.playerCamera().firstPerson());
+    CHECK(runtime.playerCamera().avatarHidden());
+    CHECK(NearlyEqual(runtime.characterRoot().rotation,QuaternionIdentity()));
     runtime.stop();
 }
 }

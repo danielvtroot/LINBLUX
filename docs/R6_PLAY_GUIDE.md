@@ -76,8 +76,12 @@ elevar a posição inicial para sua superfície. Abaixo de Y=-500 ocorre respawn
   Use pulo para subir degraus. Walk depende do deslocamento real e chão, não
   apenas de W; velocidade de animação acompanha velocidade horizontal.
 - PlayerCamera separada de EditorCamera. Zoom e seguimento suavizados,
-  limites de pitch, sphere sweep contra sólidos, ocultação integral do avatar
-  em primeira pessoa. Follow alinha suavemente após um intervalo sem mouse.
+  limites de pitch, sphere sweep contra sólidos e foco na cabeça articulada,
+  incluindo proporções editadas. Com primeira pessoa desligada, o zoom respeita
+  a saída da geometria do avatar. Se parede/limite de zoom ainda obrigar a câmera
+  a entrar num membro, o avatar é ocultado sem mudar o modo de controle.
+  Em primeira pessoa o avatar é ocultado integralmente.
+  Follow alinha suavemente após um intervalo sem mouse.
   Camera Lock é uma opção explícita; não há atalho Shift Lock separado.
 - `InputRouting.h`: um snapshot/contexto decide também gameplay/pausa.
   UI/modal/texto bloqueiam gameplay; pausa bloqueia WASD/scroll/câmera; Stop

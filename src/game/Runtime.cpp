@@ -11,6 +11,21 @@ namespace {
 btVector3 Bt(Vector3 v) { return {v.x, v.y, v.z}; }
 Vector3 Vec(const btVector3& v) { return {v.x(), v.y(), v.z()}; }
 float Response(float rate, float dt) { return 1 - std::exp(-rate * dt); }
+bool InsideBox(Vector3 p, Vector3 half, float margin = 0) {
+    return std::fabs(p.x) <= half.x+margin && std::fabs(p.y) <= half.y+margin &&
+           std::fabs(p.z) <= half.z+margin;
+}
+// Exit of a ray starting inside a visual body's local box. Same rig transforms
+// and dimensions as rendering; no independently-maintained avatar collision rig.
+float BoxExit(Vector3 origin, Vector3 direction, Vector3 half) {
+    float exit = 1e30f;
+    const float o[]{origin.x,origin.y,origin.z}, d[]{direction.x,direction.y,direction.z};
+    const float h[]{half.x,half.y,half.z};
+    for (int i = 0; i < 3; ++i) {
+        if (std::fabs(d[i]) > 1e-6f) exit = std::min(exit, ((d[i] > 0 ? h[i] : -h[i])-o[i])/d[i]);
+    }
+    return std::max(0.f,exit);
+}
 void Event(const char* subsystem, const char* name, const std::string& correlation,
            nlohmann::json context = nlohmann::json::object()) {
     diag::Event e; e.subsystem = subsystem; e.name = name; e.correlationId = correlation;
@@ -65,6 +80,7 @@ void PlayerCamera::reset(Vector3 root, const PlayerSettings& settings) {
     target_ = Vector3Add(root, {0, 1.2f, 0});
     previousMode_ = settings.cameraMode;
     firstPerson_ = settings.cameraMode == CameraMode::FirstPerson;
+    avatarOccluded_ = false;
     camera_ = {Vector3Add(target_, {0, 3, distance_}), target_, {0, 1, 0}, 60, CAMERA_PERSPECTIVE};
 }
 Vector3 PlayerCamera::moveDirection(Vector2 input) const {
@@ -93,10 +109,22 @@ void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const Player
         const float desiredYaw = std::atan2(-velocity.x, -velocity.z);
         yaw_ += std::remainder(desiredYaw - yaw_, 2*PI) * Response(2, dt);
     }
-    const Vector3 desiredTarget = Vector3Add(root, {0, 1.2f, 0});
+    const auto bodies = runtime.rig().evaluate(runtime.pose(), {root,runtime.characterRoot().rotation});
+    const Vector3 desiredTarget = Compose(bodies[Head], {{0,.08f,0}}).position;
     target_ = firstPerson_ ? desiredTarget : Vector3Lerp(target_, desiredTarget, Response(14, dt));
     const Vector3 back{std::sin(yaw_) * std::cos(pitch_), std::sin(pitch_),
                        std::cos(yaw_) * std::cos(pitch_)};
+    if (!settings.allowFirstPerson && !firstPerson_) {
+        float visualMinimum = settings.minZoom;
+        for (int i = 0; i < kBodyCount; ++i) {
+            const auto inverse = Inverse(bodies[i]);
+            const auto local = Compose(inverse,{target_}).position;
+            const auto half = Vector3Scale(runtime.rig().bodies[i].size,.5f);
+            if (InsideBox(local,half)) visualMinimum = std::max(visualMinimum,
+                BoxExit(local,Vector3RotateByQuaternion(back,inverse.rotation),half)+.15f);
+        }
+        requestedDistance_ = std::max(requestedDistance_,std::min(settings.maxZoom,visualMinimum));
+    }
     const float wanted = firstPerson_ ? .05f : requestedDistance_;
     const Vector3 endpoint = Vector3Add(target_, Vector3Scale(back, wanted));
     const float clearance = runtime.cameraClearance(target_, endpoint, .25f);
@@ -104,6 +132,11 @@ void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const Player
     distance_ = safe < distance_ ? safe : Lerp(distance_, safe, Response(8, dt));
     if (firstPerson_) distance_ = .05f;
     camera_.position = Vector3Add(target_, Vector3Scale(back, distance_));
+    avatarOccluded_ = false;
+    for (int i = 0; i < kBodyCount; ++i) {
+        const auto local = Compose(Inverse(bodies[i]),{camera_.position}).position;
+        if (InsideBox(local,Vector3Scale(runtime.rig().bodies[i].size,.5f),.08f)) avatarOccluded_ = true;
+    }
     camera_.target = Vector3Subtract(camera_.position, back);
     camera_.up = {0, 1, 0}; camera_.fovy = 60; camera_.projection = CAMERA_PERSPECTIVE;
 }

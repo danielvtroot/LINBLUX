@@ -184,7 +184,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     BeginTextureMode(viewport_);
     RigRenderState character{&runtime_.rig(), runtime_.pose(), runtime_.characterRoot()};
     renderer_.drawScene(runtime_.scene(), runtime_.playerCamera().camera(), viewportWidth_, viewportHeight_,
-        kInvalidInstanceId, runtime_.playerCamera().firstPerson() ? nullptr : &character, false);
+        kInvalidInstanceId, runtime_.playerCamera().avatarHidden() ? nullptr : &character, false);
     EndTextureMode();
     const char* hint = runtime_.state() == game::RuntimeState::Paused ? "PAUSED | Esc to resume" :
         "PLAY | WASD move | Space jump | RMB look | Wheel zoom | Esc menu | Shift+F5 stop";

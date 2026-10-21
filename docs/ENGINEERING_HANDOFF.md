@@ -1,9 +1,10 @@
 # Continuidade — R6 e primeiro runtime local — 2026-10-21
 
-## Estado atual: protótipo jogável implementado, validação final em execução
+## Estado atual: protótipo jogável validado em software, alvo físico pendente
 
 Base desta evolução: `d6f1e95` (Ctrl+D), branch preservado. Sem push.
-Checkpoint vertical: `d8965ab`; checkpoint seguinte: consultar `git log -1`.
+Checkpoints: `d8965ab` (vertical slice), `33801f1` (input/save e GUI real).
+O checkpoint de câmera que contém este documento é identificado por `git log -1`.
 `src/game/Rig.*`: R6 original Y-up/frente -Z, seis corpos visuais,
 HumanoidRootPart interno, seis juntas com anchors/rest separados da pose;
 SLERP, tracks/keyframes, Walk original de 0,8 s e Idle editáveis.
@@ -22,7 +23,7 @@ Lua declarativo v1 recusa exportar gameplay para não perder assets.
 Prévia trabalha numa cópia de animação; Save Animation ou Ctrl+S atualiza
 asset/projeto. Novos rigs não sobrescrevem a caminhada já personalizada.
 
-CTest Release 8/8 passou. GUI agora edita cor, tempo 0,25 s e Right Shoulder
+CTest Release e Debug 8/8 passaram na versão final. GUI edita cor, tempo 0,25 s e Right Shoulder
 55 graus por eventos reais, insere key, cancela retiming com Esc, usa Save As,
 Ctrl+S, Play/WASD/Space, pausa/Settings/reset/zoom/perda de foco e Stop.
 Core cobre também Follow e referências inválidas sem rig. Save As antes
@@ -35,13 +36,39 @@ intermitente falhou ao conectar ao display entre processos; `-noreset`
 eliminou a falha na repetição. Restart agora cobre 6 processos, incluindo
 salvar/fechar/reabrir R6, Walk modificada e configurações do Player.
 
+Última causa reproduzida: com primeira pessoa desativada, zoom entrava na
+cabeça; a altura do alvo também ignorava proporções editadas. O novo teste
+falhou antes da correção. PlayerCamera agora usa a cabeça de Rig.evaluate,
+limita zoom pela saída das mesmas caixas visuais e oculta o avatar se uma
+parede ainda forçar a câmera para dentro dele, sem mudar o modo de controle.
+Regressões cobrem cabeça/torso redimensionados e parede lateral.
+
+Resultados finais: 252 checks de game; 1.575 headless anteriores; 300 casos /
+7.529 checks gráficos; 208 checks de GUI game e 223 de input do editor, todos
+sem falhas funcionais. Restart Xvfb abre 6 processos reais. Sway/XWayland
+privado (headless/pixman, usuário comum) passou novamente 208 checks e 4
+launches/restarts, sem enviar entrada à sessão pessoal.
+
 Comandos: `cmake -E env TMPDIR=$PWD/build/compiler-tmp cmake --build build -j2`;
 `ctest --test-dir build --output-on-failure -j2`.
-Debug limpo passou 8/8 antes das últimas ampliações; repetir na versão final.
-ASan/UBSan headless passaram; gráfico acusa ~194 KB GLX/Mesa, também reproduzidos
-por prova mínima InitWindow/CloseWindow. Não houve suppressions/desativação de
-leaks. Sway privado passou 200 checks; repetir com as novas regressões.
-Próximo: rodada final Debug/sanitizers/Sway privado e registrar resultados.
+Build Debug inicialmente limpo: `build/r6-clean-debug`, CTest final 8/8.
+ASan/UBSan: `build/stabilization-sanitize`, com detect_leaks=1 e halt_on_error=1.
+Headless 2/2 passaram (252 + 1.575 checks); GUI fez 208 checks sem falha, mas
+LSan encerrou com erro: 194.140 bytes/865 alocações em libGLX_mesa.so.0.
+Mesma assinatura reproduzida por InitWindow/CloseWindow, sem editor/core.
+Sem suppressions/desativação de leaks: sanitizer gráfico NÃO está verde.
+Evidência: Testing/Temporary/LastTest.log em cada build. Artefatos da última GUI
+Release: /tmp/loblox-game-ui-Dm4tBC; Sway: /tmp/loblox-sway-ifFgSe.
+
+Medição Release llvmpipe: startup 0,829 s, RSS 130.748 kB; Play 138,2 MiB,
+mediana 61,67 ms/p95 76,54 ms sob testes concorrentes. No Sway privado,
+Play 136,1 MiB, mediana 37,54 ms/p95 57,17 ms. Não comprova 60 FPS nem o
+orçamento real do notebook: host/software/compositor e carga são diferentes.
+`git diff --check` passou; .desenvolvimento/ permanece intocado e fora dos commits.
+
+Próximo comando no notebook: `./build/loblox`; executar passos 1–9 e checklist
+manual do guia, coletando JSONL se houver conflito. Não iniciar outra grande
+refatoração antes dessa validação física e de sessões/cenas maiores.
 Sway físico/GPU/DPI/3 GB reais continuam pendentes. Guia e limites completos:
 `docs/R6_PLAY_GUIDE.md`. Sem auto-step, camadas Action, preferências pessoais
 persistentes, Jump/Fall assets atribuíveis, Play Here/F8 ou quality/fullscreen
