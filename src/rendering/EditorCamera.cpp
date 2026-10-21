@@ -100,8 +100,8 @@ void EditorCamera::zoomBy(float wheelDelta) {
 }
 
 void EditorCamera::moveFree(Vector3 localInput, float deltaSeconds, bool fast) {
-    const Vector3 forward{ -std::sin(yaw_), 0.0f, -std::cos(yaw_) };
-    const Vector3 right{ std::cos(yaw_), 0.0f, -std::sin(yaw_) };
+    const Vector3 forward = Vector3Normalize(Vector3Subtract(target_, position()));
+    const Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, Vector3{0, 1, 0}));
     Vector3 movement = Vector3Add(Vector3Scale(forward, localInput.z),
                                   Vector3Scale(right, localInput.x));
     movement.y += localInput.y;
