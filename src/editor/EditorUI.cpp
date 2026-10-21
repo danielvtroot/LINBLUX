@@ -1768,6 +1768,12 @@ void EditorUI::drawLightingProperties() {
     if (ImGui::SliderFloat("FogDensity", &fogDensity, 0.0f, 1.0f, "%.3f")) {
         lighting->setFogDensity(fogDensity);
     }
+    bool skyboxEnabled = lighting->skyboxEnabled();
+    if (ImGui::Checkbox("Skybox enabled", &skyboxEnabled)) {
+        lighting->setSkyboxEnabled(skyboxEnabled);
+        if (!skyboxEnabled)
+            ImGui::SetTooltip("O fundo volta para a cor sólida do SkyColor");
+    }
 }
 
 void EditorUI::drawWorkspaceProperties() {

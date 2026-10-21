@@ -31,6 +31,10 @@ public:
     float brightness() const { return brightness_; }
     void setBrightness(float brightness);
 
+    // Skybox das imagens skyline1/: ligada por padrão, desligável por projeto.
+    bool skyboxEnabled() const { return skyboxEnabled_; }
+    void setSkyboxEnabled(bool enabled) { skyboxEnabled_ = enabled; }
+
     Color fogColor() const { return fogColor_; }
     void setFogColor(Color color) { fogColor_ = color; }
 
@@ -48,6 +52,7 @@ private:
     float brightness_ = 1.0f;
     Color fogColor_{120, 180, 240, 255};
     float fogDensity_ = 0.0f;
+    bool skyboxEnabled_ = true;
 };
 
 }  // namespace loblox

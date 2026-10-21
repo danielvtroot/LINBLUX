@@ -805,7 +805,8 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
     gFog.color = lighting != nullptr ? lighting->fogColor() : sky;
     gFog.density = lighting != nullptr ? lighting->fogDensity() : 0.0f;
     gFog.enabled = gFog.density > 0.0f;
-    const bool skyboxReady = SkyLoader().any;
+    const bool skyboxReady = SkyLoader().any &&
+        (lighting == nullptr || lighting->skyboxEnabled());
 
     ClearBackground(sky);
     if (skyboxReady) {

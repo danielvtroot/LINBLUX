@@ -54,6 +54,7 @@ struct ParsedLighting {
     float brightness = 1.0f;
     Color fogColor{120, 180, 240, 255};
     float fogDensity = 0.0f;
+    bool skyboxEnabled = true;
 };
 
 bool ReadFloat(const json& value, const char* field, float& out, std::string& error) {
@@ -237,6 +238,13 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
                 error = prefix + error;
                 return false;
             }
+        if (const json* skybox = FindField(value, "skyboxEnabled", ignored); skybox != nullptr) {
+            if (!skybox->is_boolean()) {
+                error = prefix + "'skyboxEnabled' deve ser booleano";
+                return false;
+            }
+            lighting.skyboxEnabled = skybox->get<bool>();
+        }
         hasLighting = true;
         return true;
     }
@@ -344,7 +352,8 @@ std::string toJson(const Scene& scene) {
                            {"brightness", lighting.brightness()},
                            {"fogColor", {lighting.fogColor().r, lighting.fogColor().g,
                                          lighting.fogColor().b, lighting.fogColor().a}},
-                           {"fogDensity", lighting.fogDensity()}});
+                           {"fogDensity", lighting.fogDensity()},
+                           {"skyboxEnabled", lighting.skyboxEnabled()}});
     }
 
     std::function<void(const Instance*)> append = [&](const Instance* node) {
@@ -568,6 +577,9 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
     staged.lighting()->setSunDirection(lighting.sunDirection);
     staged.lighting()->setSunIntensity(lighting.sunIntensity);
     staged.lighting()->setBrightness(lighting.brightness);
+    staged.lighting()->setFogColor(lighting.fogColor);
+    staged.lighting()->setFogDensity(lighting.fogDensity);
+    staged.lighting()->setSkyboxEnabled(lighting.skyboxEnabled);
     for (const auto& value:root["objects"]) if (value["class"]=="Workspace" && value.contains("fallenPartsDestroyHeight")) {
         float height;
         if (version<3 || !ReadFloat(value["fallenPartsDestroyHeight"],"fallenPartsDestroyHeight",height,error) ||
