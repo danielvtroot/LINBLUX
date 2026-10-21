@@ -1,5 +1,19 @@
 # Studio 2 — continuidade
 
+## Etapa A — frontend profissional (checkpoint parcial)
+
+Commit `a8bb7ef` nesta rodada: Explorer com ícone vetorial próprio por classe
+(Workspace/Lighting/Baseplate/SpawnLocation/Part/Folder/Model/páginas de
+Script/LocalScript/ModuleScript com badge/serviços com badge), realce do
+destino de drag-and-drop no nó sob o cursor, tamanhos iniciais mais
+confortáveis para Explorer/Properties (350×620/330×560 first-use). Lógica de
+hierarquia, reparent e seleção preservada. Build Release OK; CTest 10/10.
+Validação visual GUI ainda pendente (sem ambiente de GUI nesta rodada).
+
+Pendente da Etapa A: ribbon/agrupamento de ferramentas, tooltips da barra,
+busca do Explorer já existe (nome ou classe). Próximo passo sugerido:
+melhorar organização/toolbar e depois partir para Script Editor (Etapa B).
+
 ## Estado do checkpoint final desta rodada
 
 Há avanço funcional nas fases A–E, mas elas não cobrem todos os requisitos

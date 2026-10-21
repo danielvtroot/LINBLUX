@@ -86,6 +86,11 @@ enum class Icon {
     Open,
     Explorer,
     Properties,
+    Rig,
+    Clip,
+    ScriptPage,
+    Output,
+    Stop,
 };
 
 void DrawIcon(ImDrawList* drawList, ImVec2 center, float size, Icon icon, ImU32 color) {
@@ -240,6 +245,57 @@ void DrawIcon(ImDrawList* drawList, ImVec2 center, float size, Icon icon, ImU32 
                     ImVec2(center.x + (i == 0 ? -half * 0.25f : half * 0.35f), y), 2.4f, color,
                     10);
             }
+            break;
+        case Icon::Rig:  // Avatar clássico: cabeça, tronco e pernas.
+            drawList->AddCircle(ImVec2(center.x, center.y - half * 0.55f), half * 0.30f, color,
+                                12, 2.0f);
+            drawList->AddLine(ImVec2(center.x, center.y - half * 0.20f),
+                              ImVec2(center.x, center.y + half * 0.45f), color, 2.6f);
+            drawList->AddLine(ImVec2(center.x - half * 0.55f, center.y + half * 0.05f),
+                              ImVec2(center.x + half * 0.55f, center.y + half * 0.05f), color,
+                              2.2f);
+            drawList->AddLine(ImVec2(center.x, center.y + half * 0.45f),
+                              ImVec2(center.x - half * 0.38f, center.y + half), color, 2.2f);
+            drawList->AddLine(ImVec2(center.x, center.y + half * 0.45f),
+                              ImVec2(center.x + half * 0.38f, center.y + half), color, 2.2f);
+            break;
+        case Icon::Clip:  // Clipe de animação em execução.
+            drawList->AddRect(ImVec2(center.x - half * 0.7f, center.y - half * 0.7f),
+                              ImVec2(center.x + half * 0.7f, center.y + half * 0.7f), color,
+                              2.0f, 0, 2.0f);
+            drawList->AddTriangleFilled(ImVec2(center.x - half * 0.2f, center.y - half * 0.35f),
+                                        ImVec2(center.x - half * 0.2f, center.y + half * 0.35f),
+                                        ImVec2(center.x + half * 0.35f, center.y), color);
+            break;
+        case Icon::ScriptPage:  // Página de código com linhas.
+            drawList->AddRect(ImVec2(center.x - half * 0.55f, center.y - half * 0.8f),
+                              ImVec2(center.x + half * 0.55f, center.y + half * 0.8f), color,
+                              1.5f, 0, 1.8f);
+            drawList->AddLine(ImVec2(center.x - half * 0.3f, center.y - half * 0.4f),
+                              ImVec2(center.x + half * 0.3f, center.y - half * 0.4f), color, 1.4f);
+            drawList->AddLine(ImVec2(center.x - half * 0.3f, center.y),
+                              ImVec2(center.x + half * 0.1f, center.y), color, 1.4f);
+            drawList->AddLine(ImVec2(center.x - half * 0.3f, center.y + half * 0.4f),
+                              ImVec2(center.x + half * 0.3f, center.y + half * 0.4f), color,
+                              1.4f);
+            break;
+        case Icon::Output:  // Console: prompt + linhas.
+            drawList->AddRect(ImVec2(center.x - half * 0.8f, center.y - half * 0.65f),
+                              ImVec2(center.x + half * 0.8f, center.y + half * 0.65f), color,
+                              2.0f, 0, 1.8f);
+            drawList->AddTriangleFilled(ImVec2(center.x - half * 0.55f, center.y - half * 0.35f),
+                                        ImVec2(center.x - half * 0.55f, center.y + half * 0.35f),
+                                        ImVec2(center.x - half * 0.2f, center.y), color);
+            drawList->AddLine(ImVec2(center.x, center.y), ImVec2(center.x + half * 0.55f, center.y),
+                              color, 1.6f);
+            drawList->AddLine(ImVec2(center.x - half * 0.55f, center.y + half * 0.35f),
+                              ImVec2(center.x + half * 0.55f, center.y + half * 0.35f), color,
+                              1.3f);
+            break;
+        case Icon::Stop:
+            drawList->AddRectFilled(ImVec2(center.x - half * 0.55f, center.y - half * 0.55f),
+                                    ImVec2(center.x + half * 0.55f, center.y + half * 0.55f),
+                                    color, 2.0f);
             break;
     }
 }
@@ -974,6 +1030,37 @@ void EditorUI::drawToolbar() {
         ImGui::EndTabItem();
     }
 
+    if (ImGui::BeginTabItem("Avatar")) {
+        ImGui::Spacing();
+        if (IconButton("avatar_r6", Icon::Rig, "R6", false, "Inserir um Rig R6")) insertR6();
+        ImGui::SameLine();
+        if (IconButton("avatar_rig", Icon::Rig, "Rig Editor", showRigEditor_,
+                       "Abrir o Rig Editor")) showRigEditor_ = true;
+        ImGui::SameLine();
+        if (IconButton("avatar_anim", Icon::Clip, "Animation Editor", showAnimationEditor_,
+                       "Abrir o Animation Editor")) {
+            showAnimationEditor_ = true;
+            if (animationSource_.empty()) openAnimation(scene_.gameAssets().player.walkAnimation);
+        }
+        ImGui::EndTabItem();
+    }
+
+    if (ImGui::BeginTabItem("Script")) {
+        ImGui::Spacing();
+        if (IconButton("script_new", Icon::ScriptPage, "New Script", false,
+                       "Criar um Script")) insertScript();
+        ImGui::SameLine();
+        if (IconButton("script_module", Icon::ScriptPage, "New ModuleScript", false,
+                       "Criar um ModuleScript")) insertScript(InstanceClass::ModuleScript);
+        ImGui::SameLine();
+        if (IconButton("script_editor", Icon::ScriptPage, "Script Editor", showScriptEditor_,
+                       "Abrir o Script Editor")) showScriptEditor_ = true;
+        ImGui::SameLine();
+        if (IconButton("script_output", Icon::Output, "Output", showOutput_,
+                       "Abrir o Output")) showOutput_ = true;
+        ImGui::EndTabItem();
+    }
+
     if (ImGui::BeginTabItem("View")) {
         ImGui::Spacing();
         if (IconButton("toolbox_toggle", Icon::Part, "Toolbox", showToolbox_,
@@ -995,18 +1082,16 @@ void EditorUI::drawToolbar() {
 
     if (ImGui::BeginTabItem("Game")) {
         ImGui::Spacing();
-        if (ImGui::Button("Insert R6", ImVec2(105, 35))) insertR6();
+        if (IconButton("game_play", Icon::Clip, "Play (F5)", playing(),
+                       "Iniciar o Play e executar os scripts")) startPlay();
         ImGui::SameLine();
-        if (ImGui::Button("Rig Editor", ImVec2(105, 35))) showRigEditor_ = true;
+        ImGui::BeginDisabled(!playing());
+        if (IconButton("game_stop", Icon::Stop, "Stop", false,
+                       "Encerrar o Play e restaurar a cena autoral")) stopPlay();
+        ImGui::EndDisabled();
         ImGui::SameLine();
-        if (ImGui::Button("Animation Editor", ImVec2(140, 35))) {
-            showAnimationEditor_ = true;
-            if (animationSource_.empty()) openAnimation(scene_.gameAssets().player.walkAnimation);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Game Settings", ImVec2(120, 35))) showGameSettings_ = true;
-        ImGui::SameLine();
-        if (ImGui::Button("Play (F5)", ImVec2(105, 35))) startPlay();
+        if (IconButton("game_settings", Icon::Properties, "Game Settings", showGameSettings_,
+                       "Configurações de jogador e câmera")) showGameSettings_ = true;
         ImGui::EndTabItem();
     }
 
