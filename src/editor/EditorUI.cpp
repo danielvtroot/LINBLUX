@@ -1820,14 +1820,14 @@ void EditorUI::drawProperties() {
         ImGui::Spacing();
         ImGui::TextUnformatted("Properties");
         ImGui::TextWrapped("Select an object in the Explorer or viewport to edit its properties.");
-    } else if (selection->isPart() || selection->instanceClass()==InstanceClass::Folder ||
-               selection->instanceClass()==InstanceClass::Model || IsScriptClass(selection->instanceClass()) ||
-               IsRootServiceClass(selection->instanceClass())) {
-        drawInstanceProperties(*selection);
     } else if (selection == scene_.lighting()) {
         drawLightingProperties();
     } else if (selection == scene_.workspace()) {
         drawWorkspaceProperties();
+    } else if (selection->isPart() || selection->instanceClass()==InstanceClass::Folder ||
+               selection->instanceClass()==InstanceClass::Model || IsScriptClass(selection->instanceClass()) ||
+               IsRootServiceClass(selection->instanceClass())) {
+        drawInstanceProperties(*selection);
     }
     ImGui::End();
 }
