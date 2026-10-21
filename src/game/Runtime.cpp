@@ -204,14 +204,14 @@ void RuntimeSession::stop() {
     activeAnimation_.clear();
     scripts_.stop();
     destroyCharacter(); physics_.reset(); scene_.reset();
-    accumulator_ = 0; jumpPending_ = false; pose_ = {};
+    accumulator_ = 0; jumpPending_ = false; coyoteTime_=jumpBufferTime_=0; pose_ = {};
     shiftLockRequested_ = false; lastShiftKey_ = 0; // Stop nunca deixa o lock preso
     state_ = RuntimeState::Editing;
     Event("runtime", "stop", correlation_);
 }
 void RuntimeSession::pause() {
     if (state_ != RuntimeState::Playing) return;
-    state_ = RuntimeState::Paused; accumulator_ = 0; jumpPending_ = false;
+    state_ = RuntimeState::Paused; accumulator_ = 0; jumpPending_ = false;jumpBufferTime_=0;
     Event("runtime", "pause", correlation_);
 }
 void RuntimeSession::resume() {
@@ -257,6 +257,7 @@ bool RuntimeSession::respawn(std::string& error) {
     capsule_ = std::move(capsule); motion_ = std::move(motion); body_ = std::move(body);
     physics_->world_->addRigidBody(body_.get());
     pose_ = {}; walkTime_ = 0; idleTime_ = 0; airTime_=0; walkWeight_ = 0; accumulator_ = 0; yaw_ = 0; jumpPending_ = false;
+    coyoteTime_=jumpBufferTime_=0;
     shiftLockRequested_ = false; lastShiftKey_ = 0; // respawn começa sem lock
     health_=respawns_==0?settings_.health:settings_.maxHealth;deadTime_=damageCooldown_=0;
     humanoidState_ = health_>0?HumanoidState::Idle:HumanoidState::Dead;
@@ -315,8 +316,8 @@ void RuntimeSession::step(float dt, Vector3 desired, bool jump) {
     }
 
     // Pulo: permite pular se estava no chão (coyote time) ou se há buffer de pulo
-    const bool canJump = (coyoteTime_ > 0 || jumpBufferTime_ > 0) && wasGrounded;
-    if (jump && canJump) {
+    const bool canJump = coyoteTime_ > 0;
+    if (jumpBufferTime_ > 0 && canJump) {
         speed.y = std::sqrt(2 * settings_.gravity * settings_.jumpHeight);
         Event("player", "jump", correlation_);
         coyoteTime_ = 0;

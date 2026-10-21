@@ -270,6 +270,32 @@ void IndependentFall() {
     CHECK(runtime.start(loaded,error));CHECK(runtime.setAnimation("Fall","anim://r6-fall",error));runtime.stop();
     assets.player.fallAnimation="anim://missing";CHECK(!assets.validate(error));
 }
+void JumpTiming() {
+    Scene author;author.buildDefaultScene();author.gameAssets().createR6();std::string error;
+    game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+    for(int i=0;i<120;++i)runtime.update(1.f/60,{});
+    CHECK(runtime.grounded());const float floorY=runtime.position().y;
+    for(auto* part:runtime.mutableScene().parts())part->setPosition(Vector3Add(part->position(),{0,-1000,0}));
+    runtime.update(1.f/60,{});CHECK(!runtime.grounded());
+    game::PlayerInput jump;jump.jump=true;runtime.update(1.f/60,jump);
+    CHECK(runtime.velocity().y>1); // press after support was lost, inside 100 ms
+    runtime.stop();CHECK(runtime.start(author,error));
+    for(int i=0;i<120;++i)runtime.update(1.f/60,{});
+    for(auto* part:runtime.mutableScene().parts())part->setPosition(Vector3Add(part->position(),{0,-1000,0}));
+    for(int i=0;i<12;++i)runtime.update(1.f/60,{});
+    runtime.update(1.f/60,jump);CHECK(runtime.velocity().y<0); // grace expired
+    runtime.stop();CHECK(runtime.start(author,error));
+    for(int i=0;i<120;++i)runtime.update(1.f/60,{});
+    runtime.update(1.f/60,jump);bool queued=false,bounced=false;
+    for(int i=0;i<120;++i) {
+        if(!queued && runtime.velocity().y< -1 && runtime.position().y<floorY+1.2f && runtime.position().y>floorY+.2f) {
+            CHECK(!runtime.grounded());runtime.update(1.f/60,jump);queued=true;
+        } else runtime.update(1.f/60,{});
+        if(queued && runtime.velocity().y>1){bounced=true;break;}
+    }
+    CHECK(queued && bounced); // a single press before contact executes after landing
+    CHECK(runtime.validate(error));runtime.stop();
+}
 void NativeCloneBudget() {
     Scene scene;scene.buildDefaultScene();auto* folder=scene.createContainer(InstanceClass::Folder,nullptr,"Payload");
     for(int i=0;i<17;++i) {
@@ -289,6 +315,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Scripts();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();NativeCloneBudget();
+    Hierarchy();Scripts();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();NativeCloneBudget();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

@@ -52,6 +52,36 @@ Capturas inspecionadas: `/tmp/loblox-sky-capture-fOFmdv/` e
 `/tmp/loblox-visual-studio-MRynAG/`. O readback da fixture agora corrige Y
 antes de exportar. Essas imagens anteriores não aprovam o hardware real.
 
+Pulo: foi confirmado que coyote/buffer tinham timers, mas não funcionavam:
+canJump exigia wasGrounded e jump no mesmo passo. Teste físico novo reproduziu
+duas falhas. Agora buffer>0 + grace>0 executa uma vez; tempos continuam
+100/150 ms, timers limpos em respawn/Stop e buffer em Pause. Studio 1.393
+checks passou após a correção. Não houve mudança de parâmetros físicos.
+
+Validação intermediária: Release 13/13 e Debug 13/13 passaram antes desta
+correção de condição. Uma nova rodada está sendo feita com todas as fontes
+congeladas. Startup real detectou objeto Application.cpp.o compilado durante
+mudança de EditorUI.h (sizeof antigo): malloc abortava. Recompilar o objeto
+contra o header atual resolveu; app principal abriu/Play/Esc e foi capturado.
+Não confundir esse binário incremental inconsistente com aprovação de tests.
+Capturas reais atuais: /tmp/loblox-resume-app-wJgzIHbF/.
+
+Revisão UI adicional: rig no Explorer agora tem ID de árvore independente
+do nome, Rename usa o mesmo modal com referência de rig, Duplicate faz cópia
+profunda de bind/proporções com ID novo e Delete cancela drag antes da remoção.
+Script Editor corrige whitespace do lexer, scroll em pixels e sem wrap falso,
+caret após indentação, gutter monoespaçado e navegação por linha/match.
+Output não dereferencia scripts excluídos. HUD ganhou botão logo/menu real
+no mesmo roteador Pause/Resume, sem faixa permanente de instruções; marca
+também no cabeçalho e no ícone da janela, resolvida fora do CWD.
+
+ASan/UBSan detect_leaks=1 headless passou 3/3 após a correção de pulo. Ainda
+está sendo executado o teste gráfico instrumentado (sem suprimir Mesa).
+Última suíte Studio headless: 1.393 checks. Fontes de produção congeladas.
+PNG original logo/face mantém SHA256 inicial. Sem push; rascunhos locais
+Instance/Scene.h/Lighting.h e arquivos do usuário ainda preservados fora dos
+commits de correção. Não incluir Testing/, assets/, PNGs ou referências no Git.
+
 Base real: f75e44d, branch fix/unified-3d-gizmos, seis arquivos rastreados
 modificados antes da intervenção. Patch e originais preservados em backup
 externo `studio3-Li2jVGjM`. PNGs, assets e referências permanecem originais.
