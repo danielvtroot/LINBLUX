@@ -55,8 +55,11 @@ private:
     void drawViewport();
     void drawExplorer();
     void drawExplorerNode(Instance* instance, const char* filter);
+    void insertContainer(InstanceClass type, Instance* parent = nullptr);
+    void renameSelection();
     void drawProperties();
     void drawPartProperties(Part& part);
+    void drawInstanceProperties(Instance& instance);
     void drawLightingProperties();
     void drawWorkspaceProperties();
     void drawDialogs();
@@ -155,6 +158,13 @@ private:
     std::string projectPath_;
     char pathBuffer_[512] = {};
     char explorerFilter_[128] = {};
+    char propertiesFilter_[128] = {};
+    bool explorerFocused_ = false;
+    InstanceId renameId_ = 0, clipboardId_ = 0, revealedSelection_ = 0, pendingDelete_ = 0;
+    char renameBuffer_[129] = {};
+    std::pair<InstanceId,InstanceId> pendingReparent_{0,0};
+    bool pendingDuplicate_ = false;
+    int pendingInsert_ = 0;
 
     std::string status_;
     bool statusIsError_ = false;

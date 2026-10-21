@@ -269,6 +269,8 @@ std::string toLua(const Scene& scene) {
         throw std::runtime_error("Lua v1 nao suporta rigs/animacoes; salve o projeto JSON v2 para preservar os assets");
     }
     json document = json::parse(projectio::toJson(scene));
+    if (document["version"].get<int>() > 1)
+        throw std::runtime_error("Lua declarativo v1 nao suporta hierarquia; salve JSON v3");
     document["format"] = "loblox-scene";
     std::ostringstream out;
     out << "-- Loblox declarative scene v1. Literal data only; never executed.\nreturn ";

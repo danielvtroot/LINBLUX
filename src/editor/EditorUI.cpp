@@ -56,6 +56,9 @@ EditorInput ReadEditorInput() {
     input.remove = ImGui::IsKeyPressed(ImGuiKey_Delete, false) ||
                    ImGui::IsKeyPressed(ImGuiKey_Backspace, false);
     input.focus = ImGui::IsKeyPressed(ImGuiKey_F, false);
+    input.rename = ImGui::IsKeyPressed(ImGuiKey_F2, false);
+    input.copy = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C, false);
+    input.paste = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V, false);
     if (!input.modified) {
         const ImGuiKey tools[] = {ImGuiKey_1, ImGuiKey_2, ImGuiKey_3, ImGuiKey_4};
         for (int i = 0; i < 4; ++i)
@@ -308,6 +311,14 @@ ImVec4 ClassColor(InstanceClass instanceClass) {
             return ImVec4(0.45f, 0.80f, 1.00f, 1.0f);
         case InstanceClass::Part:
             return ImVec4(0.82f, 0.86f, 0.92f, 1.0f);
+        case InstanceClass::Folder: return ImVec4(.95f,.78f,.3f,1);
+        case InstanceClass::Model: return ImVec4(.5f,.75f,1,1);
+        case InstanceClass::Script: return ImVec4(.65f,.8f,1,1);
+        case InstanceClass::LocalScript: return ImVec4(.5f,.95f,.75f,1);
+        case InstanceClass::ModuleScript: return ImVec4(.85f,.7f,1,1);
+        case InstanceClass::ServerScriptService:
+        case InstanceClass::ServerStorage:
+        case InstanceClass::ReplicatedStorage: return ImVec4(.9f,.7f,.45f,1);
     }
     return ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
 }
@@ -468,7 +479,7 @@ void EditorUI::buildDockLayout() {
     const ImGuiID left =
         ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.19f, nullptr, &center);
     ImGuiID right =
-        ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.25f, nullptr, &center);
+        ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.34f, nullptr, &center);
     const ImGuiID rightTop =
         ImGui::DockBuilderSplitNode(right, ImGuiDir_Up, 0.42f, nullptr, &right);
 
@@ -482,11 +493,22 @@ void EditorUI::buildDockLayout() {
 }
 
 void EditorUI::handleShortcuts(const EditorInput& input, const InputRoute& route) {
+    if ((route.editorKeys || route.globalKeys) && input.rename && explorerFocused_) renameSelection();
+    if ((route.editorKeys || route.globalKeys) && input.copy && explorerFocused_)
+        clipboardId_ = scene_.selection() ? scene_.selection()->id() : 0;
+    if ((route.editorKeys || route.globalKeys) && input.paste && explorerFocused_) {
+        if (auto* original = scene_.find(clipboardId_)) {
+            auto* destination = scene_.selection();
+            if (!destination || destination->isPart()) destination = original->parent();
+            if (auto* copy = scene_.duplicateTree(*original,destination)) scene_.select(copy);
+            else setStatus("Destino de colagem invalido.",true);
+        } else setStatus("Origem da copia nao existe mais; copie novamente.",true);
+    }
     if ((route.globalKeys || route.editorKeys) && input.play) startPlay();
     if ((route.editorKeys || route.globalKeys) && input.duplicate) {
         duplicateSelection();
     }
-    if (route.editorKeys && input.remove && !input.modified) {
+    if ((route.editorKeys || (route.globalKeys && explorerFocused_)) && input.remove && !input.modified) {
         deleteSelection();
     }
     if (route.editorKeys && input.focus && !input.modified) {
@@ -617,6 +639,8 @@ void EditorUI::drawMainMenuBar() {
         if (ImGui::MenuItem("Insert Block")) insertPart(PartShape::Block);
         if (ImGui::MenuItem("Insert Sphere")) insertPart(PartShape::Sphere);
         if (ImGui::MenuItem("Insert Spawn")) insertSpawnLocation();
+        if (ImGui::MenuItem("Insert Folder")) insertContainer(InstanceClass::Folder);
+        if (ImGui::MenuItem("Insert Model")) insertContainer(InstanceClass::Model);
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Model")) {
@@ -630,6 +654,10 @@ void EditorUI::drawMainMenuBar() {
         ImGui::MenuItem("Toolbox", nullptr, &showToolbox_);
         ImGui::MenuItem("Explorer", nullptr, &showExplorer_);
         ImGui::MenuItem("Properties", nullptr, &showProperties_);
+        if (ImGui::MenuItem("Reset Layout")) {
+            ImGui::DockBuilderRemoveNode(ImGui::GetID("LobloxDockspace"));
+            layoutBuilt_ = false; showExplorer_ = showProperties_ = showToolbox_ = true;
+        }
         ImGui::EndMenu();
     }
     ImGui::EndDisabled();
@@ -971,6 +999,8 @@ void EditorUI::drawViewport() {
     context.widget = ImGui::IsAnyItemActive() && !viewportActive;
     context.text = io.WantTextInput && context.widget;
     context.keyboardCaptured = io.WantCaptureKeyboard;
+    if (explorerFocused_ && !context.text && !context.widget && !context.popup)
+        context.keyboardCaptured = false;
     context.transforming = transform_.active();
     context.navigating = camera_.cursorCaptured();
     if (runtime_.active()) {
@@ -1179,8 +1209,10 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
     if (instance == nullptr || !TreeContains(instance, filter)) return;
     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
                                ImGuiTreeNodeFlags_OpenOnDoubleClick |
-                               ImGuiTreeNodeFlags_SpanAvailWidth |
-                               ImGuiTreeNodeFlags_DefaultOpen;
+                               ImGuiTreeNodeFlags_SpanAvailWidth;
+    if (instance == scene_.workspace() || instance == scene_.lighting()) flags |= ImGuiTreeNodeFlags_DefaultOpen;
+    if (scene_.selection() && revealedSelection_ != scene_.selection()->id() &&
+        instance->isAncestorOf(scene_.selection())) ImGui::SetNextItemOpen(true);
     if (filter != nullptr && *filter != '\0') {
         ImGui::SetNextItemOpen(true, ImGuiCond_Always);
     }
@@ -1225,10 +1257,33 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
     if (ImGui::IsItemClicked()) {
         endGizmoSession(true);
         scene_.select(instance);
+        if (ImGui::IsMouseDoubleClicked(0) && !ImGui::IsItemToggledOpen()) renameSelection();
+    }
+    if (ImGui::BeginDragDropSource()) {
+        const auto id = instance->id();
+        ImGui::SetDragDropPayload("LOBLOX_INSTANCE",&id,sizeof(id));
+        ImGui::Text("%s (%s)",instance->name().c_str(),instance->className());
+        ImGui::EndDragDropSource();
+    }
+    if (ImGui::BeginDragDropTarget()) {
+        if (const auto* payload = ImGui::AcceptDragDropPayload("LOBLOX_INSTANCE")) {
+            endGizmoSession(true,"explorer_reparent");
+            pendingReparent_ = {*static_cast<const InstanceId*>(payload->Data),instance->id()};
+        }
+        ImGui::EndDragDropTarget();
     }
     if (ImGui::BeginPopupContextItem("##explorer_context")) {
         ImGui::TextDisabled("%s", instance->className());
         ImGui::Separator();
+        if (ImGui::MenuItem("Rename", "F2")) { scene_.select(instance); renameSelection(); }
+        if (ImGui::MenuItem("Duplicate", "Ctrl+D",false,instance->deletable())) { scene_.select(instance); pendingDuplicate_=true; }
+        if (ImGui::MenuItem("Copy", "Ctrl+C",false,instance->deletable())) clipboardId_ = instance->id();
+        if (ImGui::BeginMenu("Insert child (+)", !instance->isPart() && instance != scene_.lighting())) {
+            if (ImGui::MenuItem("Folder")) { scene_.select(instance); pendingInsert_=1; }
+            if (ImGui::MenuItem("Model")) { scene_.select(instance); pendingInsert_=2; }
+            if (ImGui::MenuItem("Part")) { scene_.select(instance); pendingInsert_=3; }
+            ImGui::EndMenu();
+        }
         if (ImGui::MenuItem("Focar na viewport", "F")) {
             endGizmoSession(true);
             scene_.select(instance);
@@ -1237,7 +1292,7 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
         if (ImGui::MenuItem("Excluir", "Del", false, instance->deletable())) {
             endGizmoSession(true);
             scene_.select(instance);
-            deleteSelection();
+            pendingDelete_ = instance->id();
         }
         ImGui::EndPopup();
     }
@@ -1251,9 +1306,13 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
 }
 
 void EditorUI::drawExplorer() {
-    ImGui::Begin("Explorer");
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize,ImVec2(280,150));
+    ImGui::Begin("Explorer", &showExplorer_);
+    explorerFocused_ = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+    if (ImGui::Button("+ Folder")) insertContainer(InstanceClass::Folder);
+    ImGui::SameLine(); if (ImGui::Button("+ Model")) insertContainer(InstanceClass::Model);
     ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::InputTextWithHint("##explorer_filter", "Filter workspace", explorerFilter_,
+    ImGui::InputTextWithHint("##explorer_filter", "Search name or class", explorerFilter_,
                              sizeof(explorerFilter_));
     if (scene_.workspace() != nullptr) {
         drawExplorerNode(scene_.workspace(), explorerFilter_);
@@ -1275,6 +1334,20 @@ void EditorUI::drawExplorer() {
         }
         ImGui::PopID();
     }
+    revealedSelection_ = scene_.selection() ? scene_.selection()->id() : 0;
+    if (pendingDelete_) { scene_.select(scene_.find(pendingDelete_)); pendingDelete_=0; deleteSelection(); }
+    if (pendingReparent_.first) {
+        std::string error;
+        if (!scene_.reparent(scene_.find(pendingReparent_.first),scene_.find(pendingReparent_.second),error)) setStatus(error,true);
+        else { setStatus("Parent atualizado; transform mundial preservado."); checkInvariants("reparent"); }
+        pendingReparent_={0,0};
+    }
+    if (pendingDuplicate_) { pendingDuplicate_=false; duplicateSelection(); }
+    if (pendingInsert_) {
+        const int action=pendingInsert_; pendingInsert_=0;
+        if (action==3) insertPart(PartShape::Block);
+        else insertContainer(action==1?InstanceClass::Folder:InstanceClass::Model);
+    }
     ImGui::Separator();
     if (scene_.selection() != nullptr) {
         ImGui::TextDisabled("Selecionado: %s", scene_.selection()->name().c_str());
@@ -1282,6 +1355,7 @@ void EditorUI::drawExplorer() {
         ImGui::TextDisabled("Nenhum objeto selecionado");
     }
     ImGui::End();
+    ImGui::PopStyleVar();
 }
 
 void EditorUI::drawPartProperties(Part& part) {
@@ -1477,8 +1551,9 @@ void EditorUI::drawProperties() {
         ImGui::Text("Pecas: %d", static_cast<int>(scene_.parts().size()));
         ImGui::Text("Arquivo: %s", projectPath_.c_str());
         ImGui::Text("FPS: %.0f", ImGui::GetIO().Framerate);
-    } else if (selection->isPart()) {
-        drawPartProperties(*static_cast<Part*>(selection));
+    } else if (selection->isPart() || selection->instanceClass()==InstanceClass::Folder ||
+               selection->instanceClass()==InstanceClass::Model) {
+        drawInstanceProperties(*selection);
     } else if (selection == scene_.lighting()) {
         drawLightingProperties();
     } else if (selection == scene_.workspace()) {
@@ -1488,6 +1563,19 @@ void EditorUI::drawProperties() {
 }
 
 void EditorUI::drawDialogs() {
+    if (renameId_) ImGui::OpenPopup("Rename instance");
+    if (ImGui::BeginPopupModal("Rename instance",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        const bool enter=ImGui::InputText("Name",renameBuffer_,sizeof(renameBuffer_),ImGuiInputTextFlags_EnterReturnsTrue);
+        if (enter || ImGui::Button("Rename")) {
+            if (auto* node=scene_.find(renameId_); node && renameBuffer_[0]) node->setName(renameBuffer_);
+            renameId_=0; ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine(); if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape,false)) {
+            renameId_=0; ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
     if (requestSavePopup_) {
         ImGui::OpenPopup("Salvar projeto");
         requestSavePopup_ = false;
@@ -1629,6 +1717,7 @@ void EditorUI::drawDialogs() {
 
 void EditorUI::insertPart(PartShape shape) {
     endGizmoSession(true);
+    Instance* parent=scene_.selection();
     const Vector3 focus = camera_.target();
     const Vector3 position{focus.x, std::max(6.0f, focus.y + 4.0f), focus.z};
     const Vector3 size = shape == PartShape::Sphere ? Vector3{3.0f, 3.0f, 3.0f}
@@ -1640,6 +1729,9 @@ void EditorUI::insertPart(PartShape shape) {
     }
     // In edit mode inserted parts must stay where the user places them.
     part->setAnchored(true);
+    if (parent && (parent->instanceClass()==InstanceClass::Folder || parent->instanceClass()==InstanceClass::Model)) {
+        std::string error; if (!scene_.reparent(part,parent,error)) setStatus(error,true);
+    }
     scene_.select(part);
     setStatus(shape == PartShape::Sphere ? "Sphere criada e ancorada."
                                          : "Block criado e ancorado.");
@@ -1680,9 +1772,9 @@ void EditorUI::applyMaterialToSelection(int materialIndex) {
 
 void EditorUI::duplicateSelection() {
     Instance* selection = scene_.selection();
-    if (!selection || !selection->isPart()) return;
+    if (!selection) return;
     endGizmoSession(false, "duplicate");
-    Part* copy = scene_.duplicatePart(*static_cast<Part*>(selection));
+    Instance* copy = scene_.duplicateTree(*selection);
     if (!copy) {
         setStatus("Nao foi possivel duplicar a peca selecionada.", true);
         return;
@@ -1691,6 +1783,19 @@ void EditorUI::duplicateSelection() {
     scene_.select(copy);
     checkInvariants("duplicate");
     setStatus("Duplicado: " + copy->name());
+}
+
+void EditorUI::renameSelection() {
+    auto* selected=scene_.selection(); if (!selected) return;
+    endGizmoSession(true,"rename"); renameId_=selected->id();
+    std::snprintf(renameBuffer_,sizeof(renameBuffer_),"%s",selected->name().c_str());
+}
+void EditorUI::insertContainer(InstanceClass type, Instance* parent) {
+    endGizmoSession(true,"insert_container");
+    if (!parent) parent=scene_.selection();
+    if (!parent || parent->isPart() || parent==scene_.lighting()) parent=scene_.workspace();
+    if (auto* object=scene_.createContainer(type,parent)) { scene_.select(object); setStatus("Criado: "+object->name()); }
+    else setStatus("Nao foi possivel criar container nesse Parent.",true);
 }
 
 void EditorUI::deleteSelection() {

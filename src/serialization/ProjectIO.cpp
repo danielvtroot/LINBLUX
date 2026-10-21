@@ -42,6 +42,8 @@ struct ParsedObject {
     PartMaterial material = PartMaterial::SmoothPlastic;
     bool anchored = false;
     bool canCollide = true;
+    std::string source;
+    bool enabled = true;
 };
 
 struct ParsedLighting {
@@ -183,7 +185,18 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
         return false;
     }
 
-    if (out.instanceClass == InstanceClass::Workspace) {
+    if (IsScriptClass(out.instanceClass)) {
+        if (!value.contains("source") || !value["source"].is_string() ||
+            !value.contains("enabled") || !value["enabled"].is_boolean()) {
+            error=prefix+"Script requires source string and enabled boolean"; return false;
+        }
+        out.source=value["source"].get<std::string>(); out.enabled=value["enabled"].get<bool>();
+        if (out.source.size()>262144) { error=prefix+"Script source exceeds 256 KiB"; return false; }
+        return true;
+    }
+    if (out.instanceClass == InstanceClass::Workspace ||
+        (IsRootServiceClass(out.instanceClass) && out.instanceClass!=InstanceClass::Lighting) || out.instanceClass == InstanceClass::Folder ||
+        out.instanceClass == InstanceClass::Model) {
         return true;
     }
 
@@ -282,7 +295,13 @@ std::string toJson(const Scene& scene) {
     // A plain legacy scene stays v1; gameplay assets opt into the v2 schema.
     const auto gameData = game::EncodeAssets(scene.gameAssets());
     const bool hasGame = gameData != game::EncodeAssets(game::GameAssets{});
-    root["version"] = hasGame ? kFormatVersion : 1;
+    const bool hierarchy = std::any_of(scene.objects().begin(),scene.objects().end(),[](const auto& o) {
+        return o->instanceClass() == InstanceClass::Folder || o->instanceClass() == InstanceClass::Model ||
+            !o->attributes().empty() ||
+            IsScriptClass(o->instanceClass()) || (IsRootServiceClass(o->instanceClass()) &&
+                o->instanceClass()!=InstanceClass::Workspace && o->instanceClass()!=InstanceClass::Lighting);
+    });
+    root["version"] = hierarchy ? 3 : hasGame ? 2 : 1;
     if (hasGame) root["game"] = gameData;
     root["nextId"] = scene.nextId();
 
@@ -311,7 +330,18 @@ std::string toJson(const Scene& scene) {
                            {"brightness", lighting.brightness()}});
     }
 
-    for (Part* part : scene.parts()) {
+    std::function<void(const Instance*)> append = [&](const Instance* node) {
+        if (!node->isPart()) {
+            objects.push_back({{"id",node->id()},{"class",node->className()},
+                {"name",node->name()},{"parent",node->parent()?node->parent()->id():0}});
+            if (IsScriptClass(node->instanceClass())) {
+                const auto& script=static_cast<const Script&>(*node);
+                objects.back()["source"]=script.source; objects.back()["enabled"]=script.enabled;
+            }
+            for (const auto* child : node->children()) append(child);
+            return;
+        }
+        const Part* part = static_cast<const Part*>(node);
         const Vector3 position = part->position();
         const Vector3 euler = part->rotationEulerDegrees();
         const Vector3 size = part->size();
@@ -319,7 +349,7 @@ std::string toJson(const Scene& scene) {
         objects.push_back({{"id", part->id()},
                            {"class", part->className()},
                            {"name", part->name()},
-                           {"parent", scene.workspace() != nullptr ? scene.workspace()->id() : 0},
+                           {"parent", part->parent()->id()},
                            {"shape", PartShapeName(part->shape())},
                            {"position", {position.x, position.y, position.z}},
                            {"rotation", {euler.x, euler.y, euler.z}},
@@ -328,8 +358,18 @@ std::string toJson(const Scene& scene) {
                            {"material", PartMaterialName(part->material())},
                            {"anchored", part->anchored()},
                            {"canCollide", part->canCollide()}});
-    }
+    };
+    for (const auto* child : scene.workspace()->children()) append(child);
+    for (const auto& object:scene.objects())
+        if (!object->parent() && object.get()!=scene.workspace() && object.get()!=scene.lighting()) append(object.get());
 
+    for (auto& entry:objects) {
+        const auto* node=scene.find(entry["id"].get<InstanceId>());
+        if (node && !node->attributes().empty()) {
+            auto& attrs=entry["attributes"]; attrs=json::object();
+            for (const auto& pair:node->attributes()) std::visit([&](const auto& value){attrs[pair.first]=value;},pair.second);
+        }
+    }
     root["objects"] = std::move(objects);
     return root.dump(2) + "\n";
 }
@@ -382,6 +422,11 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         if (!ParseObject(root["objects"][i], i, object, lighting, hasLighting, error)) {
             return false;
         }
+        if (version < 3 && (object.instanceClass == InstanceClass::Folder || object.instanceClass == InstanceClass::Model ||
+            IsScriptClass(object.instanceClass) || (IsRootServiceClass(object.instanceClass) &&
+                object.instanceClass!=InstanceClass::Workspace && object.instanceClass!=InstanceClass::Lighting))) {
+            error = "hierarquia requer projeto version 3"; return false;
+        }
         if (!ids.insert(object.id).second) {
             error = "id duplicado no projeto: " + std::to_string(object.id);
             return false;
@@ -407,17 +452,14 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
     }
 
     for (const ParsedObject& object : parsed) {
-        if (object.instanceClass == InstanceClass::Workspace) {
-            continue;
-        }
-        if (object.instanceClass == InstanceClass::Lighting) {
+        if (IsRootServiceClass(object.instanceClass)) {
             if (object.parent != 0) {
-                error = "Lighting deve estar na raiz (parent = 0)";
+                error = "servico deve estar na raiz (parent = 0)";
                 return false;
             }
             continue;
         }
-        if (object.parent != workspaceId) {
+        if ((version < 3 && object.parent != workspaceId) || object.parent == 0 || !ids.count(object.parent)) {
             error = "objeto '" + object.name + "' deve pertencer ao Workspace";
             return false;
         }
@@ -472,12 +514,12 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
     // A cena atual permanece intocada ate que todos os objetos tenham sido
     // criados com sucesso. A troca final e O(1) e nao pode falhar.
     Scene staged;
-    if (version == 2) {
+    if (version >= 2 && root.contains("game")) {
         if (!root.contains("game") || !game::DecodeAssets(root["game"], staged.gameAssets(), error)) {
             if (error.empty()) error = "version 2 requires game assets";
             return false;
         }
-    } else if (root.contains("game")) {
+    } else if (version == 2 || root.contains("game")) {
         error = "game assets require project version 2";
         return false;
     }
@@ -504,9 +546,27 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
     staged.lighting()->setSunIntensity(lighting.sunIntensity);
     staged.lighting()->setBrightness(lighting.brightness);
 
+    for (const auto& object:parsed) {
+        if (!IsRootServiceClass(object.instanceClass) || object.instanceClass==InstanceClass::Workspace || object.instanceClass==InstanceClass::Lighting) continue;
+        if (staged.service(object.instanceClass) || !staged.ensureService(object.instanceClass,object.id)) {
+            error="servico duplicado ou id invalido: "+object.name; return false;
+        }
+        staged.service(object.instanceClass)->setName(object.name);
+    }
+
     for (const ParsedObject& object : parsed) {
-        if (object.instanceClass == InstanceClass::Workspace ||
-            object.instanceClass == InstanceClass::Lighting) {
+        if (IsRootServiceClass(object.instanceClass)) {
+            continue;
+        }
+        if (IsScriptClass(object.instanceClass)) {
+            auto* script=staged.createScript(object.instanceClass,staged.workspace(),object.name,object.id);
+            if (!script) { error="falha ao criar Script "+object.name; return false; }
+            script->source=object.source; script->enabled=object.enabled; continue;
+        }
+        if (object.instanceClass == InstanceClass::Folder || object.instanceClass == InstanceClass::Model) {
+            if (!staged.createContainer(object.instanceClass,nullptr,object.name,object.id)) {
+                error = "falha ao criar container " + object.name; return false;
+            }
             continue;
         }
         Part* part = nullptr;
@@ -535,7 +595,27 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         part->clearDirty();
     }
 
+    for (const auto& object : parsed) {
+        if (IsRootServiceClass(object.instanceClass)) continue;
+        auto* parent = object.parent == workspaceId ? staged.workspace() : staged.find(object.parent);
+        if (!staged.reparent(staged.find(object.id),parent,error)) {
+            error = "objeto '"+object.name+"': "+error; return false;
+        }
+    }
     if (requestedNextId != 0) staged.setNextId(requestedNextId);
+    for (const auto& value:root["objects"]) if (value.contains("attributes")) {
+        const auto& attrs=value["attributes"];
+        if (version<3 || !attrs.is_object() || attrs.size()>64) { error="attributes requires v3 object, max 64"; return false; }
+        const auto cls=value["class"].get<std::string>();
+        auto* node=cls=="Workspace"?static_cast<Instance*>(staged.workspace()):cls=="Lighting"?static_cast<Instance*>(staged.lighting()):staged.find(value["id"].get<InstanceId>());
+        for (auto it=attrs.begin();it!=attrs.end();++it) {
+            bool ok=false;
+            if (it.value().is_boolean()) ok=node->setAttribute(it.key(),it.value().get<bool>());
+            else if (it.value().is_number()) ok=node->setAttribute(it.key(),it.value().get<double>());
+            else if (it.value().is_string()) ok=node->setAttribute(it.key(),it.value().get<std::string>());
+            if (!ok) { error="invalid attribute: "+it.key(); return false; }
+        }
+    }
     staged.select(nullptr);
     if (!staged.validate(error)) {
         error = "cena candidata viola invariantes: " + error;

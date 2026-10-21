@@ -325,19 +325,21 @@ int main() {
 
         // Properties Name really receives typing; editor shortcuts stay blocked.
         ImGuiWindow* properties = ImGui::FindWindowByName("Properties");
-        mouse({properties->InnerRect.Min.x + 45, properties->InnerRect.Min.y + 35});
+        // Two-column Properties: Data/Name value, after title/search/category.
+        mouse({properties->InnerRect.Min.x + properties->InnerRect.GetWidth()*.7f,
+               properties->InnerRect.Min.y + 76});
         command("mousedown 1");
         command("mouseup 1");
         CHECK(ImGui::GetIO().WantTextInput);
         key("2");
         key("4");
         CHECK(ui.tool() == ToolMode::Move);
-        CHECK(part->name().find("24") != std::string::npos);
         const auto typingPartCount = scene.parts().size();
         command("keydown ctrl keydown d");
         command("keyup d keyup ctrl");
         CHECK(scene.parts().size() == typingPartCount);
         key("Return");
+        CHECK(part->name().find("24") != std::string::npos);
 
         // Save using the editor, then load into a fresh scene with fresh Bullet.
         mouse({rect.x + 35, rect.y + 90});

@@ -51,6 +51,16 @@ public:
 
     // Copy properties in place, with a fresh ID and unique name. Selection is unchanged.
     Part* duplicatePart(const Part& source);
+    Container* createContainer(InstanceClass type, Instance* parent = nullptr,
+                              const std::string& name = "", InstanceId forcedId = 0);
+    // World transforms and object addresses remain unchanged. Depth is capped at 128.
+    bool canParent(const Instance* object, const Instance* parent) const;
+    bool reparent(Instance* object, Instance* parent, std::string& error);
+    Instance* duplicateTree(const Instance& source, Instance* parent = nullptr);
+    Script* createScript(InstanceClass type, Instance* parent = nullptr,
+                         const std::string& name = "", InstanceId forcedId = 0);
+    Instance* ensureService(InstanceClass type, InstanceId forcedId = 0);
+    Instance* service(InstanceClass type) const;
 
     // Remove a subarvore. Recusa objetos protegidos (Baseplate/servicos).
     bool remove(Instance* object);
@@ -92,6 +102,7 @@ private:
     bool adopt(std::unique_ptr<Instance> object, Instance* parent);
     void notifyRemoval(Instance* object);
     bool isService(const Instance* object) const;
+    bool accepts(InstanceClass type, const Instance* parent) const;
     bool canDeleteSubtree(const Instance* object) const;
     void removeSubtree(Instance* object);
     void rebuildParts();

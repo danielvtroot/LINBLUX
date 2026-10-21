@@ -42,7 +42,29 @@ void Scene::buildDefaultScene() {
 }
 
 bool Scene::isService(const Instance* object) const {
-    return object == workspace_ || object == lighting_;
+    return object && IsRootServiceClass(object->instanceClass());
+}
+
+Instance* Scene::service(InstanceClass type) const {
+    for (const auto& object:objects_) if (object->instanceClass()==type && !object->parent()) return object.get();
+    return nullptr;
+}
+Instance* Scene::ensureService(InstanceClass type, InstanceId forcedId) {
+    if (!IsRootServiceClass(type)) return nullptr;
+    if (auto* existing=service(type)) return existing;
+    if (forcedId && find(forcedId)) return nullptr;
+    auto node=std::make_unique<Container>(forcedId?forcedId:allocateId(),InstanceClassName(type),type);
+    node->setDeletable(false); auto* raw=node.get();
+    return adopt(std::move(node),nullptr)?raw:nullptr;
+}
+bool Scene::accepts(InstanceClass type, const Instance* parent) const {
+    if (!parent || find(parent->id())!=parent || IsRootServiceClass(type)) return false;
+    const auto p=parent->instanceClass();
+    if (IsScriptClass(type)) return p!=InstanceClass::Lighting && !IsScriptClass(p);
+    if (p!=InstanceClass::Workspace && p!=InstanceClass::Folder && p!=InstanceClass::Model &&
+        p!=InstanceClass::ServerScriptService && p!=InstanceClass::ServerStorage && p!=InstanceClass::ReplicatedStorage) return false;
+    if (type==InstanceClass::Folder || type==InstanceClass::Model) return true;
+    return workspace_->isAncestorOf(parent);
 }
 
 InstanceId Scene::allocateId() {
@@ -96,12 +118,16 @@ bool Scene::validate(std::string& error) const {
             error = "indice de id nao aponta para o objeto " + std::to_string(object->id());
             return false;
         }
-        if (object->parent() != nullptr && object->parent() != workspace_ &&
-            object->parent() != lighting_) {
+        if (object->name().empty() || object->name().size()>128 ||
+            (IsScriptClass(object->instanceClass()) && static_cast<const Script&>(*object).source.size()>262144)) {
+            error="nome ou Script excede limite"; return false;
+        }
+        if (isService(object.get()) && object->parent()) { error="servico fora da raiz"; return false; }
+        if (!isService(object.get()) && !canParent(object.get(), object->parent())) {
             error = "objeto com pai invalido: " + std::to_string(object->id());
             return false;
         }
-        if (object->isPart() && object->parent() != workspace_) {
+        if (object->isPart() && !workspace_->isAncestorOf(object.get())) {
             error = "Part fora do Workspace: " + std::to_string(object->id());
             return false;
         }
@@ -111,10 +137,22 @@ bool Scene::validate(std::string& error) const {
         error = "servicos ausentes do indice de ids";
         return false;
     }
-    if (workspace_->children().size() != parts_.size()) {
-        error = "Workspace e lista de Parts divergem";
-        return false;
+    std::size_t actualParts = 0;
+    for (const auto& object : objects_) {
+        if (object->isPart()) ++actualParts;
+        std::set<const Instance*> uniqueChildren;
+        for (const auto* child : object->children()) {
+            if (!child || find(child->id()) != child || child->parent() != object.get() ||
+                !uniqueChildren.insert(child).second) {
+                error = "vinculo de filho inconsistente"; return false;
+            }
+        }
+        if (object->parent() && std::count(object->parent()->children().begin(),
+            object->parent()->children().end(), object.get()) != 1) {
+            error = "objeto ausente dos filhos de seu Parent"; return false;
+        }
     }
+    if (actualParts != parts_.size()) { error = "indice de Parts inconsistente"; return false; }
     if (!lighting_->children().empty()) {
         error = "Lighting nao pode conter Parts";
         return false;
@@ -132,7 +170,7 @@ bool Scene::validate(std::string& error) const {
         }
         const auto indexed = byId_.find(part->id());
         if (indexed == byId_.end() || indexed->second != part ||
-            part->parent() != workspace_) {
+            !workspace_->isAncestorOf(part)) {
             error = "Part orfa ou com pai invalido: " + std::to_string(part->id());
             return false;
         }
@@ -175,20 +213,15 @@ bool Scene::adopt(std::unique_ptr<Instance> object, Instance* parent) {
         return false;
     }
     if (parent == nullptr) {
-        if (object->instanceClass() != InstanceClass::Workspace &&
-            object->instanceClass() != InstanceClass::Lighting) {
+        if (!IsRootServiceClass(object->instanceClass()) || service(object->instanceClass())) {
             return false;
         }
         if ((workspace_ != nullptr && object->instanceClass() == InstanceClass::Workspace) ||
             (lighting_ != nullptr && object->instanceClass() == InstanceClass::Lighting)) {
             return false;
         }
-    } else if (parent != workspace_ && parent != lighting_) {
-        return false;
-    } else if (parent == lighting_ && object->isPart()) {
-        return false;
-    } else if (parent == workspace_ && !object->isPart()) {
-        return false;
+    } else {
+        if (!accepts(object->instanceClass(),parent)) return false;
     }
 
     Instance* raw = object.get();
@@ -288,6 +321,80 @@ Part* Scene::duplicatePart(const Part& source) {
         copy->setAnchored(source.anchored());
         copy->setCanCollide(source.canCollide());
         copy->setDeletable(source.deletable());
+        std::string ignored;
+        reparent(copy, source.parent(), ignored);
+    }
+    return copy;
+}
+
+Container* Scene::createContainer(InstanceClass type, Instance* parent,
+                                  const std::string& name, InstanceId forcedId) {
+    if (type != InstanceClass::Folder && type != InstanceClass::Model) return nullptr;
+    if (forcedId && find(forcedId)) return nullptr;
+    if (!parent) parent = workspace_;
+    const std::string requested = name.empty() ? InstanceClassName(type) : name;
+    auto node = std::make_unique<Container>(forcedId ? forcedId : allocateId(),
+        forcedId ? requested : makeUniqueName(requested), type);
+    auto* raw = node.get();
+    if (!adopt(std::move(node), parent)) return nullptr;
+    std::string error;
+    if (!canParent(raw,parent)) { remove(raw); return nullptr; }
+    return raw;
+}
+
+bool Scene::canParent(const Instance* object, const Instance* parent) const {
+    if (!object || !parent || find(object->id()) != object || find(parent->id()) != parent ||
+        isService(object) || object == parent || object->isAncestorOf(parent)) return false;
+    if (!accepts(object->instanceClass(),parent)) return false;
+    unsigned depth = 0;
+    for (auto* p = parent; p; p = p->parent()) if (++depth > 128) return false;
+    // Account for descendants too, so reparent cannot bypass the depth budget.
+    std::function<bool(const Instance*,unsigned)> fits = [&](const Instance* n, unsigned d) {
+        if (d > 128) return false;
+        for (auto* c : n->children()) if (!fits(c,d+1)) return false;
+        return true;
+    };
+    if (!fits(object,depth)) return false;
+    // A storage reparent must not strand nested Parts outside Workspace.
+    if (!workspace_->isAncestorOf(parent)) {
+        for (const auto* part:parts_) if (object->isAncestorOf(part)) return false;
+    }
+    return true;
+}
+
+Script* Scene::createScript(InstanceClass type,Instance* parent,const std::string& name,InstanceId forcedId) {
+    if (!IsScriptClass(type) || (forcedId && find(forcedId))) return nullptr;
+    if (!parent) parent=ensureService(InstanceClass::ServerScriptService);
+    auto node=std::make_unique<Script>(forcedId?forcedId:allocateId(),
+        forcedId?name:makeUniqueName(name.empty()?InstanceClassName(type):name),type);
+    auto* raw=node.get(); return adopt(std::move(node),parent)?raw:nullptr;
+}
+
+bool Scene::reparent(Instance* object, Instance* parent, std::string& error) {
+    error.clear();
+    if (!canParent(object,parent)) { error = "Parent invalido: ciclo, servico protegido, classe ou profundidade"; return false; }
+    if (object->parent() == parent) return true;
+    parent->attachChild(object);
+    return true;
+}
+
+Instance* Scene::duplicateTree(const Instance& source, Instance* parent) {
+    if (find(source.id()) != &source || isService(&source)) return nullptr;
+    if (!parent) parent = source.parent();
+    if (source.isAncestorOf(parent)) return nullptr;
+    Instance* copy = source.isPart() ? static_cast<Instance*>(duplicatePart(static_cast<const Part&>(source))) :
+        IsScriptClass(source.instanceClass()) ? static_cast<Instance*>(createScript(source.instanceClass(),parent,source.name())) :
+        createContainer(source.instanceClass(),parent,source.name());
+    if (!copy) return nullptr;
+    for (const auto& pair:source.attributes()) copy->setAttribute(pair.first,pair.second);
+    if (IsScriptClass(source.instanceClass())) {
+        auto& script=static_cast<const Script&>(source); auto& cloned=static_cast<Script&>(*copy);
+        cloned.source=script.source; cloned.enabled=script.enabled;
+    }
+    std::string error;
+    if (!reparent(copy,parent,error)) { removeSubtree(copy); return nullptr; }
+    for (auto* child : source.children()) {
+        if (!duplicateTree(*child,copy)) { removeSubtree(copy); return nullptr; }
     }
     return copy;
 }
@@ -359,6 +466,9 @@ void Scene::clearObjects() {
             removeSubtree(child);
         }
     }
+    std::vector<Instance*> extra;
+    for (const auto& object:objects_) if (!object->parent() && object.get()!=workspace_ && object.get()!=lighting_) extra.push_back(object.get());
+    for (auto* root:extra) removeSubtree(root);
     selection_ = nullptr;
     rebuildParts();
 }

@@ -15,6 +15,7 @@ struct EditorInput {
     bool escape = false, shift = false, modified = false;
     bool save = false, open = false, remove = false, focus = false, duplicate = false;
     bool play = false, stop = false, jump = false;
+    bool rename = false, copy = false, paste = false;
     int tool = -1;
 };
 

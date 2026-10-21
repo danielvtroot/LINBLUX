@@ -1,6 +1,7 @@
 #include "objects/Instance.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace loblox {
@@ -17,11 +18,24 @@ const char* InstanceClassName(InstanceClass instanceClass) {
             return "Baseplate";
         case InstanceClass::SpawnLocation:
             return "SpawnLocation";
+        case InstanceClass::Folder: return "Folder";
+        case InstanceClass::Model: return "Model";
+        case InstanceClass::Script: return "Script";
+        case InstanceClass::LocalScript: return "LocalScript";
+        case InstanceClass::ModuleScript: return "ModuleScript";
+        case InstanceClass::ServerScriptService: return "ServerScriptService";
+        case InstanceClass::ServerStorage: return "ServerStorage";
+        case InstanceClass::ReplicatedStorage: return "ReplicatedStorage";
     }
     return "Instance";
 }
 
 bool InstanceClassFromName(const std::string& name, InstanceClass& out) {
+    for (auto type : {InstanceClass::Script,InstanceClass::LocalScript,InstanceClass::ModuleScript,
+        InstanceClass::ServerScriptService,InstanceClass::ServerStorage,InstanceClass::ReplicatedStorage})
+        if (name == InstanceClassName(type)) { out=type; return true; }
+    if (name == "Folder") { out = InstanceClass::Folder; return true; }
+    if (name == "Model") { out = InstanceClass::Model; return true; }
     if (name == "Workspace") {
         out = InstanceClass::Workspace;
         return true;
@@ -52,10 +66,24 @@ Instance::Instance(InstanceId id, std::string name)
     }
 }
 
+bool IsScriptClass(InstanceClass type) {
+    return type==InstanceClass::Script || type==InstanceClass::LocalScript || type==InstanceClass::ModuleScript;
+}
+bool IsRootServiceClass(InstanceClass type) {
+    return type==InstanceClass::Workspace || type==InstanceClass::Lighting ||
+        type==InstanceClass::ServerScriptService || type==InstanceClass::ServerStorage || type==InstanceClass::ReplicatedStorage;
+}
+
 void Instance::setName(const std::string& name) {
-    if (!name.empty()) {
+    if (!name.empty() && name.size()<=128) {
         name_ = name;
     }
+}
+bool Instance::setAttribute(const std::string& name, Attribute value) {
+    if (name.empty() || name.size()>64 || (!attributes_.count(name) && attributes_.size()>=64)) return false;
+    if (const auto* n=std::get_if<double>(&value); n && !std::isfinite(*n)) return false;
+    if (const auto* s=std::get_if<std::string>(&value); s && s->size()>4096) return false;
+    attributes_[name]=std::move(value); return true;
 }
 
 bool Instance::isAncestorOf(const Instance* other) const {

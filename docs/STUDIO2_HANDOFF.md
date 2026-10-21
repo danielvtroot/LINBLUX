@@ -19,6 +19,28 @@ RGB magenta em pixels transparentes: respeitar alpha, não usar chroma key.
 
 Comandos: `cmake --build build -j2`; `ctest --test-dir build --output-on-failure -j2`.
 O build usa TMPDIR=build/compiler-tmp neste ambiente (tmpfs pequeno).
-Próximo: testes de hierarquia/round-trip/Bullet e implementação de Folder/Model.
-Ainda não implementadas nesta missão: fases A–I; não confundir baseline com
-aceitação do Studio 2. Ver também ENGINEERING_HANDOFF.md (R6 anterior).
+Implementado: Folder/Model organizacionais, Parent verdadeiro com ciclos/depth
+budget, clone de subárvore, Delete seguro, drag/drop real, busca nome/classe,
+F2, menus de inserção, reveal de ancestrais e JSON v3 transacional. Renderer/
+Bullet usam o mesmo índice de Parts aninhadas. JSON v1/v2 continuam aceitos.
+Properties de Part/Folder/Model tem busca, categorias, duas colunas ajustáveis,
+Parent, valores numéricos finitos e Enter/Esc para campos de texto/transform.
+Novo layout reserva mais largura à direita, respeita layout salvo e oferece
+View → Reset Layout. Rig/painéis de animação anteriores preservados.
+
+Testes: 1.045 checks Studio headless; 1.000 nós create/validate/round-trip em
+18,9 ms numa amostra Release, não uma medição do notebook. Regressões antigas
+passaram; teste GUI novo cobre botões Folder, F2, drag/drop e save/reload.
+A fixture usa press/release entre frames, não xdotool key instantâneo.
+
+Infraestrutura de Script/LocalScript/ModuleScript e containers de scripts
+persistidos está preparada. A VM real e Script Editor estão em implementação;
+isso ainda NÃO comprova execução Lua. Instalada liblua5.4-dev (biblioteca
+runtime 5.4 já existia). Lua é dependência pequena, não Luau/engine Roblox.
+
+Limites atuais: Ctrl+C/V referencia a origem viva, não snapshot independente;
+sem seleção múltipla nem undo/redo ainda. Storage guarda scripts/módulos e
+folders, não Parts físicas fora de Workspace. Rig continua asset de autoria,
+não uma segunda hierarquia de Instances. Visuais/imagens/skybox/vida/Shift Lock
+da missão nova ainda pendentes. Próximo: LuaRuntime + bindings + scheduler,
+Script Editor/Output, teste de Play, erros, loops, módulos e Stop.

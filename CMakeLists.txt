@@ -80,6 +80,7 @@ add_library(loblox_editor STATIC
   src/rendering/SceneRenderer.cpp
   src/editor/EditorUI.cpp
   src/editor/GamePanels.cpp
+  src/editor/StudioPanels.cpp
 )
 target_link_libraries(loblox_editor PUBLIC loblox_core loblox_imgui OpenGL::GL)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -92,6 +93,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 enable_testing()
+add_executable(loblox_studio_tests tests/studio_main.cpp)
+target_link_libraries(loblox_studio_tests PRIVATE loblox_core)
+add_test(NAME loblox_studio COMMAND loblox_studio_tests)
 add_executable(loblox_game_tests tests/game_main.cpp)
 target_link_libraries(loblox_game_tests PRIVATE loblox_core)
 add_test(NAME loblox_game COMMAND loblox_game_tests)
@@ -119,6 +123,10 @@ if(XVFB_RUN_EXECUTABLE)
   find_program(XDOTOOL_EXECUTABLE xdotool)
   find_package(X11 QUIET)
   if(XDOTOOL_EXECUTABLE AND X11_FOUND)
+    add_executable(loblox_studio_ui_tests tests/studio_ui_main.cpp tests/x11_focus.cpp)
+    target_link_libraries(loblox_studio_ui_tests PRIVATE loblox_editor X11::X11)
+    add_test(NAME loblox_studio_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset" $<TARGET_FILE:loblox_studio_ui_tests>)
+    set_tests_properties(loblox_studio_ui PROPERTIES TIMEOUT 180 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
     add_executable(loblox_game_ui_tests tests/game_ui_main.cpp tests/x11_focus.cpp)
     target_link_libraries(loblox_game_ui_tests PRIVATE loblox_editor X11::X11)
     add_test(NAME loblox_game_ui
