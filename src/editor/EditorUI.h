@@ -130,6 +130,7 @@ private:
     bool showRigEditor_ = false, showAnimationEditor_ = false, showGameSettings_ = false;
     enum class RigContext { Edit, Pose, Animation };
     RigContext rigContext_ = RigContext::Edit;
+    ToolMode rigToolMode_ = ToolMode::Rotate;
     std::string selectedRig_;
     int selectedRigBody_ = -1, selectedJoint_ = 0;
     bool showJointPivots_ = true;

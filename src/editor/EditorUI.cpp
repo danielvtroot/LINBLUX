@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cinttypes>
 #include <filesystem>
 #include <utility>
 
@@ -1381,17 +1382,6 @@ void EditorUI::drawViewport() {
     EndTextureMode();
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    char overlay[192];
-    std::snprintf(overlay, sizeof(overlay), "%s%s | %.0f FPS | WASD move | RMB look | Q/E vertical",
-                  ToolModeName(tool_), viewportFocused_ ? " [focus]" : "", ImGui::GetIO().Framerate);
-    const ImVec2 overlaySize = ImGui::CalcTextSize(overlay);
-    const ImVec2 overlayMin(imagePosition.x + 10.0f, imagePosition.y + 9.0f);
-    drawList->AddRectFilled(overlayMin,
-                            ImVec2(overlayMin.x + overlaySize.x + 16.0f,
-                                   overlayMin.y + overlaySize.y + 10.0f),
-                            IM_COL32(24, 29, 35, 220), 5.0f);
-    drawList->AddText(ImVec2(overlayMin.x + 8.0f, overlayMin.y + 5.0f),
-                      IM_COL32(230, 236, 242, 245), overlay);
 
     if (selectedPart != nullptr) {
         char selectionLabel[128];
@@ -1490,7 +1480,9 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
         }
         ImGui::EndDragDropTarget();
     }
-    if (ImGui::BeginPopupContextItem("##explorer_context")) {
+    char explorerPopupId[64];
+        std::snprintf(explorerPopupId, sizeof(explorerPopupId), "##explorer_context_%" PRIu64, instance->id());
+        if (ImGui::BeginPopupContextItem(explorerPopupId)) {
         ImGui::TextDisabled("%s", instance->className());
         ImGui::Separator();
         if (IsScriptClass(instance->instanceClass()) && ImGui::MenuItem("Open Script")) openScript(instance->id());

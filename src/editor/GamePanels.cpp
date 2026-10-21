@@ -437,6 +437,16 @@ void EditorUI::drawRigEditor() {
     if (ImGui::Button("Reset pose")) { cancelRigGizmo(); previewPose_ = {}; previewPlaying_ = false; }
     ImGui::SameLine();
     if (ImGui::Button("Save project")) saveCurrentProject();
+
+    ImGui::Separator();
+    const char* toolNames[] = {"Rotate", "Move", "Scale"};
+    int toolMode = static_cast<int>(rigToolMode_);
+    if (ImGui::Combo("Gizmo Tool", &toolMode, toolNames, IM_ARRAYSIZE(toolNames))) {
+        rigToolMode_ = static_cast<ToolMode>(toolMode);
+        cancelRigGizmo();
+        setTool(rigToolMode_, "rig_editor");
+    }
+    if (ImGui::Button("Reset pose")) { cancelRigGizmo(); previewPose_ = {}; previewPlaying_ = false; }
     if (ImGui::CollapsingHeader("Root / HumanoidRootPart", ImGuiTreeNodeFlags_DefaultOpen)) EditTransform("root", rig->root);
     if (ImGui::CollapsingHeader("Body parts", ImGuiTreeNodeFlags_DefaultOpen)) {
         for (int i = 0; i < game::kBodyCount; ++i) {
