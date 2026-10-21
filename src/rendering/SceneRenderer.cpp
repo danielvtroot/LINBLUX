@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <filesystem>
-#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -12,19 +10,16 @@
 #include "raymath.h"
 #include "rlgl.h"
 
-#include "game/ImageAssets.h"
 #include "objects/Baseplate.h"
 #include "objects/Lighting.h"
 #include "objects/SpawnLocation.h"
 #include "scene/Scene.h"
+#include "game/ImageAssets.h"
 #include "rendering/EditorCamera.h"
 
 namespace loblox {
 
 namespace {
-
-// Forward declarations for sky dome functions
-void BuildEquirectangularTexture(const struct SkyImages& sky);
 
 constexpr int kStudSegments = 8;
 constexpr float kStudSpacing = 8.0f;
@@ -80,428 +75,365 @@ Color ApplyFog(Color color, Vector3 worldPosition) {
                  blend(color.b, gFog.color.b), color.a};
 }
 
-// ---------- Atmospheric Skydome: hemisfério com texturas cúbicas projetadas --------
-// Sem shader: malha hemisférica com UVs derivadas da projeção equirretangular das
-// 4 faces do skybox (Frente, Direita, Esquerda, Cima). A face Trás é interpolada
-// das laterais. A metade inferior usa gradiente de vértice (horizonte -> void).
-// O céu acompanha a câmera, sem paralaxe, sem costuras visíveis de cubo.
-// Para modo Classic (cubo), mantém todas 6 faces (Back/Down opcionais).
-struct SkyImages {
-    Texture2D front{}, right{}, left{}, up{};
-    Texture2D back{}, down{};
-    bool tried = false;
-    bool any = false;
+// ---------- Procedural Sky Shader System ----------
+// Fullscreen quad + GLSL shader para céu procedural contínuo e sem costuras.
+// Não usa texturas externas; tudo é gerado no shader (gradiente, sol, nuvens, atmosfera).
+struct ProceduralSky {
+    Shader shader{};
+    int locMvp = -1;
+    int locCameraPos = -1;
+    int locSunDir = -1;
+    int locSunColor = -1;
+    int locSunSize = -1;
+    int locSunIntensity = -1;
+    int locZenithColor = -1;
+    int locHorizonColor = -1;
+    int locGroundColor = -1;
+    int locAtmosphereStrength = -1;
+    int locCloudDensity = -1;
+    int locCloudScale = -1;
+    int locCloudSpeed = -1;
+    int locCloudSoftness = -1;
+    int locSkyRotation = -1;
+    int locTime = -1;
+    int locFogColor = -1;
+    int locFogDensity = -1;
+    int locViewMatrix = -1;
+    int locProjMatrix = -1;
+    Mesh quadMesh{};
+    bool initialized = false;
+    float timeAccumulator = 0.0f;
 };
 
-struct SkyDomeMesh {
-    Mesh mesh{};
-    Texture2D equirectangularTex{};
-    int vertexCount = 0;
-    bool valid = false;
-    bool texReady = false;
-    int rings = 16;      // latitude (0 = topo, rings = horizonte)
-    int slices = 32;     // longitude
-};
+ProceduralSky& SkyData() { static ProceduralSky sky; return sky; }
 
-SkyImages& SkyData() { static SkyImages sky; return sky; }
-SkyDomeMesh& DomeData() { static SkyDomeMesh dome; return dome; }
-int rendererCount = 0;
+// Shader source embedded as strings
+const char* skyVertexShader = R"(
+#version 330 core
 
-SkyImages& SkyLoader() {
-    auto& sky = SkyData();
-    if (!sky.tried) {
-        sky.tried = true;
-        const char* names[] = {
-            "SkyboxFt_Frente_1024x1024.png",   // front (+Z)
-            "SkyboxRt_Direita_1024x1024.png",  // right (+X)
-            "SkyboxLf_Esquerda_1024x1024.png", // left (-X)
-            "SkyboxUp_Cima_1024x1024.png",     // top (+Y)
-            "SkyboxBk_Back_1024x1024.png",     // back (-Z) opcional
-            "SkyboxDn_Baixo_1024x1024.png",    // down (-Y) opcional
-        };
-        std::vector<std::string> dirs = {"", "../", "../../", "../../../"};
-        char exePath[4096] = {};
-        const ssize_t exeLen = ::readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
-        if (exeLen > 0) {
-            exePath[exeLen] = 0;
-            std::filesystem::path dir = std::filesystem::path(exePath).parent_path();
-            for (int i = 0; i < 3 && !dir.empty(); ++i, dir = dir.parent_path())
-                dirs.push_back(dir.string() + "/");
-        }
-        const auto isSky = [](const Texture2D& t) { return t.id != 0; };
-        for (int face = 0; face < 6; ++face) {
-            for (const std::string& dirName : dirs) {
-                const std::string path = dirName + "sky1/" + names[face];
-                if (FileExists(path.c_str())) {
-                    Texture2D tex = game::AssetTexture(path);
-                    if (tex.id != 0) {
-                        SetTextureWrap(tex, TEXTURE_WRAP_CLAMP);
-                        Texture2D* slots[6] = {&sky.front, &sky.right, &sky.left, &sky.up, &sky.back, &sky.down};
-                        *slots[face] = tex;
-                        break;
-                    }
-                }
-            }
-        }
-        sky.any = isSky(sky.front) || isSky(sky.right) || isSky(sky.left) || isSky(sky.up);
-    }
-    // Build equirectangular texture from cube faces for atmospheric mode
-    if (sky.any && !DomeData().texReady) {
-        BuildEquirectangularTexture(sky);
-    }
-    return sky;
+in vec3 vertexPosition;
+in vec2 vertexTexCoord;
+
+out vec2 fragTexCoord;
+out vec3 worldDir;
+
+uniform mat4 mvp;
+
+void main() {
+    fragTexCoord = vertexTexCoord;
+    float u = vertexTexCoord.x * 2.0 - 1.0;
+    float v = vertexTexCoord.y * 2.0 - 1.0;
+    float theta = u * 3.14159265359;
+    float phi = v * 1.57079632679;
+    worldDir = vec3(cos(phi) * sin(theta), sin(phi), cos(phi) * cos(theta));
+    gl_Position = mvp * vec4(vertexPosition, 1.0);
+}
+)";
+
+const char* skyFragmentShader = R"(
+#version 330 core
+
+in vec2 fragTexCoord;
+in vec3 worldDir;
+
+out vec4 fragColor;
+
+uniform vec3 cameraPos;
+uniform vec3 sunDir;
+uniform vec3 sunColor;
+uniform float sunSize;
+uniform float sunIntensity;
+
+uniform vec3 zenithColor;
+uniform vec3 horizonColor;
+uniform vec3 groundColor;
+uniform float atmosphereStrength;
+
+uniform float cloudDensity;
+uniform float cloudScale;
+uniform float cloudSpeed;
+uniform float cloudSoftness;
+uniform float skyRotation;
+uniform float time;
+
+uniform vec3 fogColor;
+uniform float fogDensity;
+
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
 
-// Converte as 4 faces do cubo (Frente, Direita, Esquerda, Topo) para uma
-// textura equirretangular (panorama 360x180 graus) que pode ser mapeada
-// suavemente no skydome hemisférico.
-// Otimizado: resolução menor + amostragem direta das imagens carregadas.
-void BuildEquirectangularTexture(const SkyImages& sky) {
-    auto& dome = DomeData();
-    if (dome.texReady) return;
-
-    // Resolução reduzida para performance (ainda boa qualidade no dome)
-    const int eqWidth = 1024;
-    const int eqHeight = 512;
-
-    // Carrega as imagens das faces uma vez (CPU) para amostragem rápida
-    Image frontImg = sky.front.id ? LoadImageFromTexture(sky.front) : Image{};
-    Image rightImg = sky.right.id ? LoadImageFromTexture(sky.right) : Image{};
-    Image leftImg = sky.left.id ? LoadImageFromTexture(sky.left) : Image{};
-    Image upImg = sky.up.id ? LoadImageFromTexture(sky.up) : Image{};
-
-    auto sampleFaceImg = [&](const Image& img, float u, float v) -> Color {
-        if (img.data == nullptr) return BLANK;
-        const int texX = static_cast<int>(std::clamp(u, 0.0f, 0.999f) * (img.width - 1));
-        const int texY = static_cast<int>(std::clamp(v, 0.0f, 0.999f) * (img.height - 1));
-        return GetImageColor(img, texX, texY);
-    };
-
-    Image eqImage = GenImageColor(eqWidth, eqHeight, BLANK);
-
-    for (int y = 0; y < eqHeight; ++y) {
-        const float v = static_cast<float>(y) / eqHeight;
-        const float phi = v * PI;
-        const float sinPhi = std::sin(phi);
-        const float cosPhi = std::cos(phi);
-
-        for (int x = 0; x < eqWidth; ++x) {
-            const float u = static_cast<float>(x) / eqWidth;
-            const float theta = u * 2.0f * PI - PI;
-
-            const float dirX = sinPhi * std::cos(theta);
-            const float dirY = cosPhi;
-            const float dirZ = sinPhi * std::sin(theta);
-
-            Vector3 dir = {dirX, dirY, dirZ};
-            Color color = BLANK;
-
-            const float absX = std::fabs(dir.x);
-            const float absY = std::fabs(dir.y);
-            const float absZ = std::fabs(dir.z);
-
-            if (absZ >= absX && absZ >= absY) {
-                if (dir.z > 0 && frontImg.data) {
-                    const float uu = 0.5f - dir.x * 0.5f;
-                    const float vv = 0.5f - dir.y * 0.5f;
-                    color = sampleFaceImg(frontImg, uu, vv);
-                } else if (dir.z < 0) {
-                    // Back face: interpolate from left/right
-                    if (leftImg.data && rightImg.data) {
-                        const float t = (dir.x + 1.0f) * 0.5f;
-                        if (t < 0.5f && leftImg.data) {
-                            const float uu = 0.5f + dir.z * 0.5f;
-                            const float vv = 0.5f - dir.y * 0.5f;
-                            color = sampleFaceImg(leftImg, uu, vv);
-                        } else if (rightImg.data) {
-                            const float uu = 0.5f - dir.z * 0.5f;
-                            const float vv = 0.5f - dir.y * 0.5f;
-                            color = sampleFaceImg(rightImg, uu, vv);
-                        }
-                    }
-                }
-            } else if (absX >= absY) {
-                if (dir.x > 0 && rightImg.data) {
-                    const float uu = 0.5f + dir.z * 0.5f;
-                    const float vv = 0.5f - dir.y * 0.5f;
-                    color = sampleFaceImg(rightImg, uu, vv);
-                } else if (dir.x < 0 && leftImg.data) {
-                    const float uu = 0.5f - dir.z * 0.5f;
-                    const float vv = 0.5f - dir.y * 0.5f;
-                    color = sampleFaceImg(leftImg, uu, vv);
-                }
-            } else if (dir.y > 0 && upImg.data) {
-                const float uu = 0.5f + dir.x * 0.5f;
-                const float vv = 0.5f + dir.z * 0.5f;
-                color = sampleFaceImg(upImg, uu, vv);
-            }
-
-            if (color.a > 0) {
-                ImageDrawPixel(&eqImage, x, y, color);
-            }
-        }
-    }
-
-    // Cleanup temporary images
-    if (frontImg.data) UnloadImage(frontImg);
-    if (rightImg.data) UnloadImage(rightImg);
-    if (leftImg.data) UnloadImage(leftImg);
-    if (upImg.data) UnloadImage(upImg);
-
-    // Cria textura da imagem equirretangular
-    dome.equirectangularTex = LoadTextureFromImage(eqImage);
-    SetTextureWrap(dome.equirectangularTex, TEXTURE_WRAP_CLAMP);
-    SetTextureFilter(dome.equirectangularTex, TEXTURE_FILTER_BILINEAR);
-    UnloadImage(eqImage);
-
-    dome.texReady = true;
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-// SampleEquirectCubeFace não é mais necessária (lógica inline acima)
-
-void BuildSkyDome(int rings, int slices) {
-    auto& dome = DomeData();
-    if (dome.valid && dome.rings == rings && dome.slices == slices) return;
-    if (dome.valid) {
-        UnloadMesh(dome.mesh);
-        dome.mesh = Mesh{};
-        dome.valid = false;
+float fbm(vec2 p, int octaves) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    float frequency = 1.0;
+    for (int i = 0; i < octaves; i++) {
+        value += amplitude * noise(p * frequency);
+        amplitude *= 0.5;
+        frequency *= 2.0;
     }
-    dome.rings = rings;
-    dome.slices = slices;
-    dome.vertexCount = (rings + 1) * (slices + 1);
-    const int triangleCount = rings * slices * 2;
-
-    std::vector<float> vertices(dome.vertexCount * 3);
-    std::vector<float> texcoords(dome.vertexCount * 2);
-    std::vector<unsigned char> colors(dome.vertexCount * 4);
-    std::vector<unsigned short> indices(triangleCount * 3);
-
-    int vIdx = 0;
-    for (int ring = 0; ring <= rings; ++ring) {
-        const float v = static_cast<float>(ring) / rings;  // 0 = topo, 1 = horizonte
-        const float phi = v * (PI / 2.0f);                 // 0 a PI/2
-        const float y = std::cos(phi);
-        const float r = std::sin(phi);
-
-        for (int slice = 0; slice <= slices; ++slice) {
-            const float u = static_cast<float>(slice) / slices;  // 0 a 1
-            const float theta = u * 2.0f * PI - PI/4;  // -PI/4 para alinhar +Z como "frente"
-            const float x = r * std::cos(theta);
-            const float z = r * std::sin(theta);
-
-            // Posição na esfera unitária (raio 1, escalado no draw)
-            vertices[vIdx * 3 + 0] = x;
-            vertices[vIdx * 3 + 1] = y;
-            vertices[vIdx * 3 + 2] = z;
-
-            // UV: mapeamento esférico para amostragem das 4 faces do cubo
-            // u = longitude normalizada, v = latitude normalizada (0=topo, 1=horizonte)
-            texcoords[vIdx * 2 + 0] = u;
-            texcoords[vIdx * 2 + 1] = v;
-
-            // Cor base branca (multiplicada pela textura); vértices do horizonte (v=1)
-            // recebem alpha=0 para transição suave para o gradiente inferior
-            if (ring == rings) {
-                colors[vIdx * 4 + 0] = 255;
-                colors[vIdx * 4 + 1] = 255;
-                colors[vIdx * 4 + 2] = 255;
-                colors[vIdx * 4 + 3] = 0;  // horizonte = transparente
-            } else {
-                colors[vIdx * 4 + 0] = 255;
-                colors[vIdx * 4 + 1] = 255;
-                colors[vIdx * 4 + 2] = 255;
-                colors[vIdx * 4 + 3] = 255;
-            }
-            ++vIdx;
-        }
-    }
-
-    int iIdx = 0;
-    for (int ring = 0; ring < rings; ++ring) {
-        for (int slice = 0; slice < slices; ++slice) {
-            const int a = ring * (slices + 1) + slice;
-            const int b = ring * (slices + 1) + slice + 1;
-            const int c = (ring + 1) * (slices + 1) + slice;
-            const int d = (ring + 1) * (slices + 1) + slice + 1;
-            indices[iIdx++] = a;
-            indices[iIdx++] = c;
-            indices[iIdx++] = b;
-            indices[iIdx++] = b;
-            indices[iIdx++] = c;
-            indices[iIdx++] = d;
-        }
-    }
-
-    dome.mesh.vertexCount = dome.vertexCount;
-    dome.mesh.triangleCount = triangleCount;
-    dome.mesh.vertices = static_cast<float*>(MemAlloc(sizeof(float) * 3 * vertices.size()));
-    dome.mesh.texcoords = static_cast<float*>(MemAlloc(sizeof(float) * 2 * texcoords.size()));
-    dome.mesh.colors = static_cast<unsigned char*>(MemAlloc(sizeof(unsigned char) * 4 * colors.size()));
-    dome.mesh.indices = static_cast<unsigned short*>(MemAlloc(sizeof(unsigned short) * indices.size()));
-
-    for (size_t i = 0; i < vertices.size(); ++i) dome.mesh.vertices[i] = vertices[i];
-    for (size_t i = 0; i < texcoords.size(); ++i) dome.mesh.texcoords[i] = texcoords[i];
-    for (size_t i = 0; i < colors.size(); ++i) dome.mesh.colors[i] = colors[i];
-    for (size_t i = 0; i < indices.size(); ++i) dome.mesh.indices[i] = indices[i];
-
-    UploadMesh(&dome.mesh, false);
-    dome.valid = true;
+    return value;
 }
 
-// Versão otimizada: sem shader, usamos vertex colors para gradiente atmosférico.
-// As texturas do skybox (nuvens) ficam disponíveis no modo Classic.
-// Aqui criamos um gradiente suave: topo=skyColor, horizonte=horizonColor, abaixo=transparente.
-void BakeSkyColorsToMesh(Color skyColor, Color horizonColor, float atmoStrength) {
-    auto& dome = DomeData();
-    if (!dome.valid) return;
-
-    std::vector<unsigned char> colors(dome.vertexCount * 4);
-
-    for (int ring = 0; ring <= dome.rings; ++ring) {
-        const float v = static_cast<float>(ring) / dome.rings;  // 0 = topo, 1 = horizonte
-        const float phi = v * (PI / 2.0f);
-        const float y = std::cos(phi);  // 1 no topo, 0 no horizonte
-
-        for (int slice = 0; slice <= dome.slices; ++slice) {
-            const int idx = (ring * (dome.slices + 1) + slice) * 4;
-
-            if (ring == dome.rings) {
-                // Horizonte: transição para transparente (void)
-                colors[idx + 0] = horizonColor.r;
-                colors[idx + 1] = horizonColor.g;
-                colors[idx + 2] = horizonColor.b;
-                colors[idx + 3] = 0;
-            } else {
-                // Gradiente atmosférico: interpola entre skyColor (topo) e horizonColor (horizonte)
-                // atmoStrength controla a intensidade da transição
-                const float t = std::pow(1.0f - y, 0.7f);  // curva suave
-                const float blend = atmoStrength * t;
-                colors[idx + 0] = static_cast<unsigned char>(skyColor.r * (1.0f - blend) + horizonColor.r * blend);
-                colors[idx + 1] = static_cast<unsigned char>(skyColor.g * (1.0f - blend) + horizonColor.g * blend);
-                colors[idx + 2] = static_cast<unsigned char>(skyColor.b * (1.0f - blend) + horizonColor.b * blend);
-                colors[idx + 3] = 255;
-            }
-        }
-    }
-
-    // Atualiza buffer de cores no GPU
-    rlUpdateVertexBuffer(dome.mesh.vboId[3], colors.data(), static_cast<int>(colors.size()), 0);
-}
-
-// Desenha o skydome atmosférico: hemisfério superior com gradiente de vértice
-void DrawSkydome(Vector3 cameraPosition, Color skyColor, Color horizonColor,
-                 float atmoStrength, float skyRotationDeg) {
-    const SkyImages& sky = SkyLoader();
-    if (!sky.any) return;
-
-    BuildSkyDome(16, 32);
-    auto& dome = DomeData();
-    if (!dome.valid) return;
-
-    // Atualiza cores dos vértices quando parâmetros mudam
-    static float lastRotation = -1;
-    static Color lastSkyColor, lastHorizonColor;
-    static float lastAtmo = -1;
-    if (lastRotation != skyRotationDeg || lastSkyColor.r != skyColor.r || lastSkyColor.g != skyColor.g ||
-        lastSkyColor.b != skyColor.b || lastHorizonColor.r != horizonColor.r ||
-        lastHorizonColor.g != horizonColor.g || lastHorizonColor.b != horizonColor.b ||
-        lastAtmo != atmoStrength) {
-        BakeSkyColorsToMesh(skyColor, horizonColor, atmoStrength);
-        lastRotation = skyRotationDeg;
-        lastSkyColor = skyColor;
-        lastHorizonColor = horizonColor;
-        lastAtmo = atmoStrength;
-    }
-
-    const float scale = 500.0f;  // raio do dome (dentro do far plane)
-    const float yOffset = -50.0f;  // abaixa levemente o horizonte para evitar corte
-
-    rlPushMatrix();
-    rlTranslatef(cameraPosition.x, cameraPosition.y + yOffset, cameraPosition.z);
-    rlRotatef(skyRotationDeg, 0, 1, 0);
-    rlScalef(scale, scale, scale);
-
-    // Bind da textura equirretangular (nuvens do skybox)
-    if (dome.texReady && dome.equirectangularTex.id != 0) {
-        rlSetTexture(dome.equirectangularTex.id);
+vec3 computeSkyColor(vec3 dir, vec3 sunDir, float time) {
+    vec3 sun = normalize(sunDir);
+    float sunDot = max(dot(dir, sun), 0.0);
+    float elevation = dir.y;
+    
+    vec3 skyColor;
+    if (elevation > 0.0) {
+        float t = pow(1.0 - elevation, 1.5);
+        skyColor = mix(zenithColor, horizonColor, t);
     } else {
-        rlSetTexture(0);
+        float t = pow(1.0 + elevation, 2.0);
+        skyColor = mix(horizonColor, groundColor, t);
     }
-
-    rlBegin(RL_TRIANGLES);
-    rlColor4ub(255, 255, 255, 255);
-
-    // Desenha usando os índices da malha com textura e vertex colors
-    for (int i = 0; i < dome.mesh.triangleCount * 3; ++i) {
-        const unsigned short idx = dome.mesh.indices[i];
-        const float* v = &dome.mesh.vertices[idx * 3];
-        const float* uv = &dome.mesh.texcoords[idx * 2];
-        const unsigned char* c = &dome.mesh.colors[idx * 4];
-        rlColor4ub(c[0], c[1], c[2], c[3]);
-        rlTexCoord2f(uv[0], uv[1]);
-        rlVertex3f(v[0], v[1], v[2]);
-    }
-    rlEnd();
-
-    rlSetTexture(0);
-    rlPopMatrix();
+    
+    float scatter = atmosphereStrength * (1.0 - elevation) * 0.5;
+    vec3 atmospheric = mix(vec3(0.0), sunColor * 0.3, scatter);
+    skyColor += atmospheric;
+    
+    float sunDisk = pow(sunDot, 2048.0) * sunIntensity * 1000.0;
+    skyColor += sunColor * sunDisk;
+    
+    float sunGlow = pow(sunDot, 32.0) * sunIntensity * 10.0;
+    skyColor += sunColor * sunGlow;
+    
+    return skyColor;
 }
 
-// Um quad do skybox: corners em ordem (bl, br, tr, tl); uv idem. Faces sem
-// textura recebem a cor sólida do fallback.
-void DrawSkyQuad(const Vector3 corners[4], const float uv[4][2], bool textured,
-                 const Texture2D& tex, Color solid) {
-    rlSetTexture(textured ? tex.id : 0);
-    rlBegin(RL_QUADS);
-    if (textured) rlColor4ub(255, 255, 255, 255);
-    else rlColor4ub(solid.r, solid.g, solid.b, solid.a);
-    for (int i = 0; i < 4; ++i) rlTexCoord2f(uv[i][0], uv[i][1]), rlVertex3f(corners[i].x, corners[i].y, corners[i].z);
-    rlEnd();
-    rlSetTexture(0);
+float cloudNoise(vec2 p, float time, float speed) {
+    p += vec2(time * speed * 0.01, 0.0);
+    return fbm(p, 5);
 }
 
-// Classic cube skybox (legado) - mantido para compatibilidade com modo SkyMode::Classic
-void DrawSkybox(Vector3 cameraPosition, Color skyColor) {
-    const SkyImages& sky = SkyLoader();
-    if (!sky.any) return;
-    const float d = 450.0f;
-    const auto V = [&](float x, float y, float z) {
-        return Vector3Add(cameraPosition, Vector3{x, y, z});
+void main() {
+    vec3 dir = normalize(worldDir);
+    
+    float rot = skyRotation * 3.14159265359 / 180.0;
+    mat3 rotY = mat3(
+        cos(rot), 0.0, sin(rot),
+        0.0, 1.0, 0.0,
+        -sin(rot), 0.0, cos(rot)
+    );
+    dir = rotY * dir;
+    
+    vec3 color = computeSkyColor(dir, sunDir, time);
+    
+    if (cloudDensity > 0.0) {
+        vec2 cloudCoord = vec2(dir.x, dir.z) * cloudScale * 10.0;
+        float cloudTime = time * cloudSpeed * 0.5;
+        
+        float clouds = 0.0;
+        clouds += cloudNoise(cloudCoord * 1.0, cloudTime, 1.0) * 0.5;
+        clouds += cloudNoise(cloudCoord * 2.0 + 100.0, cloudTime, 0.5) * 0.25;
+        clouds += cloudNoise(cloudCoord * 4.0 - 50.0, cloudTime, 0.25) * 0.125;
+        
+        clouds = smoothstep(1.0 - cloudSoftness, 1.0, clouds);
+        float cloudMask = smoothstep(-0.1, 0.15, dir.y);
+        clouds *= cloudMask;
+        clouds *= cloudDensity;
+        
+        vec3 cloudColor = vec3(1.0, 0.98, 0.95);
+        color = mix(color, cloudColor, clouds);
+        
+        float sunDot = max(dot(normalize(dir), normalize(sunDir)), 0.0);
+        float silverLining = pow(sunDot, 16.0) * clouds * 0.3;
+        color += sunColor * silverLining;
+    }
+    
+    if (fogDensity > 0.0) {
+        float fogAmount = fogDensity * smoothstep(0.3, -0.2, dir.y);
+        color = mix(color, fogColor, fogAmount);
+    }
+    
+    color = pow(color, vec3(1.0 / 2.2));
+    color = clamp(color, 0.0, 1.0);
+    
+    fragColor = vec4(color, 1.0);
+}
+)";
+
+
+void InitProceduralSky() {
+    auto& sky = SkyData();
+    if (sky.initialized) return;
+    
+    // Create fullscreen quad mesh
+    float vertices[] = {
+        -1.0f, -1.0f, 0.0f,  0.0f, 0.0f,
+         1.0f, -1.0f, 0.0f,  1.0f, 0.0f,
+         1.0f,  1.0f, 0.0f,  1.0f, 1.0f,
+        -1.0f,  1.0f, 0.0f,  0.0f, 1.0f
     };
-    const float uvStandard[4][2] = {{0,1}, {1,1}, {1,0}, {0,0}};
-    const float uvFlippedX[4][2] = {{1,1}, {0,1}, {0,0}, {1,0}};
+    unsigned short indices[] = {0, 1, 2, 0, 2, 3};
+    
+    sky.quadMesh.vertexCount = 4;
+    sky.quadMesh.triangleCount = 2;
+    sky.quadMesh.vertices = (float*)MemAlloc(sizeof(float) * 5 * 4);
+    sky.quadMesh.texcoords = (float*)MemAlloc(sizeof(float) * 2 * 4);
+    sky.quadMesh.indices = (unsigned short*)MemAlloc(sizeof(unsigned short) * 6);
+    
+    for (int i = 0; i < 4; ++i) {
+        sky.quadMesh.vertices[i * 3 + 0] = vertices[i * 5 + 0];
+        sky.quadMesh.vertices[i * 3 + 1] = vertices[i * 5 + 1];
+        sky.quadMesh.vertices[i * 3 + 2] = vertices[i * 5 + 2];
+        sky.quadMesh.texcoords[i * 2 + 0] = vertices[i * 5 + 3];
+        sky.quadMesh.texcoords[i * 2 + 1] = vertices[i * 5 + 4];
+    }
+    for (int i = 0; i < 6; ++i) {
+        sky.quadMesh.indices[i] = indices[i];
+    }
+    UploadMesh(&sky.quadMesh, false);
+    
+    // Load shader from memory
+    sky.shader = LoadShaderFromMemory(skyVertexShader, skyFragmentShader);
+    if (sky.shader.id == 0) {
+        // Fallback: shader compilation failed
+        sky.initialized = false;
+        return;
+    }
+    
+    // Get uniform locations
+    sky.locMvp = GetShaderLocation(sky.shader, "mvp");
+    sky.locCameraPos = GetShaderLocation(sky.shader, "cameraPos");
+    sky.locSunDir = GetShaderLocation(sky.shader, "sunDir");
+    sky.locSunColor = GetShaderLocation(sky.shader, "sunColor");
+    sky.locSunSize = GetShaderLocation(sky.shader, "sunSize");
+    sky.locSunIntensity = GetShaderLocation(sky.shader, "sunIntensity");
+    sky.locZenithColor = GetShaderLocation(sky.shader, "zenithColor");
+    sky.locHorizonColor = GetShaderLocation(sky.shader, "horizonColor");
+    sky.locGroundColor = GetShaderLocation(sky.shader, "groundColor");
+    sky.locAtmosphereStrength = GetShaderLocation(sky.shader, "atmosphereStrength");
+    sky.locCloudDensity = GetShaderLocation(sky.shader, "cloudDensity");
+    sky.locCloudScale = GetShaderLocation(sky.shader, "cloudScale");
+    sky.locCloudSpeed = GetShaderLocation(sky.shader, "cloudSpeed");
+    sky.locCloudSoftness = GetShaderLocation(sky.shader, "cloudSoftness");
+    sky.locSkyRotation = GetShaderLocation(sky.shader, "skyRotation");
+    sky.locTime = GetShaderLocation(sky.shader, "time");
+    sky.locFogColor = GetShaderLocation(sky.shader, "fogColor");
+    sky.locFogDensity = GetShaderLocation(sky.shader, "fogDensity");
+    sky.locViewMatrix = GetShaderLocation(sky.shader, "viewMatrix");
+    sky.locProjMatrix = GetShaderLocation(sky.shader, "projMatrix");
+    
+    sky.initialized = true;
+}
 
-    // Frente (+Z)
-    {
-        const Vector3 c[4] = {V(+d, -d, +d), V(-d, -d, +d), V(-d, +d, +d), V(+d, +d, +d)};
-        DrawSkyQuad(c, uvFlippedX, sky.front.id != 0, sky.front, skyColor);
+void UnloadProceduralSky() {
+    auto& sky = SkyData();
+    if (sky.initialized) {
+        UnloadMesh(sky.quadMesh);
+        UnloadShader(sky.shader);
+        sky.initialized = false;
     }
-    // Trás (-Z)
-    {
-        const Vector3 c[4] = {V(-d, -d, -d), V(+d, -d, -d), V(+d, +d, -d), V(-d, +d, -d)};
-        DrawSkyQuad(c, uvFlippedX, sky.back.id!=0, sky.back, skyColor);
+}
+
+void DrawProceduralSky(const Camera3D& camera, const Lighting* lighting, float deltaTime) {
+    auto& sky = SkyData();
+    if (!sky.initialized) {
+        InitProceduralSky();
+        if (!sky.initialized) return; // Shader failed to compile
     }
-    // Direita (+X)
-    {
-        const Vector3 c[4] = {V(+d, -d, -d), V(+d, -d, +d), V(+d, +d, +d), V(+d, +d, -d)};
-        DrawSkyQuad(c, uvStandard, sky.right.id != 0, sky.right, skyColor);
-    }
-    // Esquerda (-X)
-    {
-        const Vector3 c[4] = {V(-d, -d, +d), V(-d, -d, -d), V(-d, +d, -d), V(-d, +d, +d)};
-        DrawSkyQuad(c, uvStandard, sky.left.id != 0, sky.left, skyColor);
-    }
-    // Cima (+Y)
-    {
-        const Vector3 top[4] = {V(-d, +d, +d), V(+d, +d, +d), V(+d, +d, -d), V(-d, +d, -d)};
-        DrawSkyQuad(top, uvStandard, sky.up.id != 0, sky.up, skyColor);
-    }
-    // Baixo (-Y)
-    {
-        const Vector3 bottom[4] = {V(-d, -d, -d), V(+d, -d, -d), V(+d, -d, +d), V(-d, -d, +d)};
-        DrawSkyQuad(bottom, uvStandard, sky.down.id!=0, sky.down, skyColor);
-    }
+    
+    if (!lighting || !lighting->skyEnabled()) return;
+    
+    sky.timeAccumulator += deltaTime;
+    
+    // Prepare matrices
+    Matrix view = MatrixInvert(GetCameraMatrix(camera));
+    Matrix proj = MatrixPerspective(camera.fovy * DEG2RAD, 1.0f, 0.01f, 1000.0f);
+    Matrix mvp = MatrixMultiply(view, proj);
+    
+    // Sun direction (normalized, pointing FROM sun TO scene)
+    Vector3 sunDir = Vector3Normalize(Vector3Negate(lighting->sunDirection()));
+    
+    // Cache getter values
+    float sunSize = lighting->sunSize();
+    float sunIntensity = lighting->sunIntensity();
+    float atmosphereStrength = lighting->atmosphereStrength();
+    float cloudDensity = lighting->cloudDensity();
+    float cloudScale = lighting->cloudScale();
+    float cloudSpeed = lighting->cloudSpeed();
+    float cloudSoftness = lighting->cloudSoftness();
+    float skyRotation = lighting->skyRotation();
+    float fogDensity = lighting->fogDensity();
+    
+    // Begin shader
+    BeginShaderMode(sky.shader);
+    
+    // Set uniforms
+    SetShaderValueMatrix(sky.shader, sky.locMvp, mvp);
+    SetShaderValue(sky.shader, sky.locCameraPos, &camera.position.x, SHADER_UNIFORM_VEC3);
+    SetShaderValue(sky.shader, sky.locSunDir, &sunDir.x, SHADER_UNIFORM_VEC3);
+    
+    Vector3 sunColorNorm = {
+        lighting->sunColor().r / 255.0f,
+        lighting->sunColor().g / 255.0f,
+        lighting->sunColor().b / 255.0f
+    };
+    SetShaderValue(sky.shader, sky.locSunColor, &sunColorNorm.x, SHADER_UNIFORM_VEC3);
+    SetShaderValue(sky.shader, sky.locSunSize, &sunSize, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sky.shader, sky.locSunIntensity, &sunIntensity, SHADER_UNIFORM_FLOAT);
+    
+    Vector3 zenithNorm = {
+        lighting->skyZenithColor().r / 255.0f,
+        lighting->skyZenithColor().g / 255.0f,
+        lighting->skyZenithColor().b / 255.0f
+    };
+    SetShaderValue(sky.shader, sky.locZenithColor, &zenithNorm.x, SHADER_UNIFORM_VEC3);
+    
+    Vector3 horizonNorm = {
+        lighting->skyHorizonColor().r / 255.0f,
+        lighting->skyHorizonColor().g / 255.0f,
+        lighting->skyHorizonColor().b / 255.0f
+    };
+    SetShaderValue(sky.shader, sky.locHorizonColor, &horizonNorm.x, SHADER_UNIFORM_VEC3);
+    
+    Vector3 groundNorm = {
+        lighting->skyGroundColor().r / 255.0f,
+        lighting->skyGroundColor().g / 255.0f,
+        lighting->skyGroundColor().b / 255.0f
+    };
+    SetShaderValue(sky.shader, sky.locGroundColor, &groundNorm.x, SHADER_UNIFORM_VEC3);
+    
+    Vector3 fogColorNorm = {
+        lighting->fogColor().r / 255.0f,
+        lighting->fogColor().g / 255.0f,
+        lighting->fogColor().b / 255.0f
+    };
+    SetShaderValue(sky.shader, sky.locAtmosphereStrength, &atmosphereStrength, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sky.shader, sky.locFogColor, &fogColorNorm.x, SHADER_UNIFORM_VEC3);
+    SetShaderValue(sky.shader, sky.locFogDensity, &fogDensity, SHADER_UNIFORM_FLOAT);
+    
+    Matrix viewMatrix = MatrixInvert(GetCameraMatrix(camera));
+    Matrix projMatrix = MatrixPerspective(camera.fovy * DEG2RAD, 1.0f, 0.01f, 1000.0f);
+    SetShaderValueMatrix(sky.shader, sky.locViewMatrix, viewMatrix);
+    SetShaderValueMatrix(sky.shader, sky.locProjMatrix, projMatrix);
+    
+    // Disable depth test and write for sky
+    rlDisableDepthTest();
+    rlDisableDepthMask();
+    rlDisableBackfaceCulling();
+    
+    // Draw fullscreen quad
+    DrawMesh(sky.quadMesh, Material{0}, MatrixIdentity());
+    
+    rlEnableDepthMask();
+    rlEnableDepthTest();
+    rlEnableBackfaceCulling();
+    
+    EndShaderMode();
 }
 
 void DrawShadedBox(Vector3 center, Vector3 size, Quaternion rotation, Color color,
@@ -951,6 +883,9 @@ void DrawHeadFace(const game::RigidTransform& headWorld, Vector3 headSize) {
 
 }  // namespace
 
+// Static counter for SceneRenderer instances
+static int rendererCount = 0;
+
 SceneRenderer::SceneRenderer() {
     ++rendererCount;
     studMaterial_ = LoadMaterialDefault();
@@ -961,7 +896,10 @@ SceneRenderer::~SceneRenderer() {
     // LoadMaterialDefault allocates the maps even though shader/texture are
     // shared defaults. UnloadMaterial preserves those defaults and frees maps.
     UnloadMaterial(studMaterial_);
-    if(--rendererCount==0) { game::ClearImageTextures();SkyData()={}; }
+    if(--rendererCount==0) { 
+        game::ClearImageTextures();
+        UnloadProceduralSky();
+    }
 }
 
 Color SceneRenderer::MaterialColor(const Part& part) {
@@ -1131,39 +1069,19 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
                                                  : Vector3{-0.45f, -1.0f, -0.35f};
     lightDirection = Vector3Normalize(Vector3Negate(lightDirection));
 
-    // Fog por distância e skybox da câmera: editor e Play passam por aqui.
+    // Fog por distância: editor e Play passam por aqui.
     gFog.camera = camera.position;
     gFog.color = lighting != nullptr ? lighting->fogColor() : sky;
     gFog.density = lighting != nullptr ? lighting->fogDensity() : 0.0f;
     gFog.enabled = gFog.density > 0.0f;
 
-    const bool skyboxEnabled = lighting != nullptr ? lighting->skyboxEnabled() : true;
-    const SkyMode skyMode = lighting != nullptr ? lighting->skyMode() : SkyMode::Atmospheric;
-    const Color horizonColor = lighting != nullptr ? lighting->horizonColor() : Color{180, 200, 230, 255};
-    const float atmoStrength = lighting != nullptr ? lighting->atmosphereStrength() : 0.6f;
-    const float skyRotation = lighting != nullptr ? lighting->skyRotation() : 0.0f;
-    const bool skyTexturesReady = SkyLoader().any;
-
     ClearBackground(sky);
-    if (skyboxEnabled && skyTexturesReady) {
-        BeginMode3D(camera);
-        rlDisableDepthTest();
-        rlDisableDepthMask();
-        rlDisableBackfaceCulling();
-
-        if (skyMode == SkyMode::Atmospheric) {
-            DrawSkydome(camera.position, sky, horizonColor, atmoStrength, skyRotation);
-        } else {
-            // Classic cube skybox (legado)
-            DrawSkybox(camera.position, sky);
-        }
-
-        rlDrawRenderBatchActive();
-        rlEnableDepthMask();
-        rlEnableDepthTest();
-        rlEnableBackfaceCulling();
-        EndMode3D();
+    
+    // Desenha o céu procedural (sempre, se habilitado)
+    if (lighting && lighting->skyEnabled()) {
+        DrawProceduralSky(camera, lighting, GetFrameTime());
     } else {
+        // Fallback: gradiente simples
         DrawRectangleGradientV(0, 0, width, height, sky, Shade(sky, 1.22f));
     }
 

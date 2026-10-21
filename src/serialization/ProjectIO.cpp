@@ -54,10 +54,17 @@ struct ParsedLighting {
     float brightness = 1.0f;
     Color fogColor{120, 180, 240, 255};
     float fogDensity = 0.0f;
-    bool skyboxEnabled = true;
-    int skyMode = 1;              // 0=Classic, 1=Atmospheric
-    Color horizonColor{180, 200, 230, 255};
-    float atmosphereStrength = 0.6f;
+    bool skyEnabled = true;
+    Color skyZenithColor{80, 140, 220, 255};
+    Color skyHorizonColor{180, 200, 230, 255};
+    Color skyGroundColor{60, 80, 100, 255};
+    Color sunColor{255, 240, 200, 255};
+    float sunSize = 0.04f;
+    float atmosphereStrength = 0.5f;
+    float cloudDensity = 0.3f;
+    float cloudScale = 1.0f;
+    float cloudSpeed = 0.1f;
+    float cloudSoftness = 0.5f;
     float skyRotation = 0.0f;
 };
 
@@ -242,23 +249,40 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
                 error = prefix + error;
                 return false;
             }
-        if (const json* skybox = FindField(value, "skyboxEnabled", ignored); skybox != nullptr) {
-            if (!skybox->is_boolean()) {
-                error = prefix + "'skyboxEnabled' deve ser booleano";
+        // Sky procedural fields (opcionais, compatíveis com projetos antigos)
+        if (const json* skyEnabled = FindField(value, "skyEnabled", ignored); skyEnabled != nullptr) {
+            if (!skyEnabled->is_boolean()) {
+                error = prefix + "'skyEnabled' deve ser booleano";
                 return false;
             }
-            lighting.skyboxEnabled = skybox->get<bool>();
+            lighting.skyEnabled = skyEnabled->get<bool>();
         }
-        // Novos campos do modo Atmospheric (opcionais, compatíveis com projetos antigos).
-        if (const json* skyMode = FindField(value, "skyMode", ignored); skyMode != nullptr) {
-            if (!skyMode->is_number_integer()) {
-                error = prefix + "'skyMode' deve ser inteiro (0=Classic, 1=Atmospheric)";
+        if (const json* zenith = FindField(value, "skyZenithColor", ignored); zenith != nullptr) {
+            if (!ReadColor(*zenith, "skyZenithColor", lighting.skyZenithColor, error)) {
+                error = prefix + error;
                 return false;
             }
-            lighting.skyMode = std::clamp(skyMode->get<int>(), 0, 1);
         }
-        if (const json* horizon = FindField(value, "horizonColor", ignored); horizon != nullptr) {
-            if (!ReadColor(*horizon, "horizonColor", lighting.horizonColor, error)) {
+        if (const json* horizon = FindField(value, "skyHorizonColor", ignored); horizon != nullptr) {
+            if (!ReadColor(*horizon, "skyHorizonColor", lighting.skyHorizonColor, error)) {
+                error = prefix + error;
+                return false;
+            }
+        }
+        if (const json* ground = FindField(value, "skyGroundColor", ignored); ground != nullptr) {
+            if (!ReadColor(*ground, "skyGroundColor", lighting.skyGroundColor, error)) {
+                error = prefix + error;
+                return false;
+            }
+        }
+        if (const json* sunColor = FindField(value, "sunColor", ignored); sunColor != nullptr) {
+            if (!ReadColor(*sunColor, "sunColor", lighting.sunColor, error)) {
+                error = prefix + error;
+                return false;
+            }
+        }
+        if (const json* sunSize = FindField(value, "sunSize", ignored); sunSize != nullptr) {
+            if (!ReadFloat(*sunSize, "sunSize", lighting.sunSize, error)) {
                 error = prefix + error;
                 return false;
             }
@@ -269,11 +293,65 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
                 return false;
             }
         }
+        if (const json* cloudDensity = FindField(value, "cloudDensity", ignored); cloudDensity != nullptr) {
+            if (!ReadFloat(*cloudDensity, "cloudDensity", lighting.cloudDensity, error)) {
+                error = prefix + error;
+                return false;
+            }
+        }
+        if (const json* cloudScale = FindField(value, "cloudScale", ignored); cloudScale != nullptr) {
+            if (!ReadFloat(*cloudScale, "cloudScale", lighting.cloudScale, error)) {
+                error = prefix + error;
+                return false;
+            }
+        }
+        if (const json* cloudSpeed = FindField(value, "cloudSpeed", ignored); cloudSpeed != nullptr) {
+            if (!ReadFloat(*cloudSpeed, "cloudSpeed", lighting.cloudSpeed, error)) {
+                error = prefix + error;
+                return false;
+            }
+        }
+        if (const json* cloudSoftness = FindField(value, "cloudSoftness", ignored); cloudSoftness != nullptr) {
+            if (!ReadFloat(*cloudSoftness, "cloudSoftness", lighting.cloudSoftness, error)) {
+                error = prefix + error;
+                return false;
+            }
+        }
         if (const json* skyRot = FindField(value, "skyRotation", ignored); skyRot != nullptr) {
             if (!ReadFloat(*skyRot, "skyRotation", lighting.skyRotation, error)) {
                 error = prefix + error;
                 return false;
             }
+        }
+        // Legacy fields (para compatibilidade com projetos antigos)
+        if (const json* skybox = FindField(value, "skyboxEnabled", ignored); skybox != nullptr) {
+            if (!skybox->is_boolean()) {
+                error = prefix + "'skyboxEnabled' deve ser booleano";
+                return false;
+            }
+            lighting.skyEnabled = skybox->get<bool>();
+        }
+        if (const json* oldHorizon = FindField(value, "horizonColor", ignored); oldHorizon != nullptr) {
+            if (!ReadColor(*oldHorizon, "horizonColor", lighting.skyHorizonColor, error)) {
+                error = prefix + error;
+                return false;
+            }
+        }
+        if (const json* oldAtmo = FindField(value, "atmosphereStrength", ignored); oldAtmo != nullptr) {
+            if (!ReadFloat(*oldAtmo, "atmosphereStrength", lighting.atmosphereStrength, error)) {
+                error = prefix + error;
+                return false;
+            }
+        }
+        if (const json* oldSkyRot = FindField(value, "skyRotation", ignored); oldSkyRot != nullptr) {
+            if (!ReadFloat(*oldSkyRot, "skyRotation", lighting.skyRotation, error)) {
+                error = prefix + error;
+                return false;
+            }
+        }
+        // Ignorar skyMode antigo (Classic/Atmospheric)
+        if (const json* oldSkyMode = FindField(value, "skyMode", ignored); oldSkyMode != nullptr) {
+            // Apenas ignora - não usamos mais
         }
         hasLighting = true;
         return true;
@@ -383,11 +461,21 @@ std::string toJson(const Scene& scene) {
                            {"fogColor", {lighting.fogColor().r, lighting.fogColor().g,
                                          lighting.fogColor().b, lighting.fogColor().a}},
                            {"fogDensity", lighting.fogDensity()},
-                           {"skyboxEnabled", lighting.skyboxEnabled()},
-                           {"skyMode", static_cast<int>(lighting.skyMode())},
-                           {"horizonColor", {lighting.horizonColor().r, lighting.horizonColor().g,
-                                             lighting.horizonColor().b, lighting.horizonColor().a}},
+                           {"skyEnabled", lighting.skyEnabled()},
+                           {"skyZenithColor", {lighting.skyZenithColor().r, lighting.skyZenithColor().g,
+                                             lighting.skyZenithColor().b, lighting.skyZenithColor().a}},
+                           {"skyHorizonColor", {lighting.skyHorizonColor().r, lighting.skyHorizonColor().g,
+                                               lighting.skyHorizonColor().b, lighting.skyHorizonColor().a}},
+                           {"skyGroundColor", {lighting.skyGroundColor().r, lighting.skyGroundColor().g,
+                                              lighting.skyGroundColor().b, lighting.skyGroundColor().a}},
+                           {"sunColor", {lighting.sunColor().r, lighting.sunColor().g,
+                                         lighting.sunColor().b, lighting.sunColor().a}},
+                           {"sunSize", lighting.sunSize()},
                            {"atmosphereStrength", lighting.atmosphereStrength()},
+                           {"cloudDensity", lighting.cloudDensity()},
+                           {"cloudScale", lighting.cloudScale()},
+                           {"cloudSpeed", lighting.cloudSpeed()},
+                           {"cloudSoftness", lighting.cloudSoftness()},
                            {"skyRotation", lighting.skyRotation()}});
     }
 
@@ -614,10 +702,17 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
     staged.lighting()->setBrightness(lighting.brightness);
     staged.lighting()->setFogColor(lighting.fogColor);
     staged.lighting()->setFogDensity(lighting.fogDensity);
-    staged.lighting()->setSkyboxEnabled(lighting.skyboxEnabled);
-    staged.lighting()->setSkyMode(static_cast<loblox::SkyMode>(lighting.skyMode));
-    staged.lighting()->setHorizonColor(lighting.horizonColor);
+    staged.lighting()->setSkyEnabled(lighting.skyEnabled);
+    staged.lighting()->setSkyZenithColor(lighting.skyZenithColor);
+    staged.lighting()->setSkyHorizonColor(lighting.skyHorizonColor);
+    staged.lighting()->setSkyGroundColor(lighting.skyGroundColor);
+    staged.lighting()->setSunColor(lighting.sunColor);
+    staged.lighting()->setSunSize(lighting.sunSize);
     staged.lighting()->setAtmosphereStrength(lighting.atmosphereStrength);
+    staged.lighting()->setCloudDensity(lighting.cloudDensity);
+    staged.lighting()->setCloudScale(lighting.cloudScale);
+    staged.lighting()->setCloudSpeed(lighting.cloudSpeed);
+    staged.lighting()->setCloudSoftness(lighting.cloudSoftness);
     staged.lighting()->setSkyRotation(lighting.skyRotation);
     for (const auto& value:root["objects"]) if (value["class"]=="Workspace" && value.contains("fallenPartsDestroyHeight")) {
         float height;

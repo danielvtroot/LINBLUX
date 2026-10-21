@@ -1749,31 +1749,78 @@ void EditorUI::drawLightingProperties() {
     }
 
     ImGui::SeparatorText("Sky");
-    bool skyboxEnabled = lighting->skyboxEnabled();
-    if (ImGui::Checkbox("Skybox enabled", &skyboxEnabled)) {
-        lighting->setSkyboxEnabled(skyboxEnabled);
-        if (!skyboxEnabled)
+    bool skyEnabled = lighting->skyEnabled();
+    if (ImGui::Checkbox("Sky Enabled", &skyEnabled)) {
+        lighting->setSkyEnabled(skyEnabled);
+        if (!skyEnabled)
             ImGui::SetTooltip("O fundo volta para a cor sólida do SkyColor");
     }
 
-    const char* skyModeNames[] = {"Classic (Cube)", "Atmospheric (Dome)"};
-    int skyMode = static_cast<int>(lighting->skyMode());
-    if (ImGui::Combo("Sky Mode", &skyMode, skyModeNames, IM_ARRAYSIZE(skyModeNames))) {
-        lighting->setSkyMode(static_cast<SkyMode>(skyMode));
+    float zenith[3] = {lighting->skyZenithColor().r / 255.0f,
+                       lighting->skyZenithColor().g / 255.0f,
+                       lighting->skyZenithColor().b / 255.0f};
+    if (ImGui::ColorEdit3("Zenith Color", zenith)) {
+        lighting->setSkyZenithColor(Color{static_cast<unsigned char>(std::lround(zenith[0] * 255.0f)),
+                                          static_cast<unsigned char>(std::lround(zenith[1] * 255.0f)),
+                                          static_cast<unsigned char>(std::lround(zenith[2] * 255.0f)), 255});
     }
 
-    float horizon[3] = {lighting->horizonColor().r / 255.0f,
-                        lighting->horizonColor().g / 255.0f,
-                        lighting->horizonColor().b / 255.0f};
-    if (ImGui::ColorEdit3("HorizonColor", horizon)) {
-        lighting->setHorizonColor(Color{static_cast<unsigned char>(std::lround(horizon[0] * 255.0f)),
-                                        static_cast<unsigned char>(std::lround(horizon[1] * 255.0f)),
-                                        static_cast<unsigned char>(std::lround(horizon[2] * 255.0f)), 255});
+    float horizon[3] = {lighting->skyHorizonColor().r / 255.0f,
+                        lighting->skyHorizonColor().g / 255.0f,
+                        lighting->skyHorizonColor().b / 255.0f};
+    if (ImGui::ColorEdit3("Horizon Color", horizon)) {
+        lighting->setSkyHorizonColor(Color{static_cast<unsigned char>(std::lround(horizon[0] * 255.0f)),
+                                           static_cast<unsigned char>(std::lround(horizon[1] * 255.0f)),
+                                           static_cast<unsigned char>(std::lround(horizon[2] * 255.0f)), 255});
+    }
+
+    float ground[3] = {lighting->skyGroundColor().r / 255.0f,
+                       lighting->skyGroundColor().g / 255.0f,
+                       lighting->skyGroundColor().b / 255.0f};
+    if (ImGui::ColorEdit3("Ground Color", ground)) {
+        lighting->setSkyGroundColor(Color{static_cast<unsigned char>(std::lround(ground[0] * 255.0f)),
+                                          static_cast<unsigned char>(std::lround(ground[1] * 255.0f)),
+                                          static_cast<unsigned char>(std::lround(ground[2] * 255.0f)), 255});
+    }
+
+    float sunCol[3] = {lighting->sunColor().r / 255.0f,
+                       lighting->sunColor().g / 255.0f,
+                       lighting->sunColor().b / 255.0f};
+    if (ImGui::ColorEdit3("Sun Color", sunCol)) {
+        lighting->setSunColor(Color{static_cast<unsigned char>(std::lround(sunCol[0] * 255.0f)),
+                                    static_cast<unsigned char>(std::lround(sunCol[1] * 255.0f)),
+                                    static_cast<unsigned char>(std::lround(sunCol[2] * 255.0f)), 255});
+    }
+
+    float sunSize = lighting->sunSize();
+    if (ImGui::SliderFloat("Sun Size", &sunSize, 0.0f, 1.0f, "%.3f")) {
+        lighting->setSunSize(sunSize);
     }
 
     float atmoStrength = lighting->atmosphereStrength();
     if (ImGui::SliderFloat("Atmosphere Strength", &atmoStrength, 0.0f, 1.0f, "%.2f")) {
         lighting->setAtmosphereStrength(atmoStrength);
+    }
+
+    ImGui::SeparatorText("Clouds");
+    float cloudDensity = lighting->cloudDensity();
+    if (ImGui::SliderFloat("Cloud Density", &cloudDensity, 0.0f, 1.0f, "%.2f")) {
+        lighting->setCloudDensity(cloudDensity);
+    }
+
+    float cloudScale = lighting->cloudScale();
+    if (ImGui::SliderFloat("Cloud Scale", &cloudScale, 0.1f, 10.0f, "%.2f")) {
+        lighting->setCloudScale(cloudScale);
+    }
+
+    float cloudSpeed = lighting->cloudSpeed();
+    if (ImGui::SliderFloat("Cloud Speed", &cloudSpeed, 0.0f, 5.0f, "%.2f")) {
+        lighting->setCloudSpeed(cloudSpeed);
+    }
+
+    float cloudSoftness = lighting->cloudSoftness();
+    if (ImGui::SliderFloat("Cloud Softness", &cloudSoftness, 0.0f, 1.0f, "%.2f")) {
+        lighting->setCloudSoftness(cloudSoftness);
     }
 
     float skyRot = lighting->skyRotation();

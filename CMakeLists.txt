@@ -130,6 +130,12 @@ if(XVFB_RUN_EXECUTABLE)
     target_link_libraries(loblox_visual_studio_tests PRIVATE loblox_editor)
     add_test(NAME loblox_visual_studio COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:loblox_visual_studio_tests>)
     set_tests_properties(loblox_visual_studio PROPERTIES TIMEOUT 180 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
+
+    add_executable(loblox_sky_capture_tests tests/sky_capture_main.cpp)
+    target_link_libraries(loblox_sky_capture_tests PRIVATE loblox_editor)
+    add_test(NAME loblox_sky_capture COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:loblox_sky_capture_tests>)
+    set_tests_properties(loblox_sky_capture PROPERTIES TIMEOUT 180 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
+
     add_executable(loblox_studio_ui_tests tests/studio_ui_main.cpp tests/x11_focus.cpp)
     target_link_libraries(loblox_studio_ui_tests PRIVATE loblox_editor X11::X11)
     add_test(NAME loblox_studio_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset" $<TARGET_FILE:loblox_studio_ui_tests>)
