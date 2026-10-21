@@ -1541,6 +1541,18 @@ void EditorUI::drawExplorer() {
         const bool open = ImGui::TreeNodeEx(rig.name.c_str(),
             ImGuiTreeNodeFlags_DefaultOpen | (rig.id == selectedRig_ ? ImGuiTreeNodeFlags_Selected : 0));
         if (ImGui::IsItemClicked()) selectRig(rig.id);
+        
+        // Context menu for rig
+        std::string rigPopupId = "##rig_context_" + rig.id;
+        if (ImGui::BeginPopupContextItem(rigPopupId.c_str())) {
+            ImGui::TextDisabled("%s", "Rig");
+            ImGui::Separator();
+            if (ImGui::MenuItem("Rename", "F2")) { selectRig(rig.id); renameSelection(); }
+            if (ImGui::MenuItem("Duplicate", "Ctrl+D")) { selectRig(rig.id); pendingDuplicate_=true; }
+            if (ImGui::MenuItem("Delete", "Del")) { selectRig(rig.id); pendingDeleteRigId_ = rig.id; }
+            ImGui::EndPopup();
+        }
+        
         if (open) {
             ImGui::TextDisabled("HumanoidRootPart (internal)");
             for (int b = 0; b < game::kBodyCount; ++b)
@@ -1552,6 +1564,19 @@ void EditorUI::drawExplorer() {
     }
     revealedSelection_ = scene_.selection() ? scene_.selection()->id() : 0;
     if (pendingDelete_) { scene_.select(scene_.find(pendingDelete_)); pendingDelete_=0; deleteSelection(); }
+    if (!pendingDeleteRigId_.empty()) {
+        const std::string rigId = pendingDeleteRigId_;
+        pendingDeleteRigId_.clear();
+        if (scene_.gameAssets().removeRig(rigId)) {
+            selectedRig_.clear();
+            selectedRigBody_ = -1;
+            selectedJoint_ = 0;
+            checkInvariants("delete_rig");
+            setStatus("Rig excluido: " + rigId);
+        } else {
+            setStatus("Nao foi possivel excluir rig", true);
+        }
+    }
     if (pendingReparent_.first) {
         std::string error;
         if (!scene_.reparent(scene_.find(pendingReparent_.first),scene_.find(pendingReparent_.second),error)) setStatus(error,true);
@@ -2109,6 +2134,23 @@ void EditorUI::insertContainer(InstanceClass type, Instance* parent) {
 }
 
 void EditorUI::deleteSelection() {
+    // Check if a rig is selected (rigs are not Instances, handled separately)
+    if (!selectedRig_.empty()) {
+        endGizmoSession(true, "delete");
+        const std::string name = selectedRig_;
+        if (scene_.gameAssets().removeRig(selectedRig_)) {
+            selectedRig_.clear();
+            selectedRigBody_ = -1;
+            selectedJoint_ = 0;
+            checkInvariants("delete_rig");
+            setStatus("Rig excluido: " + name);
+            return;
+        } else {
+            setStatus("Nao foi possivel excluir rig", true);
+            return;
+        }
+    }
+
     Instance* selection = scene_.selection();
     if (selection == nullptr) {
         return;

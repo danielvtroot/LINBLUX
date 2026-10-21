@@ -186,6 +186,7 @@ private:
     char propertiesFilter_[128] = {};
     bool explorerFocused_ = false;
     InstanceId renameId_ = 0, clipboardId_ = 0, revealedSelection_ = 0, pendingDelete_ = 0;
+    std::string pendingDeleteRigId_;
     char renameBuffer_[129] = {};
     std::pair<InstanceId,InstanceId> pendingReparent_{0,0};
     bool pendingDuplicate_ = false;

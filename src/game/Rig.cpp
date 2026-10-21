@@ -253,6 +253,18 @@ Rig& GameAssets::createR6() {
     event.context = {{"rig", rigs.back().id}}; event.result = "ok"; diag::log(event);
     return rigs.back();
 }
+bool GameAssets::removeRig(const std::string& id) {
+    for (auto it = rigs.begin(); it != rigs.end(); ++it) {
+        if (it->id == id) {
+            rigs.erase(it);
+            if (defaultRig == id) {
+                defaultRig = rigs.empty() ? "" : rigs.front().id;
+            }
+            return true;
+        }
+    }
+    return false;
+}
 Rig* GameAssets::findRig(const std::string& id) {
     for (auto& r : rigs) if (r.id == id) return &r;
     return nullptr;

@@ -139,6 +139,7 @@ struct GameAssets {
     Rig& createR6();
     Rig* findRig(const std::string& id);
     const Rig* findRig(const std::string& id) const;
+    bool removeRig(const std::string& id);
     AnimationClip* findAnimation(const std::string& id);
     const AnimationClip* findAnimation(const std::string& id) const;
     bool validate(std::string& error) const;
