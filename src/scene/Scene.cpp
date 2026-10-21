@@ -58,17 +58,8 @@ Players.CharacterAdded:Connect(function(character)
     -- Customize this map here. Project defaults are in Game Settings.
 end)
 )");
-    insert("CharacterAnimations.server.lua",R"(local Players = game:GetService("Players")
-local IDLE = "anim://r6-idle"
-local WALK = "anim://r6-walk"
-local JUMP = "anim://r6-jump"
-Players.CharacterAdded:Connect(function(character)
-    local animator = character.Animator
-    animator:SetAnimation("Idle", IDLE)
-    animator:SetAnimation("Walk", WALK)
-    animator:SetAnimation("Jump", JUMP)
-end)
-)");
+    // CharacterAnimations.server.lua is no longer auto-generated.
+    // Animation configuration is now managed exclusively through Game Settings (Game Config).
 }
 
 bool Scene::isService(const Instance* object) const {
@@ -90,6 +81,8 @@ Instance* Scene::ensureService(InstanceClass type, InstanceId forcedId) {
 bool Scene::accepts(InstanceClass type, const Instance* parent) const {
     if (!parent || find(parent->id())!=parent || IsRootServiceClass(type)) return false;
     const auto p=parent->instanceClass();
+    if(IsSurfaceClass(p)) return false;
+    if(IsSurfaceClass(type)) return parent->isPart() && static_cast<const Part*>(parent)->shape()==PartShape::Block;
     if (IsScriptClass(type)) return p!=InstanceClass::Lighting && !IsScriptClass(p);
     if (p!=InstanceClass::Workspace && p!=InstanceClass::Folder && p!=InstanceClass::Model &&
         p!=InstanceClass::ServerScriptService && p!=InstanceClass::ServerStorage && p!=InstanceClass::ReplicatedStorage) return false;
@@ -153,6 +146,9 @@ bool Scene::validate(std::string& error) const {
             error="nome ou Script excede limite"; return false;
         }
         if (isService(object.get()) && object->parent()) { error="servico fora da raiz"; return false; }
+        if(IsSurfaceClass(object->instanceClass()) && !static_cast<const Surface&>(*object).properties().valid()) {
+            error="invalid surface: "+object->name();return false;
+        }
         if (!isService(object.get()) && !canParent(object.get(), object->parent())) {
             error = "objeto com pai invalido: " + std::to_string(object->id());
             return false;
@@ -357,6 +353,13 @@ Part* Scene::duplicatePart(const Part& source) {
     return copy;
 }
 
+Surface* Scene::createSurface(InstanceClass type,Instance* parent,const std::string& name,InstanceId forcedId) {
+    if(!IsSurfaceClass(type) || !accepts(type,parent) || (forcedId && find(forcedId)))return nullptr;
+    const std::string requested=name.empty()?InstanceClassName(type):name;
+    auto node=std::make_unique<Surface>(forcedId?forcedId:allocateId(),forcedId?requested:makeUniqueName(requested),type);
+    auto* result=node.get();return adopt(std::move(node),parent)?result:nullptr;
+}
+
 Container* Scene::createContainer(InstanceClass type, Instance* parent,
                                   const std::string& name, InstanceId forcedId) {
     if (type != InstanceClass::Folder && type != InstanceClass::Model) return nullptr;
@@ -417,10 +420,12 @@ Instance* Scene::duplicateTree(const Instance& source, Instance* parent) {
     if (!parent) parent = source.parent();
     if (source.isAncestorOf(parent)) return nullptr;
     Instance* copy = source.isPart() ? static_cast<Instance*>(duplicatePart(static_cast<const Part&>(source))) :
+        IsSurfaceClass(source.instanceClass()) ? static_cast<Instance*>(createSurface(source.instanceClass(),parent,source.name())) :
         IsScriptClass(source.instanceClass()) ? static_cast<Instance*>(createScript(source.instanceClass(),parent,source.name())) :
         createContainer(source.instanceClass(),parent,source.name());
     if (!copy) return nullptr;
     for (const auto& pair:source.attributes()) copy->setAttribute(pair.first,pair.second);
+    if(IsSurfaceClass(source.instanceClass())) static_cast<Surface*>(copy)->setProperties(static_cast<const Surface&>(source).properties());
     if (IsScriptClass(source.instanceClass())) {
         auto& script=static_cast<const Script&>(source); auto& cloned=static_cast<Script&>(*copy);
         cloned.source=script.source; cloned.enabled=script.enabled;
