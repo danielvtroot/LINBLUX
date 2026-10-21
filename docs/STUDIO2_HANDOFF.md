@@ -37,6 +37,9 @@ fix/unified-3d-gizmos, sem push):
   moderado, cursor capturado, badge SHIFT LOCK ON/OFF + retículo próprio;
   Esc pausa (captura liberada), Stop/respawn nunca deixam lock preso.
   HUD do Play ganha logo inline 18 px.
+- `6070936` (Etapa D, complemento) skybox configurável pelo Lighting:
+  skyboxEnabled persistido (leitura opcional; v1/v2 carregam), guard no
+  renderer e checkbox nos Properties. CTest 10/10 após o complemento.
 
 Validação desta rodada: build incremental limpo (sem erros/warnings),
 CTest 10/10 após cada etapa, `git diff --check` OK, fixtures críticos
