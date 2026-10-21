@@ -297,9 +297,7 @@ void ToolbarSeparator() {
         ImVec2(cursor.x, cursor.y + 7.0f), ImVec2(cursor.x, cursor.y + height - 7.0f),
         IM_COL32(202, 208, 216, 255), 1.0f);
     ImGui::SameLine(0.0f, 7.0f);
-}
-
-ImVec4 ClassColor(InstanceClass instanceClass) {
+}    ImVec4 ClassColor(InstanceClass instanceClass) {
     switch (instanceClass) {
         case InstanceClass::Workspace:
             return ImVec4(0.95f, 0.85f, 0.45f, 1.0f);
@@ -321,6 +319,105 @@ ImVec4 ClassColor(InstanceClass instanceClass) {
         case InstanceClass::ReplicatedStorage: return ImVec4(.9f,.7f,.45f,1);
     }
     return ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
+}
+
+// Badges diferenciam classes que compartilham a mesma silhueta (scripts,
+// servicos). Cores fixas para leitura rapida na hierarquia.
+ImU32 ClassIconBadge(InstanceClass instanceClass) {
+    switch (instanceClass) {
+        case InstanceClass::Script: return IM_COL32(70, 150, 255, 255);
+        case InstanceClass::LocalScript: return IM_COL32(45, 200, 150, 255);
+        case InstanceClass::ModuleScript: return IM_COL32(165, 110, 235, 255);
+        case InstanceClass::ServerScriptService: return IM_COL32(230, 125, 160, 255);
+        case InstanceClass::ServerStorage: return IM_COL32(170, 125, 230, 255);
+        case InstanceClass::ReplicatedStorage: return IM_COL32(245, 155, 55, 255);
+        default: return IM_COL32(60, 66, 74, 255);
+    }
+}
+
+// Icones vetoriais por classe do Explorer: desenhados via ImDrawList a cada
+// frame (custo desprezivel), sem texturas nem assets novos.
+void DrawClassIcon(ImDrawList* draw, ImVec2 center, InstanceClass instanceClass, ImU32 color) {
+    const float x = center.x, y = center.y;
+    using C = InstanceClass;
+    const C cls = instanceClass;
+    // Pagina com canto dobrado: Script/LocalScript/ModuleScript; o badge
+    // distingue cada um.
+    if (cls == C::Script || cls == C::LocalScript || cls == C::ModuleScript) {
+        draw->AddCircleFilled(ImVec2(x + 3.8f, y + 3.6f), 2.6f, IM_COL32(30, 33, 38, 255), 10);
+        draw->AddCircleFilled(ImVec2(x + 3.8f, y + 3.6f), 1.7f, ClassIconBadge(cls), 10);
+        draw->AddRectFilled(ImVec2(x - 4.2f, y - 4.6f), ImVec2(x + 3.4f, y + 4.6f), color, 1.2f);
+        draw->AddTriangleFilled(ImVec2(x + 3.4f, y - 4.6f), ImVec2(x + 3.4f, y - 1.8f),
+                                ImVec2(x + 0.8f, y - 4.6f), IM_COL32(30, 33, 38, 90));
+        draw->AddLine(ImVec2(x - 2.6f, y + 0.4f), ImVec2(x + 1.8f, y + 0.4f), IM_COL32(30, 33, 38, 200), 1.2f);
+        draw->AddLine(ImVec2(x - 2.6f, y + 2.3f), ImVec2(x + 0.6f, y + 2.3f), IM_COL32(30, 33, 38, 200), 1.2f);
+        draw->AddLine(ImVec2(x - 2.6f, y - 1.5f), ImVec2(x + 1.0f, y - 1.5f), IM_COL32(30, 33, 38, 200), 1.2f);
+        return;
+    }
+    // Servicos: gaveta com dois volumes + badge colorido.
+    if (cls == C::ServerScriptService || cls == C::ServerStorage || cls == C::ReplicatedStorage) {
+        draw->AddRectFilled(ImVec2(x - 5, y - 4.4f), ImVec2(x + 5, y + 4.4f), color, 1.5f);
+        draw->AddLine(ImVec2(x - 5, y - 0.6f), ImVec2(x + 5, y - 0.6f), IM_COL32(30, 33, 38, 200), 1.3f);
+        draw->AddLine(ImVec2(x - 5, y - 2.5f), ImVec2(x + 5, y - 2.5f), IM_COL32(30, 33, 38, 110), 1.2f);
+        draw->AddCircleFilled(ImVec2(x + 3.4f, y + 2.9f), 1.8f, ClassIconBadge(cls), 10);
+        draw->AddCircle(ImVec2(x + 3.4f, y + 2.9f), 1.8f, IM_COL32(30, 33, 38, 255), 10, 1.2f);
+        return;
+    }
+    switch (cls) {
+        case C::Workspace: {
+            draw->AddRectFilled(ImVec2(x - 5, y - 5), ImVec2(x + 5, y + 5), color, 2.0f);
+            draw->AddLine(ImVec2(x - 4.6f, y + 0.6f), ImVec2(x + 4.6f, y + 0.6f), IM_COL32(30, 33, 38, 235), 1.3f);
+            draw->AddLine(ImVec2(x - 4.6f, y - 2.2f), ImVec2(x + 4.6f, y - 2.2f), IM_COL32(30, 33, 38, 170), 1.2f);
+            draw->AddLine(ImVec2(x - 4.6f, y + 3.3f), ImVec2(x + 4.6f, y + 3.3f), IM_COL32(30, 33, 38, 130), 1.2f);
+            break;
+        }
+        case C::Lighting: {
+            draw->AddCircle(ImVec2(x, y), 3.0f, color, 12, 1.8f);
+            for (int i = 0; i < 8; ++i) {
+                const float angle = static_cast<float>(i) * (PI / 4.0f);
+                const float c = std::cos(angle), s = std::sin(angle);
+                draw->AddLine(ImVec2(x + c * 4.2f, y + s * 4.2f), ImVec2(x + c * 6.0f, y + s * 6.0f),
+                              color, 1.3f);
+            }
+            break;
+        }
+        case C::Baseplate: {
+            draw->AddRectFilled(ImVec2(x - 5, y - 5), ImVec2(x + 5, y + 5), color, 1.5f);
+            draw->AddRectFilled(ImVec2(x - 5, y - 5), ImVec2(x, y), IM_COL32(46, 50, 56, 120), 0);
+            draw->AddRectFilled(ImVec2(x, y), ImVec2(x + 5, y + 5), IM_COL32(46, 50, 56, 120), 0);
+            draw->AddRect(ImVec2(x - 5, y - 5), ImVec2(x + 5, y + 5), color, 1.5f, 0, 1.3f);
+            break;
+        }
+        case C::SpawnLocation: {
+            draw->AddRectFilled(ImVec2(x - 4.2f, y + 2.6f), ImVec2(x + 4.2f, y + 4.4f), color, 1.0f);
+            draw->AddCircleFilled(ImVec2(x, y - 0.6f), 3.4f, color, 12);
+            draw->AddCircle(ImVec2(x, y - 0.6f), 3.4f, IM_COL32(28, 32, 38, 200), 12, 1.2f);
+            draw->AddCircle(ImVec2(x, y - 0.6f), 1.5f, IM_COL32(28, 32, 38, 170), 10, 1.2f);
+            break;
+        }
+        case C::Folder: {
+            draw->AddRectFilled(ImVec2(x - 5, y - 4.4f), ImVec2(x - 0.4f, y - 1.8f), color, 1.0f);
+            draw->AddRectFilled(ImVec2(x - 5, y - 2.2f), ImVec2(x + 5, y + 4.4f), color, 1.2f);
+            draw->AddLine(ImVec2(x - 3.6f, y + 1.0f), ImVec2(x + 3.6f, y + 1.0f),
+                          IM_COL32(30, 33, 38, 130), 1.2f);
+            break;
+        }
+        case C::Model: {
+            draw->AddRectFilled(ImVec2(x - 5, y - 4.6f), ImVec2(x + 1.2f, y + 1.6f), color, 1.0f);
+            draw->AddRectFilled(ImVec2(x - 1.8f, y - 1.4f), ImVec2(x + 5, y + 4.6f), color, 1.0f);
+            draw->AddRect(ImVec2(x - 1.8f, y - 1.4f), ImVec2(x + 5, y + 4.6f),
+                          IM_COL32(230, 235, 242, 200), 1.0f);
+            break;
+        }
+        default: {  // Part e demais: bloco com brilho superior.
+            draw->AddRectFilled(ImVec2(x - 5, y - 4), ImVec2(x + 5, y + 4), color, 1.5f);
+            draw->AddLine(ImVec2(x - 3.8f, y - 2.2f), ImVec2(x + 3.8f, y - 2.2f),
+                          IM_COL32(255, 255, 255, 130), 1.4f);
+            draw->AddRect(ImVec2(x - 5, y - 4), ImVec2(x + 5, y + 4),
+                          IM_COL32(230, 235, 242, 190), 1.5f, 0, 1.2f);
+            break;
+        }
+    }
 }
 
 const Color kPalette[] = {
@@ -1254,25 +1351,11 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
     const ImVec2 iconCenter(rowMin.x + 22.0f, (rowMin.y + rowMax.y) * 0.5f);
     const ImVec4 classColor = ClassColor(instance->instanceClass());
     const ImU32 iconColor = ImGui::ColorConvertFloat4ToU32(classColor);
-    if (instance->instanceClass() == InstanceClass::Lighting) {
-        ImGui::GetWindowDrawList()->AddCircle(iconCenter, 5.0f, iconColor, 16, 1.7f);
-        ImGui::GetWindowDrawList()->AddCircleFilled(
-            ImVec2(iconCenter.x + 1.5f, iconCenter.y - 1.5f), 1.3f, iconColor, 8);
-    } else if (instance->instanceClass() == InstanceClass::Workspace) {
-        ImGui::GetWindowDrawList()->AddRectFilled(
-            ImVec2(iconCenter.x - 5.0f, iconCenter.y - 5.0f),
-            ImVec2(iconCenter.x + 5.0f, iconCenter.y + 5.0f), iconColor, 2.0f);
-        ImGui::GetWindowDrawList()->AddLine(ImVec2(iconCenter.x - 2.5f, iconCenter.y),
-                                            ImVec2(iconCenter.x + 2.5f, iconCenter.y),
-                                            IM_COL32(35, 38, 42, 255), 1.5f);
-    } else {
-        ImGui::GetWindowDrawList()->AddRectFilled(
-            ImVec2(iconCenter.x - 5.0f, iconCenter.y - 4.0f),
-            ImVec2(iconCenter.x + 5.0f, iconCenter.y + 4.0f), iconColor, 1.5f);
-        ImGui::GetWindowDrawList()->AddRect(
-            ImVec2(iconCenter.x - 5.0f, iconCenter.y - 4.0f),
-            ImVec2(iconCenter.x + 5.0f, iconCenter.y + 4.0f),
-            IM_COL32(230, 235, 242, 190), 1.5f);
+    DrawClassIcon(ImGui::GetWindowDrawList(), iconCenter, instance->instanceClass(), iconColor);
+    // Indicador de destino de arrasto: contorno realce no no sob o cursor.
+    if (ImGui::IsItemHovered() && ImGui::IsDragDropActive()) {
+        ImGui::GetWindowDrawList()->AddRect(rowMin, rowMax, IM_COL32(120, 200, 255, 255), 3.0f,
+                                            0, 2.0f);
     }
     ImGui::PopStyleColor();
 
@@ -1335,6 +1418,7 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
 
 void EditorUI::drawExplorer() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize,ImVec2(280,150));
+    ImGui::SetNextWindowSize({350, 620}, ImGuiCond_FirstUseEver);
     ImGui::Begin("Explorer", &showExplorer_);
     explorerFocused_ = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
     if (ImGui::Button("+ Folder")) insertContainer(InstanceClass::Folder);
@@ -1566,6 +1650,7 @@ void EditorUI::drawWorkspaceProperties() {
 }
 
 void EditorUI::drawProperties() {
+    ImGui::SetNextWindowSize({330, 560}, ImGuiCond_FirstUseEver);
     ImGui::Begin("Properties");
     Instance* selection = scene_.selection();
     if (selection == nullptr) {
