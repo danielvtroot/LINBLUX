@@ -80,6 +80,7 @@ void EditorUI::selectRig(const std::string& id, int body) {
     endGizmoSession(true, "rig_selection"); cancelRigGizmo(); scene_.select(nullptr);
     if (selectedRig_ != id) previewPose_ = {};
     selectedRig_ = id; selectedRigBody_ = body; showRigEditor_ = true;
+    if(tool_==ToolMode::Select)setTool(ToolMode::Rotate,"rig_selection");
     for (int j = 0; j < game::kJointCount; ++j) if (rig->joints[j].child == body) selectedJoint_ = j;
 }
 void EditorUI::openAnimation(const std::string& id) {
@@ -440,13 +441,17 @@ void EditorUI::drawRigEditor() {
 
     ImGui::Separator();
     const char* toolNames[] = {"Rotate", "Move", "Scale"};
-    int toolMode = static_cast<int>(rigToolMode_);
-    if (ImGui::Combo("Gizmo Tool", &toolMode, toolNames, IM_ARRAYSIZE(toolNames))) {
-        rigToolMode_ = static_cast<ToolMode>(toolMode);
-        cancelRigGizmo();
-        setTool(rigToolMode_, "rig_editor");
+    const ToolMode toolModes[]{ToolMode::Rotate,ToolMode::Move,ToolMode::Scale};
+    if(ImGui::BeginCombo("Gizmo Tool",ToolModeName(tool_))) {
+        for(int i=0;i<3;++i) {
+            ImGui::BeginDisabled(toolModes[i]==ToolMode::Scale && rigContext_!=RigContext::Edit);
+            if(ImGui::Selectable(toolNames[i],tool_==toolModes[i]))setTool(toolModes[i],"rig_editor");
+            ImGui::EndDisabled();
+        }
+        ImGui::EndCombo();
     }
-    if (ImGui::Button("Reset pose")) { cancelRigGizmo(); previewPose_ = {}; previewPlaying_ = false; }
+    {const auto lo=ImGui::GetItemRectMin(),hi=ImGui::GetItemRectMax();rigToolControl_={lo.x,lo.y,hi.x-lo.x,hi.y-lo.y};}
+    if(rigContext_!=RigContext::Edit)ImGui::TextDisabled("Scale changes bind proportions: use Edit Rig.");
     if (ImGui::CollapsingHeader("Root / HumanoidRootPart", ImGuiTreeNodeFlags_DefaultOpen)) EditTransform("root", rig->root);
     if (ImGui::CollapsingHeader("Body parts", ImGuiTreeNodeFlags_DefaultOpen)) {
         for (int i = 0; i < game::kBodyCount; ++i) {
@@ -455,6 +460,7 @@ void EditorUI::drawRigEditor() {
                 cancelRigGizmo(); selectedRigBody_ = i;
                 for (int j = 0; j < game::kJointCount; ++j) if (rig->joints[j].child == i) selectedJoint_ = j;
             }
+            {const auto lo=ImGui::GetItemRectMin(),hi=ImGui::GetItemRectMax();rigBodyRows_[i]={lo.x,lo.y,hi.x-lo.x,hi.y-lo.y};}
             ImGui::PopID();
         }
         if (selectedRigBody_ >= 0) {
@@ -463,6 +469,7 @@ void EditorUI::drawRigEditor() {
             if (ImGui::ColorEdit3("Body color", color) && std::isfinite(color[0]) &&
                 std::isfinite(color[1]) && std::isfinite(color[2])) body.color = {
                 static_cast<unsigned char>(color[0]*255), static_cast<unsigned char>(color[1]*255), static_cast<unsigned char>(color[2]*255), 255};
+            {const auto lo=ImGui::GetItemRectMin(),hi=ImGui::GetItemRectMax();rigColorControl_={lo.x,lo.y,hi.x-lo.x,hi.y-lo.y};}
             int material = static_cast<int>(body.material);
             if (ImGui::BeginCombo("Material", PartMaterialName(body.material))) {
                 for (int m = 0; m < PartMaterialCount(); ++m)
@@ -510,55 +517,85 @@ void EditorUI::drawRigEditor() {
 }
 
 void EditorUI::cancelRigGizmo(bool restore) {
-    if (rigGizmo_.dragging() && restore && rigDragJoint_ >= 0) {
-        if (auto* rig = scene_.gameAssets().findRig(rigDragId_)) {
-            if (rigDragContext_ == RigContext::Edit) rig->restPose[rigDragJoint_] = rigDragInitial_;
-            else previewPose_[rigDragJoint_] = rigDragInitial_;
+    if(rigDrag_) {
+        if(restore) if(auto* rig=scene_.gameAssets().findRig(rigDrag_->id)) {
+            rig->bodies=rigDrag_->initial.bodies;
+            rig->joints=rigDrag_->initial.joints;
+            rig->restPose=rigDrag_->initial.restPose;
+            previewPose_=rigDrag_->preview;
         }
+        diag::Event event;event.subsystem="rig";event.name=restore?"drag_cancel":"drag_commit";
+        event.correlationId=rigDrag_->correlation;event.result=restore?"restored":"ok";
+        event.context={{"rig",rigDrag_->id},{"tool",ToolModeName(rigDrag_->tool)},{"body",rigDrag_->body}};
+        diag::log(event);
     }
-    rigGizmo_.cancel(&jointProxy_, false); rigDragJoint_ = -1; rigDragId_.clear();
+    rigGizmo_.cancel(&jointProxy_,false);rigDrag_.reset();
 }
-bool EditorUI::updateRigGizmo(const EditorInput& input, const InputRoute& route, Rectangle viewport,
-                              bool hovered, bool blocked) {
+bool EditorUI::updateRigGizmo(const EditorInput& input,const InputRoute& route,Rectangle viewport,
+                              bool hovered,bool blocked) {
     rigGizmo_.setLocalSpace(gizmoLocalSpace_);
-    rigGizmo_.setSnap(moveSnap_, scaleSnap_, rotateSnapDegrees_);
-    auto* rig = scene_.gameAssets().findRig(selectedRig_);
-    if (!rig || !showJointPivots_ || blocked || input.escape) {
-        const bool consumed = rigGizmo_.dragging(); cancelRigGizmo(); return consumed;
+    rigGizmo_.setSnap(moveSnap_,scaleSnap_,rotateSnapDegrees_);
+    auto* rig=scene_.gameAssets().findRig(selectedRig_);
+    const bool editing=rigContext_==RigContext::Edit;
+    const bool invalid=!rig || !showJointPivots_ || blocked || input.escape || tool_==ToolMode::Select ||
+        selectedJoint_<0 || selectedJoint_>=game::kJointCount ||
+        (tool_==ToolMode::Scale && !editing);
+    const bool changed=rigDrag_ && (rigDrag_->id!=selectedRig_ || rigDrag_->tool!=tool_ ||
+        rigDrag_->context!=rigContext_ || rigDrag_->joint!=selectedJoint_ ||
+        rigDrag_->body!=selectedRigBody_);
+    if(invalid || changed) { const bool consumed=rigGizmo_.dragging();cancelRigGizmo();return consumed; }
+    const auto& joint=rig->joints[selectedJoint_];
+    const int body=joint.child;
+    const auto world=rig->evaluate(editing?game::Pose{}:previewPose_,rig->root);
+    auto base=game::Compose(joint.parent<0?rig->root:world[joint.parent],joint.parentAnchor);
+    if(!editing)base=game::Compose(base,rig->restPose[selectedJoint_]);
+    auto& pose=editing?rig->restPose[selectedJoint_]:previewPose_[selectedJoint_];
+    if(!rigGizmo_.dragging()) {
+        const auto proxy=tool_==ToolMode::Rotate?game::Compose(base,pose):world[body];
+        jointProxy_.setPosition(proxy.position);jointProxy_.setRotation(proxy.rotation);
+        jointProxy_.setSize(tool_==ToolMode::Rotate?Vector3{1,1,1}:rig->bodies[body].size);
     }
-    if (rigToolMode_ == ToolMode::Rotate) {
-        // Existing joint rotation logic
-        if (tool_ != ToolMode::Rotate || blocked || input.escape) {
-            const bool consumed = rigGizmo_.dragging(); cancelRigGizmo(); return consumed;
-        }
-        const auto world = rig->evaluate(previewPose_, rig->root);
-        const auto& joint = rig->joints[selectedJoint_];
-        auto base = game::Compose(joint.parent < 0 ? rig->root : world[joint.parent], joint.parentAnchor);
-        if (rigContext_ != RigContext::Edit) base = game::Compose(base, rig->restPose[selectedJoint_]);
-        auto& pose = rigContext_ == RigContext::Edit ? rig->restPose[selectedJoint_] : previewPose_[selectedJoint_];
-        if (!rigGizmo_.dragging()) {
-            jointProxy_.setPosition(game::Compose(base, {pose.position}).position);
-            jointProxy_.setRotation(QuaternionMultiply(base.rotation, pose.rotation));
-            jointProxy_.setSize({1,1,1});
-        }
-        const auto before = pose;
-        GizmoInput gi{input.mouse, input.leftPressed, input.leftDown, IsWindowFocused(), input.shift};
-        const auto result = rigGizmo_.update(ToolMode::Rotate, &jointProxy_, camera_, viewport, hovered,
-            route.owner == InputOwner::Viewport || route.owner == InputOwner::Transform, gi);
-        if (result.started) {
-            rigDragInitial_ = before; rigDragContext_ = rigContext_; rigDragJoint_ = selectedJoint_; rigDragId_ = selectedRig_;
-            previewPlaying_ = false; camera_.releaseCapture();
-        }
-        if (rigGizmo_.dragging() || (result.ended && !result.cancelled)) {
-            pose.rotation = QuaternionNormalize(QuaternionMultiply(QuaternionInvert(base.rotation), jointProxy_.rotation()));
-        }
-        if (result.cancelled) pose = rigDragInitial_;
-        if (result.ended) { rigDragJoint_ = -1; rigDragId_.clear(); }
-        return result.consumed;
-    } else {
-        // Move/Scale not yet implemented for rig bodies - fallback to UI controls
-        const bool consumed = rigGizmo_.dragging(); cancelRigGizmo(); return consumed;
+    // Capture before Gizmo::update edits the proxy. Both drawing and hit testing
+    // consume jointProxy_; pose coordinates are solved through the same bind chain.
+    RigDrag initial;
+    if(!rigDrag_) initial={selectedRig_,{},tool_,rigContext_,selectedJoint_,selectedRigBody_,
+                           *rig,previewPose_,base};
+    GizmoInput gi{input.mouse,input.leftPressed,input.leftDown,IsWindowFocused(),input.shift};
+    const auto result=rigGizmo_.update(tool_,&jointProxy_,camera_,viewport,hovered,
+        route.owner==InputOwner::Viewport || route.owner==InputOwner::Transform,gi);
+    if(result.started) {
+        initial.correlation=diag::newCorrelationId();rigDrag_=std::move(initial);
+        previewPlaying_=false;camera_.releaseCapture();
+        diag::Event event;event.subsystem="rig";event.name="drag_begin";event.result="ok";
+        event.correlationId=rigDrag_->correlation;
+        event.context={{"rig",selectedRig_},{"tool",ToolModeName(tool_)},{"body",body}};
+        diag::log(event);
     }
+    if(result.cancelled) {cancelRigGizmo();return result.consumed;}
+    if(rigDrag_ && (rigGizmo_.dragging() || result.ended)) {
+        const auto& drag=*rigDrag_;
+        // Scale from the transaction snapshot, never from last frame's anchors.
+        if(tool_==ToolMode::Scale) {
+            rig->bodies=drag.initial.bodies;rig->joints=drag.initial.joints;
+            rig->restPose=drag.initial.restPose;
+            auto size=jointProxy_.size();
+            size={std::clamp(size.x,.2f,10.f),std::clamp(size.y,.2f,10.f),std::clamp(size.z,.2f,10.f)};
+            jointProxy_.setSize(size);
+            rig->resizeBody(body,size); // resizeBody already updates every attachment once
+        }
+        auto& target=editing?rig->restPose[selectedJoint_]:previewPose_[selectedJoint_];
+        if(tool_==ToolMode::Rotate) {
+            target.rotation=QuaternionNormalize(QuaternionMultiply(QuaternionInvert(drag.base.rotation),jointProxy_.rotation()));
+        } else {
+            const game::RigidTransform desiredBody{jointProxy_.position(),jointProxy_.rotation()};
+            const auto desiredJoint=game::Compose(desiredBody,rig->joints[selectedJoint_].childAnchor);
+            target.position=game::Compose(game::Inverse(drag.base),desiredJoint).position;
+        }
+        std::string error;
+        if(!rig->validate(error)) {setStatus("Rig transform rejected: "+error,true);cancelRigGizmo();return true;}
+        if(result.ended)cancelRigGizmo(false);
+    }
+    return result.consumed;
 }
 
 void EditorUI::drawGameSettings() {
@@ -579,7 +616,7 @@ void EditorUI::drawGameSettings() {
         ImGui::EndCombo();
     }
     AnimationChoice("Walk animation", p.walkAnimation, a); AnimationChoice("Idle animation", p.idleAnimation, a);
-    AnimationChoice("Jump animation",p.jumpAnimation,a);
+    AnimationChoice("Jump animation", p.jumpAnimation, a); AnimationChoice("Fall animation", p.fallAnimation, a);
     ImGui::SliderFloat("WalkSpeed (units/s)", &p.walkSpeed, .1f, 100);
     ImGui::SliderFloat("Turn response", &p.turnSpeed, .1f, 50);
     ImGui::SliderFloat("Acceleration", &p.acceleration, 1, 500);

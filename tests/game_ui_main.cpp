@@ -19,6 +19,8 @@
 
 namespace loblox {
 struct EditorUITestAccess {
+    static Vector2 bodyRow(EditorUI& ui,int body) {const auto r=ui.rigBodyRows_[body];return {r.x+40,r.y+r.height*.5f};}
+    static Vector2 colorField(EditorUI& ui) {const auto r=ui.rigColorControl_;return {r.x+25,r.y+r.height*.5f};}
     static void rigPanel(EditorUI& ui) { ui.showRigEditor_ = true; }
     static void pose(EditorUI& ui) {
         ui.showRigEditor_ = false;
@@ -122,9 +124,9 @@ int main() {
         CHECK(scene.gameAssets().animations.size() == 3);
         // Fixed-font/window fixture; body list and first color component.
         const Vector2 rigOrigin{panel->DC.CursorStartPos.x,panel->DC.CursorStartPos.y};
-        click(Vector2Add(rigOrigin,{40,285}));
+        click(EditorUITestAccess::bodyRow(ui,game::LeftArm));
         CHECK(EditorUITestAccess::selectedBody(ui) == game::LeftArm);
-        number(Vector2Add(rigOrigin,{40,355}),"210");
+        number(EditorUITestAccess::colorField(ui),"210");
         CHECK(scene.gameAssets().rigs[0].bodies[game::LeftArm].color.r == 210);
         EditorUITestAccess::pose(ui); frames();
         EditorUITestAccess::sharedGizmoSettings(ui,true,7.5f); frames();

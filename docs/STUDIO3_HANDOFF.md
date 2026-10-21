@@ -1,5 +1,34 @@
 # Studio 3 — recuperação em andamento
 
+## Retomada após Nemotron
+
+HEAD de entrada 7afd682; todos os hashes relatados foram encontrados. Backup
+do worktree misto em `resume-TbA2zhIY`, fora do repositório. Preservados céu
+procedural, Lighting, câmera com pitch, coyote/buffer, Lua e física. As nove
+referências foram reabertas. Baseline: build principal OK, CTest 9/12;
+falhas: teste antigo esperava script automático e fazia acesso fora da lista;
+export Lua rejeitava campos novos de Lighting; fixture Game UI usava posições
+antigas após inserção de controles no Rig Editor.
+
+Causas de rig confirmadas: enum do combo incorreto; proxy desenhado diferente
+do manipulado; rest pose aplicada duas vezes; childAnchor sem inversa; escala
+duplicava ajuste de attachments; cancel usava índice errado/dados sem snapshot.
+Implementação usa tool_ como fonte única, jointProxy_ para desenho/picking,
+transação com snapshot, solver da cadeia bind/rest/pose e resizeBody uma vez.
+Scale é edição de proporções (Edit Rig); Pose/Animation usam Move/Rotate.
+Regressão real por xdotool: 14 falhas antes; depois passou, incluindo XYZ,
+Esc/restauração exata, câmera parada, commits e save/load/Play.
+Capturas examinadas: `/tmp/loblox-rig-input-B9oTxH/{Move,Rotate,Scale}.png`.
+Suíte focada rig/game_ui/studio/tests passou 4/4. Principal recompilado.
+Ainda executar Debug, sanitizers e validar GUI completa atual.
+
+Pendente na retomada: completar Fall independente (mudança local parcial
+ainda reutiliza Jump como fallback), reparar rename/duplicate de rigs e delete
+de animações atribuídas; conferir shader procedural (capturas mostram azul
+plano; Material{0} e matrizes do fullscreen exigem investigação), face frontal.
+Classes Decal/Texture em Instance.h são rascunho local preexistente sem ligação
+com Scene/IO; preservadas, não anunciadas como recurso disponível.
+
 Base real: f75e44d, branch fix/unified-3d-gizmos, seis arquivos rastreados
 modificados antes da intervenção. Patch e originais preservados em backup
 externo `studio3-Li2jVGjM`. PNGs, assets e referências permanecem originais.

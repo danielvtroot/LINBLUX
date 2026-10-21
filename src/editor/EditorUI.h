@@ -3,6 +3,7 @@
 #include <functional>
 #include <string>
 #include <map>
+#include <optional>
 
 #include "core/Config.h"
 #include "core/Math.h"
@@ -130,7 +131,6 @@ private:
     bool showRigEditor_ = false, showAnimationEditor_ = false, showGameSettings_ = false;
     enum class RigContext { Edit, Pose, Animation };
     RigContext rigContext_ = RigContext::Edit;
-    ToolMode rigToolMode_ = ToolMode::Rotate;
     std::string selectedRig_;
     int selectedRigBody_ = -1, selectedJoint_ = 0;
     bool showJointPivots_ = true;
@@ -147,10 +147,17 @@ private:
     game::Keyframe timelineDragInitial_;
     Gizmo rigGizmo_;
     Part jointProxy_{~InstanceId{0}-2, "Joint pivot", PartShape::Block};
-    game::RigidTransform rigDragInitial_;
-    RigContext rigDragContext_ = RigContext::Pose;
-    std::string rigDragId_;
-    int rigDragJoint_ = -1;
+    struct RigDrag {
+        std::string id, correlation;
+        ToolMode tool=ToolMode::Select;
+        RigContext context=RigContext::Edit;
+        int joint=0, body=0;
+        game::Rig initial;
+        game::Pose preview;
+        game::RigidTransform base;
+    };
+    std::optional<RigDrag> rigDrag_;
+    Rectangle rigBodyRows_[game::kBodyCount]{},rigColorControl_{},rigToolControl_{};
     bool gizmoLocalSpace_ = false;
     float moveSnap_ = 1.0f;
     float scaleSnap_ = 0.5f;

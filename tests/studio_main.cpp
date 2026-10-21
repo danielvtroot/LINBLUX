@@ -141,8 +141,9 @@ print("Game task completed")
 }
 void AnimationIds() {
     Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();std::string error;
-    auto* service=scene.service(InstanceClass::ServerScriptService);CHECK(service && service->children().size()==2);
-    auto* animations=static_cast<Script*>(service->children()[1]);
+    auto* service=scene.service(InstanceClass::ServerScriptService);CHECK(service && service->children().size()==1);
+    auto* animations=scene.createScript(InstanceClass::Script,service,"CustomCharacterAnimations.lua");
+    CHECK(animations);if(!animations)return; // custom scripts remain supported; no automatic animation script
     auto edited=game::MakeWalk(65);edited.id="custom-walk";edited.name="My Walk";
     scene.gameAssets().animations.push_back(edited);
     animations->source=R"(game:GetService("Players").CharacterAdded:Connect(function(character)

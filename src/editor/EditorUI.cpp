@@ -1180,6 +1180,7 @@ void EditorUI::drawViewport() {
         if (runtime_.state() == game::RuntimeState::Playing) runtime_.pause();
         setGameplayCapture(false);
         endGizmoSession(true, "viewport_hidden");
+        cancelRigGizmo();
         camera_.releaseCapture();
         viewportFocused_ = false;
         ImGui::End();
@@ -1374,8 +1375,9 @@ void EditorUI::drawViewport() {
     renderer_.drawScene(scene_, camera_, viewportWidth_, viewportHeight_,
                         selection != nullptr ? selection->id() : kInvalidInstanceId,
                         rigState.rig ? &rigState : nullptr);
-    if (rigState.rig && showJointPivots_ && tool_ == ToolMode::Rotate)
-        rigGizmo_.drawOverlay(jointProxy_, ToolMode::Rotate, camera_, viewportRect);
+    if (rigState.rig && showJointPivots_ && tool_!=ToolMode::Select &&
+        (tool_!=ToolMode::Scale || rigContext_==RigContext::Edit))
+        rigGizmo_.drawOverlay(jointProxy_, tool_, camera_, viewportRect);
     if (selectedPart != nullptr && tool_ != ToolMode::Select) {
         gizmo_.drawOverlay(*selectedPart, tool_, camera_, viewportRect);
     }
