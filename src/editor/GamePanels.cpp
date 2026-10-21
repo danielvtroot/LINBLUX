@@ -36,6 +36,9 @@ void CameraSettings(game::PlayerSettings& p) {
     if (ImGui::Combo("Camera mode", &mode, "Classic\0Follow\0First Person\0")) p.cameraMode = static_cast<game::CameraMode>(mode);
     ImGui::SliderFloat("Mouse sensitivity", &p.sensitivity, .0001f, .02f, "%.4f");
     ImGui::Checkbox("Camera lock", &p.cameraLock);
+    ImGui::Checkbox("Enable Shift Lock (Left Shift toggles during Play)", &p.enableShiftLock);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Toggle pelo Left Shift durante o Play. Suspenso no menu Esc e liberado no Stop");
     ImGui::Checkbox("Allow zoom to first person", &p.allowFirstPerson);
     ImGui::SliderFloat("Min zoom", &p.minZoom, .1f, 10);
     ImGui::SliderFloat("Max zoom", &p.maxZoom, std::max(p.minZoom, 5.f), 100);
@@ -170,13 +173,15 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     }
     game::PlayerInput input;
     const bool owns = route.owner == InputOwner::Gameplay;
+    const bool shiftLocked = runtime_.shiftLockActive();
     const bool wantsCapture = owns && (runtime_.playerCamera().firstPerson() || runtime_.settings().cameraLock ||
-        (context.hovered && raw.rightPressed) || (gameplayCapture_ && raw.rightDown));
+        shiftLocked || (context.hovered && raw.rightPressed) || (gameplayCapture_ && raw.rightDown));
     setGameplayCapture(wantsCapture);
     if (owns) {
         if (!raw.modified) {
             input.movement = {raw.movement.x, raw.movement.z};
             input.jump = raw.jump;
+            input.shiftKey = raw.shift; // toggle do Shift Lock (edge no Runtime)
         }
         if (gameplayCapture_ && !gameplaySkipDelta_) input.look = raw.delta;
         if (context.hovered || gameplayCapture_) input.zoom = raw.wheel;
@@ -192,7 +197,33 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
         "PLAY | WASD move | Space jump | RMB look | Wheel zoom | Esc menu | Shift+F5 stop";
     auto* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled({image.x+8, image.y+8}, {image.x+viewportWidth_-8.f, image.y+36}, IM_COL32(20,25,30,210), 4);
-    dl->AddText({image.x+14, image.y+14}, IM_COL32(235,240,245,255), hint);
+    const LobloxLogo& brand = LoadLobloxLogo();
+    float hintX = image.x+14, hintY = image.y+14;
+    if (brand.ok) {
+        // Marca 18 px inline na barra, proporção preservada.
+        dl->AddImage(static_cast<ImTextureID>(brand.id),
+                     ImVec2(image.x+12, image.y+11), ImVec2(image.x+12+18.f*brand.width/brand.height, image.y+11+18.f));
+        hintX += 12.f + 18.f; hintY = image.y+16;
+    }
+    dl->AddText({hintX, hintY}, IM_COL32(235,240,245,255), hint);
+    // Shift Lock: indicador de estado + retículo próprio no centro quando ativo.
+    if (runtime_.settings().enableShiftLock) {
+        const ImVec2 badge = ImGui::CalcTextSize(shiftLocked ? "SHIFT LOCK: ON" : "SHIFT LOCK: OFF");
+        const float badgeRight = image.x+viewportWidth_-12.f;
+        dl->AddRectFilled({badgeRight-badge.x-10, image.y+10}, {badgeRight, image.y+34},
+            shiftLocked ? IM_COL32(40,130,80,230) : IM_COL32(55,60,66,200), 4);
+        dl->AddText({badgeRight-badge.x-5, image.y+15},
+            shiftLocked ? IM_COL32(190,255,215,255) : IM_COL32(200,205,212,190), shiftLocked ? "SHIFT LOCK: ON" : "SHIFT LOCK: OFF");
+        if (shiftLocked) {
+            const float cx = image.x+viewportWidth_*.5f, cy = image.y+viewportHeight_*.5f;
+            const ImU32 cross = IM_COL32(235,240,248,200);
+            dl->AddLine({cx-9,cy}, {cx-3,cy}, cross, 1.5f);
+            dl->AddLine({cx+3,cy}, {cx+9,cy}, cross, 1.5f);
+            dl->AddLine({cx,cy-9}, {cx,cy-3}, cross, 1.5f);
+            dl->AddLine({cx,cy+3}, {cx,cy+9}, cross, 1.5f);
+            dl->AddCircleFilled({cx,cy}, 1.6f, cross, 10);
+        }
+    }
     const float health=runtime_.health(), maximum=runtime_.settings().maxHealth;
     displayedHealth_=Lerp(displayedHealth_,health,1-std::exp(-10*std::min(GetFrameTime(),.1f)));
     const float fraction=std::clamp(displayedHealth_/maximum,0.f,1.f);

@@ -112,7 +112,14 @@ void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const Player
     }
     const auto bodies = runtime.rig().evaluate(runtime.pose(), {root,runtime.characterRoot().rotation});
     const Vector3 desiredTarget = Compose(bodies[Head], {{0,.08f,0}}).position;
-    target_ = firstPerson_ ? desiredTarget : Vector3Lerp(target_, desiredTarget, Response(14, dt));
+    // Shift Lock: desloca o alvo para o lado direito do avatar (offset moderado)
+    // e mantém o alvo estável durante a rotação da câmera.
+    Vector3 lockedTarget = desiredTarget;
+    if (!firstPerson_ && runtime.shiftLockActive()) {
+        const Vector3 right{std::cos(yaw_), 0.f, -std::sin(yaw_)};
+        lockedTarget = Vector3Add(lockedTarget, Vector3Scale(right, .6f));
+    }
+    target_ = firstPerson_ ? desiredTarget : Vector3Lerp(target_, lockedTarget, Response(14, dt));
     const Vector3 back{std::sin(yaw_) * std::cos(pitch_), std::sin(pitch_),
                        std::cos(yaw_) * std::cos(pitch_)};
     if (!settings.allowFirstPerson && !firstPerson_) {
@@ -194,6 +201,7 @@ void RuntimeSession::stop() {
     scripts_.stop();
     destroyCharacter(); physics_.reset(); scene_.reset();
     accumulator_ = 0; jumpPending_ = false; pose_ = {};
+    shiftLockRequested_ = false; lastShiftKey_ = 0; // Stop nunca deixa o lock preso
     state_ = RuntimeState::Editing;
     Event("runtime", "stop", correlation_);
 }
@@ -245,6 +253,7 @@ bool RuntimeSession::respawn(std::string& error) {
     capsule_ = std::move(capsule); motion_ = std::move(motion); body_ = std::move(body);
     physics_->world_->addRigidBody(body_.get());
     pose_ = {}; walkTime_ = 0; idleTime_ = 0; airTime_=0; walkWeight_ = 0; accumulator_ = 0; yaw_ = 0; jumpPending_ = false;
+    shiftLockRequested_ = false; lastShiftKey_ = 0; // respawn começa sem lock
     health_=respawns_==0?settings_.health:settings_.maxHealth;deadTime_=damageCooldown_=0;
     humanoidState_ = health_>0?HumanoidState::Idle:HumanoidState::Dead;
     camera_.reset(characterRoot().position, settings_);
@@ -254,6 +263,9 @@ bool RuntimeSession::respawn(std::string& error) {
     error.clear(); return true;
 }
 Vector3 RuntimeSession::position() const { return body_ ? Vec(body_->getWorldTransform().getOrigin()) : Vector3{}; }
+bool RuntimeSession::shiftLockActive() const {
+    return settings_.enableShiftLock && shiftLockRequested_ && state_ == RuntimeState::Playing;
+}
 Vector3 RuntimeSession::velocity() const { return body_ ? Vec(body_->getLinearVelocity()) : Vector3{}; }
 RigidTransform RuntimeSession::characterRoot() const {
     return {Vector3Add(position(), {0, rootHeightOffset_, 0}), QuaternionFromEuler(0, yaw_, 0)};
@@ -297,7 +309,7 @@ void RuntimeSession::step(float dt, Vector3 desired, bool jump) {
     if (!onGround) transition(velocity().y > 1 ? HumanoidState::Jumping : HumanoidState::Freefall);
     else if (!wasGrounded) transition(HumanoidState::Landing);
     else transition(horizontal > .2f ? HumanoidState::Walking : HumanoidState::Idle);
-    if (settings_.cameraLock || camera_.firstPerson()) yaw_ = camera_.yaw();
+    if (settings_.cameraLock || shiftLockActive() || camera_.firstPerson()) yaw_ = camera_.yaw();
     else if (settings_.autoRotate && horizontal > .2f) {
         const float target = std::atan2(-actual.x, -actual.z);
         yaw_ += std::remainder(target-yaw_, 2*PI) * Response(settings_.turnSpeed, dt);
@@ -405,6 +417,12 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     if (!std::isfinite(input.movement.x) || !std::isfinite(input.movement.y) ||
         !std::isfinite(input.look.x) || !std::isfinite(input.look.y) || !std::isfinite(input.zoom)) return;
     dt = std::min(dt, .1f);
+    // Toggle do Shift Lock (Left Shift) detectado por borda; ignorado sem a
+    // opção habilitada e nunca dispara no editor (route só roteia gameplay).
+    const bool shiftDown = input.shiftKey;
+    if (settings_.enableShiftLock && shiftDown && !lastShiftKey_)
+        shiftLockRequested_ = !shiftLockRequested_;
+    lastShiftKey_ = shiftDown ? 1 : 0;
     scripts_.update(dt);
     physics_->syncScene(*scene_);
     damageCooldown_=std::max(0.f,damageCooldown_-dt);

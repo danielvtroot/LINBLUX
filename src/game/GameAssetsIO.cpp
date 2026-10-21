@@ -69,6 +69,7 @@ nlohmann::json EncodeAssets(const GameAssets& a) {
     if (p.healthDisplayType!=2) j["player"]["healthDisplayType"]=p.healthDisplayType;
     if (p.healthDisplayDistance!=45) j["player"]["healthDisplayDistance"]=p.healthDisplayDistance;
     if (p.nameDisplayDistance!=0) j["player"]["nameDisplayDistance"]=p.nameDisplayDistance;
+    if (p.enableShiftLock) j["player"]["enableShiftLock"]=true;
     return j;
 }
 bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& error) {
@@ -134,6 +135,7 @@ bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& erro
         out.jumpAnimation=p.value("jumpAnimation",std::string());
         out.respawnDelay=p.value("respawnDelay",2.f);out.healthDisplayType=p.contains("healthDisplayType")?ReadInt(p.at("healthDisplayType"),0,2):2;
         out.healthDisplayDistance=p.value("healthDisplayDistance",45.f);out.nameDisplayDistance=p.value("nameDisplayDistance",0.f);
+        out.enableShiftLock=p.value("enableShiftLock",false);
         if (!a.validate(error)) return false;
         assets = std::move(a); error.clear(); return true;
     } catch (const std::exception& e) { error = std::string("game assets: ") + e.what(); return false; }

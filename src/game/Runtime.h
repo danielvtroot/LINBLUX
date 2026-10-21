@@ -15,6 +15,7 @@ enum class RuntimeState { Editing, StartingPlay, Playing, Paused, StoppingPlay }
 enum class HumanoidState { Idle, Walking, Jumping, Freefall, Landing, Dead };
 const char* StateName(HumanoidState state);
 struct PlayerInput {
+    bool shiftKey = false; // roteado ao gameplay; edge detect do Shift Lock
     Vector2 movement{}; // X=right, Y=forward, relative to horizontal camera
     Vector2 look{};     // mouse pixels; apply once per display frame
     float zoom = 0;
@@ -86,6 +87,10 @@ public:
     float cameraClearance(Vector3 from, Vector3 to, float radius) const;
     PlayerSettings& settings() { return settings_; } // session preferences, not project writes
     const PlayerSettings& settings() const { return settings_; }
+
+    // Shift Lock: estado de sessão (não persistido); toggle pelo Left Shift.
+    bool shiftLockActive() const;
+    void setShiftLockRequested(bool requested) { shiftLockRequested_ = requested; }
     PlayerCamera& playerCamera() { return camera_; }
     const PlayerCamera& playerCamera() const { return camera_; }
 private:
@@ -113,5 +118,7 @@ private:
     std::string activeAnimation_;
     scripting::LuaRuntime scripts_;
     float health_=100, deadTime_=0, damageCooldown_=0;
+    bool shiftLockRequested_ = false;
+    unsigned char lastShiftKey_ = 0;
 };
 } // namespace loblox::game

@@ -119,6 +119,7 @@ struct PlayerSettings {
     float sensitivity = 0.003f;
     bool allowFirstPerson = true;
     bool cameraLock = false;
+    bool enableShiftLock = false; // Left Shift liga/desliga durante Play
     std::string walkAnimation = "r6-walk";
     std::string idleAnimation = "r6-idle";
     std::string jumpAnimation; // empty retains the legacy native air-pose fallback
