@@ -8,6 +8,8 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
+#include <vector>
 
 namespace loblox {
 namespace {
@@ -19,6 +21,212 @@ bool Matches(const char* text,const char* filter) {
     return a.find(b)!=std::string::npos;
 }
 bool Finite(const float* v) { return std::isfinite(v[0])&&std::isfinite(v[1])&&std::isfinite(v[2]); }
+
+// ---------- Script Editor: realce Lua, indentação e caret próprios ----------
+struct LuaTokenRun { int begin; int end; unsigned color; };
+constexpr unsigned kLuaColorDefault = IM_COL32(206, 214, 228, 255);
+constexpr unsigned kLuaColorKeyword = IM_COL32(234, 118, 172, 255);
+constexpr unsigned kLuaColorNumber  = IM_COL32(174, 143, 250, 255);
+constexpr unsigned kLuaColorString  = IM_COL32(150, 201, 110, 255);
+constexpr unsigned kLuaColorComment = IM_COL32(114, 128, 150, 255);
+constexpr unsigned kLuaColorGlobal  = IM_COL32(118, 177, 255, 255);
+constexpr unsigned kLuaColorCaret   = IM_COL32(224, 234, 249, 230);
+
+const char* kLuaKeywords[] = {"and","break","do","else","elseif","end","false","for",
+    "function","goto","if","in","local","nil","not","or","repeat","return","then",
+    "true","until","while"};
+const char* kLuaGlobals[] = {"game","workspace","script","Instance","Vector3","Vector2",
+    "Color","Enum","Ray","print","warn","error","task","math","string","table",
+    "tonumber","tostring","typeof","type","pcall","assert","select","pairs","ipairs",
+    "next","require","spawn","wait"};
+
+bool LuaWordInList(const char* text, int begin, int end, const char* const* list, int count) {
+    const int length = end - begin;
+    for (int i = 0; i < count; ++i) {
+        const int wordLength = (int)std::strlen(list[i]);
+        if (wordLength == length && std::memcmp(text + begin, list[i], (size_t)length) == 0) return true;
+    }
+    return false;
+}
+
+// Tokenizador leve para a viewport do editor: roda uma vez por frame sobre o
+// source (scripts típicos têm poucos KiB) e alimentaa o desenho por runs.
+void TokenizeLua(const char* text, std::vector<LuaTokenRun>& runs) {
+    runs.clear();
+    const int len = (int)std::strlen(text);
+    if (len <= 0) return;
+    runs.reserve(len / 12 + 1);
+    int i = 0, runStart = 0;
+    unsigned cur = kLuaColorDefault;
+    bool blockComment = false;
+    const auto toColor = [&](int pos, unsigned color) {
+        if (cur != color) {
+            if (runStart < pos) runs.push_back({runStart, pos, cur});
+            cur = color; runStart = pos;
+        }
+    };
+    auto splitToken = [&](int j, unsigned color) {
+        runs.push_back({i, j, color});
+        cur = kLuaColorDefault; runStart = j; i = j;
+    };
+    while (i < len) {
+        const unsigned char c = (unsigned char)text[i];
+        if (blockComment) {
+            if (c == ']' && i + 1 < len && text[i+1] == ']') {
+                blockComment = false;
+                i += 2;
+                if (cur != kLuaColorDefault) { runs.push_back({runStart, i, cur}); cur = kLuaColorDefault; runStart = i; }
+                continue;
+            }
+            ++i; continue;
+        }
+        if (c == '-' && i + 1 < len && text[i+1] == '-' && cur != kLuaColorComment) {
+            if (i + 3 < len && text[i+2] == '[' && text[i+3] == '[') {
+                blockComment = true;
+                toColor(i, kLuaColorComment);
+                i += 4; continue;
+            }
+            if (i > runStart) runs.push_back({runStart, i, cur});
+            int j = i + 2;
+            while (j < len && text[j] != '\n') ++j;
+            runs.push_back({i, j, kLuaColorComment});
+            cur = kLuaColorDefault; runStart = j; i = j;
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            toColor(i, kLuaColorString);
+            int j = i + 1;
+            while (j < len && text[j] != c && text[j] != '\n') {
+                if (text[j] == '\\' && j + 1 < len) ++j;  // pula escapes
+                ++j;
+            }
+            const int stop = std::min(j + ((j < len && text[j] == c) ? 1 : 0), len);
+            splitToken(stop, kLuaColorString);
+            continue;
+        }
+        if (c >= '0' && c <= '9') {
+            toColor(i, kLuaColorNumber);
+            int j = i + 1;
+            while (j < len && ((text[j] >= '0' && text[j] <= '9') || (text[j] >= 'a' && text[j] <= 'f') ||
+                               (text[j] >= 'A' && text[j] <= 'F') || text[j] == '.' || text[j] == '_')) ++j;
+            splitToken(j, kLuaColorNumber);
+            continue;
+        }
+        if (std::isalpha(c) || c == '_') {
+            int j = i + 1;
+            while (j < len && (std::isalnum((unsigned char)text[j]) || text[j] == '_')) ++j;
+            const bool keyword = LuaWordInList(text, i, j, kLuaKeywords,
+                                               (int)(sizeof(kLuaKeywords)/sizeof(kLuaKeywords[0])));
+            const bool global = !keyword && LuaWordInList(text, i, j, kLuaGlobals,
+                                                          (int)(sizeof(kLuaGlobals)/sizeof(kLuaGlobals[0])));
+            const unsigned color = keyword ? kLuaColorKeyword : global ? kLuaColorGlobal : kLuaColorDefault;
+            splitToken(j, color);
+            continue;
+        }
+        if (c == '\n') toColor(i, kLuaColorDefault);  // nada atravessa uma linha
+        ++i;  // caractere comum continua o run atual
+    }
+    if (runStart < len && (cur != kLuaColorDefault || runStart < i))
+        runs.push_back({runStart, len, cur});
+}
+
+// Desenha o texto colorido ma zona do InputTextMultiline (o texto nativo fica
+// invisível via cor transparente; seleção nativa, undo e scroll continuam).
+// Compatível com o wrap do ImGui quando a linha excede a largura do painel.
+void DrawLuaSyntax(ImDrawList* draw, ImVec2 textOrigin, float lineHeight, float wrapWidth,
+                   float scrollPixels, const char* text, int len,
+                   const std::vector<LuaTokenRun>& runs, bool caretVisible, int caretByte,
+                   ImVec2 clipMin, ImVec2 clipMax, unsigned caretColor) {
+    ImFont* font = ImGui::GetFont();
+    draw->PushClipRect(clipMin, clipMax, true);
+    const float firstY = textOrigin.y - scrollPixels;
+    const int firstRow = std::max(0, (int)std::floor(scrollPixels / lineHeight) - 1);
+    const float bottom = clipMax.y + lineHeight * 2.0f;
+    int row = 0;
+    int i = 0;
+    bool caretFound = false;
+    ImVec2 caretPos{};
+    while (i < len) {
+        int lineEnd = i;
+        while (lineEnd < len && text[lineEnd] != '\n') ++lineEnd;
+        int p = i;
+        if (p == lineEnd) {  // linha vazia: uma row que ainda completa o wrap
+            const float y = firstY + (float)row * lineHeight;
+            if (caretVisible && !caretFound && caretByte == p) {
+                caretFound = true; caretPos = ImVec2(textOrigin.x, y);
+            }
+            ++row; i = lineEnd + 1; continue;
+        }
+        while (p < lineEnd) {
+            int rowEnd = lineEnd;
+            if (wrapWidth > 0) {
+                const char* brk = font->CalcWordWrapPosition(1.0f, text + p, text + lineEnd, wrapWidth);
+                if (brk != nullptr) {
+                    rowEnd = (int)(brk - text);
+                    if (rowEnd <= p) rowEnd = std::min(lineEnd, p + 1);
+                }
+            }
+            const float y = firstY + (float)row * lineHeight;
+            if (row >= firstRow && y <= bottom) {
+                ImVec2 pos{textOrigin.x, y};
+                for (const auto& run : runs) {
+                    const int s = std::max(run.begin, p), e = std::min(run.end, rowEnd);
+                    if (e <= s) continue;
+                    draw->AddText(pos, run.color, text + s, text + e);
+                    pos.x += ImGui::CalcTextSize(text + s, text + e).x;
+                }
+            }
+            if (caretVisible && !caretFound &&
+                (caretByte < rowEnd || (caretByte == rowEnd && rowEnd == lineEnd))) {
+                caretFound = true;
+                caretPos = ImVec2(textOrigin.x + ImGui::CalcTextSize(text + p, text + std::min(caretByte, rowEnd)).x, y);
+            }
+            ++row;
+            p = rowEnd;
+            if (p >= lineEnd) break;
+        }
+        if (lineEnd < len) { i = lineEnd + 1; } else { break; }
+    }
+    if (caretVisible && caretFound)
+        draw->AddRectFilled(caretPos, ImVec2(caretPos.x + 1.6f, caretPos.y + ImGui::GetFontSize()), caretColor);
+    draw->PopClipRect();
+}
+
+// Indentação automática: o '\n' passa normalmente; quando ele chega ao
+// callback de Edit, confirmamos que foi UMA inserção e replicamos a indentação
+// da linha anterior (pastes ficam intactos; campos usam o mesmo canal do imgui
+// para reconciliar undo/redo corretamente).
+struct LuaEditCtx { bool singleNewline = false; int insertPos = 0; unsigned prevLen = 0; bool* dirty = nullptr; };
+
+int LuaEditCallback(ImGuiInputTextCallbackData* data) {
+    auto* ctx = static_cast<LuaEditCtx*>(data->UserData);
+    if (data->EventFlag == ImGuiInputTextFlags_CallbackCharFilter) {
+        if (data->EventChar == '\n') {
+            ctx->singleNewline = true;
+            ctx->insertPos = data->CursorPos;
+            ctx->prevLen = (unsigned)data->BufTextLen;
+        }
+        return 0;
+    }
+    if (ctx == nullptr || !ctx->singleNewline) return 0;
+    ctx->singleNewline = false;
+    const int len = data->BufTextLen;
+    if (len < 0 || (unsigned)len != ctx->prevLen + 1 || data->CursorPos != ctx->insertPos + 1 ||
+        data->CursorPos > len || data->Buf[ctx->insertPos] != '\n') return 0;
+    int lineStart = ctx->insertPos;
+    while (lineStart > 0 && data->Buf[lineStart-1] != '\n') --lineStart;
+    int indent = 0;
+    while (lineStart + indent < ctx->insertPos && data->Buf[lineStart+indent] == ' ') ++indent;
+    if (indent > 96) indent = 96;
+    if (indent <= 0 || data->BufSize < len + indent + 1 || ctx->insertPos >= len) return 0;
+    char spaces[97];
+    std::memset(spaces, ' ', (size_t)indent); spaces[indent] = 0;
+    data->InsertChars(data->CursorPos, spaces);
+    data->BufDirty = true;
+    data->CursorPos = data->SelectionStart = data->SelectionEnd = data->CursorPos + indent;
+    if (ctx->dirty) *ctx->dirty = true;
+    return 0;
+}
 }
 void EditorUI::drawInstanceProperties(Instance& object) {
     ImGui::TextWrapped("%s  /  %s",object.name().c_str(),object.className());
@@ -202,16 +410,45 @@ void EditorUI::drawScriptEditor() {
                 }
                 const auto origin=ImGui::GetCursorScreenPos();const float height=std::max(100.f,ImGui::GetContentRegionAvail().y-22);
                 ImGui::Dummy({42,height});ImGui::SameLine();
-                if(ImGui::InputTextMultiline("##source",&draft.text,{-1,height},ImGuiInputTextFlags_AllowTabInput))draft.dirty=true;
+                bool typedNewline=false;
+                LuaEditCtx editCtx;editCtx.dirty=&typedNewline;
+                // O texto nativo fica invisível (canal alpha 0): o realce do
+                // TokenizerLua desenha tudo por cima; seleção/undo/scroll nativos.
+                ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0,0,0,0));
+                if(ImGui::InputTextMultiline("##source",&draft.text,{-1,height},
+                        ImGuiInputTextFlags_AllowTabInput|
+                        ImGuiInputTextFlags_CallbackCharFilter|ImGuiInputTextFlags_CallbackEdit,
+                        LuaEditCallback,&editCtx))draft.dirty=true;
+                if(typedNewline)draft.dirty=true;
+                ImGui::PopStyleColor();
                 const auto* state=ImGui::GetInputTextState(ImGui::GetItemID());
-                const float scroll=state?state->Scroll.y:0, line=ImGui::GetTextLineHeight();
-                auto* draw=ImGui::GetWindowDrawList();draw->PushClipRect(origin,{origin.x+40,origin.y+height},true);
+                const float lineHeight=ImGui::GetTextLineHeight();
+                const ImVec2 fieldMin=ImGui::GetItemRectMin(),fieldMax=ImGui::GetItemRectMax();
+                const float scrollPixels=state?state->Scroll.y*lineHeight:0;
+                std::vector<LuaTokenRun> luaRuns;TokenizeLua(draft.text.c_str(),luaRuns);
+                int caretByte=0;bool caretVisible=false;
+                if(state){caretByte=state->GetCursorPos();caretVisible=state->ID==ImGui::GetItemID();}
+                auto* draw=ImGui::GetWindowDrawList();
+                DrawLuaSyntax(draw,
+                    ImVec2(fieldMin.x+ImGui::GetStyle().FramePadding.x,fieldMin.y+ImGui::GetStyle().FramePadding.y),
+                    lineHeight,std::max(1.f,ImGui::GetItemRectSize().x-ImGui::GetStyle().FramePadding.x*2),
+                    scrollPixels,draft.text.c_str(),(int)draft.text.size(),luaRuns,
+                    caretVisible,caretByte,fieldMin,fieldMax,kLuaColorCaret);
+                // Erros de runtime deste script: barra vermelha na margem + contagem.
+                int scriptErrors=0;
+                for(const auto& msg:runtime_.scripts().messages())
+                    if(msg.error&&msg.script==object->name())++scriptErrors;
+                draw->PushClipRect(origin,{origin.x+40,origin.y+height},true);
                 const auto count=1+std::count(draft.text.begin(),draft.text.end(),'\n');
-                for(int i=std::max(0,int(scroll/line));i<count && (i*line-scroll)<height;++i) {
+                for(int i=std::max(0,int(scrollPixels/lineHeight));i<count&&(i*lineHeight-scrollPixels)<height;++i){
                     char number[16];std::snprintf(number,sizeof(number),"%d",i+1);
-                    draw->AddText({origin.x+3,origin.y+ImGui::GetStyle().FramePadding.y+i*line-scroll},IM_COL32(130,145,160,255),number);
+                    draw->AddText({origin.x+3,origin.y+ImGui::GetStyle().FramePadding.y+i*lineHeight-scrollPixels},IM_COL32(130,145,160,255),number);
                 }
-                draw->PopClipRect();ImGui::TextDisabled("Tab indents | Ctrl+Z/Y text undo/redo | Enter inserts line | code executes only in Play");
+                if(scriptErrors>0)
+                    draw->AddRectFilled(origin,ImVec2(origin.x+2.5f,origin.y+height),IM_COL32(198,58,70,235));
+                draw->PopClipRect();
+                if(scriptErrors>0)ImGui::TextColored(ImVec4(1,.45f,.4f,1),"Erros de runtime: %d (veja o Output)",scriptErrors);
+                else ImGui::TextDisabled("Tab indents | Ctrl+Z/Y undo/redo | Enter indenta a linha | so executa no Play");
                 ImGui::PopID();ImGui::EndTabItem();
             }
             ++it;
@@ -230,9 +467,23 @@ void EditorUI::drawOutput() {
     if(!ImGui::Begin("Output",&showOutput_)){ImGui::End();return;}
     ImGui::Text("Lua: %zu KiB / 8192 | %zu / 128 tasks",runtime_.scripts().memoryUsed()/1024,runtime_.scripts().taskCount());
     ImGui::Separator();
+    int messageIndex=0;
     for(const auto& message:runtime_.scripts().messages()) {
+        ImGui::PushID(++messageIndex);
         ImGui::PushStyleColor(ImGuiCol_Text,message.error?ImVec4(1,.4f,.35f,1):ImVec4(.7f,.85f,.75f,1));
-        ImGui::TextWrapped("[%s] %s",message.script.c_str(),message.text.c_str());ImGui::PopStyleColor();
+        ImGui::TextWrapped("[%s] %s",message.script.c_str(),message.text.c_str());
+        ImGui::PopStyleColor();
+        if(ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Clique para abrir o script");
+            if(ImGui::IsItemClicked(0))
+                for(const auto& pair:scriptDrafts_)
+                    if(auto* node=scene_.find(pair.first);
+                       !pair.second.text.empty()&&IsScriptClass(node?
+                        node->instanceClass():InstanceClass::Script)&&message.script==node->name()) {
+                        openScript(pair.first);break;
+                    }
+        }
+        ImGui::PopID();
     }
     ImGui::End();
 }
