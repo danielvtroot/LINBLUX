@@ -1,5 +1,6 @@
 #include "editor/EditorUI.h"
 #include "editor/StudioTheme.h"
+#include "ui/StudioFrontend.h"
 #include <filesystem>
 
 #include <algorithm>
@@ -166,7 +167,7 @@ void EditorUI::setGameplayCapture(bool capture) {
 }
 void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context, Vector2 image) {
     const Rectangle menuButton{image.x+12,image.y+12,78,38};
-    const bool menuHovered=context.hovered && !gameplayCapture_ && CheckCollisionPointRec(raw.mouse,menuButton);
+    const bool menuHovered=!frontend_ && context.hovered && !gameplayCapture_ && CheckCollisionPointRec(raw.mouse,menuButton);
     EditorInput gameInput=raw;
     if(menuHovered && raw.leftPressed)gameInput.escape=true; // HUD action enters the same Pause/Resume router
     if(menuHovered)context.hovered=false;
@@ -214,6 +215,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     renderer_.drawScene(runtime_.scene(), runtime_.playerCamera().camera(), viewportWidth_, viewportHeight_,
         kInvalidInstanceId, runtime_.playerCamera().avatarHidden() ? nullptr : &character, false);
     EndTextureMode();
+    if(frontend_)return; // RML owns gameplay presentation; no duplicate HUD/menu.
     auto* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled({menuButton.x,menuButton.y},{menuButton.x+menuButton.width,menuButton.y+menuButton.height},
         menuHovered?IM_COL32(54,68,88,245):IM_COL32(20,25,33,235),8);
@@ -423,7 +425,13 @@ void EditorUI::drawRigEditor() {
             ImGui::SetNextWindowDockID(properties->DockId, ImGuiCond_FirstUseEver);
     }
     ImGui::SetNextWindowSize({390, 550}, ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Rig Editor", &showRigEditor_)) { ImGui::End(); return; }
+    if(frontend_)frontend_->prepareAdvanced();
+    if (!ImGui::Begin("Rig Editor", &showRigEditor_,frontend_?(ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoDocking):0)) { ImGui::End(); return; }
+    const bool integrated=frontend_!=nullptr;
+    if(integrated) {
+        ImGui::BeginChild("Rig controls",{std::min(250.f,ImGui::GetContentRegionAvail().x*.34f),0});
+        ImGui::PushItemWidth(std::max(90.f,ImGui::GetContentRegionAvail().x-45));
+    }
     if (ImGui::Button("Create R6")) insertR6();
     auto* rig = scene_.gameAssets().findRig(selectedRig_);
     if (ImGui::BeginCombo("Rig", rig ? rig->name.c_str() : "Select a rig")) {
@@ -432,7 +440,7 @@ void EditorUI::drawRigEditor() {
         ImGui::EndCombo();
     }
     rig = scene_.gameAssets().findRig(selectedRig_);
-    if (!rig) { ImGui::TextWrapped("Create an R6 or select one in Explorer."); ImGui::End(); return; }
+    if (!rig) { ImGui::TextWrapped("Create an R6 or select one in Explorer.");if(integrated){ImGui::PopItemWidth();ImGui::EndChild();} ImGui::End(); return; }
     ImGui::InputText("Name", &rig->name);
     if (rig->name.empty()) rig->name = "R6Character";
     if (ImGui::Button("Use as Player")) scene_.gameAssets().defaultRig = rig->id;
@@ -463,7 +471,11 @@ void EditorUI::drawRigEditor() {
     }
     {const auto lo=ImGui::GetItemRectMin(),hi=ImGui::GetItemRectMax();rigToolControl_={lo.x,lo.y,hi.x-lo.x,hi.y-lo.y};}
     if(rigContext_!=RigContext::Edit)ImGui::TextDisabled("Scale changes bind proportions: use Edit Rig.");
-    if (ImGui::CollapsingHeader("Root / HumanoidRootPart", ImGuiTreeNodeFlags_DefaultOpen)) EditTransform("root", rig->root);
+    if(integrated) {
+        ImGui::PopItemWidth();ImGui::EndChild();ImGui::SameLine();
+        ImGui::BeginChild("Rig inspector",{0,0});
+    }
+    if (ImGui::CollapsingHeader("Root / HumanoidRootPart", integrated?0:ImGuiTreeNodeFlags_DefaultOpen)) EditTransform("root", rig->root);
     if (ImGui::CollapsingHeader("Body parts", ImGuiTreeNodeFlags_DefaultOpen)) {
         for (int i = 0; i < game::kBodyCount; ++i) {
             ImGui::PushID(i);
@@ -497,7 +509,7 @@ void EditorUI::drawRigEditor() {
             ImGui::EndDisabled();
         }
     }
-    if (ImGui::CollapsingHeader("Joints", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Joints", integrated?0:ImGuiTreeNodeFlags_DefaultOpen)) {
         for (int j = 0; j < game::kJointCount; ++j) {
             if (ImGui::Selectable(rig->joints[j].name.c_str(), selectedJoint_ == j)) {
                 cancelRigGizmo(); selectedJoint_ = j; selectedRigBody_ = rig->joints[j].child;
@@ -524,6 +536,7 @@ void EditorUI::drawRigEditor() {
         ImGui::SameLine(); if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
+    if(integrated)ImGui::EndChild();
     ImGui::End();
 }
 
@@ -629,7 +642,8 @@ void EditorUI::drawGameSettings() {
             ImGui::SetNextWindowDockID(properties->DockId, ImGuiCond_FirstUseEver);
     }
     ImGui::SetNextWindowSize({420, 540}, ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Game Settings", &showGameSettings_)) { ImGui::End(); return; }
+    if(frontend_)frontend_->prepareAdvanced();
+    if (!ImGui::Begin("Game Settings", &showGameSettings_,frontend_?(ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoDocking):0)) { ImGui::End(); return; }
     auto& a = scene_.gameAssets(); auto& p = a.player;
     const auto previousSettings = p;
     if (a.rigs.empty()) {
@@ -681,7 +695,8 @@ void EditorUI::drawAnimationEditor() {
         }
     }
     ImGui::SetNextWindowSize({800, 600}, ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Animation Editor", &showAnimationEditor_)) { ImGui::End(); return; }
+    if(frontend_)frontend_->prepareAdvanced();
+    if (!ImGui::Begin("Animation Editor", &showAnimationEditor_,frontend_?(ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoDocking):0)) { ImGui::End(); return; }
     auto& assets = scene_.gameAssets();
     if (assets.animations.empty()) {
         ImGui::TextUnformatted("No animation assets. Create a new clip to begin.");
@@ -748,8 +763,13 @@ void EditorUI::drawAnimationEditor() {
         ImGui::EndPopup();
     }
     if(animationSource_.empty()) {ImGui::End();return;}
-    const bool compact = ImGui::IsWindowDocked();
-    if (!compact || ImGui::CollapsingHeader("Clip settings: name / duration / FPS / loop / priority")) {
+    const bool integrated=frontend_!=nullptr;
+    const bool compact = ImGui::IsWindowDocked()||integrated;
+    if(integrated) {
+        ImGui::BeginChild("Clip inspector",{std::min(230.f,ImGui::GetContentRegionAvail().x*.28f),0});
+        ImGui::PushItemWidth(std::max(75.f,ImGui::GetContentRegionAvail().x*.45f));
+    }
+    if (integrated || !compact || ImGui::CollapsingHeader("Clip settings: name / duration / FPS / loop / priority")) {
         animationDirty_ |= ImGui::InputText("Name", &animationDraft_.name);
         float duration = animationDraft_.duration;
         if (ImGui::DragFloat("Duration (s)", &duration, .05f, .05f, 120, "%.2f", ImGuiSliderFlags_AlwaysClamp) &&
@@ -767,7 +787,8 @@ void EditorUI::drawAnimationEditor() {
         }
     }
     auto* rig = assets.findRig(selectedRig_);
-    if (!rig) { ImGui::TextDisabled("Select a rig in Explorer to preview."); ImGui::End(); return; }
+    if(integrated){ImGui::PopItemWidth();ImGui::EndChild();ImGui::SameLine();ImGui::BeginChild("Animation timeline",{0,0});}
+    if (!rig) { ImGui::TextDisabled("Select a rig in Explorer to preview.");if(integrated)ImGui::EndChild();ImGui::End(); return; }
     if (ImGui::Button(previewPlaying_ ? "Pause preview" : "Play preview")) {
         cancelRigGizmo(); rigContext_ = RigContext::Animation; previewPlaying_ = !previewPlaying_;
     }
@@ -782,10 +803,10 @@ void EditorUI::drawAnimationEditor() {
         }
         previewPose_ = animationDraft_.sample(previewTime_);
     }
-    if (compact) ImGui::SetNextItemWidth(std::max(100.f, ImGui::GetContentRegionAvail().x-280));
-    bool seek = ImGui::SliderFloat("Time / scrub", &previewTime_, 0, animationDraft_.duration, "%.3f s");
+    if (compact) ImGui::SetNextItemWidth(std::max(100.f, ImGui::GetContentRegionAvail().x-(integrated?90:280)));
+    bool seek = ImGui::SliderFloat(integrated?"##Time / scrub":"Time / scrub", &previewTime_, 0, animationDraft_.duration, "%.3f s");
     if (compact) { ImGui::SameLine(); ImGui::SetNextItemWidth(70); }
-    seek |= ImGui::InputFloat("Exact time (s)", &previewTime_, 0, 0, "%.3f");
+    seek |= ImGui::InputFloat(integrated?"##Exact time (s)":"Exact time (s)", &previewTime_, 0, 0, "%.3f");
     previewTime_ = std::isfinite(previewTime_) ? std::clamp(previewTime_, 0.f, animationDraft_.duration) : 0;
     if (seek) {
         cancelRigGizmo(); previewPlaying_ = false; rigContext_ = RigContext::Animation;
@@ -861,6 +882,7 @@ void EditorUI::drawAnimationEditor() {
     ImGui::EndDisabled();
     if (ImGui::Button("Reset selected pose")) previewPose_[selectedJoint_] = {};
     ImGui::SameLine(); ImGui::TextDisabled("%s / preview is separate from saved asset", animationDirty_ ? "Unsaved keys" : "Saved");
+    if(integrated)ImGui::EndChild();
     ImGui::End();
 }
 } // namespace loblox

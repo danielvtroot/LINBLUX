@@ -28,6 +28,7 @@ struct AppConfig {
     int targetFps = 60;            // limite configuravel de renderizacao
     bool vsync = true;
     bool resizable = true;
+    bool modernUI = true;
 
     // Fisica independente da taxa de renderizacao.
     float physicsFixedStep = 1.0f / 60.0f;

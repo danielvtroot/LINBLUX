@@ -1,0 +1,27 @@
+<div id="ribbon-Home" class="ribbon-page">
+ <div class="ribbon-group"><div class="group-tools"><button id="cmd-tool-0" data-action="tool" data-value="0" title="Select · 1"><img src="icon-select"/>Select</button><button id="cmd-tool-1" data-action="tool" data-value="1" title="Move · 2"><img src="icon-move"/>Move</button><button id="cmd-tool-2" data-action="tool" data-value="2" title="Scale · 3"><img src="icon-scale"/>Scale</button><button id="cmd-tool-3" data-action="tool" data-value="3" title="Rotate · 4"><img src="icon-rotate"/>Rotate</button></div><div class="group-name">Transform</div></div>
+ <div class="ribbon-group"><div class="group-tools"><button id="cmd-part-" data-action="part" title="Insert anchored block"><img src="icon-part"/>Part</button><button data-action="sphere"><img src="icon-sphere"/>Sphere</button><button data-action="spawn"><img src="icon-spawn"/>Spawn</button></div><div class="group-name">Insert</div></div>
+ <div class="ribbon-group"><div class="group-tools"><button data-action="color-dialog"><img src="icon-color"/>Color</button><button data-action="material-dialog"><img src="icon-material"/>Material</button><button data-action="anchor" title="Toggle Anchored on selected Part"><img src="icon-anchor"/>Anchor</button></div><div class="group-name">Appearance / physics</div></div>
+ <div class="ribbon-group"><div class="group-tools"><button data-action="show:settings"><img src="icon-settings"/>Settings</button><button data-action="show:assets"><img src="icon-image"/>Images</button></div><div class="group-name">Project</div></div>
+</div>
+<div id="ribbon-Model" class="ribbon-page">
+ <div class="ribbon-group"><div class="group-tools"><button data-action="folder"><img src="icon-folder"/>Folder</button><button data-action="model"><img src="icon-model"/>Model</button></div><div class="group-name">Organize</div></div>
+ <div class="ribbon-group"><div class="group-tools"><button data-action="duplicate" title="Duplicate · Ctrl+D"><img src="icon-duplicate"/>Duplicate</button><button data-action="copy" title="Copy · Ctrl+C"><img src="icon-copy"/>Copy</button><button data-action="paste" title="Paste · Ctrl+V"><img src="icon-paste"/>Paste</button><button data-action="delete"><img src="icon-delete"/>Delete</button></div><div class="group-name">Edit</div></div>
+ <div class="ribbon-group"><div class="group-tools"><button data-action="focus" title="Frame selection · F"><img src="icon-focus"/>Focus</button><button data-action="show:assets"><img src="icon-image"/>Images</button></div><div class="group-name">Surface</div></div>
+</div>
+<div id="ribbon-Avatar" class="ribbon-page">
+ <div class="ribbon-group"><div class="group-tools"><button id="cmd-r6-" data-action="r6"><img src="icon-rig"/>Create R6</button><button id="cmd-show:rig-" data-action="show:rig"><img src="icon-rig"/>Rig Editor</button><button id="cmd-show:animation-" data-action="show:animation"><img src="icon-animation"/>Animate</button></div><div class="group-name">Avatar tools</div></div>
+ <div class="ribbon-group"><div class="group-tools"><button data-action="show:settings"><img src="icon-settings"/>Player</button></div><div class="group-name">Configuration</div></div>
+</div>
+<div id="ribbon-Script" class="ribbon-page">
+ <div class="ribbon-group"><div class="group-tools"><button id="cmd-script-" data-action="script"><img src="icon-script"/>Script</button><button data-action="local-script"><img src="icon-local-script"/>Local</button><button data-action="module"><img src="icon-module"/>Module</button></div><div class="group-name">Insert Lua 5.4</div></div>
+ <div class="ribbon-group"><div class="group-tools"><button data-action="show:script"><img src="icon-script"/>Editor</button><button data-action="show:output"><img src="icon-output"/>Output</button></div><div class="group-name">Code</div></div>
+</div>
+<div id="ribbon-View" class="ribbon-page">
+ <div class="ribbon-group"><div class="group-tools"><button data-action="toggle-toolbox"><img src="icon-toolbox"/>Toolbox</button><button data-action="toggle-explorer"><img src="icon-explorer"/>Explorer</button><button data-action="toggle-properties"><img src="icon-properties"/>Properties</button><button data-action="show:output"><img src="icon-output"/>Output</button></div><div class="group-name">Panels</div></div>
+ <div class="ribbon-group"><div class="group-tools"><button data-action="reset-layout"><img src="icon-respawn"/>Reset</button><button data-action="focus"><img src="icon-focus"/>Focus</button></div><div class="group-name">Workspace</div></div>
+</div>
+<div id="ribbon-Game" class="ribbon-page">
+ <div class="ribbon-group"><div class="group-tools"><button data-action="play"><img src="icon-play"/>Play</button><button data-action="stop"><img src="icon-stop"/>Stop</button></div><div class="group-name">Test</div></div>
+ <div class="ribbon-group"><div class="group-tools"><button id="cmd-show:settings-" data-action="show:settings"><img src="icon-settings"/>Config</button><button data-action="save"><img src="icon-save"/>Save</button><button data-action="save-dialog"><img src="icon-save"/>Save as</button></div><div class="group-name">Project</div></div>
+</div>

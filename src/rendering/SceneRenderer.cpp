@@ -603,11 +603,13 @@ int FaceIndex(const std::string& face) {
     return -1;
 }
 const std::string* FindText(const Part& part, const char* key) {
+    if(!key)return nullptr;
     const auto it = part.attributes().find(key);
     if (it == part.attributes().end()) return nullptr;
     return std::get_if<std::string>(&it->second);
 }
 bool FindNumber(const Part& part, const char* key, double& out) {
+    if(!key)return false;
     const auto it = part.attributes().find(key);
     if (it == part.attributes().end()) return false;
     if (const auto* value = std::get_if<double>(&it->second)) {
@@ -692,7 +694,7 @@ void DrawLayer(const Part& part, const char* imageKey, const char* faceKey,
         const int index = FaceIndex(*faceName);
         if (index >= 0) face = index;
     }
-    double alpha = 1.0f;
+    double alpha = 0.0f; // Transparency defaults to opaque, not invisible.
     FindNumber(part, alphaKey, alpha);
     double rotation = 0.0f;
     FindNumber(part, rotationKey, rotation);

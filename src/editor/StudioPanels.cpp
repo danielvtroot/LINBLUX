@@ -1,4 +1,5 @@
 #include "editor/EditorUI.h"
+#include "ui/StudioFrontend.h"
 #include "game/ImageAssets.h"
 #include "scene/Scene.h"
 #include "physics/PhysicsWorld.h"
@@ -423,7 +424,8 @@ void EditorUI::drawScriptEditor() {
         }
     }
     ImGui::SetNextWindowSize({750,440},ImGuiCond_FirstUseEver);
-    if(!ImGui::Begin("Script Editor",&showScriptEditor_)){ImGui::End();return;}
+    if(frontend_)frontend_->prepareAdvanced();
+    if(!ImGui::Begin("Script Editor",&showScriptEditor_,frontend_?(ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoDocking):0)){ImGui::End();return;}
     if(ImGui::Button("New Script"))insertScript();
     ImGui::SameLine();
     if(ImGui::Button("New Module"))insertScript(InstanceClass::ModuleScript);
@@ -521,7 +523,8 @@ void EditorUI::drawOutput() {
             ImGui::SetNextWindowDockID(editor->DockId,ImGuiCond_FirstUseEver);
     }
     ImGui::SetNextWindowSize({740,230},ImGuiCond_FirstUseEver);
-    if(!ImGui::Begin("Output",&showOutput_)){ImGui::End();return;}
+    if(frontend_)frontend_->prepareAdvanced();
+    if(!ImGui::Begin("Output",&showOutput_,frontend_?(ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoDocking):0)){ImGui::End();return;}
     ImGui::Text("Lua: %zu KiB / 8192 | %zu / 128 tasks",runtime_.scripts().memoryUsed()/1024,runtime_.scripts().taskCount());
     ImGui::Separator();
     int messageIndex=0;

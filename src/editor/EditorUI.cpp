@@ -1,5 +1,6 @@
 #include "editor/EditorUI.h"
 #include "editor/StudioTheme.h"
+#include "ui/StudioFrontend.h"
 #include "game/ImageAssets.h"
 
 #include "core/Diagnostics.h"
@@ -382,6 +383,8 @@ void ToolbarSeparator() {
         case InstanceClass::Script: return ImVec4(.65f,.8f,1,1);
         case InstanceClass::LocalScript: return ImVec4(.5f,.95f,.75f,1);
         case InstanceClass::ModuleScript: return ImVec4(.85f,.7f,1,1);
+        case InstanceClass::Decal:
+        case InstanceClass::Texture: return ImVec4(.75f,.85f,.7f,1);
         case InstanceClass::ServerScriptService:
         case InstanceClass::ServerStorage:
         case InstanceClass::ReplicatedStorage: return ImVec4(.9f,.7f,.45f,1);
@@ -543,12 +546,21 @@ EditorUI::EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera,
 }
 
 EditorUI::~EditorUI() {
+    frontend_.reset();
     stopPlay();
     cancelRigGizmo();
     camera_.releaseCapture();
     endGizmoSession(false);
     unloadViewport();
 }
+
+bool EditorUI::enableModernFrontend(std::string& error) {
+    if(frontend_){error.clear();return true;}
+    auto candidate=std::make_unique<StudioFrontend>(*this);
+    if(!candidate->initialize(error))return false;
+    frontend_=std::move(candidate);return true;
+}
+void EditorUI::renderModernFrontend(){if(frontend_)frontend_->render();}
 
 void EditorUI::endGizmoSession(bool restoreTransform, const char* reason) {
     Part* part = scene_.findPart(transform_.partId());
@@ -731,6 +743,7 @@ void EditorUI::draw() {
     if (!runtime_.active() && scene_.selection()) {
         cancelRigGizmo(); selectedRig_.clear();
     }
+    if(frontend_) {frontend_->draw();return;}
     drawMainMenuBar();
     if (!layoutBuilt_) {
         buildDockLayout();
@@ -1185,10 +1198,16 @@ void EditorUI::drawToolbox() {
 }
 
 void EditorUI::drawViewport() {
-    const EditorInput input = ReadEditorInput();
+    EditorInput input = ReadEditorInput();
+    if(frontend_) {
+        const auto r=frontend_->viewport();
+        ImGui::SetNextWindowPos({r.x,r.y},ImGuiCond_Always);ImGui::SetNextWindowSize({r.width,r.height},ImGuiCond_Always);
+        ImGui::SetNextWindowDockID(0,ImGuiCond_Always);
+    }
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     const bool visible = ImGui::Begin("Viewport", nullptr,
-                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
+                 (frontend_?(ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoDocking):0));
     if (!visible) {
         if (runtime_.active() && input.stop && IsWindowFocused()) stopPlay();
         if (runtime_.state() == game::RuntimeState::Playing) runtime_.pause();
@@ -1249,6 +1268,7 @@ void EditorUI::drawViewport() {
         context.keyboardCaptured = false;
     context.transforming = transform_.active();
     context.navigating = camera_.cursorCaptured();
+    if(frontend_)frontend_->filter(input,context);
     if (runtime_.active()) {
         drawGameplayViewport(input, context, {imagePosition.x, imagePosition.y});
         ImGui::End(); ImGui::PopStyleVar(); return;

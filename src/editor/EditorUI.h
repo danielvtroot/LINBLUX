@@ -4,6 +4,7 @@
 #include <string>
 #include <map>
 #include <optional>
+#include <memory>
 
 #include "core/Config.h"
 #include "core/Math.h"
@@ -22,6 +23,8 @@ class EditorCamera;
 class SceneRenderer;
 class Instance;
 class Part;
+class StudioFrontend;
+class EditorActions;
 
 // Marca Loblox: textura carregada lazy na raiz do projeto (nunca caminho
 // absoluto da máquina). ok=false = usar o fallback vetorial da toolbar.
@@ -42,6 +45,9 @@ public:
     EditorUI& operator=(const EditorUI&) = delete;
 
     void draw();
+    bool enableModernFrontend(std::string& error);
+    void renderModernFrontend();
+    StudioFrontend* frontend() const {return frontend_.get();}
 
     void setOnSceneLoaded(std::function<void()> callback);
     void setStatus(std::string message, bool error = false);
@@ -52,6 +58,8 @@ public:
 
 private:
     friend struct EditorUITestAccess;
+    friend class StudioFrontend;
+    friend class EditorActions;
     void buildDockLayout();
     void handleShortcuts(const EditorInput& input, const InputRoute& route);
     bool saveCurrentProject();
@@ -119,6 +127,7 @@ private:
     bool viewportFocused_ = false;
     unsigned long long frame_ = 0;
     bool traceInput_ = false;
+    std::unique_ptr<StudioFrontend> frontend_;
     game::RuntimeSession runtime_;
     bool gameplayCapture_ = false;
     bool gameplaySkipDelta_ = true;

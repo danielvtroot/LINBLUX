@@ -46,6 +46,8 @@ static MouseCursor MouseCursorMap[ImGuiMouseCursor_COUNT];
 ImGuiContext* GlobalContext = nullptr;
 
 static constexpr size_t MAX_RAYLIB_KEY = 349;
+static bool ExternalTextInput=false; // Loblox RML keyboard owner
+void rlImGuiSetExternalTextInput(bool active) { ExternalTextInput=active; }
 static ImGuiKey RaylibKeyMap[MAX_RAYLIB_KEY];
 static bool KeyMapInitialized = false;
 
@@ -882,7 +884,7 @@ bool ImGui_ImplRaylib_ProcessEvents(void)
         // InputText receives printable characters in their original order via
         // GetCharPressed below. Artificial down/up pairs for each letter would
         // trickle for many frames and delay text until after Return submits it.
-        const bool textCharacter=io.WantTextInput && !ctrlDown && !ctrlPulse &&
+        const bool textCharacter=(io.WantTextInput || ExternalTextInput) && !ctrlDown && !ctrlPulse &&
             !altDown && !altPulse && !superDown && !superPulse &&
             (keyItr<KEY_ESCAPE || keyItr>=KEY_LEFT_SHIFT);
         const bool queuedPress=pressedInPoll[keyItr] && !textCharacter;
@@ -902,7 +904,7 @@ bool ImGui_ImplRaylib_ProcessEvents(void)
     if(altPulse)io.AddKeyEvent(ImGuiMod_Alt,false);
     if(superPulse)io.AddKeyEvent(ImGuiMod_Super,false);
 
-    if (io.WantCaptureKeyboard)
+    if (io.WantCaptureKeyboard || ExternalTextInput)
     {
         // add the text input in order
         unsigned int pressed = GetCharPressed();

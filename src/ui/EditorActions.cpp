@@ -1,0 +1,132 @@
+#include "ui/EditorActions.h"
+#include "ui/ImageSafety.h"
+#include "editor/EditorUI.h"
+#include "rendering/EditorCamera.h"
+#include "scene/Scene.h"
+#include "objects/Lighting.h"
+#include "objects/Workspace.h"
+#include "game/ImageAssets.h"
+#include "serialization/ProjectIO.h"
+#include "core/Diagnostics.h"
+#include <cmath>
+#include <stdexcept>
+namespace loblox {
+namespace {
+float Number(const std::string& text) {size_t n=0;float v=std::stof(text,&n);if(n!=text.size()||!std::isfinite(v))throw std::runtime_error("Enter a finite number");return v;}
+Color ReadColor(std::string text) {
+    if(!text.empty()&&text.front()=='#')text.erase(text.begin());
+    if(text.size()!=6||text.find_first_not_of("0123456789abcdefABCDEF")!=std::string::npos)throw std::runtime_error("Use a color in #RRGGBB format");
+    const auto rgb=std::stoul(text,nullptr,16);return {static_cast<unsigned char>(rgb>>16),static_cast<unsigned char>(rgb>>8),static_cast<unsigned char>(rgb),255};
+}
+}
+bool EditorActions::dispatch(const EditorCommand& c) {
+    auto& e=editor_;
+    try {
+        if(c.action=="play")e.startPlay();
+        else if(c.action=="stop")e.stopPlay();
+        else if(c.action=="pause") {e.runtime_.pause();e.setGameplayCapture(false);}
+        else if(c.action=="resume")e.runtime_.resume();
+        else if(c.action=="respawn") {std::string error;if(!e.runtime_.respawn(error))throw std::runtime_error(error);}
+        else if(e.runtime_.active())return false;
+        else if(c.action=="select") {e.endGizmoSession(true,"tree_selection");e.cancelRigGizmo();e.selectedRig_.clear();e.scene_.select(e.scene_.find(c.instance));}
+        else if(c.action=="rig-select")e.selectRig(c.value);
+        else if(c.action=="tool") {const int tool=std::stoi(c.value);if(tool<0||tool>3)throw std::runtime_error("Invalid tool");e.setTool(static_cast<ToolMode>(tool),"rml_ribbon");}
+        else if(c.action=="part")e.insertPart(PartShape::Block);
+        else if(c.action=="sphere")e.insertPart(PartShape::Sphere);
+        else if(c.action=="spawn")e.insertSpawnLocation();
+        else if(c.action=="folder")e.insertContainer(InstanceClass::Folder,e.scene_.find(c.instance));
+        else if(c.action=="model")e.insertContainer(InstanceClass::Model,e.scene_.find(c.instance));
+        else if(c.action=="script")e.insertScript(InstanceClass::Script);
+        else if(c.action=="local-script")e.insertScript(InstanceClass::LocalScript);
+        else if(c.action=="module")e.insertScript(InstanceClass::ModuleScript);
+        else if(c.action=="open-script")e.openScript(c.instance);
+        else if(c.action=="r6")e.insertR6();
+        else if(c.action=="duplicate")e.duplicateSelection();
+        else if(c.action=="delete")e.deleteSelection();
+        else if(c.action=="focus")e.focusSelection();
+        else if(c.action=="copy")e.clipboardId_=e.scene_.selection()?e.scene_.selection()->id():0;
+        else if(c.action=="paste") {if(auto* source=e.scene_.find(e.clipboardId_)) {auto* p=e.scene_.selection();if(p && p->isPart())p=p->parent();if(auto* copy=e.scene_.duplicateTree(*source,p))e.scene_.select(copy);}}
+        else if(c.action=="save")return e.saveCurrentProject();
+        else if(c.action=="save-as") {std::string error;if(!e.saveProjectAt(c.value,error))throw std::runtime_error(error);e.setProjectPath(c.value);}
+        else if(c.action=="open") {std::string error;e.endGizmoSession(true,"load");e.cancelRigGizmo();if(!projectio::load(e.scene_,c.value,error))throw std::runtime_error(error);
+            e.scriptDrafts_.clear();e.activeScript_=e.requestedScript_=0;e.selectedRig_.clear();e.animationSource_.clear();
+            e.previewPlaying_=false;e.previewPose_={};e.animationDirty_=false;e.timelineDragJoint_=-1;e.hasCopiedKey_=false;e.clipboardId_=0;
+            e.camera_.releaseCapture();e.setProjectPath(c.value);if(e.onSceneLoaded_)e.onSceneLoaded_();e.checkInvariants("rml_load");
+        }
+        else if(c.action=="rename") {if(c.value.empty()||c.value.size()>128)throw std::runtime_error("Name must contain 1..128 bytes");if(auto* node=e.scene_.find(c.instance))node->setName(c.value);else if(auto* rig=e.scene_.gameAssets().findRig(e.selectedRig_))rig->name=c.value;}
+        else if(c.action=="reparent") {std::string error;if(!e.scene_.reparent(e.scene_.find(c.instance),e.scene_.find(std::stoull(c.value)),error))throw std::runtime_error(error);}
+        else if(c.action=="snap") {e.endGizmoSession(true,"snap");e.cancelRigGizmo();e.snapEnabled_=c.value=="true";}
+        else if(c.action=="move-snap"||c.action=="scale-snap"||c.action=="rotate-snap") {float v=Number(c.value);if(v<=0||v>180)throw std::runtime_error("Snap increment must be 0..180");e.endGizmoSession(true,"snap");e.cancelRigGizmo();(c.action=="move-snap"?e.moveSnap_:c.action=="scale-snap"?e.scaleSnap_:e.rotateSnapDegrees_)=v;}
+        else if(c.action=="anchor") {if(auto* node=e.scene_.selection();node&&node->isPart())static_cast<Part*>(node)->setAnchored(!static_cast<Part*>(node)->anchored());}
+        else if(c.action=="import-image") {
+            if(!ui::SafeImageFile(c.value))throw std::runtime_error("Use a PNG/JPEG up to 4096 × 4096 pixels and 32 MiB");
+            Image image=LoadImage(c.value.c_str());
+            const bool valid=image.data&&image.width<=4096&&image.height<=4096;UnloadImage(image);
+            if(!valid)throw std::runtime_error("Use a valid PNG/JPEG up to 4096 × 4096 pixels");
+            std::string asset,error;if(!game::ImportImageTo(game::AssetsDir(),c.value,asset,error))throw std::runtime_error(error);
+            e.setStatus("Image imported: "+asset);
+        }
+        else if(c.action=="apply-image"||c.action=="apply-texture") {
+            auto* part=e.scene_.selection();if(!part||!part->isPart())throw std::runtime_error("Select a Part before applying an image");
+            const auto path=game::ResolveImagePath(game::AssetsDir(),c.value);if(path.empty())throw std::runtime_error("Image asset missing");
+            part->setAttribute(c.action=="apply-image"?"decal_image":"texture_image",path);
+            e.setStatus("Image applied to "+part->name());
+        }
+        else if(c.action.rfind("game:",0)==0) {
+            auto settings=e.scene_.gameAssets().player;const auto field=c.action.substr(5);
+            const std::pair<const char*,float game::PlayerSettings::*> numeric[]={
+                {"WalkSpeed",&game::PlayerSettings::walkSpeed},{"JumpHeight",&game::PlayerSettings::jumpHeight},{"Gravity",&game::PlayerSettings::gravity},
+                {"Acceleration",&game::PlayerSettings::acceleration},{"Deceleration",&game::PlayerSettings::deceleration},{"TurnSpeed",&game::PlayerSettings::turnSpeed},
+                {"MaxHealth",&game::PlayerSettings::maxHealth},{"InitialHealth",&game::PlayerSettings::health},{"RespawnDelay",&game::PlayerSettings::respawnDelay},
+                {"MinZoom",&game::PlayerSettings::minZoom},{"MaxZoom",&game::PlayerSettings::maxZoom},{"CameraDistance",&game::PlayerSettings::cameraDistance},
+                {"Sensitivity",&game::PlayerSettings::sensitivity},{"CollisionHeight",&game::PlayerSettings::collisionHeight},{"CollisionRadius",&game::PlayerSettings::collisionRadius}};
+            bool known=false;for(const auto& item:numeric)if(field==item.first){settings.*item.second=Number(c.value);known=true;break;}
+            if(field=="AutoRotate")settings.autoRotate=c.value=="true";
+            else if(field=="ShiftLock")settings.enableShiftLock=c.value=="true";
+            else if(field=="FirstPerson")settings.allowFirstPerson=c.value=="true";
+            else if(field=="CameraMode")settings.cameraMode=static_cast<game::CameraMode>(std::stoi(c.value));
+            else if(field=="DefaultRig") {if(!e.scene_.gameAssets().findRig(c.value))throw std::runtime_error("Rig not found");e.scene_.gameAssets().defaultRig=c.value;return true;}
+            else if(field=="Idle"||field=="Walk"||field=="Jump"||field=="Fall") {
+                if(!c.value.empty()&&!e.scene_.gameAssets().findAnimation(c.value))throw std::runtime_error("Animation ID not found");
+                (field=="Idle"?settings.idleAnimation:field=="Walk"?settings.walkAnimation:field=="Jump"?settings.jumpAnimation:settings.fallAnimation)=c.value;
+            }else if(!known)throw std::runtime_error("Unknown Game Config field");
+            std::string error;if(!settings.validate(error))throw std::runtime_error(error);e.scene_.gameAssets().player=settings;
+        }
+        else if(c.action.rfind("property:",0)==0) {
+            auto* node=e.scene_.find(c.instance);if(!node)return false;const auto name=c.action.substr(9);
+            if(name=="Name") {if(c.value.empty()||c.value.size()>128)throw std::runtime_error("Invalid name");node->setName(c.value);}
+            else if(name=="Parent") {std::string error;if(!e.scene_.reparent(node,e.scene_.find(std::stoull(c.value)),error))throw std::runtime_error(error);}
+            else if(name.rfind("Attribute:",0)==0) {
+                const auto key=name.substr(10);const auto it=node->attributes().find(key);if(it==node->attributes().end())throw std::runtime_error("Attribute no longer exists");
+                if(std::holds_alternative<double>(it->second))node->setAttribute(key,double(Number(c.value)));
+                else if(std::holds_alternative<bool>(it->second)){if(c.value!="true"&&c.value!="false")throw std::runtime_error("Use true or false");node->setAttribute(key,c.value=="true");}
+                else node->setAttribute(key,c.value);
+            }
+            else if(node->isPart()) {
+                auto& p=*static_cast<Part*>(node);e.endGizmoSession(true,"property");
+                if(name=="Anchored")p.setAnchored(c.value=="true");
+                else if(name=="CanCollide")p.setCanCollide(c.value=="true");
+                else if(name=="Material")p.setMaterial(PartMaterialFromIndex(std::stoi(c.value)));
+                else if(name=="Color") {auto color=ReadColor(c.value);color.a=p.color().a;p.setColor(color);}
+                else if(name=="Transparency") {const float v=Number(c.value);if(v<0||v>1)throw std::runtime_error("Transparency must be 0..1");auto color=p.color();color.a=static_cast<unsigned char>(std::lround((1-v)*255));p.setColor(color);}
+                else if(name.rfind("decal_",0)==0||name.rfind("texture_",0)==0) {
+                    if(name.find("transparency")!=std::string::npos) {const float v=Number(c.value);if(v<0||v>1)throw std::runtime_error("Transparency must be 0..1");p.setAttribute(name,double(v));}
+                    else if(name.find("rotation")!=std::string::npos||name.find("repeat")!=std::string::npos||name.find("offset")!=std::string::npos)p.setAttribute(name,double(Number(c.value)));
+                    else if(name.find("face")!=std::string::npos) {if(c.value!="Front"&&c.value!="Back"&&c.value!="Left"&&c.value!="Right"&&c.value!="Top"&&c.value!="Bottom")throw std::runtime_error("Invalid face");p.setAttribute(name,c.value);}
+                    else p.setAttribute(name,c.value);
+                }
+                else {const auto split=name.find('.');int axis=std::stoi(name.substr(split+1));if(axis<0||axis>2)throw std::runtime_error("Invalid axis");const auto field=name.substr(0,split);auto t=p.transform();Vector3 v=field=="Position"?t.position:field=="Size"?t.size:p.rotationEulerDegrees();(&v.x)[axis]=Number(c.value);if(field=="Size"&&(v.x<.2f||v.y<.2f||v.z<.2f))throw std::runtime_error("Minimum size is 0.2");if(field=="Position")p.setPosition(v);else if(field=="Size")p.setSize(v);else p.setRotationEulerDegrees(v);}
+                e.physics_.applyChanges(&p);
+            } else if(node==e.scene_.lighting()) {
+                auto* l=e.scene_.lighting();float v=Number(c.value);
+                if(name=="SkyEnabled")l->setSkyEnabled(v!=0);else if(name=="SunIntensity")l->setSunIntensity(v);
+                else if(name=="Brightness")l->setBrightness(v);else if(name=="FogDensity")l->setFogDensity(v);
+                else if(name=="CloudCoverage")l->setCloudDensity(v);else if(name=="SkyRotation")l->setSkyRotation(v);
+            } else if(node==e.scene_.workspace() && name=="VoidHeight")e.scene_.workspace()->setFallenPartsDestroyHeight(Number(c.value));
+            else if(IsScriptClass(node->instanceClass()) && name=="Enabled")static_cast<Script*>(node)->enabled=c.value=="true";
+        } else return false;
+        diag::Event event;event.subsystem="ui";event.name="command";event.entityId=c.instance;event.context={{"source","rml"},{"action",c.action}};event.result="ok";diag::log(event);
+        return true;
+    } catch(const std::exception& error) {e.setStatus(error.what(),true);diag::Event event;event.level=diag::Level::Error;event.subsystem="ui";event.name="command";event.entityId=c.instance;event.context={{"source","rml"},{"action",c.action}};event.result="error";event.error=error.what();diag::log(event);return false;}
+}
+}

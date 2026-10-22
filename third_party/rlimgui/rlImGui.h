@@ -92,6 +92,10 @@ RLIMGUIAPI void rlImGuiEnd(void);
 /// </summary>
 RLIMGUIAPI void rlImGuiShutdown(void);
 
+// Loblox extension: RML text controls use this backend's ordered character
+// queue too. This is an ownership hint, not a second keyboard event reader.
+RLIMGUIAPI void rlImGuiSetExternalTextInput(bool active);
+
 // Advanced StartupAPI
 
 /// <summary>

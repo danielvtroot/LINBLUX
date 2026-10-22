@@ -16,6 +16,26 @@ pkg_check_modules(LUA REQUIRED IMPORTED_TARGET lua5.4)
 find_package(OpenGL REQUIRED)
 find_package(Threads REQUIRED)
 
+# RmlUi 6.3, immutable source + digest; no samples, browser, GLFW backend or Lua VM.
+include(FetchContent)
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW)
+endif()
+set(RMLUI_SAMPLES OFF CACHE BOOL "" FORCE)
+set(RMLUI_LUA_BINDINGS OFF CACHE BOOL "" FORCE)
+set(RMLUI_PRECOMPILED_HEADERS OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(rmlui
+  URL https://codeload.github.com/mikke89/RmlUi/tar.gz/ba95ffe8bfb6370efb2cdcca927eaad4710c5413
+  URL_HASH SHA256=1541ef5577115e9368f8ed389b29f0925ef6572f326a33d378ea16c3cfa2cde8)
+FetchContent_MakeAvailable(rmlui)
+add_library(loblox_rml_gl3 STATIC ${rmlui_SOURCE_DIR}/Backends/RmlUi_Renderer_GL3.cpp)
+target_include_directories(loblox_rml_gl3 PUBLIC ${rmlui_SOURCE_DIR}/Backends)
+target_link_libraries(loblox_rml_gl3 PUBLIC RmlUi::Core OpenGL::GL ${CMAKE_DL_LIBS})
+# Zero disables multisample renderbuffers; one is still multisample storage.
+# Font atlas antialiasing and PNG filtering remain enabled on the Low baseline.
+target_compile_definitions(loblox_rml_gl3 PRIVATE RMLUI_NUM_MSAA_SAMPLES=0)
+
 # Bullet Physics: Debian/Ubuntu install the headers under /usr/include/bullet.
 find_path(BULLET_INCLUDE_DIR NAMES btBulletDynamicsCommon.h
   HINTS /usr/include/bullet /usr/local/include/bullet)
@@ -80,17 +100,23 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 add_library(loblox_editor STATIC
+  src/ui/StudioFrontend.cpp
+  src/ui/EditorActions.cpp
   src/rendering/SceneRenderer.cpp
   src/editor/EditorUI.cpp
   src/editor/GamePanels.cpp
   src/editor/StudioPanels.cpp
 )
-target_link_libraries(loblox_editor PUBLIC loblox_core loblox_imgui OpenGL::GL)
+target_link_libraries(loblox_editor PUBLIC loblox_core loblox_imgui loblox_rml_gl3 OpenGL::GL)
+target_compile_definitions(loblox_editor PRIVATE LOBLOX_UI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/ui")
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(loblox_editor PRIVATE -Wall -Wextra)
 endif()
 add_executable(loblox src/main.cpp src/app/Application.cpp)
 target_link_libraries(loblox PRIVATE loblox_editor)
+add_custom_target(loblox_ui_assets ALL COMMAND ${CMAKE_COMMAND} -E copy_directory
+  ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui ${CMAKE_CURRENT_BINARY_DIR}/share/loblox/ui)
+add_dependencies(loblox loblox_ui_assets)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(loblox PRIVATE -Wall -Wextra)
 endif()
@@ -119,6 +145,10 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 find_program(XVFB_RUN_EXECUTABLE xvfb-run)
 if(XVFB_RUN_EXECUTABLE)
+  add_executable(loblox_decal_render_tests tests/decal_render_main.cpp)
+  target_link_libraries(loblox_decal_render_tests PRIVATE loblox_editor)
+  add_test(NAME loblox_decal_render COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 256x256x24" $<TARGET_FILE:loblox_decal_render_tests>)
+  set_tests_properties(loblox_decal_render PROPERTIES TIMEOUT 45 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
   add_test(NAME loblox_gizmo_visual
     COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset"
             $<TARGET_FILE:loblox_gizmo_visual_tests>)
@@ -126,6 +156,11 @@ if(XVFB_RUN_EXECUTABLE)
   find_program(XDOTOOL_EXECUTABLE xdotool)
   find_package(X11 QUIET)
   if(XDOTOOL_EXECUTABLE AND X11_FOUND)
+    add_executable(loblox_rml_ui_tests tests/rml_ui_main.cpp)
+    target_link_libraries(loblox_rml_ui_tests PRIVATE loblox_editor)
+    add_dependencies(loblox_rml_ui_tests loblox_ui_assets)
+    add_test(NAME loblox_rml_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:loblox_rml_ui_tests>)
+    set_tests_properties(loblox_rml_ui PROPERTIES TIMEOUT 240 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
     add_executable(loblox_rig_input_tests tests/rig_input_main.cpp)
     target_link_libraries(loblox_rig_input_tests PRIVATE loblox_editor)
     add_test(NAME loblox_rig_input COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1366x768x24 -noreset" $<TARGET_FILE:loblox_rig_input_tests>)

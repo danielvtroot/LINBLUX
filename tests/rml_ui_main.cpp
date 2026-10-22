@@ -1,0 +1,137 @@
+// Actual RML document, GL3 renderer, engine actions and X11 input, not mock UI.
+#include "editor/EditorUI.h"
+#include "editor/StudioTheme.h"
+#include "editor/GizmoLayout.h"
+#include "ui/StudioFrontend.h"
+#include "ui/EditorActions.h"
+#include "rendering/SceneRenderer.h"
+#include "rendering/EditorCamera.h"
+#include "serialization/ProjectIO.h"
+#include "game/ImageAssets.h"
+#include "core/Diagnostics.h"
+#include "imgui.h"
+#include "rlImGui.h"
+#include <filesystem>
+#include <cstdio>
+#include <cstdlib>
+
+namespace loblox {
+struct EditorUITestAccess {
+    static game::RuntimeSession& runtime(EditorUI& ui){return ui.runtime_;}
+    static bool snap(EditorUI& ui){return ui.snapEnabled_;}
+    static bool captured(EditorUI& ui){return ui.gameplayCapture_;}
+    static ToolMode tool(EditorUI& ui){return ui.tool_;}
+    static Rectangle source(EditorUI& ui){return ui.scriptSourceControl_;}
+    static void rigArm(EditorUI& ui,const std::string& id){ui.selectRig(id,game::RightArm);ui.rigContext_=EditorUI::RigContext::Edit;ui.selectedJoint_=game::RightShoulder;ui.showJointPivots_=true;}
+    static const Part& proxy(EditorUI& ui){return ui.jointProxy_;}
+    static bool dragging(EditorUI& ui){return ui.rigGizmo_.dragging();}
+};
+}
+using namespace loblox;
+int checks=0,failures=0;
+#define CHECK(x) do {++checks;if(!(x)){++failures;std::fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);}}while(0)
+int main() {
+    char pattern[]="/tmp/loblox-rml-ui-XXXXXX";const char* directory=mkdtemp(pattern);if(!directory)return 1;
+    setenv("XDG_CONFIG_HOME",directory,1);diag::configure(std::string(directory)+"/events.jsonl");
+    std::filesystem::current_path(directory);
+    SetTraceLogLevel(LOG_WARNING);SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    InitWindow(1366,768,"Loblox RML integration");SetWindowPosition(0,0);SetExitKey(KEY_NULL);SetTargetFPS(60);
+    rlImGuiSetup(true);ImGui::GetIO().ConfigFlags|=ImGuiConfigFlags_DockingEnable;ImGui::GetIO().IniFilename=nullptr;studio::Apply();
+    {
+        Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();scene.gameAssets().player.enableShiftLock=true;
+        auto* folder=scene.createContainer(InstanceClass::Folder,nullptr,"Buildings");
+        auto* part=scene.createPart(PartShape::Block,{14,3,0},{4,6,1},"Wall");part->setAnchored(true);scene.select(part);
+        PhysicsWorld physics;physics.attach(scene);EditorCamera camera;SceneRenderer renderer;AppConfig config;
+        config.defaultProjectPath=std::string(directory)+"/map.json";
+        const auto untouched=projectio::toJson(scene);
+        EditorUI ui(scene,physics,camera,renderer,config);std::string error;
+        CHECK(ui.enableModernFrontend(error));std::fprintf(stderr,"RML init: %s\n",error.c_str());
+        if(!ui.frontend())return 1;
+        auto frames=[&](int count=2){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(BLACK);rlImGuiBegin();ui.draw();rlImGuiEnd();ui.renderModernFrontend();EndDrawing();}};
+        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames();};
+        auto key=[&](const std::string& name){event("keydown "+name);event("keyup "+name);};
+        auto clickAt=[&](Vector2 p){event("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));event("mousedown 1");event("mouseup 1");};
+        auto click=[&](const std::string& id){auto b=ui.frontend()->elementBounds(id);CHECK(b.width>0&&b.height>0);clickAt({b.x+b.width/2,b.y+b.height/2});};
+        auto capture=[&](const std::string& name){frames();TakeScreenshot((std::string(directory)+"/"+name+".png").c_str());};
+        frames(6);event("search --name '^Loblox RML integration$' windowfocus --sync");capture("studio-1366");
+        CHECK(projectio::toJson(scene)==untouched);
+        CHECK(ui.frontend()->viewport().x>0);CHECK(scene.selection()==part);
+        click("cmd-tool-1");CHECK(EditorUITestAccess::tool(ui)==ToolMode::Move);
+        const bool snap=EditorUITestAccess::snap(ui);click("snap");CHECK(EditorUITestAccess::snap(ui)!=snap);click("snap");CHECK(EditorUITestAccess::snap(ui)==snap);
+        // Real field editing must not route M/R/S/Delete to scene tools.
+        click("prop-Name");key("ctrl+a");event("type --clearmodifiers --delay 20 PreciseWall");key("Return");CHECK(part->name()=="PreciseWall");
+        click("cmd-tool-2");CHECK(EditorUITestAccess::tool(ui)==ToolMode::Scale);
+        click("cmd-tool-3");CHECK(EditorUITestAccess::tool(ui)==ToolMode::Rotate);
+        // Hierarchy drag moves the real Parent, preserving ID and collision.
+        const auto partId=part->id();auto from=ui.frontend()->elementBounds("node-"+std::to_string(partId));auto to=ui.frontend()->elementBounds("node-"+std::to_string(folder->id()));
+        event("mousemove "+std::to_string(int(from.x+from.width/2))+" "+std::to_string(int(from.y+from.height/2)));event("mousedown 1");
+        event("mousemove "+std::to_string(int(to.x+to.width/2))+" "+std::to_string(int(to.y+to.height/2)));event("mouseup 1");
+        CHECK(part->parent()==folder);CHECK(scene.find(partId)==part);capture("explorer-properties");
+        // Common panels are RML; code/timeline/rig keep their proven native
+        // editing controls inside the single RML split region.
+        click("node-"+std::to_string(scene.lighting()->id()));capture("properties-lighting");
+        click("prop-Brightness");key("ctrl+a");event("type --clearmodifiers 1.25");key("Return");CHECK(NearlyEqual(scene.lighting()->brightness(),1.25f));
+        click("tab-Script");capture("ribbon-script");click("cmd-script-");frames();
+        CHECK(scene.selection()&&IsScriptClass(scene.selection()->instanceClass()));
+        const InstanceId scriptId=scene.selection()?scene.selection()->id():0;
+        auto source=EditorUITestAccess::source(ui);CHECK(source.width>100&&source.height>40);
+        clickAt({source.x+25,source.y+18});key("ctrl+a");event("type --clearmodifiers 'print(123)'");key("ctrl+s");
+        CHECK(scene.find(scriptId)&&static_cast<Script*>(scene.find(scriptId))->source=="print(123)");capture("script-editor");
+        click("advanced-settings");const auto beforeConfig=projectio::toJson(scene);frames(5);CHECK(projectio::toJson(scene)==beforeConfig);
+        click("game-WalkSpeed");key("ctrl+a");event("type --clearmodifiers 18");key("Return");CHECK(scene.gameAssets().player.walkSpeed==18);capture("game-config");
+        click("tab-Avatar");capture("ribbon-avatar");click("cmd-show:rig-");
+        const auto rigId=scene.gameAssets().rigs.front().id;EditorUITestAccess::rigArm(ui,rigId);frames();
+        auto& rig=*scene.gameAssets().findRig(rigId);camera.setOrbit(Vector3Add(rig.root.position,{0,1,0}),12,.7f,.23f);
+        click("tab-Home");if(EditorUITestAccess::snap(ui))click("snap");
+        for(int mode:{1,3,2}) {
+            click("cmd-tool-"+std::to_string(mode));frames();const auto vp=ui.frontend()->viewport();
+            const auto layout=gizmolayout::Build(EditorUITestAccess::proxy(ui),static_cast<ToolMode>(mode),camera,vp,false);CHECK(layout.valid);
+            const auto local=mode==3?layout.rotateMarker[0]:mode==2?layout.scaleHandle[1]:layout.axisButton[0];const auto at=Vector2Add(local,{vp.x,vp.y});
+            const auto before=projectio::toJson(scene);const auto cam=camera.position();
+            event("mousemove "+std::to_string(int(at.x))+" "+std::to_string(int(at.y)));event("mousedown 1");CHECK(EditorUITestAccess::dragging(ui));
+            const auto delta=mode==3?Vector2{28,16}:Vector2Scale(layout.axisDirection[0],28);
+            event("mousemove "+std::to_string(int(at.x+delta.x))+" "+std::to_string(int(at.y+delta.y)));
+            CHECK(projectio::toJson(scene)!=before);CHECK(NearlyEqual(camera.position(),cam));capture("rig-"+std::to_string(mode));
+            key("Escape");event("mouseup 1");CHECK(!EditorUITestAccess::dragging(ui));CHECK(projectio::toJson(scene)==before);
+        }
+        click("advanced-animation");capture("animation-editor");click("advanced-output");capture("output");
+        click("node-"+std::to_string(partId));click("advanced-assets");click("cmd-import-dialog-");
+        Image image=GenImageChecked(64,64,8,8,{110,174,218,255},{232,195,106,255});
+        const auto imagePath=std::string(directory)+"/source.png";CHECK(ExportImage(image,imagePath.c_str()));UnloadImage(image);
+        // Paste as a user would: a blocking xdotool type of a long path can
+        // overflow raylib's bounded char queue while no frame is being pumped.
+        SetClipboardText(imagePath.c_str());key("ctrl+v");key("Return");frames(4);
+        const auto imported=game::ListImages(game::AssetsDir());CHECK(imported.size()==1);
+        if(!imported.empty()) {click("cmd-apply-image-assets/"+imported.front().filename);CHECK(part->attributes().count("decal_image"));capture("image-library-decal");}
+        // Close the embedded panel through its RML close button.
+        EditorActions actions(ui);CHECK(actions.dispatch({"select","",partId}));
+        // A native scene action does not implicitly change panel layout.
+        auto close=ui.frontend()->elementBounds("advanced-tabs");clickAt({close.x+close.width-15,close.y+13});frames();camera.reset();
+        const auto wallPosition=part->position();part->setPosition({40,3,0});CHECK(actions.dispatch({"select","",0}));
+        const auto world=rig.evaluate({},rig.root);camera.setOrbit(world[game::Head].position,4,PI,0);capture("r6-front");
+        part->setPosition(wallPosition);camera.reset();CHECK(actions.dispatch({"select","",partId}));
+        CHECK(projectio::save(scene,config.defaultProjectPath,error));const auto original=projectio::toJson(scene);
+        for(auto size:{Vector2{1280,720},Vector2{1366,768},Vector2{1600,900},Vector2{1920,1080}}) {
+            SetWindowSize(int(size.x),int(size.y));frames(6);capture("studio-"+std::to_string(int(size.x)));
+            click("play");auto& rt=EditorUITestAccess::runtime(ui);CHECK(rt.state()==game::RuntimeState::Playing);
+            frames(12);auto vp=ui.frontend()->viewport();auto hud=ui.frontend()->elementBounds("health");
+            CHECK(hud.x>=vp.x && hud.y>=vp.y);CHECK(hud.x+hud.width<=vp.x+vp.width+1);CHECK(hud.y+hud.height<=vp.y+vp.height+1);
+            capture("health-100-"+std::to_string(int(size.x)));
+            CHECK(rt.takeDamage(75,error));frames(20);CHECK(rt.health()==25);capture("health-25-"+std::to_string(int(size.x)));
+            key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);CHECK(!EditorUITestAccess::captured(ui));
+            auto overlay=ui.frontend()->elementBounds("pause");CHECK(std::fabs(overlay.x-vp.x)<1 && std::fabs(overlay.y-vp.y)<1);
+            for(const char* id:{"page-game","leave","respawn","resume"}) {auto b=ui.frontend()->elementBounds(id);CHECK(b.x>=vp.x && b.y>=vp.y && b.x+b.width<=vp.x+vp.width+1 && b.y+b.height<=vp.y+vp.height+1);}
+            capture("pause-game-"+std::to_string(int(size.x)));
+            click("page-settings");capture("pause-settings-"+std::to_string(int(size.x)));
+            click("page-controls");capture("pause-controls-"+std::to_string(int(size.x)));
+            const auto generation=rt.characterGeneration();click("respawn");CHECK(rt.characterGeneration()==generation+1);CHECK(rt.health()==100);
+            click("resume");CHECK(rt.state()==game::RuntimeState::Playing);
+            key("Shift_L");CHECK(rt.shiftLockActive());key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);
+            click("leave");CHECK(!rt.active());CHECK(!EditorUITestAccess::captured(ui));CHECK(projectio::toJson(scene)==original);
+        }
+        CHECK(scene.validate(error));
+        Scene restored;CHECK(projectio::load(restored,config.defaultProjectPath,error));CHECK(projectio::toJson(restored)==original);
+    }
+    game::ClearImageTextures();rlImGuiShutdown();CloseWindow();
+    std::printf("RML UI: %d checks, %d failures; screenshots: %s\n",checks,failures,directory);return failures?1:0;
+}

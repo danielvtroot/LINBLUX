@@ -1,5 +1,36 @@
 # Studio 3 — referências e evidências visuais
 
+## RmlUi — revisão de direção em 22/10/2026
+
+Reabertos individualmente nesta revisão: `1.png`, `2.png`, `image.png`,
+`objetivoigualesse.png`, `q.png`, `roblox2.png`, `roblox.png`. `aa.png` e
+`images.png` constam da inspeção anterior abaixo, mas estão ausentes agora.
+Nenhum original foi alterado. As referências não incluem close-ups de Script,
+Animation ou Rig Editor; não se presume equivalência visual desses painéis.
+
+Comparação com capturas reais do novo executável (não mockups):
+
+| Área | Referência observada | Intermediário RML | Correção aplicada / limite |
+|---|---|---|---|
+| Cabeçalho | Marca pequena e comandos de sessão compactos | Cabeçalho alto, aparência de dashboard | Altura 34 px, logo original, nome do documento e ações compactas |
+| Ribbon | Ferramentas contíguas em grupos delimitados | Botões cresciam até preencher a largura | Grupos em `ribbon.rml`, ferramentas 48–55 px sem flex-grow, legendas e divisórias |
+| Toolbox | Grade de itens e filtros | Cartões verticais enormes | Grade de três colunas, busca/categorias, comandos locais; sem marketplace fictício |
+| Explorer | Árvore densa, ícones diferenciados e seleção azul | Linhas largas e ícones genéricos | Linhas de 23 px, recuo de 14 px, ícones próprios coloridos, truncamento e seleção |
+| Properties | Categorias e colunas nome/valor | Estado vazio ilustrado e controles espaçados | Aviso discreto, categorias, filtro e linhas de edição de 26 px |
+| Viewport | Região central predominante | Chrome e painéis consumiam muito espaço | Chrome 144 px + aba 26 px; laterais menores e divisórias redimensionáveis |
+| Esc | Abas horizontais, conteúdo rolável e três ações no rodapé | Painel genérico e pouca hierarquia | Documento RML contido na viewport, marca, abas, linhas e rodapé fixo |
+| HUD | Topbar circular; vida discreta dentro do jogo | Retângulo de diagnóstico | Topbar Loblox e componente de vida compacto, valor nativo e suavização visual |
+| Script | Sem close-up local disponível | Editor nativo separado | Edição nativa embutida na região com abas RML; não é editor RML completo |
+| Animation | Sem close-up local disponível | Janela nativa flutuante | Timeline nativa integrada ao mesmo split; recursos preservados |
+| Rig | Sem close-up local disponível | Janela nativa flutuante | Controles nativos no split e gizmos compartilhados; teste de entrada real necessário |
+
+Referências técnicas desta migração:
+[RmlUi](https://github.com/mikke89/RmlUi),
+[integração](https://mikke89.github.io/RmlUiDoc/pages/cpp_manual/integrating.html),
+[render interface](https://mikke89.github.io/RmlUiDoc/pages/cpp_manual/interfaces/render.html).
+As fontes oficiais Roblox consultadas anteriormente continuam listadas abaixo.
+Implementado não significa visualmente aprovado pelo usuário.
+
 ## Inspeção inicial (21/10/2026)
 
 As nove imagens originais de `referenciaspngs/` foram abertas individualmente.

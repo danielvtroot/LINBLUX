@@ -119,6 +119,13 @@ bool Application::initialize() {
     // Keep allocation and constructor built against the same frozen UI header.
     ui_ = std::make_unique<EditorUI>(scene_, physics_, camera_, *renderer_, config_);
     ui_->setOnSceneLoaded([this]() { physics_.rebuildAll(scene_); });
+    if(config_.modernUI) {
+        std::string error;
+        if(!ui_->enableModernFrontend(error)) {
+            std::fprintf(stderr,"RmlUi unavailable; using diagnostic legacy UI: %s\n",error.c_str());
+            ui_->setStatus("RmlUi initialization failed: "+error,true);
+        }
+    }
     if (projectLoaded) {
         std::error_code pathError;
         const std::filesystem::path absolute =
@@ -163,6 +170,8 @@ int Application::run() {
         return 1;
     }
 
+    const bool reportTiming=std::getenv("LOBLOX_UI_TIMINGS")!=nullptr;
+    double frameTotal=0;int frameSamples=0;
     while (!WindowShouldClose()) {
         const float deltaSeconds = GetFrameTime();
 
@@ -176,7 +185,9 @@ int Application::run() {
             ui_->draw();
         }
         rlImGuiEnd();
+        if(ui_)ui_->renderModernFrontend();
         EndDrawing();
+        if(reportTiming) {frameTotal+=GetFrameTime();if(++frameSamples==60){std::fprintf(stderr,"Application frame ms (%s): %.2f\n",config_.modernUI?"rml":"legacy",frameTotal*1000/frameSamples);frameSamples=0;frameTotal=0;}}
     }
 
     shutdown();
