@@ -1,5 +1,8 @@
 # Continuidade — R6 e primeiro runtime local — 2026-10-21
 
+Retomada atual: [STUDIO3_HANDOFF.md](STUDIO3_HANDOFF.md), com correções de
+rig, Fall, céu procedural, frontend e evidências Release/Debug/Sway.
+
 Evolução posterior Studio 2: ver [STUDIO2_HANDOFF.md](STUDIO2_HANDOFF.md)
 para hierarquia, Properties, Lua executável, IDs de animação e Health/void.
 O restante deste arquivo conserva a evidência histórica do checkpoint R6.

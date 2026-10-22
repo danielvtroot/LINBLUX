@@ -55,7 +55,10 @@ int main() {
         auto frames=[&](int count=3){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(BLACK);rlImGuiBegin();ui.draw();rlImGuiEnd();EndDrawing();}};
         auto event=[&](const std::string& args){CHECK(std::system(("xdotool "+args).c_str())==0);frames();};
         auto key=[&](const char* key){event(std::string("keydown ")+key);event(std::string("keyup ")+key);};
-        auto mouse=[&](Vector2 p){event("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));};
+        // ImGui coordinates belong to this client window, not the X root.
+        // A tiling compositor may ignore SetWindowPosition or center a window
+        // wider than its output; XTest must translate the client coordinates.
+        auto mouse=[&](Vector2 p){event("search --name '^Loblox rig regression$' mousemove --window %1 "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));};
         auto click=[&](Vector2 p){mouse(p);event("mousedown 1");event("mouseup 1");};
         auto viewport=[&](){auto* w=ImGui::FindWindowByName("Viewport");return Rectangle{w->InnerRect.Min.x,w->InnerRect.Min.y,w->InnerRect.GetWidth(),w->InnerRect.GetHeight()};};
         auto screenshot=[&](const std::string& name){TakeScreenshot((std::string(dir)+"/"+name+".png").c_str());};

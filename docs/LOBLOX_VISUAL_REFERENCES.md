@@ -75,3 +75,11 @@ concluídos. Não declarar equivalência integral com Roblox Studio.
 Documento de trabalho: screenshots posteriores e resultados devem acompanhar
 cada checkpoint. Referência visual não equivale a aprovação do usuário, e
 Xvfb/llvmpipe não equivale à GPU/DPI do notebook.
+
+Última galeria inspecionada: `build/validation-studio3/` (artefatos locais,
+não versionados). Contém aplicativo principal em Studio/Play/Esc, gizmos do
+rig, Home/Avatar/Script, código Lua, Animation Editor, R6 frontal/perspectiva,
+HUD/Shift Lock e menu Game/Settings nas quatro resoluções de aceitação.
+O teste de geometria passou 147 verificações; o de rig, 192 no Xvfb e no
+Sway privado. A ribbon Avatar/Script ainda é esparsa e o painel de animação
+exige scroll em notebook: estes pontos não são equivalência visual concluída.
