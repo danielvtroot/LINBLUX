@@ -70,6 +70,76 @@ Color ApplyFog(Color color, Vector3 worldPosition) {
                  blend(color.b, gFog.color.b), color.a};
 }
 
+// Colour and camera of the current frame. AmbientColor already existed in
+// Lighting and in the project format, but the renderer ignored it and used a
+// flat 50% ambient term. Using it here gives cool sky-tinted shadows and a
+// warm sun-facing side without a shader or an extra pass.
+struct SurfaceLightState {
+    Color ambient{150, 150, 160, 255};
+    Color sun{255, 240, 200, 255};
+    Color sky{180, 200, 230, 255};
+    Vector3 camera{};
+};
+SurfaceLightState gSurfaceLight;
+
+Color BlendColor(Color a, Color b, float t) {
+    const auto mix = [t](unsigned char x, unsigned char y) {
+        return static_cast<unsigned char>(std::lround(x + (static_cast<float>(y) - x) * t));
+    };
+    return Color{mix(a.r, b.r), mix(a.g, b.g), mix(a.b, b.b), a.a};
+}
+
+float MaterialGloss(PartMaterial material) {
+    switch (material) {
+        case PartMaterial::SmoothPlastic: return 0.18f;
+        case PartMaterial::Plastic: return 0.10f;
+        case PartMaterial::Metal: return 0.28f;
+        case PartMaterial::Wood: return 0.05f;
+        case PartMaterial::Concrete: return 0.02f;
+        case PartMaterial::Neon: return 0.0f;
+    }
+    return 0.0f;
+}
+
+// Hemispheric ambient + warm directional sun + a small per-face sheen.
+// Flat faces stay flat like classic Roblox parts, but the light now has
+// colour and the shadow side is darker than the sky-facing side.
+Color LitSurface(Color color, Vector3 normal, Vector3 point, Vector3 lightDirection,
+                 float sunIntensity, float brightness, float gloss, bool unlit) {
+    const float exposure = std::clamp(brightness, 0.2f, 2.0f);
+    if (unlit) return Shade(color, std::clamp(exposure * 1.12f, 0.9f, 1.35f));
+
+    const float up = std::clamp(0.5f + 0.5f * normal.y, 0.0f, 1.0f);
+    // AmbientColor is an albedo tint in the project format, not a dimmer.
+    // Keep most of the ambient white and borrow the sky hue for the shadows,
+    // otherwise the default grey (150) would cut the scene brightness by 40%.
+    const Color skyAmbient = BlendColor(gSurfaceLight.ambient, gSurfaceLight.sky, 0.45f);
+    const Color ambientTint = BlendColor(Color{255, 255, 255, 255}, skyAmbient, 0.36f);
+    const Color sunTint = BlendColor(Color{255, 255, 255, 255}, gSurfaceLight.sun, 0.45f);
+    const float ambient = (0.72f + 0.06f * up) * exposure;
+    const float lambert = std::max(0.0f, Vector3DotProduct(normal, lightDirection));
+    const float sun = 0.34f * lambert * std::clamp(sunIntensity, 0.0f, 3.0f) * exposure;
+
+    float sheen = 0.0f;
+    if (gloss > 0.0f && sunIntensity > 0.0f) {
+        const Vector3 view = Vector3Normalize(Vector3Subtract(gSurfaceLight.camera, point));
+        const Vector3 half = Vector3Normalize(Vector3Add(lightDirection, view));
+        const float highlight = std::pow(std::max(0.0f, Vector3DotProduct(normal, half)), 40.0f);
+        sheen = gloss * highlight * std::clamp(sunIntensity, 0.0f, 2.0f) * exposure;
+    }
+
+    const auto channel = [&](unsigned char base, unsigned char ambientChannel,
+                             unsigned char sunChannel) {
+        const float lit = static_cast<float>(base) *
+                              (ambient * ambientChannel / 255.0f + sun * sunChannel / 255.0f) +
+                          sheen * 255.0f * sunChannel / 255.0f;
+        return static_cast<unsigned char>(std::clamp<long>(std::lround(lit), 0, 255));
+    };
+    return Color{channel(color.r, ambientTint.r, sunTint.r),
+                 channel(color.g, ambientTint.g, sunTint.g),
+                 channel(color.b, ambientTint.b, sunTint.b), color.a};
+}
+
 // ---------- Procedural Sky Shader System ----------
 // Fullscreen quad + GLSL shader para céu procedural contínuo e sem costuras.
 // Não usa texturas externas; tudo é gerado no shader (gradiente, sol, nuvens, atmosfera).
@@ -429,8 +499,8 @@ bool DrawProceduralSky(const Camera3D& camera, const Lighting* lighting, float d
 }
 
 void DrawShadedBox(Vector3 center, Vector3 size, Quaternion rotation, Color color,
-                   Vector3 lightDirection, float sunIntensity, float brightness) {
-    color = ApplyFog(color, center);
+                   Vector3 lightDirection, float sunIntensity, float brightness,
+                   float gloss = 0.0f, bool unlit = false) {
     const Vector3 half = Vector3Scale(size, 0.5f);
     const Vector3 localCorners[8] = {
         {-half.x, -half.y, -half.z}, {half.x, -half.y, -half.z},
@@ -459,14 +529,14 @@ void DrawShadedBox(Vector3 center, Vector3 size, Quaternion rotation, Color colo
     rlBegin(RL_TRIANGLES);
     for (const Face& face : faces) {
         const Vector3 normal = Vector3RotateByQuaternion(face.normal, rotation);
-        const float lambert = std::max(0.0f, Vector3DotProduct(normal, lightDirection));
-        const float factor =
-            std::clamp((0.5f + 0.5f * sunIntensity * lambert) * brightness, 0.2f, 1.6f);
-        SetColor4(Shade(color, factor));
         const Vector3& a = corners[face.indices[0]];
         const Vector3& b = corners[face.indices[1]];
         const Vector3& c = corners[face.indices[2]];
         const Vector3& d = corners[face.indices[3]];
+        const Vector3 faceCenter = Vector3Scale(Vector3Add(Vector3Add(a, b), Vector3Add(c, d)), 0.25f);
+        SetColor4(ApplyFog(LitSurface(color, normal, faceCenter, lightDirection, sunIntensity,
+                                      brightness, gloss, unlit),
+                           faceCenter));
         Triangle(a, b, c);
         Triangle(a, c, d);
     }
@@ -494,8 +564,8 @@ void DrawRotatedBoxWires(Vector3 center, Vector3 size, Quaternion rotation, Colo
 
 // Esfera facetada com sombreamento por quad. Suficiente para o estilo classico.
 void DrawShadedSphere(Vector3 center, float radius, Color color, Vector3 lightDirection,
-                      float sunIntensity, float brightness) {
-    color = ApplyFog(color, center);
+                      float sunIntensity, float brightness, float gloss = 0.0f,
+                      bool unlit = false) {
     constexpr int rings = 7;
     constexpr int slices = 12;
     rlBegin(RL_TRIANGLES);
@@ -523,10 +593,10 @@ void DrawShadedSphere(Vector3 center, float radius, Color color, Vector3 lightDi
             const Vector3 normal =
                 Vector3Normalize(Vector3Subtract(Vector3Add(Vector3Add(a, b), Vector3Add(c, d)),
                                                  Vector3Scale(center, 4.0f)));
-            const float lambert = std::max(0.0f, Vector3DotProduct(normal, lightDirection));
-            const float factor =
-                std::clamp((0.5f + 0.5f * sunIntensity * lambert) * brightness, 0.2f, 1.6f);
-            SetColor4(Shade(color, factor));
+            const Vector3 quadCenter = Vector3Scale(Vector3Add(Vector3Add(a, b), Vector3Add(c, d)), 0.25f);
+            SetColor4(ApplyFog(LitSurface(color, normal, quadCenter, lightDirection, sunIntensity,
+                                          brightness, gloss, unlit),
+                               quadCenter));
             Triangle(a, b, c);
             Triangle(a, c, d);
         }
@@ -539,7 +609,8 @@ void DrawShadedSphere(Vector3 center, float radius, Color color, Vector3 lightDi
 // Superelipsoide (expoente ~4.5): silhueta de bloco com cantos suavizados.
 // Malha fechada, sem emendas, custo comparável à esfera facetada existente.
 void DrawShadedRoundedBlocky(Vector3 center, Vector3 size, Quaternion rotation, Color color,
-                             Vector3 lightDirection, float sunIntensity, float brightness) {
+                             Vector3 lightDirection, float sunIntensity, float brightness,
+                             float gloss = 0.0f, bool unlit = false) {
     const Vector3 half=Vector3Scale(size,.5f);
     const float radius=std::min({size.x,size.y,size.z})*.16f;
     const Vector3 core{half.x-radius,half.y-radius,half.z-radius};
@@ -548,7 +619,6 @@ void DrawShadedRoundedBlocky(Vector3 center, Vector3 size, Quaternion rotation, 
     const Vector3 normals[]={{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}};
     const Vector3 axes[]={{0,1,0},{0,-1,0},{0,0,1},{0,0,-1},{1,0,0},{-1,0,0}};
     const auto extent=[&](Vector3 axis){return std::fabs(axis.x)*half.x+std::fabs(axis.y)*half.y+std::fabs(axis.z)*half.z;};
-    color=ApplyFog(color,center);
     rlBegin(RL_TRIANGLES);
     for(int face=0;face<6;++face) {
         const auto n=normals[face],u=axes[face],v=Vector3CrossProduct(n,u);
@@ -561,9 +631,11 @@ void DrawShadedRoundedBlocky(Vector3 center, Vector3 size, Quaternion rotation, 
             const auto normal=Vector3Normalize(Vector3Subtract(p,anchor));
             const auto position=Vector3Add(anchor,Vector3Scale(normal,radius));
             const auto worldNormal=Vector3RotateByQuaternion(normal,rotation);
-            const float lambert=std::max(0.f,Vector3DotProduct(worldNormal,lightDirection));
-            SetColor4(Shade(color,std::clamp((.60f+.40f*sunIntensity*lambert)*brightness,.2f,1.6f)));
-            Vertex(Vector3Add(center,Vector3RotateByQuaternion(position,rotation)));
+            const auto worldPosition=Vector3Add(center,Vector3RotateByQuaternion(position,rotation));
+            SetColor4(ApplyFog(LitSurface(color,worldNormal,worldPosition,lightDirection,sunIntensity,
+                                          brightness,gloss,unlit),
+                               worldPosition));
+            Vertex(worldPosition);
         };
         for(int x=0;x<3;++x)for(int y=0;y<3;++y) {
             vertex(x,y);vertex(x+1,y);vertex(x+1,y+1);
@@ -632,7 +704,8 @@ Color Tint(const std::string* hex) {
     return Color{channel(0), channel(2), channel(4), 255};
 }
 void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
-              Color tint, Vector2 repeatUv, Vector2 offsetUv, int rotation, float sizeScale) {
+              Color tint, Vector2 repeatUv, Vector2 offsetUv, int rotation, float sizeScale,
+              Vector3 lightDirection, float sunIntensity, float brightness) {
     const Quaternion rotationQuat = part.rotation();
     const Vector3 half = Vector3Scale(part.size(), 0.5f);
     const FaceDef& def = kFaces[face];
@@ -676,6 +749,14 @@ void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
     // mip chain filters it in that space, so the quad has to blend the same
     // way. The result is identical to straight alpha, but the filtered
     // colour no longer bleeds the colour stored under alpha = 0.
+    // Decals are lit by the face they sit on, so a texture on a shadow side
+    // no longer glows brighter than the Part itself.
+    const Vector3 worldNormal = Vector3Normalize(Vector3RotateByQuaternion(def.normal, rotationQuat));
+    const Vector3 worldCenter = Vector3Add(part.position(),
+                                          Vector3RotateByQuaternion(centerLocal, rotationQuat));
+    const Color litTint = ApplyFog(
+        LitSurface(tint, worldNormal, worldCenter, lightDirection, sunIntensity, brightness, 0.0f, false),
+        worldCenter);
     // The blend mode is switched BEFORE the texture: switching it flushes
     // raylib's vertex batch, and the flush resets the batch entry that
     // holds the texture id.
@@ -683,7 +764,7 @@ void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
     rlSetTexture(tex.id);
     rlBegin(RL_QUADS);
     const auto channel=[alpha](unsigned char value){return static_cast<unsigned char>(std::lround(std::clamp(alpha,0.0f,1.0f)*value));};
-    rlColor4ub(channel(tint.r),channel(tint.g),channel(tint.b),static_cast<unsigned char>(lround(std::clamp(alpha, 0.0f, 1.0f) * 255.0f)));
+    rlColor4ub(channel(litTint.r),channel(litTint.g),channel(litTint.b),static_cast<unsigned char>(lround(std::clamp(alpha, 0.0f, 1.0f) * 255.0f)));
     for (int i = 0; i < 4; ++i) {
         const auto uv = rotateUv(cornerUv[i][0], cornerUv[i][1]);
         rlTexCoord2f(uv.first, uv.second);
@@ -696,7 +777,8 @@ void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
 void DrawLayer(const Part& part, const char* imageKey, const char* faceKey,
                const char* alphaKey, const char* tintKey, const char* rotationKey,
                const char* repeatUKey, const char* repeatVKey, const char* offsetUKey,
-               const char* offsetVKey, const std::string& assetsDir) {
+               const char* offsetVKey, const std::string& assetsDir,
+               Vector3 lightDirection, float sunIntensity, float brightness) {
     const std::string* image = FindText(part, imageKey);
     if (image == nullptr || image->empty()) return;
     int face = 0;
@@ -722,17 +804,20 @@ void DrawLayer(const Part& part, const char* imageKey, const char* faceKey,
     const Texture2D tex = game::AssetTexture(relative);
     if (tex.id == 0) return;
     DrawQuad(part, face, tex, static_cast<float>(1.0f - std::clamp(alpha, 0.0, 1.0)),
-             Tint(FindText(part, tintKey)), repeat, offset, (int)std::lround(rotation), 1.0f);
+             Tint(FindText(part, tintKey)), repeat, offset, (int)std::lround(rotation), 1.0f,
+             lightDirection, sunIntensity, brightness);
 }
 }  // namespace skins
 
-void DrawPartSkins(const Part& part, const std::string& assetsDir) {
+void DrawPartSkins(const Part& part, const std::string& assetsDir,
+                   Vector3 lightDirection, float sunIntensity, float brightness) {
     skins::DrawLayer(part, "decal_image", "decal_face", "decal_transparency",
                      "decal_tint", "decal_rotation", nullptr, nullptr, nullptr, nullptr,
-                     assetsDir);
+                     assetsDir, lightDirection, sunIntensity, brightness);
     skins::DrawLayer(part, "texture_image", "texture_face", "texture_transparency",
                      nullptr, nullptr, "texture_repeat_u", "texture_repeat_v",
-                     "texture_offset_u", "texture_offset_v", assetsDir);
+                     "texture_offset_u", "texture_offset_v", assetsDir,
+                     lightDirection, sunIntensity, brightness);
 }
 
 Texture2D& FaceTexture() {
@@ -839,7 +924,9 @@ void SceneRenderer::drawBaseplate(const Part& baseplate, Vector3 lightDirection,
                                   float sunIntensity, float brightness) {
     // A Baseplate is a plain block. Editing grids are a separate viewport tool.
     DrawShadedBox(baseplate.position(), baseplate.size(), baseplate.rotation(), MaterialColor(baseplate),
-                  lightDirection, sunIntensity, brightness);
+                  lightDirection, sunIntensity, brightness,
+                  MaterialGloss(baseplate.material()),
+                  baseplate.material() == PartMaterial::Neon);
 }
 
 void SceneRenderer::drawSelection(const Part& part) const {
@@ -864,14 +951,14 @@ void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float in
     for (int i = 0; i < game::kBodyCount; ++i) {
         const auto& body = rig.bodies[i];
         const Color bodyColor = MaterialColor(body.color, body.material);
-        const float bodyIntensity = body.material == PartMaterial::Neon ? 0.f : intensity;
-        const float bodyBrightness = body.material == PartMaterial::Neon ? 1.4f : brightness;
+        const float gloss = MaterialGloss(body.material);
+        const bool unlit = body.material == PartMaterial::Neon;
         if (i == game::Head)
             DrawShadedRoundedBlocky(world[i].position, body.size, world[i].rotation, bodyColor,
-                                    light, bodyIntensity, bodyBrightness);
+                                    light, intensity, brightness, gloss, unlit);
         else
             DrawShadedBox(world[i].position, body.size, world[i].rotation, bodyColor, light,
-                          bodyIntensity, bodyBrightness);
+                          intensity, brightness, gloss, unlit);
         if (i == state.selectedBody) DrawRotatedBoxWires(world[i].position,
             Vector3Scale(body.size, 1.02f), world[i].rotation, GOLD);
     }
@@ -902,7 +989,7 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
     const float sunIntensity = lighting != nullptr ? lighting->sunIntensity() : 1.0f;
     const float brightness = lighting != nullptr ? lighting->brightness() : 1.0f;
     Vector3 lightDirection = lighting != nullptr ? lighting->sunDirection()
-                                                 : Vector3{-0.45f, -1.0f, -0.35f};
+                                                 : Vector3{-0.45f, -1.0f, 0.55f};
     lightDirection = Vector3Normalize(Vector3Negate(lightDirection));
 
     // Fog por distância: editor e Play passam por aqui.
@@ -910,6 +997,11 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
     gFog.color = lighting != nullptr ? lighting->fogColor() : sky;
     gFog.density = lighting != nullptr ? lighting->fogDensity() : 0.0f;
     gFog.enabled = gFog.density > 0.0f;
+
+    gSurfaceLight.ambient = lighting != nullptr ? lighting->ambientColor() : Color{150, 150, 160, 255};
+    gSurfaceLight.sun = lighting != nullptr ? lighting->sunColor() : Color{255, 240, 200, 255};
+    gSurfaceLight.sky = lighting != nullptr ? lighting->skyHorizonColor() : Color{180, 200, 230, 255};
+    gSurfaceLight.camera = camera.position;
 
     ClearBackground(sky);
     
@@ -935,7 +1027,7 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
                 const Vector3 world = Vector3Add(
                     part->position(), Vector3RotateByQuaternion(localCenter, rotation));
                 DrawShadedBox(world, size, rotation, color, lightDirection, sunIntensity,
-                              brightness);
+                              brightness, 0.10f);
             };
             localBox(Vector3{0.0f, 0.0f, 0.0f}, part->size(), MaterialColor(*part));
             const float top = part->size().y * 0.5f;
@@ -948,14 +1040,18 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
             }
         } else if (part->shape() == PartShape::Sphere) {
             DrawShadedSphere(part->position(), part->sphereRadius(), MaterialColor(*part),
-                             lightDirection, sunIntensity, brightness);
+                             lightDirection, sunIntensity, brightness,
+                             MaterialGloss(part->material()),
+                             part->material() == PartMaterial::Neon);
         } else {
             DrawShadedBox(part->position(), part->size(), part->rotation(),
-                          MaterialColor(*part), lightDirection, sunIntensity, brightness);
+                          MaterialColor(*part), lightDirection, sunIntensity, brightness,
+                          MaterialGloss(part->material()),
+                          part->material() == PartMaterial::Neon);
         }
         // Decal/Texture da Part (atributos persistidos); assets são relativos
         // ao executável (`assets/`), conforme ImageAssets.
-        DrawPartSkins(*part, game::AssetsDir());
+        DrawPartSkins(*part, game::AssetsDir(), lightDirection, sunIntensity, brightness);
 
         if (part->id() == selectedId) {
             drawSelection(*part);

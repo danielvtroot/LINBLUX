@@ -49,7 +49,7 @@ struct ParsedObject {
 struct ParsedLighting {
     Color skyColor{120, 180, 240, 255};
     Color ambientColor{150, 150, 160, 255};
-    Vector3 sunDirection{-0.45f, -1.0f, -0.35f};
+    Vector3 sunDirection{-0.45f, -1.0f, 0.55f};
     float sunIntensity = 1.0f;
     float brightness = 1.0f;
     Color fogColor{120, 180, 240, 255};

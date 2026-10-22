@@ -215,6 +215,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     renderer_.drawScene(runtime_.scene(), runtime_.playerCamera().camera(), viewportWidth_, viewportHeight_,
         kInvalidInstanceId, runtime_.playerCamera().avatarHidden() ? nullptr : &character, false);
     EndTextureMode();
+    resolveViewport();
     if(frontend_)return; // RML owns gameplay presentation; no duplicate HUD/menu.
     auto* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled({menuButton.x,menuButton.y},{menuButton.x+menuButton.width,menuButton.y+menuButton.height},

@@ -99,7 +99,9 @@ public:
 private:
     Color skyColor_{120, 180, 240, 255};
     Color ambientColor_{150, 150, 160, 255};
-    Vector3 sunDirection_{-0.45f, -1.0f, -0.35f};
+    // Light comes from the front-right-above of the default camera so the
+    // faces the player sees first receive the warm key light.
+    Vector3 sunDirection_{-0.45f, -1.0f, 0.55f};
     float sunIntensity_ = 1.0f;
     float brightness_ = 1.0f;
     Color fogColor_{120, 180, 240, 255};

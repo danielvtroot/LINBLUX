@@ -17,6 +17,13 @@ void Lighting::setSunDirection(Vector3 direction) {
     if (!std::isfinite(length) || length < 1e-5f) {
         return;
     }
+    // Project files store a normalised vector. Re-normalising it on every load
+    // introduces a last-bit drift that breaks exact project round-trips, so
+    // leave already-unit directions untouched.
+    if (std::fabs(length - 1.0f) < 1e-6f) {
+        sunDirection_ = direction;
+        return;
+    }
     sunDirection_ = Vector3Scale(direction, 1.0f / length);
 }
 

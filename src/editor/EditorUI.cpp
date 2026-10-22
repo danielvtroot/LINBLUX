@@ -33,6 +33,75 @@
 
 namespace loblox {
 
+namespace {
+
+// FXAA 3.11-style edge blend. The viewport is an offscreen RenderTexture and
+// raylib exposes no multisampled FBO path, so one cheap full-screen pass is
+// the practical antialiasing option for the integrated GPU.
+const char* kFxaaVertexShader = R"(#version 330
+in vec3 vertexPosition;
+in vec2 vertexTexCoord;
+in vec4 vertexColor;
+uniform mat4 mvp;
+out vec2 fragTexCoord;
+out vec4 fragColor;
+void main() {
+    fragTexCoord = vertexTexCoord;
+    fragColor = vertexColor;
+    gl_Position = mvp * vec4(vertexPosition, 1.0);
+}
+)";
+
+const char* kFxaaFragmentShader = R"(#version 330
+in vec2 fragTexCoord;
+in vec4 fragColor;
+uniform sampler2D texture0;
+uniform vec2 resolution;
+out vec4 finalColor;
+
+float luma(vec3 color) {
+    return dot(color, vec3(0.299, 0.587, 0.114));
+}
+
+void main() {
+    vec2 uv = fragTexCoord;
+    vec2 texel = 1.0 / resolution;
+    vec3 rgbM  = texture(texture0, uv).rgb;
+    vec3 rgbNW = texture(texture0, uv + vec2(-1.0, -1.0) * texel).rgb;
+    vec3 rgbNE = texture(texture0, uv + vec2( 1.0, -1.0) * texel).rgb;
+    vec3 rgbSW = texture(texture0, uv + vec2(-1.0,  1.0) * texel).rgb;
+    vec3 rgbSE = texture(texture0, uv + vec2( 1.0,  1.0) * texel).rgb;
+
+    float lumaM  = luma(rgbM);
+    float lumaNW = luma(rgbNW);
+    float lumaNE = luma(rgbNE);
+    float lumaSW = luma(rgbSW);
+    float lumaSE = luma(rgbSE);
+    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
+    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
+    if (lumaMax - lumaMin < max(0.0312, lumaMax * 0.125)) {
+        finalColor = vec4(rgbM, 1.0);
+        return;
+    }
+
+    vec2 dir = vec2(-((lumaNW + lumaNE) - (lumaSW + lumaSE)),
+                     ((lumaNW + lumaSW) - (lumaNE + lumaSE)));
+    float dirReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * 0.0625, 0.0078125);
+    float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
+    dir = clamp(dir * rcpDirMin, vec2(-8.0), vec2(8.0)) * texel;
+
+    vec3 rgbA = 0.5 * (texture(texture0, uv + dir * (1.0 / 3.0 - 0.5)).rgb +
+                       texture(texture0, uv + dir * (2.0 / 3.0 - 0.5)).rgb);
+    vec3 rgbB = rgbA * 0.5 + 0.25 *
+        (texture(texture0, uv - dir * 0.5).rgb +
+         texture(texture0, uv + dir * 0.5).rgb);
+    float lumaB = luma(rgbB);
+    finalColor = vec4((lumaB < lumaMin || lumaB > lumaMax) ? rgbA : rgbB, 1.0);
+}
+)";
+
+}  // namespace
+
 // Marca do projeto: carregada uma unica vez, a partir da raiz (caminhos
 // relativos; sem caminho absoluto da maquina). Falha permanece !ok e a UI
 // usa o fallback vetorial existente.
@@ -631,9 +700,50 @@ void EditorUI::resizeViewport(int width, int height) {
     viewportReady_ = IsRenderTextureValid(viewport_);
     viewportWidth_ = width;
     viewportHeight_ = height;
+    if (!viewportReady_) return;
+
+    fxaa_ = LoadShaderFromMemory(kFxaaVertexShader, kFxaaFragmentShader);
+    fxaaResolutionLoc_ = fxaa_.id != 0 ? GetShaderLocation(fxaa_, "resolution") : -1;
+    if (fxaa_.id == 0) {
+        TraceLog(LOG_WARNING, "FXAA shader unavailable; viewport uses native sampling");
+        return;
+    }
+    resolvedViewport_ = LoadRenderTexture(width, height);
+    resolvedViewportReady_ = IsRenderTextureValid(resolvedViewport_);
+    if (!resolvedViewportReady_) {
+        UnloadShader(fxaa_);
+        fxaa_ = Shader{};
+        fxaaResolutionLoc_ = -1;
+        TraceLog(LOG_WARNING, "FXAA target unavailable; viewport uses native sampling");
+    }
+}
+
+void EditorUI::resolveViewport() {
+    if (!viewportReady_ || !resolvedViewportReady_ || fxaa_.id == 0) return;
+    BeginTextureMode(resolvedViewport_);
+    ClearBackground(BLANK);
+    BeginShaderMode(fxaa_);
+    const float resolution[2] = {static_cast<float>(viewportWidth_),
+                                 static_cast<float>(viewportHeight_)};
+    SetShaderValue(fxaa_, fxaaResolutionLoc_, resolution, SHADER_UNIFORM_VEC2);
+    DrawTextureRec(viewport_.texture,
+                   Rectangle{0.0f, 0.0f, static_cast<float>(viewportWidth_),
+                             -static_cast<float>(viewportHeight_)},
+                   Vector2{0.0f, 0.0f}, WHITE);
+    EndShaderMode();
+    EndTextureMode();
 }
 
 void EditorUI::unloadViewport() {
+    if (resolvedViewportReady_) {
+        UnloadRenderTexture(resolvedViewport_);
+    }
+    resolvedViewportReady_ = false;
+    if (fxaa_.id != 0) {
+        UnloadShader(fxaa_);
+        fxaa_ = Shader{};
+        fxaaResolutionLoc_ = -1;
+    }
     if (viewportReady_) {
         UnloadRenderTexture(viewport_);
     }
@@ -1247,8 +1357,10 @@ void EditorUI::drawViewport() {
         ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight |
         ImGuiButtonFlags_MouseButtonMiddle);
     const bool viewportActive = ImGui::IsItemActive();
+    const unsigned int presentedTexture =
+        resolvedViewportReady_ ? resolvedViewport_.texture.id : viewport_.texture.id;
     ImGui::GetWindowDrawList()->AddImage(
-        static_cast<ImTextureID>(static_cast<intptr_t>(viewport_.texture.id)), imagePosition,
+        static_cast<ImTextureID>(static_cast<intptr_t>(presentedTexture)), imagePosition,
         ImVec2(imagePosition.x + imageSize.x, imagePosition.y + imageSize.y),
         ImVec2(0, 1), ImVec2(1, 0));
     const bool hovered = ImGui::IsItemHovered();
@@ -1419,6 +1531,7 @@ void EditorUI::drawViewport() {
         gizmo_.drawOverlay(*selectedPart, tool_, camera_, viewportRect);
     }
     EndTextureMode();
+    resolveViewport();
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
