@@ -833,26 +833,43 @@ bool ImGui_ImplRaylib_ProcessEvents(void)
         io.AddFocusEvent(focused);
     LastFrameFocused = focused;
 
+    // Loblox modification: preserve taps completed in one GLFW input poll.
+    bool pressedInPoll[MAX_RAYLIB_KEY] = {};
+    for(int raw=GetKeyPressed();raw!=0;raw=GetKeyPressed())
+        if(raw>0 && raw<MAX_RAYLIB_KEY)pressedInPoll[raw]=true;
+
     // handle the modifyer key events so that shortcuts work
     bool ctrlDown = rlImGuiIsControlDown();
     if (ctrlDown != LastControlPressed)
         io.AddKeyEvent(ImGuiMod_Ctrl, ctrlDown);
     LastControlPressed = ctrlDown;
+    const bool ctrlPulse=!ctrlDown && (pressedInPoll[KEY_LEFT_CONTROL] || pressedInPoll[KEY_RIGHT_CONTROL]);
+    if(ctrlPulse)io.AddKeyEvent(ImGuiMod_Ctrl,true);
 
     bool shiftDown = rlImGuiIsShiftDown();
     if (shiftDown != LastShiftPressed)
         io.AddKeyEvent(ImGuiMod_Shift, shiftDown);
     LastShiftPressed = shiftDown;
+    const bool shiftPulse=!shiftDown && (pressedInPoll[KEY_LEFT_SHIFT] || pressedInPoll[KEY_RIGHT_SHIFT]);
+    if(shiftPulse)io.AddKeyEvent(ImGuiMod_Shift,true);
 
     bool altDown = rlImGuiIsAltDown();
     if (altDown != LastAltPressed)
         io.AddKeyEvent(ImGuiMod_Alt, altDown);
     LastAltPressed = altDown;
+    const bool altPulse=!altDown && (pressedInPoll[KEY_LEFT_ALT] || pressedInPoll[KEY_RIGHT_ALT]);
+    if(altPulse)io.AddKeyEvent(ImGuiMod_Alt,true);
 
     bool superDown = rlImGuiIsSuperDown();
     if (superDown != LastSuperPressed)
         io.AddKeyEvent(ImGuiMod_Super, superDown);
     LastSuperPressed = superDown;
+    const bool superPulse=!superDown && (pressedInPoll[KEY_LEFT_SUPER] || pressedInPoll[KEY_RIGHT_SUPER]);
+    if(superPulse)io.AddKeyEvent(ImGuiMod_Super,true);
+
+    // Loblox modification: preserve short taps whose press AND release were
+    // pumped by GLFW between frames. IsKeyPressed only compares final states;
+    // raylib's press queue retains the edge even when the key is already up.
 
     // walk the keymap and check for up and down events
 	for (int keyItr = 0; keyItr < MAX_RAYLIB_KEY; keyItr++)
@@ -862,11 +879,28 @@ bool ImGui_ImplRaylib_ProcessEvents(void)
         if (key == 0)
             continue;
 
-        if (IsKeyReleased(keyItr))
-            io.AddKeyEvent(key, false);
-        else if(IsKeyPressed(keyItr))
+        // InputText receives printable characters in their original order via
+        // GetCharPressed below. Artificial down/up pairs for each letter would
+        // trickle for many frames and delay text until after Return submits it.
+        const bool textCharacter=io.WantTextInput && !ctrlDown && !ctrlPulse &&
+            !altDown && !altPulse && !superDown && !superPulse &&
+            (keyItr<KEY_ESCAPE || keyItr>=KEY_LEFT_SHIFT);
+        const bool queuedPress=pressedInPoll[keyItr] && !textCharacter;
+        if (queuedPress || IsKeyPressed(keyItr)) {
+            // Also handle release/re-press within one poll of a previously
+            // held key. ImGui's event queue trickles the distinct edges.
+            if(queuedPress && !IsKeyPressed(keyItr))io.AddKeyEvent(key,false);
             io.AddKeyEvent(key, true);
+            if(!IsKeyDown(keyItr))io.AddKeyEvent(key,false);
+        } else if(IsKeyReleased(keyItr))io.AddKeyEvent(key,false);
     }
+
+    // Keep a short chord's modifier down until its ordinary key events have
+    // been submitted. Otherwise Shift+F5 can be misread as unmodified F5.
+    if(ctrlPulse)io.AddKeyEvent(ImGuiMod_Ctrl,false);
+    if(shiftPulse)io.AddKeyEvent(ImGuiMod_Shift,false);
+    if(altPulse)io.AddKeyEvent(ImGuiMod_Alt,false);
+    if(superPulse)io.AddKeyEvent(ImGuiMod_Super,false);
 
     if (io.WantCaptureKeyboard)
     {

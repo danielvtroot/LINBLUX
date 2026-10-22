@@ -232,6 +232,10 @@ int main() {
         command("keydown space"); CHECK(runtime.velocity().y > 0 || runtime.humanoidState() == game::HumanoidState::Jumping);
         command("keyup space");
         frames(70); CHECK(runtime.grounded());
+        // Both X11 edges arrive between two frames, as with a quick Space tap
+        // at low FPS. The backend must not discard the press because it is up.
+        command("keydown space keyup space");frames(2);CHECK(runtime.velocity().y>1);
+        frames(70);CHECK(runtime.grounded());
         v = viewport(); mouse({v.x+v.width*.5f,v.y+v.height*.6f}); command("mousedown 3");
         CHECK(EditorUITestAccess::captured(ui));
         const float yaw = runtime.playerCamera().yaw(); command("mousemove_relative -- 28 10");
@@ -257,6 +261,8 @@ int main() {
             key("F5"); CHECK(ui.playing());
             command("keydown shift"); key("F5"); command("keyup shift"); CHECK(!ui.playing());
         }
+        command("keydown F5 keyup F5");frames(2);CHECK(ui.playing());
+        command("key shift+F5");frames(2);CHECK(!ui.playing());
         CHECK(projectio::toJson(scene) == authoring);
         TakeScreenshot((std::string(directory)+"/editor.png").c_str());
     }
