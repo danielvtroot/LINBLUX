@@ -134,19 +134,16 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 #scene-count { margin-left: 15px; }
 /* Gameplay deliberately has larger controls and translucent surfaces. */
 #game-layer { position: absolute; overflow: hidden; }
-#game-topbar { position: absolute; top: 12px; left: 13px; display: flex; }
-#game-topbar button { flex-shrink: 0; width: 42px; height: 42px; padding: 7px; margin-right: 7px; border: 1px #4e535c66; border-radius: 22px; background-color: #16191ddb; }
-#game-topbar button:hover { background-color: #414953e8; }
-#game-topbar img { width: 26px; height: 26px; margin: 0; }
-#game-topbar .menu-button img { width: 22px; height: 22px; margin-top: 2px; }
-#health { position: absolute; left: 16px; bottom: 17px; width: 222px; height: 48px; display: flex; align-items: center; padding: 7px 10px 7px 6px; background-color: #161d28d9; border: 1px #8fadc638; border-radius: 25px 7px 7px 25px; }
-.health-icon { flex: 0 0 32px; width: 32px; height: 32px; padding: 7px; margin-right: 8px; background-color: #1e4c38da; border-radius: 17px; }
-.health-icon img { width: 18px; height: 18px; }
-.health-content { flex: 1; }
-.health-caption { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 11px; }
-.health-caption span { color: #c1d6ca; }
-.health-track { width: 100%; height: 7px; border-radius: 4px; background-color: #0e121a; overflow: hidden; }
-#health-fill { height: 100%; width: 100%; border-radius: 4px; background-color: #48d990; }
+#game-topbar { position: absolute; top: 14px; left: 14px; display: flex; }
+#game-topbar button { flex-shrink: 0; width: 48px; height: 48px; padding: 6px; margin-right: 6px; border: 1px #ffffff21; border-radius: 24px; background-color: #101317eb; }
+#game-topbar button:hover { background-color: #272e38f2; border-color: #ffffff4a; }
+#game-topbar button:active { background-color: #37414ef2; border-color: #8fc3ff8c; }
+#game-topbar img { display: block; width: 34px; height: 34px; margin: 0 auto; }
+#game-topbar .menu-button img { width: 34px; height: 34px; margin: 0 auto; }
+/* Roblox CoreGui health bar: slim green fill over a grey track, top right. */
+#health { position: absolute; top: 14px; right: 14px; width: 180px; height: 20px; padding: 0; border: 2px #08090bee; border-radius: 10px; background-color: #3a3d42f2; }
+.health-track { position: relative; width: 100%; height: 100%; border-radius: 6px; background-color: #5b5e63; overflow: hidden; }
+#health-fill { height: 100%; width: 100%; border-radius: 6px; background-color: #2ef267; decorator: linear-gradient(180deg, #55ff87, #20dc4d); }
 #reticle { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; pointer-events: none; }
 .cross-horizontal { position: absolute; top: 6px; left: 0; width: 14px; height: 2px; background-color: #ffffffdb; }
 .cross-vertical { position: absolute; top: 0; left: 6px; height: 14px; width: 2px; background-color: #ffffffdb; }

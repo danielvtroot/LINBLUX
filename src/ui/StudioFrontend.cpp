@@ -403,13 +403,16 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     }
     void syncGame() {
         const bool active=ui.runtime_.active(),paused=ui.runtime_.state()==game::RuntimeState::Paused;
-        display("pause",paused,"flex");display("health",active&&!paused,"flex");display("game-topbar",active,"flex");display("reticle",active&&!paused&&ui.runtime_.shiftLockActive());
+        display("pause",paused,"flex");display("health",active&&!paused,"flex");display("game-topbar",active&&!paused,"flex");display("reticle",active&&!paused&&ui.runtime_.shiftLockActive());
         for(const auto* name:{"game","settings","controls","about"}) {display(std::string(name)+"-page",page==name);el(std::string("page-")+name)->SetClass("active",page==name);}
         if(!active)return;
-        const float health=ui.runtime_.health(),maximum=ui.runtime_.settings().maxHealth;
-        shownHealth=Lerp(shownHealth,health,1-std::exp(-10*std::min(GetFrameTime(),.1f)));
-        char s[64];std::snprintf(s,sizeof(s),"%.0f / %.0f",health,maximum);text("health-value",s);text("pause-health",s);text("health-label",health>0?"Health":"Respawning");
-        style("health-fill","width",Num(100*std::clamp(shownHealth/maximum,0.f,1.f))+"%");style("health-fill","background-color",health/maximum>.6f?"#3cdf89":health/maximum>.25f?"#f0c44e":"#f36676");
+        const float health=ui.runtime_.health(),maximum=std::max(1.f,ui.runtime_.settings().maxHealth);
+        // Snap at the ends so 0/100 and respawn are exact on the next frame;
+        // intermediate damage still animates.
+        if(health<=0.f||health>=maximum)shownHealth=health;
+        else shownHealth=Lerp(shownHealth,health,1-std::exp(-10*std::min(GetFrameTime(),.1f)));
+        char s[64];std::snprintf(s,sizeof(s),"%.0f / %.0f",health,maximum);text("pause-health",s);
+        style("health-fill","width",Num(100*std::clamp(shownHealth/maximum,0.f,1.f))+"%");
         text("player-name",ui.runtime_.rig().name);text("map-name",std::filesystem::path(ui.projectPath_).filename().string());
         if(paused&&!editing()) {
             auto set=[&](const char* id,const std::string& v){if(auto* f=dynamic_cast<Rml::ElementFormControl*>(el(id)))f->SetValue(v);};

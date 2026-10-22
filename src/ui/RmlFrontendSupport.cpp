@@ -46,7 +46,8 @@ Image IconImage(const std::string& name, int resolution) {
     const auto px = [scale](float v) { return v * scale; };
     const auto ix = [scale](float v) { return static_cast<int>(std::lround(v * scale)); };
     const auto line = [&](int x, int y, int a, int b) {
-        const int thick = std::max(1, ix(name.rfind("chevron-", 0) == 0 ? 6.0f : 3.0f));
+        const int thick = std::max(1, ix(name.rfind("chevron-", 0) == 0 ? 6.0f
+                                         : name == "menu" ? 4.5f : 3.0f));
         ImageDrawLineEx(&image, {px(static_cast<float>(x)), px(static_cast<float>(y))},
                         {px(static_cast<float>(a)), px(static_cast<float>(b))}, thick, ink);
     };
@@ -134,7 +135,7 @@ Image IconImage(const std::string& name, int resolution) {
     } else if (name == "stop") {
         solid(12, 12, 25, 25);
     } else if (name == "menu") {
-        for (int y : {13, 24, 35}) line(9, y, 39, y);
+        for (int y : {13, 24, 35}) line(3, y, 45, y);
     } else if (name == "move") {
         line(5, 24, 43, 24);
         line(24, 5, 24, 43);
@@ -275,6 +276,10 @@ Rml::TextureHandle StudioRenderer::LoadTexture(Rml::Vector2i& dimensions, const 
         UnloadImage(image);
         return 0;
     }
+    // The original logo keeps a wide transparent margin around its artwork.
+    // Trim it so the small circular menu button shows the mark at the same
+    // visual weight as the Roblox reference instead of shrinking it twice.
+    if (name == "loblox-logo") ImageAlphaCrop(&image, 0.02f);
     const int longest = std::max(image.width, image.height);
     if (longest > kUiTextureMaxEdge) {
         // Area-average instead of raylib's bicubic ImageResize: a 1600 px

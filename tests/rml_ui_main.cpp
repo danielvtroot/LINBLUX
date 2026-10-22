@@ -138,12 +138,32 @@ int main() {
             click("play");auto& rt=EditorUITestAccess::runtime(ui);CHECK(rt.state()==game::RuntimeState::Playing);
             frames(12);auto vp=ui.frontend()->viewport();auto hud=ui.frontend()->elementBounds("health");
             CHECK(hud.x>=vp.x && hud.y>=vp.y);CHECK(hud.x+hud.width<=vp.x+vp.width+1);CHECK(hud.y+hud.height<=vp.y+vp.height+1);
+            // Roblox CoreGui proportions: a slim fixed-size bar pinned to the
+            // top-right, not the old labelled bottom-left pill.
+            CHECK(hud.width>=170 && hud.width<=190);
+            CHECK(hud.height>=18 && hud.height<=22);
+            CHECK(hud.y-vp.y>=8 && hud.y-vp.y<=20);
+            CHECK(vp.x+vp.width-(hud.x+hud.width)>=8 && vp.x+vp.width-(hud.x+hud.width)<=20);
+            if(size.x==1366) {
+                const auto logo=ui.frontend()->elementBounds("game-menu");
+                const auto menu=ui.frontend()->elementBounds("game-controls");
+                CHECK(std::fabs(logo.width-48)<1 && std::fabs(logo.height-48)<1);
+                CHECK(std::fabs(menu.width-48)<1 && std::fabs(menu.height-48)<1);
+                CHECK(logo.x-vp.x>=10 && logo.y-vp.y>=10);
+                CHECK(menu.x-(logo.x+logo.width)>=2);
+            }
+            const auto fill100=ui.frontend()->elementBounds("health-fill");
+            CHECK(fill100.width>=hud.width-6);
             capture("health-100-"+std::to_string(int(size.x)));
             CHECK(rt.takeDamage(75,error));frames(20);CHECK(rt.health()==25);capture("health-25-"+std::to_string(int(size.x)));
+            const auto fill25=ui.frontend()->elementBounds("health-fill");
+            CHECK(fill25.width>25 && fill25.width<hud.width*.45f);
             if(size.x==1280) {
                 CHECK(rt.takeDamage(25,error));frames(1);CHECK(rt.health()==0);capture("health-0");
+                CHECK(ui.frontend()->elementBounds("health-fill").width<=1);
                 CHECK(rt.respawn(error));CHECK(rt.takeDamage(30,error));frames(10);CHECK(rt.health()==70);capture("health-70");
                 CHECK(rt.heal(30,error));CHECK(rt.health()==100);capture("health-respawn");
+                CHECK(ui.frontend()->elementBounds("health-fill").width>=hud.width-6);
             }
             key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);CHECK(!EditorUITestAccess::captured(ui));
             auto overlay=ui.frontend()->elementBounds("pause");CHECK(std::fabs(overlay.x-vp.x)<1 && std::fabs(overlay.y-vp.y)<1);

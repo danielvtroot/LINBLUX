@@ -20,7 +20,7 @@
  <div id="status"><span id="message">Ready</span><span id="scene-count"/></div>
  <div id="game-layer">
   <div id="game-topbar"><button id="game-menu" data-action="pause" class="logo-button" title="Loblox menu"><img src="loblox-logo"/></button><button id="game-controls" data-action="pause" class="menu-button" title="Pause · Esc"><img src="icon-menu"/></button></div>
-  <div id="health"><div class="health-icon"><img src="icon-heart"/></div><div class="health-content"><div class="health-caption"><span id="health-label">Health</span><b id="health-value">100 / 100</b></div><div class="health-track"><div id="health-fill"/></div></div></div><div id="reticle"><div class="cross-horizontal"/><div class="cross-vertical"/></div>
+  <div id="health"><div class="health-track"><div id="health-fill"/></div></div><div id="reticle"><div class="cross-horizontal"/><div class="cross-vertical"/></div>
   <div id="pause"><div id="pause-panel" class="pause-panel">
    <div class="pause-brand"><img src="loblox-logo"/><b>LOBLOX</b><span>Local playtest</span></div>
    <div class="pause-tabs"><button id="page-game" data-page="game"><img src="icon-rig"/>Game</button><button id="page-settings" data-page="settings"><img src="icon-settings"/>Settings</button><button id="page-controls" data-page="controls"><img src="icon-menu"/>Controls</button><button id="page-about" data-page="about"><img src="icon-info"/>About</button></div>
