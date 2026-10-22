@@ -137,6 +137,7 @@ private:
     game::Pose previewPose_{};
     game::AnimationClip animationDraft_;
     std::string animationSource_;
+    std::string animationDelete_;
     bool animationDirty_ = false, previewPlaying_ = false;
     float previewTime_ = 0;
     int keyInterpolation_ = 1;
@@ -159,6 +160,8 @@ private:
     std::optional<RigDrag> rigDrag_;
     Rectangle rigBodyRows_[game::kBodyCount]{},rigColorControl_{},rigToolControl_{};
     bool gizmoLocalSpace_ = false;
+    bool snapEnabled_ = true;
+    Rectangle snapControl_{};
     float moveSnap_ = 1.0f;
     float scaleSnap_ = 0.5f;
     float rotateSnapDegrees_ = 15.0f;
@@ -174,6 +177,7 @@ private:
     // viewport do jogo, não ao desktop inteiro).
     float gameViewportX_ = 0, gameViewportY_ = 0;
     float gameViewportW_ = 0, gameViewportH_ = 0;
+    Rectangle healthHud_{};
 
     bool layoutBuilt_ = false;
     bool showToolbox_ = true;

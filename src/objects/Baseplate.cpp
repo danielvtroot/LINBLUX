@@ -12,7 +12,6 @@ Baseplate::Baseplate(InstanceId id, std::string name)
     setMaterial(PartMaterial::SmoothPlastic);
     setAnchored(true);
     setCanCollide(true);
-    setDeletable(false);
     clearDirty();
 }
 

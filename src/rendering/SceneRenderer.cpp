@@ -21,11 +21,6 @@ namespace loblox {
 
 namespace {
 
-constexpr int kStudSegments = 8;
-constexpr float kStudSpacing = 8.0f;
-constexpr float kStudRadius = 1.15f;
-constexpr float kStudHeight = 0.45f;
-constexpr int kMaxStudsPerAxis = 32;
 
 Color Shade(Color color, float factor) {
     const auto channel = [factor](unsigned char value) {
@@ -539,112 +534,6 @@ void DrawShadedSphere(Vector3 center, float radius, Color color, Vector3 lightDi
     rlEnd();
 }
 
-Mesh BuildStudMesh(Vector3 size) {
-    const int nx = std::clamp(static_cast<int>(std::floor(size.x / kStudSpacing)), 1,
-                              kMaxStudsPerAxis);
-    const int nz = std::clamp(static_cast<int>(std::floor(size.z / kStudSpacing)), 1,
-                              kMaxStudsPerAxis);
-    const float topLocal = size.y * 0.5f;
-    const int perStudVertices = kStudSegments * 3 + 1;
-    const int perStudTriangles = kStudSegments * 3;
-    const int vertexCount = nx * nz * perStudVertices;
-    const int triangleCount = nx * nz * perStudTriangles;
-
-    std::vector<Vector3> vertices;
-    std::vector<Vector3> normals;
-    std::vector<Color> colors;
-    std::vector<unsigned short> indices;
-    vertices.reserve(static_cast<std::size_t>(vertexCount));
-    normals.reserve(static_cast<std::size_t>(vertexCount));
-    colors.reserve(static_cast<std::size_t>(vertexCount));
-    indices.reserve(static_cast<std::size_t>(triangleCount * 3));
-
-    const float startX = -0.5f * static_cast<float>(nx - 1) * kStudSpacing;
-    const float startZ = -0.5f * static_cast<float>(nz - 1) * kStudSpacing;
-    const Color sideColor{188, 188, 188, 255};
-    const Color topColor{255, 255, 255, 255};
-
-    for (int ix = 0; ix < nx; ++ix) {
-        for (int iz = 0; iz < nz; ++iz) {
-            const float cx = startX + static_cast<float>(ix) * kStudSpacing;
-            const float cz = startZ + static_cast<float>(iz) * kStudSpacing;
-            const unsigned short base = static_cast<unsigned short>(vertices.size());
-
-            for (int i = 0; i < kStudSegments; ++i) {
-                const float angle = 2.0f * PI * static_cast<float>(i) /
-                                    static_cast<float>(kStudSegments);
-                const Vector3 normal{std::cos(angle), 0.0f, std::sin(angle)};
-                vertices.push_back(
-                    Vector3{cx + normal.x * kStudRadius, topLocal, cz + normal.z * kStudRadius});
-                normals.push_back(normal);
-                colors.push_back(sideColor);
-            }
-            for (int i = 0; i < kStudSegments; ++i) {
-                const float angle = 2.0f * PI * static_cast<float>(i) /
-                                    static_cast<float>(kStudSegments);
-                const Vector3 normal{std::cos(angle), 0.0f, std::sin(angle)};
-                vertices.push_back(Vector3{cx + normal.x * kStudRadius, topLocal + kStudHeight,
-                                           cz + normal.z * kStudRadius});
-                normals.push_back(normal);
-                colors.push_back(sideColor);
-            }
-            for (int i = 0; i < kStudSegments; ++i) {
-                const float angle = 2.0f * PI * static_cast<float>(i) /
-                                    static_cast<float>(kStudSegments);
-                vertices.push_back(Vector3{cx + std::cos(angle) * kStudRadius,
-                                           topLocal + kStudHeight,
-                                           cz + std::sin(angle) * kStudRadius});
-                normals.push_back(Vector3{0.0f, 1.0f, 0.0f});
-                colors.push_back(topColor);
-            }
-            vertices.push_back(Vector3{cx, topLocal + kStudHeight, cz});
-            normals.push_back(Vector3{0.0f, 1.0f, 0.0f});
-            colors.push_back(topColor);
-
-            const unsigned short center = static_cast<unsigned short>(vertices.size() - 1);
-            for (int i = 0; i < kStudSegments; ++i) {
-                const unsigned short next =
-                    static_cast<unsigned short>((i + 1) % kStudSegments);
-                // Laterais.
-                indices.push_back(static_cast<unsigned short>(base + i));
-                indices.push_back(static_cast<unsigned short>(base + kStudSegments + i));
-                indices.push_back(static_cast<unsigned short>(base + kStudSegments + next));
-                indices.push_back(static_cast<unsigned short>(base + i));
-                indices.push_back(static_cast<unsigned short>(base + kStudSegments + next));
-                indices.push_back(static_cast<unsigned short>(base + next));
-                // Topo.
-                indices.push_back(center);
-                indices.push_back(static_cast<unsigned short>(base + 2 * kStudSegments + next));
-                indices.push_back(static_cast<unsigned short>(base + 2 * kStudSegments + i));
-            }
-        }
-    }
-
-    Mesh mesh{};
-    mesh.vertexCount = static_cast<int>(vertices.size());
-    mesh.triangleCount = static_cast<int>(indices.size() / 3);
-    mesh.vertices = static_cast<float*>(MemAlloc(sizeof(float) * 3 * vertices.size()));
-    mesh.normals = static_cast<float*>(MemAlloc(sizeof(float) * 3 * vertices.size()));
-    mesh.colors = static_cast<unsigned char*>(MemAlloc(sizeof(unsigned char) * 4 * vertices.size()));
-    mesh.indices = static_cast<unsigned short*>(MemAlloc(sizeof(unsigned short) * indices.size()));
-    for (std::size_t i = 0; i < vertices.size(); ++i) {
-        mesh.vertices[i * 3 + 0] = vertices[i].x;
-        mesh.vertices[i * 3 + 1] = vertices[i].y;
-        mesh.vertices[i * 3 + 2] = vertices[i].z;
-        mesh.normals[i * 3 + 0] = normals[i].x;
-        mesh.normals[i * 3 + 1] = normals[i].y;
-        mesh.normals[i * 3 + 2] = normals[i].z;
-        mesh.colors[i * 4 + 0] = colors[i].r;
-        mesh.colors[i * 4 + 1] = colors[i].g;
-        mesh.colors[i * 4 + 2] = colors[i].b;
-        mesh.colors[i * 4 + 3] = colors[i].a;
-    }
-    for (std::size_t i = 0; i < indices.size(); ++i) {
-        mesh.indices[i] = indices[i];
-    }
-    UploadMesh(&mesh, false);
-    return mesh;
-}
 
 
 // Superelipsoide (expoente ~4.5): silhueta de bloco com cantos suavizados.
@@ -885,14 +774,9 @@ static int rendererCount = 0;
 
 SceneRenderer::SceneRenderer() {
     ++rendererCount;
-    studMaterial_ = LoadMaterialDefault();
 }
 
 SceneRenderer::~SceneRenderer() {
-    unloadStudMeshes();
-    // LoadMaterialDefault allocates the maps even though shader/texture are
-    // shared defaults. UnloadMaterial preserves those defaults and frees maps.
-    UnloadMaterial(studMaterial_);
     if(--rendererCount==0) { 
         game::ClearImageTextures();
         UnloadProceduralSky();
@@ -933,74 +817,12 @@ Color SceneRenderer::MaterialColor(Color color, PartMaterial material) {
     return color;
 }
 
-void SceneRenderer::ensureStudMesh(const Part& baseplate) {
-    StudMeshEntry& entry = studMeshes_[baseplate.id()];
-    if (entry.valid && NearlyEqual(entry.size, baseplate.size(), 0.01f)) {
-        return;
-    }
-    if (entry.valid) {
-        UnloadMesh(entry.mesh);
-        entry.mesh = Mesh{};
-        entry.valid = false;
-    }
-    entry.mesh = BuildStudMesh(baseplate.size());
-    entry.size = baseplate.size();
-    entry.valid = true;
-}
-
-void SceneRenderer::unloadStudMeshes() {
-    for (auto& pair : studMeshes_) {
-        if (pair.second.valid) {
-            UnloadMesh(pair.second.mesh);
-        }
-    }
-    studMeshes_.clear();
-}
 
 void SceneRenderer::drawBaseplate(const Part& baseplate, Vector3 lightDirection,
                                   float sunIntensity, float brightness) {
-    const Quaternion rotation = baseplate.rotation();
-    DrawShadedBox(baseplate.position(), baseplate.size(), rotation, MaterialColor(baseplate),
+    // A Baseplate is a plain block. Editing grids are a separate viewport tool.
+    DrawShadedBox(baseplate.position(), baseplate.size(), baseplate.rotation(), MaterialColor(baseplate),
                   lightDirection, sunIntensity, brightness);
-
-    ensureStudMesh(baseplate);
-    const StudMeshEntry& entry = studMeshes_[baseplate.id()];
-    if (entry.valid) {
-        // Fog aplicado ao material cacheado (base é grande: aproxima pelo centro).
-        studMaterial_.maps[MATERIAL_MAP_DIFFUSE].color = ApplyFog(MaterialColor(baseplate), baseplate.position());
-        const Matrix transform = MatrixMultiply(
-            QuaternionToMatrix(rotation),
-            MatrixTranslate(baseplate.position().x, baseplate.position().y,
-                            baseplate.position().z));
-        DrawMesh(entry.mesh, studMaterial_, transform);
-        studMaterial_.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
-    }
-
-    // Grade discreta por cima do piso (referencia espacial para construcao).
-    // Os pontos sao locais a Baseplate: se ela for rotacionada, grade e studs
-    // acompanham a mesma orientacao.
-    const Vector3 half = Vector3Scale(baseplate.size(), 0.5f);
-    const float top = half.y + 0.02f;
-    const float minX = -half.x;
-    const float maxX = half.x;
-    const float minZ = -half.z;
-    const float maxZ = half.z;
-    const Color gridColor{132, 132, 138, 255};
-    const float spacing = 16.0f;
-    const int stepsX = static_cast<int>((maxX - minX) / spacing);
-    const int stepsZ = static_cast<int>((maxZ - minZ) / spacing);
-    const auto worldPoint = [&](float x, float z) {
-        return Vector3Add(baseplate.position(),
-                          Vector3RotateByQuaternion(Vector3{x, top, z}, rotation));
-    };
-    for (int i = 0; i <= stepsX; ++i) {
-        const float x = minX + static_cast<float>(i) * spacing;
-        DrawLine3D(worldPoint(x, minZ), worldPoint(x, maxZ), gridColor);
-    }
-    for (int i = 0; i <= stepsZ; ++i) {
-        const float z = minZ + static_cast<float>(i) * spacing;
-        DrawLine3D(worldPoint(minX, z), worldPoint(maxX, z), gridColor);
-    }
 }
 
 void SceneRenderer::drawSelection(const Part& part) const {

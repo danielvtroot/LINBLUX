@@ -722,6 +722,7 @@ bool EditorUI::saveCurrentProject() {
 }
 
 void EditorUI::draw() {
+    healthHud_={};
     diag::setFrame(++frame_);
     explorerFocused_=false;
     if (!runtime_.active() && !selectedRig_.empty() && !scene_.gameAssets().findRig(selectedRig_)) {
@@ -823,7 +824,7 @@ void EditorUI::drawMainMenuBar() {
     if (ImGui::BeginMenu("Model")) {
         if (ImGui::MenuItem("Anchor", nullptr, false, scene_.selection() && scene_.selection()->isPart())) {
             auto* part = static_cast<Part*>(scene_.selection());
-            if (part->instanceClass() != InstanceClass::Baseplate) part->setAnchored(!part->anchored());
+            part->setAnchored(!part->anchored());
         }
         ImGui::EndMenu();
     }
@@ -887,6 +888,19 @@ void EditorUI::drawToolbar() {
     ImGui::TextUnformatted("LOBLOX");
     ImGui::PopStyleColor();
     ImGui::SameLine(0.0f, 14.0f);
+    if(ImGui::Checkbox("Snap",&snapEnabled_)) {endGizmoSession(true,"snap_toggle");cancelRigGizmo();}
+    const auto snapMin=ImGui::GetItemRectMin(),snapMax=ImGui::GetItemRectMax();
+    snapControl_={snapMin.x,snapMin.y,snapMax.x-snapMin.x,snapMax.y-snapMin.y};
+    if(ImGui::IsItemHovered())ImGui::SetTooltip("OFF: continuous fine movement. ON: increments from the drag's initial transform.");
+    for(auto control:{std::pair<const char*,float*>{"Move",&moveSnap_},{"Scale",&scaleSnap_},{"Rotate",&rotateSnapDegrees_}}) {
+        ImGui::SameLine();ImGui::SetNextItemWidth(52);
+        if(ImGui::DragFloat(control.first,control.second,.01f,.001f,control.second==&rotateSnapDegrees_?180.f:128.f,"%.2f",ImGuiSliderFlags_AlwaysClamp)) {
+            endGizmoSession(true,"snap_increment");cancelRigGizmo();
+        }
+        if(ImGui::IsItemHovered())ImGui::SetTooltip(control.second==&rotateSnapDegrees_?"Degrees per step":"Studs per step");
+    }
+    gizmo_.setSnap(snapEnabled_?moveSnap_:0,snapEnabled_?scaleSnap_:0,snapEnabled_?rotateSnapDegrees_:0);
+    ImGui::SameLine(0,14);
     ImGui::BeginTabBar("##RibbonTabs", ImGuiTabBarFlags_FittingPolicyScroll);
 
     if (ImGui::BeginTabItem("Home")) {
@@ -914,8 +928,7 @@ void EditorUI::drawToolbar() {
         Instance* homeSelection = scene_.selection();
         Part* homePart = homeSelection != nullptr && homeSelection->isPart()
                              ? static_cast<Part*>(homeSelection) : nullptr;
-        const bool canAnchorHome = homePart != nullptr &&
-                                   homePart->instanceClass() != InstanceClass::Baseplate;
+        const bool canAnchorHome = homePart != nullptr;
         ImGui::BeginDisabled(!canAnchorHome);
         if (IconButton("anchor_home", Icon::Anchor,
                        homePart != nullptr && homePart->anchored() ? "Unanchor" : "Anchor",
@@ -1004,12 +1017,11 @@ void EditorUI::drawToolbar() {
         if (ImGui::DragFloat("Look sensitivity", &cameraLookSensitivity_, 0.0001f,
                              0.0005f, 0.03f, "%.4f"))
             camera_.setNavigationSettings(cameraMoveSpeed_, cameraLookSensitivity_);
-        gizmo_.setSnap(moveSnap_, scaleSnap_, rotateSnapDegrees_);
+        gizmo_.setSnap(snapEnabled_?moveSnap_:0,snapEnabled_?scaleSnap_:0,snapEnabled_?rotateSnapDegrees_:0);
         ToolbarSeparator();
         Instance* selection = scene_.selection();
         Part* part = selection != nullptr && selection->isPart() ? static_cast<Part*>(selection) : nullptr;
-        const bool canToggleAnchor = part != nullptr &&
-                                     part->instanceClass() != InstanceClass::Baseplate;
+        const bool canToggleAnchor = part != nullptr;
         ImGui::BeginDisabled(!canToggleAnchor);
         if (IconButton("anchor_model", Icon::Anchor,
                        part != nullptr && part->anchored() ? "Unanchor" : "Anchor",
@@ -1682,8 +1694,6 @@ void EditorUI::drawPartProperties(Part& part) {
     ImGui::EndDisabled();
 
     ImGui::SeparatorText("Physics");
-    const bool structural = part.instanceClass() == InstanceClass::Baseplate;
-    ImGui::BeginDisabled(structural);
     bool anchored = part.anchored();
     if (ImGui::Checkbox("Anchored", &anchored)) {
         part.setAnchored(anchored);
@@ -1691,10 +1701,6 @@ void EditorUI::drawPartProperties(Part& part) {
     bool canCollide = part.canCollide();
     if (ImGui::Checkbox("CanCollide", &canCollide)) {
         part.setCanCollide(canCollide);
-    }
-    ImGui::EndDisabled();
-    if (structural) {
-        ImGui::TextDisabled("Baseplate sempre ancorada e com colisao.");
     }
 
     ImGui::Separator();

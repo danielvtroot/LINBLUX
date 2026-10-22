@@ -437,12 +437,13 @@ void VerifyBaseplateStudTransform(RenderTexture2D target, SceneRenderer& rendere
     Part* base = scene.createBaseplate(Vector3{20, 10, 30}, Vector3{16, 1, 16});
     const Color studColor{80, 100, 120, 255};
     base->setColor(studColor);
-    scene.lighting()->setSunIntensity(0); // Base shade differs from unlit stud tops.
+    Scene plain;auto* reference=plain.createPart(PartShape::Block,base->position(),base->size());
+    reference->setColor(studColor);reference->setMaterial(base->material());
     PhysicsWorld physics;
     physics.attach(scene);
     for (const Vector3 degrees : {Vector3{0, 0, 0}, Vector3{0, 45, 0},
                                   Vector3{0, 90, 0}, Vector3{25, 37, -16}}) {
-        gCase = "baseplate/studs/" + std::to_string(static_cast<int>(degrees.y));
+        gCase = "baseplate/plain-surface/" + std::to_string(static_cast<int>(degrees.y));
         gCaseFailures = 0;
         base->setRotationEulerDegrees(degrees);
         physics.simulate(scene, 0);
@@ -452,14 +453,13 @@ void VerifyBaseplateStudTransform(RenderTexture2D target, SceneRenderer& rendere
         EndTextureMode();
         Image image = LoadImageFromTexture(target.texture);
         ImageFlipVertical(&image);
-        for (float x : {-4.0f, 4.0f}) for (float z : {-4.0f, 4.0f}) {
-            // These are the centers of the four visible stud top faces.
-            const Vector3 world = Vector3Add(base->position(),
-                Vector3RotateByQuaternion(Vector3{x, 0.95f, z}, base->rotation()));
-            const Vector2 pixel = camera.project(world,
-                Vector2{float(target.texture.width), float(target.texture.height)});
-            CHECK(Nearly(PixelAt(image, pixel), studColor, 5));
-        }
+        reference->setRotationEulerDegrees(degrees);
+        BeginTextureMode(target);renderer.drawScene(plain,camera,target.texture.width,target.texture.height,kInvalidInstanceId);EndTextureMode();
+        Image expected=LoadImageFromTexture(target.texture);ImageFlipVertical(&expected);
+        Color* actualPixels=LoadImageColors(image);Color* expectedPixels=LoadImageColors(expected);int different=0;
+        for(int i=0;i<image.width*image.height;++i)if(!Nearly(actualPixels[i],expectedPixels[i],1))++different;
+        CHECK(different==0); // neither studs nor baked grid above the surface
+        UnloadImageColors(actualPixels);UnloadImageColors(expectedPixels);UnloadImage(expected);
         CHECK(NearlyEqual(physics.bodyRotation(base->id()), base->rotation(), 0.002f));
         UnloadImage(image);
     }

@@ -225,35 +225,38 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     for(int i=0;i<3;++i)dl->AddLine({menuButton.x+47,menuButton.y+12+i*7.f},
         {menuButton.x+65,menuButton.y+12+i*7.f},IM_COL32(238,243,250,255),2);
     if(menuHovered)ImGui::SetTooltip("Game menu (Esc)");
-    // Shift Lock: indicador de estado + retículo próprio no centro quando ativo.
-    if (runtime_.settings().enableShiftLock) {
-        const ImVec2 badge = ImGui::CalcTextSize(shiftLocked ? "SHIFT LOCK: ON" : "SHIFT LOCK: OFF");
-        const float badgeRight = image.x+viewportWidth_-12.f;
-        dl->AddRectFilled({badgeRight-badge.x-10, image.y+10}, {badgeRight, image.y+34},
-            shiftLocked ? IM_COL32(40,130,80,230) : IM_COL32(55,60,66,200), 4);
-        dl->AddText({badgeRight-badge.x-5, image.y+15},
-            shiftLocked ? IM_COL32(190,255,215,255) : IM_COL32(200,205,212,190), shiftLocked ? "SHIFT LOCK: ON" : "SHIFT LOCK: OFF");
-        if (shiftLocked) {
-            const float cx = image.x+viewportWidth_*.5f, cy = image.y+viewportHeight_*.5f;
-            const ImU32 cross = IM_COL32(235,240,248,200);
-            dl->AddLine({cx-9,cy}, {cx-3,cy}, cross, 1.5f);
-            dl->AddLine({cx+3,cy}, {cx+9,cy}, cross, 1.5f);
-            dl->AddLine({cx,cy-9}, {cx,cy-3}, cross, 1.5f);
-            dl->AddLine({cx,cy+3}, {cx,cy+9}, cross, 1.5f);
-            dl->AddCircleFilled({cx,cy}, 1.6f, cross, 10);
-        }
+    // Shift Lock is indicated only by its reticle, never a text banner.
+    if (shiftLocked) {
+        const float cx=image.x+viewportWidth_*.5f,cy=image.y+viewportHeight_*.5f;
+        const ImU32 cross=IM_COL32(235,240,248,210);
+        dl->AddLine({cx-9,cy},{cx-3,cy},cross,1.5f);
+        dl->AddLine({cx+3,cy},{cx+9,cy},cross,1.5f);
+        dl->AddLine({cx,cy-9},{cx,cy-3},cross,1.5f);
+        dl->AddLine({cx,cy+3},{cx,cy+9},cross,1.5f);
+        dl->AddCircleFilled({cx,cy},1.6f,cross,10);
     }
-    const float health=runtime_.health(), maximum=runtime_.settings().maxHealth;
+    const float health=runtime_.health(),maximum=runtime_.settings().maxHealth;
     displayedHealth_=Lerp(displayedHealth_,health,1-std::exp(-10*std::min(GetFrameTime(),.1f)));
     const float fraction=std::clamp(displayedHealth_/maximum,0.f,1.f);
-    const ImU32 color=health<=0?IM_COL32(220,60,60,255):fraction>.6f?IM_COL32(70,195,105,255):
-        fraction>.25f?IM_COL32(230,190,65,255):IM_COL32(225,70,65,255);
-    const ImVec2 bar{image.x+16,image.y+viewportHeight_-53.f};
-    dl->AddRectFilled({bar.x-6,bar.y-6},{bar.x+218,bar.y+35},IM_COL32(20,25,30,215),5);
-    dl->AddRectFilled(bar,{bar.x+210,bar.y+10},IM_COL32(65,70,75,255),3);
-    dl->AddRectFilled(bar,{bar.x+210*fraction,bar.y+10},color,3);
-    char healthText[80];std::snprintf(healthText,sizeof(healthText),health>0?"Health %.0f / %.0f":"DEAD | Respawning... %.0f / %.0f",health,maximum);
-    dl->AddText({bar.x,bar.y+15},IM_COL32(240,245,250,255),healthText);
+    // Colour follows actual health, not an asymptotic interpolant which can
+    // remain fractionally above a threshold forever (e.g. exactly 25/100).
+    const float condition=health/maximum;
+    const ImU32 color=condition>.6f?IM_COL32(65,213,126,255):
+        condition>.25f?IM_COL32(244,192,68,255):IM_COL32(235,78,86,255);
+    if(runtime_.state()==game::RuntimeState::Playing) {
+        const float width=std::min(std::clamp(viewportWidth_*.27f,180.f,240.f),std::max(80.f,viewportWidth_-110.f));
+        const ImVec2 top{image.x+viewportWidth_-width-12,image.y+12};
+        healthHud_={top.x,top.y,width,50};
+        dl->AddRectFilled({top.x+1,top.y+2},{top.x+width+1,top.y+52},IM_COL32(0,0,0,65),9);
+        dl->AddRectFilled(top,{top.x+width,top.y+50},IM_COL32(19,25,33,235),9);
+        dl->AddRect(top,{top.x+width,top.y+50},IM_COL32(72,88,105,160),9);
+        dl->AddText({top.x+12,top.y+8},health>0?IM_COL32(210,223,232,255):color,health>0?"HEALTH":"RESPAWNING");
+        char value[48];std::snprintf(value,sizeof(value),"%.0f / %.0f",health,maximum);
+        const auto text=ImGui::CalcTextSize(value);
+        dl->AddText({top.x+width-text.x-12,top.y+8},IM_COL32(246,249,252,255),value);
+        dl->AddRectFilled({top.x+12,top.y+32},{top.x+width-12,top.y+39},IM_COL32(52,65,76,255),4);
+        if(fraction>0)dl->AddRectFilled({top.x+12,top.y+32},{top.x+12+(width-24)*fraction,top.y+39},color,4);
+    }
     const auto& settings=runtime_.settings();
     if (!runtime_.playerCamera().avatarHidden() && (settings.healthDisplayType!=2 || settings.nameDisplayDistance>0)) {
         const auto head=runtime_.rig().evaluate(runtime_.pose(),runtime_.characterRoot())[game::Head];
@@ -542,7 +545,7 @@ void EditorUI::cancelRigGizmo(bool restore) {
 bool EditorUI::updateRigGizmo(const EditorInput& input,const InputRoute& route,Rectangle viewport,
                               bool hovered,bool blocked) {
     rigGizmo_.setLocalSpace(gizmoLocalSpace_);
-    rigGizmo_.setSnap(moveSnap_,scaleSnap_,rotateSnapDegrees_);
+    rigGizmo_.setSnap(snapEnabled_?moveSnap_:0,snapEnabled_?scaleSnap_:0,snapEnabled_?rotateSnapDegrees_:0);
     auto* rig=scene_.gameAssets().findRig(selectedRig_);
     const bool editing=rigContext_==RigContext::Edit;
     const bool invalid=!rig || !showJointPivots_ || blocked || input.escape || tool_==ToolMode::Select ||
@@ -637,7 +640,7 @@ void EditorUI::drawGameSettings() {
         for (const auto& r : a.rigs) if (ImGui::Selectable(r.name.c_str(), r.id == a.defaultRig)) a.defaultRig = r.id;
         ImGui::EndCombo();
     }
-    AnimationChoice("Walk animation", p.walkAnimation, a); AnimationChoice("Idle animation", p.idleAnimation, a);
+    AnimationChoice("Walk animation", p.walkAnimation, a,true); AnimationChoice("Idle animation", p.idleAnimation, a,true);
     AnimationChoice("Jump animation", p.jumpAnimation, a,true); AnimationChoice("Fall animation", p.fallAnimation, a,true);
     if(p.fallAnimation.empty() && ImGui::Button("Create empty Fall animation")) {
         if(!a.findAnimation("r6-fall"))a.animations.push_back(game::MakeFall());
@@ -681,11 +684,15 @@ void EditorUI::drawAnimationEditor() {
     if (!ImGui::Begin("Animation Editor", &showAnimationEditor_)) { ImGui::End(); return; }
     auto& assets = scene_.gameAssets();
     if (assets.animations.empty()) {
-        ImGui::TextUnformatted("Create an R6 to generate the editable R6_Walk and R6_Idle.");
-        if (ImGui::Button("Create animated R6")) { insertR6(); openAnimation(assets.player.walkAnimation); }
+        ImGui::TextUnformatted("No animation assets. Create a new clip to begin.");
+        if(ImGui::Button("New animation")) {
+            auto clip=game::MakeIdle();clip.id="animation-"+diag::newCorrelationId();clip.name="New Animation";
+            assets.animations.push_back(clip);openAnimation(clip.id);
+        }
+        if(assets.rigs.empty() && ImGui::Button("Create animated R6")) {insertR6();openAnimation(assets.player.walkAnimation);}
         ImGui::End(); return;
     }
-    if (animationSource_.empty()) openAnimation(assets.player.walkAnimation);
+    if (animationSource_.empty()) openAnimation(assets.findAnimation(assets.player.walkAnimation)?assets.player.walkAnimation:assets.animations.front().id);
     if (ImGui::BeginCombo("Animation", animationDraft_.name.c_str())) {
         for (const auto& clip : assets.animations)
             if (ImGui::Selectable(clip.name.c_str(), clip.id == animationSource_)) {
@@ -715,16 +722,32 @@ void EditorUI::drawAnimationEditor() {
     ImGui::SameLine(); if (ImGui::Button("Use as Walk") && saveAnimation()) {
         assets.player.walkAnimation = animationSource_; saveCurrentProject();
     }
-    ImGui::SameLine(); if (ImGui::Button("Delete")) {
+    const auto eraseAnimation = [&](const std::string& id,bool confirmed) {
         std::string error;
-        if(!assets.removeAnimation(animationSource_,error))setStatus(error,true);
-        else {
+        if(!assets.removeAnimation(id,error,confirmed)) {setStatus(error,true);return;}
             cancelRigGizmo();previewPlaying_=false;animationDirty_=false;
+            timelineDragJoint_=-1;hasCopiedKey_=false;previewTime_=0;previewPose_={};
             if(!assets.animations.empty())openAnimation(assets.animations.front().id);
             else {animationSource_.clear();animationDraft_={};previewPose_={};}
             setStatus("Animation deleted. Save the project to persist this change.");
-        }
+    };
+    ImGui::SameLine(); if (ImGui::Button("Delete")) {
+        const auto* clip=assets.findAnimation(animationSource_);bool assigned=false;
+        for(const auto* ref:{&assets.player.walkAnimation,&assets.player.idleAnimation,&assets.player.jumpAnimation,&assets.player.fallAnimation})
+            assigned|=clip && assets.findAnimation(*ref)==clip;
+        if(assigned) {animationDelete_=animationSource_;ImGui::OpenPopup("Delete assigned animation?");}
+        else eraseAnimation(animationSource_,false);
     }
+    if(ImGui::BeginPopupModal("Delete assigned animation?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted("This clip is assigned in Game Config. Delete and clear its assignments?");
+        ImGui::TextUnformatted("Cleared states use neutral/native fallback. Custom Lua IDs are not rewritten.");
+        if(ImGui::Button("Delete and clear")) {
+            eraseAnimation(animationDelete_,true);animationDelete_.clear();ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();if(ImGui::Button("Cancel")) {animationDelete_.clear();ImGui::CloseCurrentPopup();}
+        ImGui::EndPopup();
+    }
+    if(animationSource_.empty()) {ImGui::End();return;}
     const bool compact = ImGui::IsWindowDocked();
     if (!compact || ImGui::CollapsingHeader("Clip settings: name / duration / FPS / loop / priority")) {
         animationDirty_ |= ImGui::InputText("Name", &animationDraft_.name);

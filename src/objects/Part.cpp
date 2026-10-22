@@ -157,20 +157,12 @@ void Part::setAnchored(bool anchored) {
     if (anchored_ == anchored) {
         return;
     }
-    // A Baseplate e estrutural: nunca pode ser desancorada (cairia da cena).
-    if (instanceClass() == InstanceClass::Baseplate && !anchored) {
-        return;
-    }
     anchored_ = anchored;
     dirty_.anchored = true;
 }
 
 void Part::setCanCollide(bool canCollide) {
     if (canCollide_ == canCollide) {
-        return;
-    }
-    // A Baseplate precisa continuar sendo o piso fisico da cena.
-    if (instanceClass() == InstanceClass::Baseplate && !canCollide) {
         return;
     }
     canCollide_ = canCollide;

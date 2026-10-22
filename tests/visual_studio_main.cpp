@@ -27,6 +27,10 @@ struct EditorUITestAccess {
     static void script(EditorUI& ui, InstanceId id) { ui.openScript(id); }
     static void hideScript(EditorUI& ui) { ui.showScriptEditor_=false; }
     static void animation(EditorUI& ui) {ui.openAnimation(ui.scene_.gameAssets().player.walkAnimation);ui.showRigEditor_=false;}
+    static Rectangle healthHud(EditorUI& ui) {return ui.healthHud_;}
+    static void open(EditorUI& ui,const std::string& id) {ui.openAnimation(id);}
+    static std::string clip(EditorUI& ui) {return ui.animationSource_;}
+    static void hideAnimation(EditorUI& ui) {ui.showAnimationEditor_=false;}
 };
 }
 using namespace loblox;
@@ -80,8 +84,15 @@ int main() {
             EditorUITestAccess::play(ui);frames(10);
             auto& runtime=EditorUITestAccess::runtime(ui);
             CHECK(runtime.state()==game::RuntimeState::Playing);
+            const auto hud=EditorUITestAccess::healthHud(ui),area=EditorUITestAccess::viewport(ui);
+            CHECK(hud.width>100 && hud.x>=area.x && hud.y>=area.y);
+            CHECK(hud.x+hud.width<=area.x+area.width && hud.y+hud.height<=area.y+area.height);
+            const float health=runtime.health();frames(5);CHECK(runtime.health()==health);
             capture("hud-"+std::to_string(int(size.x)));
             if(size.x==1280) {
+                CHECK(runtime.takeDamage(25,error));frames(12);CHECK(runtime.health()==75);capture("health-75");
+                CHECK(runtime.takeDamage(50,error));frames(20);CHECK(runtime.health()==25);capture("health-25");
+                CHECK(runtime.heal(75,error));frames(12);CHECK(runtime.health()==100);
                 const auto image=EditorUITestAccess::viewport(ui);
                 click({image.x+40,image.y+30});CHECK(runtime.state()==game::RuntimeState::Paused);
                 key("Escape");CHECK(runtime.state()==game::RuntimeState::Playing);
@@ -89,6 +100,7 @@ int main() {
                 capture("shift-lock");
             }
             key("Escape");CHECK(runtime.state()==game::RuntimeState::Paused);
+            CHECK(EditorUITestAccess::healthHud(ui).width==0);
             const auto vp=EditorUITestAccess::viewport(ui);auto* menu=ImGui::FindWindowByName("Play paused");
             CHECK(menu!=nullptr);CHECK(vp.x>0 && vp.y>0);
             if(menu) {
@@ -109,6 +121,7 @@ int main() {
             const auto generation=runtime.characterGeneration();click(EditorUITestAccess::respawn(ui));CHECK(runtime.characterGeneration()==generation+1);
             key("Escape");CHECK(runtime.state()==game::RuntimeState::Playing);
             EditorUITestAccess::stop(ui);frames();CHECK(!EditorUITestAccess::captured(ui));
+            CHECK(EditorUITestAccess::healthHud(ui).width==0);
             CHECK(projectio::toJson(scene)==original);
         }
         CHECK(scene.validate(error));
@@ -123,6 +136,36 @@ int main() {
             ImGui::SetWindowPos("Animation Editor",{270,410});ImGui::SetWindowSize("Animation Editor",{715,345});
             capture("animation-editor");
         }
+        // Actual Animation Editor New -> rename -> save -> Delete, followed by
+        // confirmation for an assigned clip. Only private fixture files are used.
+        ImGui::SetWindowSize("Animation Editor",{715,530});ImGui::SetWindowPos("Animation Editor",{270,220});frames();
+        const auto button=[&](const char* target) {
+            auto* panel=ImGui::FindWindowByName("Animation Editor");float x=panel->DC.CursorStartPos.x;
+            for(const char* name:{"New","Duplicate","Save Animation + Project","Revert","Use as Walk","Delete"}) {
+                const float width=ImGui::CalcTextSize(name).x+ImGui::GetStyle().FramePadding.x*2;
+                if(std::string(name)==target) {click({x+width/2,panel->DC.CursorStartPos.y+ImGui::GetFrameHeightWithSpacing()+ImGui::GetFrameHeight()/2});break;}
+                x+=width+ImGui::GetStyle().ItemSpacing.x;
+            }
+        };
+        const auto count=scene.gameAssets().animations.size();button("New");
+        CHECK(scene.gameAssets().animations.size()==count+1);const auto created=EditorUITestAccess::clip(ui);
+        auto* panel=ImGui::FindWindowByName("Animation Editor");
+        click({panel->DC.CursorStartPos.x+40,panel->DC.CursorStartPos.y+2*ImGui::GetFrameHeightWithSpacing()+ImGui::GetFrameHeight()/2});
+        event("keydown ctrl");key("a");event("keyup ctrl");event("type --delay 0 RenamedClip");key("Return");
+        button("Save Animation + Project");CHECK(scene.gameAssets().findAnimation(created)->name=="RenamedClip");
+        button("Delete");CHECK(!scene.gameAssets().findAnimation(created));
+        EditorUITestAccess::open(ui,scene.gameAssets().player.walkAnimation);frames();button("Delete");
+        auto* confirm=ImGui::FindWindowByName("Delete assigned animation?");CHECK(confirm && confirm->Active);
+        if(confirm)click({confirm->DC.CursorStartPos.x+40,confirm->DC.CursorStartPos.y+2*ImGui::GetTextLineHeightWithSpacing()+ImGui::GetFrameHeight()/2});
+        CHECK(scene.gameAssets().player.walkAnimation.empty());
+        CHECK(scene.gameAssets().player.jumpAnimation!=scene.gameAssets().player.fallAnimation);
+        EditorUITestAccess::hideAnimation(ui);frames();
+        Part* base=nullptr;for(auto* p:scene.parts())if(p->instanceClass()==InstanceClass::Baseplate)base=p;
+        CHECK(base);if(base) {const auto id=base->id();scene.select(base);key("Delete");CHECK(!scene.find(id));CHECK(!physics.hasBody(id));}
+        event("keydown ctrl");key("s");event("keyup ctrl");
+        Scene reloaded;CHECK(projectio::load(reloaded,config.defaultProjectPath,error));
+        CHECK(!reloaded.gameAssets().findAnimation(created));CHECK(reloaded.gameAssets().player.walkAnimation.empty());
+        for(auto* p:reloaded.parts())CHECK(p->instanceClass()!=InstanceClass::Baseplate);
     }
     rlImGuiShutdown();CloseWindow();
     std::printf("Visual Studio: %d checks, %d failures; captures: %s\n",checks,failures,directory);

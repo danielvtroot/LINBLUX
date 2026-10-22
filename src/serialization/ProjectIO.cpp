@@ -762,9 +762,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         part->setRotation(object.transform.rotation);
         part->setColor(object.color);
         part->setMaterial(object.material);
-        // A Baseplate e estrutural: permanece ancorada mesmo se o arquivo disser o contrario.
-        part->setAnchored(object.instanceClass == InstanceClass::Baseplate ? true
-                                                                          : object.anchored);
+        part->setAnchored(object.anchored);
         part->setCanCollide(object.canCollide);
         part->clearDirty();
     }

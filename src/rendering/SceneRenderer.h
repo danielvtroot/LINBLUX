@@ -20,7 +20,7 @@ struct RigRenderState {
 };
 
 // Desenha a cena com recursos minimos (sem sombras/post-processamento).
-// Recursos graficos sao criados uma vez e cacheados (studs da Baseplate).
+// Recursos graficos compartilhados sao liberados com o ultimo renderer.
 class SceneRenderer {
 public:
     SceneRenderer();
@@ -40,21 +40,11 @@ public:
     static Color MaterialColor(Color color, PartMaterial material);
 
 private:
-    struct StudMeshEntry {
-        Vector3 size{0.0f, 0.0f, 0.0f};
-        Mesh mesh{};
-        bool valid = false;
-    };
-
-    void ensureStudMesh(const Part& baseplate);
-    void unloadStudMeshes();
     void drawBaseplate(const Part& baseplate, Vector3 lightDirection, float sunIntensity,
                        float brightness);
     void drawSelection(const Part& part) const;
     void drawRig(const RigRenderState& state, Vector3 light, float intensity, float brightness);
 
-    std::unordered_map<InstanceId, StudMeshEntry> studMeshes_;
-    Material studMaterial_{};
 };
 
 }  // namespace loblox

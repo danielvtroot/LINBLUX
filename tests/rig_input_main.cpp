@@ -19,7 +19,7 @@ struct EditorUITestAccess {
         ui.rigContext_=pose?EditorUI::RigContext::Pose:EditorUI::RigContext::Edit;
         ui.setTool(mode,"rig_regression");ui.showRigEditor_=false;
         ui.showAnimationEditor_=false;
-        ui.moveSnap_=ui.scaleSnap_=ui.rotateSnapDegrees_=0;
+        ui.snapEnabled_=false;ui.moveSnap_=1;ui.scaleSnap_=.5f;ui.rotateSnapDegrees_=15;
     }
     static const Part& proxy(EditorUI& ui) { return ui.jointProxy_; }
     static bool dragging(EditorUI& ui) { return ui.rigGizmo_.dragging(); }
@@ -31,6 +31,11 @@ struct EditorUITestAccess {
     static void rename(EditorUI& ui) {ui.renameSelection();}
     static void duplicate(EditorUI& ui) {ui.duplicateSelection();}
     static void remove(EditorUI& ui) {ui.deleteSelection();}
+    static Rectangle snapControl(EditorUI& ui) {return ui.snapControl_;}
+    static bool snapped(EditorUI& ui) {return ui.snapEnabled_;}
+    static bool freeGizmos(EditorUI& ui) {return ui.gizmo_.moveSnap()==0 && ui.rigGizmo_.moveSnap()==0;}
+    static void normal(EditorUI& ui,Part* part,ToolMode mode) {ui.scene_.select(part);ui.setTool(mode,"part_snap_regression");ui.showRigEditor_=false;ui.snapEnabled_=false;}
+    static bool normalDragging(EditorUI& ui) {return ui.gizmo_.dragging();}
 };
 }
 using namespace loblox;
@@ -115,6 +120,26 @@ int main() {
                     CHECK(scene.selection()==nullptr);
                 }
             }
+            // Toggle the actual topbar checkbox: nonzero configured increments
+            // must be bypassed in OFF, shared by both gizmos in ON.
+            CHECK(EditorUITestAccess::freeGizmos(ui));
+            const auto snap=EditorUITestAccess::snapControl(ui);
+            click({snap.x+8,snap.y+snap.height/2});CHECK(EditorUITestAccess::snapped(ui));
+            const auto start=current.evaluate({},current.root)[game::RightArm];
+            const auto size=current.bodies[game::RightArm].size;const auto saved=projectio::toJson(scene);
+            layout=gizmolayout::Build(EditorUITestAccess::proxy(ui),mode,camera,vp,false);
+            auto at=mode==ToolMode::Rotate?layout.rotateMarker[0]:mode==ToolMode::Scale?layout.scaleHandle[1]:layout.axisButton[0];
+            at=Vector2Add(at,{vp.x,vp.y});auto direction=mode==ToolMode::Rotate?Vector2{1,.6f}:layout.axisDirection[0];
+            mouse(at);event("mousedown 1");CHECK(EditorUITestAccess::dragging(ui));
+            mouse(Vector2Add(at,Vector2Scale(direction,32)));
+            const auto changed=current.evaluate({},current.root)[game::RightArm];
+            float steps=0;
+            if(mode==ToolMode::Move)steps=changed.position.x-start.position.x;
+            else if(mode==ToolMode::Scale)steps=(current.bodies[game::RightArm].size.x-size.x)/.5f;
+            else {Vector3 axis;float angle;QuaternionToAxisAngle(QuaternionMultiply(changed.rotation,QuaternionInvert(start.rotation)),&axis,&angle);steps=angle*RAD2DEG/15;}
+            CHECK(std::fabs(steps-std::round(steps))<.005f);
+            key("Escape");event("mouseup 1");CHECK(projectio::toJson(scene)==saved);
+            click({snap.x+8,snap.y+snap.height/2});CHECK(!EditorUITestAccess::snapped(ui));CHECK(EditorUITestAccess::freeGizmos(ui));
         }
         // Domain limits must not move the opposite face, even with a huge drag.
         EditorUITestAccess::setup(ui,id,ToolMode::Scale);camera.setOrbit({0,6,0},45,.65f,.32f);frames();
@@ -153,6 +178,25 @@ int main() {
         event("type --delay 0 RenamedRig");key("Return");
         CHECK(scene.gameAssets().rigs.back().name=="RenamedRig");
         EditorUITestAccess::remove(ui);CHECK(scene.gameAssets().rigs.size()==1);CHECK(scene.validate(error));
+        auto* part=scene.createPart(PartShape::Block,{0,6,0},{2,2,2},"SnapPart");part->setAnchored(true);
+        for(auto mode:{ToolMode::Move,ToolMode::Scale,ToolMode::Rotate})for(bool snapped:{false,true}) {
+            EditorUITestAccess::normal(ui,part,mode);frames();
+            if(snapped) {const auto c=EditorUITestAccess::snapControl(ui);click({c.x+8,c.y+c.height/2});}
+            CHECK(EditorUITestAccess::snapped(ui)==snapped);
+            const auto saved=projectio::toJson(scene);const auto start=part->transform();const auto vp=viewport();
+            const auto layout=gizmolayout::Build(*part,mode,camera,vp,false);
+            auto at=mode==ToolMode::Move?layout.axisButton[0]:mode==ToolMode::Scale?layout.scaleHandle[1]:layout.rotateMarker[0];
+            at=Vector2Add(at,{vp.x,vp.y});const auto direction=mode==ToolMode::Rotate?Vector2{1,.6f}:layout.axisDirection[0];
+            mouse(at);event("mousedown 1");CHECK(EditorUITestAccess::normalDragging(ui));
+            mouse(Vector2Add(at,Vector2Scale(direction,snapped?32.f:4.f)));
+            float steps;
+            if(mode==ToolMode::Move)steps=part->position().x-start.position.x;
+            else if(mode==ToolMode::Scale)steps=(part->size().x-start.size.x)/.5f;
+            else {Vector3 axis;float angle;QuaternionToAxisAngle(QuaternionMultiply(part->rotation(),QuaternionInvert(start.rotation)),&axis,&angle);steps=angle*RAD2DEG/15;}
+            if(snapped)CHECK(std::fabs(steps-std::round(steps))<.005f);
+            else CHECK(std::fabs(steps)>.001f && std::fabs(steps-std::round(steps))>.001f);
+            key("Escape");event("mouseup 1");CHECK(projectio::toJson(scene)==saved);
+        }
     }
     rlImGuiShutdown();CloseWindow();std::printf("Rig input: %d checks, %d failures; captures %s\n",checks,failures,dir);return failures?1:0;
 }

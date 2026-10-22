@@ -121,7 +121,7 @@ void TestDefaultScene() {
     if (baseplate != nullptr) {
         CHECK(baseplate->anchored());
         CHECK(baseplate->canCollide());
-        CHECK(!baseplate->deletable());
+        CHECK(baseplate->deletable());
         CHECK_STR(baseplate->className(), "Baseplate");
         CHECK_NEAR(baseplate->position().y, -0.5f, 0.001f);
         CHECK(baseplate->parent() == scene.workspace());
@@ -131,8 +131,8 @@ void TestDefaultScene() {
         CHECK_STR(spawn->className(), "SpawnLocation");
         CHECK(spawn->parent() == scene.workspace());
     }
-    CHECK(!scene.remove(baseplate));
-    CHECK(scene.parts().size() == 2);
+    CHECK(scene.remove(baseplate));
+    CHECK(scene.parts().size() == 1);
     EndSection();
 }
 
@@ -1494,7 +1494,7 @@ void TestTransactionalLoad() {
 }
 
 void TestBaseplatePhysics() {
-    Section("Baseplate na fisica e protecao");
+    Section("Baseplate editavel, exclusao e persistencia");
     loblox::Scene scene;
     scene.buildDefaultScene();
     loblox::PhysicsWorld physics;
@@ -1514,11 +1514,12 @@ void TestBaseplatePhysics() {
     Simulate(physics, scene, 1.0f);
     CHECK_NEAR(baseplate->position().y, -0.5f, 0.001f);
 
-    // Nao pode ser desancorada nem perder colisao: a API protege alem da UI.
+    // Defaults are anchored/solid, but authoring has the same controls as Part.
     baseplate->setAnchored(false);
     baseplate->setCanCollide(false);
-    CHECK(baseplate->anchored());
-    CHECK(baseplate->canCollide());
+    CHECK(!baseplate->anchored());
+    CHECK(!baseplate->canCollide());
+    baseplate->setAnchored(true);baseplate->setCanCollide(true);
     physics.syncScene(scene);
     Simulate(physics, scene, 1.0f);
     CHECK_NEAR(baseplate->position().y, -0.5f, 0.001f);
@@ -1529,9 +1530,12 @@ void TestBaseplatePhysics() {
     Simulate(physics, scene, 0.5f);
     CHECK_NEAR(baseplate->position().y, -2.0f, 0.001f);
 
-    // Exclusao protegida mesmo com listener de fisica registrado.
-    CHECK(!scene.remove(baseplate));
-    CHECK(physics.hasBody(baseplate->id()));
+    const auto id=baseplate->id();CHECK(scene.remove(baseplate));
+    CHECK(!physics.hasBody(id));CHECK(scene.find(id)==nullptr);
+    std::string error;loblox::Scene loaded;
+    CHECK(loblox::projectio::fromJson(loaded,loblox::projectio::toJson(scene),error));
+    CHECK(!loaded.find(id));CHECK(loaded.parts().size()==scene.parts().size());
+    for(auto* part:loaded.parts())CHECK(part->instanceClass()!=loblox::InstanceClass::Baseplate);
     EndSection();
 }
 
