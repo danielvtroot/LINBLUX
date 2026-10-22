@@ -1,5 +1,42 @@
 # Studio 3 — continuidade verificada em 21/10/2026
 
+## Atualização prioritária — código validado em 8e89c73
+
+Checkpoints: 50e1b1c (pulo/exclusão de clips), 0f52f11 (Snap/Baseplate/HUD),
+8e89c73 (toques rápidos no backend). Principal `build/loblox` atualizado;
+Debug não foi recompilado nesta rodada. Nenhum push ou projeto pessoal alterado.
+
+- Pulo: apoio Bullet na borda sem raio central; buffer consumido também após
+  contato no mesmo passo; toque Space press/release entre frames preservado
+  pela fila raylib→ImGui. Sem cooldown novo ou impulso duplicado. Regressão
+  física reproduziu quatro falhas antes; toque rápido reproduziu outra.
+  Normalização inicial atrasava texto: corrigida separando InputText de atalhos.
+- Delete Animation: clip sem vínculo excluído; atribuído pede confirmação e
+  limpa Game Config. Preview/timeline/seleção reinicializados, vazio usa pose
+  neutra/fallback nativo; pode criar novo clip após excluir todos. Lua customizado
+  não é reescrito. Jump/Fall permanecem distintos. Save/reload testados.
+- Baseplate: excluível/editável como Part, defaults ainda ancorada/sólida;
+  removidos studs, grade embutida e seus caches. Load não recria a base apagada.
+- Snap ON/OFF + incrementos Move/Scale/Rotate na topbar, compartilhados por
+  Parts/rigs. Quantização usa o deslocamento/ângulo desde o início do drag;
+  OFF permite ajuste fino mesmo com incrementos configurados não nulos.
+- Shift Lock sem banner; retículo/captura preservados. Health compacta no alto
+  à direita da viewport, preenchimento suave, cor da vida real, oculta na pausa.
+
+Release final: CTest 13/13 (154,48 s); Studio 1.433 checks, rig/Parts Snap 318,
+Visual Studio 218, Game UI 212. Sway privado: rig 318 e Game UI 212 passaram,
+mais reinícios reais. Cenários físicos incluem saltos consecutivos em plataformas
+pequenas, 30/60 FPS, pouso+buffer no mesmo intervalo e rejeição de pulo no ar.
+Comando: `ctest --test-dir build --output-on-failure -j2`.
+Capturas inspecionadas em `build/priority-fixes-captures/`: aplicativo principal
+F5/Play/Esc/Shift+F5, HUD 75/100 e 25/100, Snap e Baseplate lisa.
+Log completo: `build/priority-fixes-full-validation.log` (artefatos não versionados).
+
+Pendente: validação manual do obby no notebook físico; sanitizers não foram
+reexecutados nesta rodada (falha Mesa anterior continua registrada abaixo).
+Céu procedural, Lua, R6 e quatro rascunhos preexistentes foram preservados.
+Fechar/reabrir o aplicativo: um processo anterior à compilação conserva código antigo.
+
 ## Estado e preservação
 
 Branch `fix/unified-3d-gizmos`; entrada desta retomada: `7afd682`.
