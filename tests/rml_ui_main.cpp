@@ -10,6 +10,7 @@
 #include "game/ImageAssets.h"
 #include "core/Diagnostics.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "rlImGui.h"
 #include <filesystem>
 #include <cstdio>
@@ -71,6 +72,12 @@ int main() {
         // editing controls inside the single RML split region.
         click("node-"+std::to_string(scene.lighting()->id()));capture("properties-lighting");
         click("prop-Brightness");key("ctrl+a");event("type --clearmodifiers 1.25");key("Return");CHECK(NearlyEqual(scene.lighting()->brightness(),1.25f));
+        click("property-search");event("type --clearmodifiers SunColor");key("Return");click("color-SunColor");capture("lighting-color-dialog");
+        SetClipboardText("#88aadd");key("ctrl+a");key("ctrl+v");key("Return");CHECK(scene.lighting()->sunColor().r==136&&scene.lighting()->sunColor().b==221);
+        click("property-search");key("ctrl+a");key("BackSpace");key("Return");
+        click("node-"+std::to_string(partId));auto row=ui.frontend()->elementBounds("node-"+std::to_string(partId));
+        event("mousemove "+std::to_string(int(row.x+row.width/2))+" "+std::to_string(int(row.y+row.height/2)));event("mousedown 3");event("mouseup 3");
+        CHECK(ui.frontend()->elementBounds("context-menu").height>100);click("context-rename-");key("Escape");CHECK(part->name()=="PreciseWall");
         click("tab-Script");capture("ribbon-script");click("cmd-script-");frames();
         CHECK(scene.selection()&&IsScriptClass(scene.selection()->instanceClass()));
         const InstanceId scriptId=scene.selection()?scene.selection()->id():0;
@@ -94,7 +101,22 @@ int main() {
             CHECK(projectio::toJson(scene)!=before);CHECK(NearlyEqual(camera.position(),cam));capture("rig-"+std::to_string(mode));
             key("Escape");event("mouseup 1");CHECK(!EditorUITestAccess::dragging(ui));CHECK(projectio::toJson(scene)==before);
         }
-        click("advanced-animation");capture("animation-editor");click("advanced-output");capture("output");
+        click("advanced-animation");capture("animation-editor");
+        if(auto* window=ImGui::FindWindowByName("Animation Editor")) {
+            const auto start=window->DC.CursorStartPos;float x=start.x;
+            for(const char* label:{"New","Duplicate","Save Animation + Project","Revert","Use as Walk"})x+=ImGui::CalcTextSize(label).x+2*ImGui::GetStyle().FramePadding.x+ImGui::GetStyle().ItemSpacing.x;
+            const float buttonY=start.y+ImGui::GetFrameHeightWithSpacing()+ImGui::GetFrameHeight()/2;
+            clickAt({x+ImGui::CalcTextSize("Delete").x/2+ImGui::GetStyle().FramePadding.x,buttonY});
+            auto* popup=ImGui::FindWindowByName("Delete assigned animation?");CHECK(popup&&popup->Active);
+            capture("animation-delete-confirmation");
+            if(popup&&popup->Active) {
+                const auto cursor=popup->DC.CursorStartPos;
+                clickAt({cursor.x+ImGui::CalcTextSize("Delete and clear").x+2*ImGui::GetStyle().FramePadding.x+ImGui::GetStyle().ItemSpacing.x+ImGui::CalcTextSize("Cancel").x/2+ImGui::GetStyle().FramePadding.x,
+                    cursor.y+2*ImGui::GetTextLineHeightWithSpacing()+ImGui::GetFrameHeight()/2});
+            }
+            CHECK(scene.gameAssets().findAnimation(scene.gameAssets().player.walkAnimation));
+        }
+        click("advanced-output");capture("output");
         click("node-"+std::to_string(partId));click("advanced-assets");click("cmd-import-dialog-");
         Image image=GenImageChecked(64,64,8,8,{110,174,218,255},{232,195,106,255});
         const auto imagePath=std::string(directory)+"/source.png";CHECK(ExportImage(image,imagePath.c_str()));UnloadImage(image);
@@ -118,6 +140,11 @@ int main() {
             CHECK(hud.x>=vp.x && hud.y>=vp.y);CHECK(hud.x+hud.width<=vp.x+vp.width+1);CHECK(hud.y+hud.height<=vp.y+vp.height+1);
             capture("health-100-"+std::to_string(int(size.x)));
             CHECK(rt.takeDamage(75,error));frames(20);CHECK(rt.health()==25);capture("health-25-"+std::to_string(int(size.x)));
+            if(size.x==1280) {
+                CHECK(rt.takeDamage(25,error));frames(1);CHECK(rt.health()==0);capture("health-0");
+                CHECK(rt.respawn(error));CHECK(rt.takeDamage(30,error));frames(10);CHECK(rt.health()==70);capture("health-70");
+                CHECK(rt.heal(30,error));CHECK(rt.health()==100);capture("health-respawn");
+            }
             key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);CHECK(!EditorUITestAccess::captured(ui));
             auto overlay=ui.frontend()->elementBounds("pause");CHECK(std::fabs(overlay.x-vp.x)<1 && std::fabs(overlay.y-vp.y)<1);
             for(const char* id:{"page-game","leave","respawn","resume"}) {auto b=ui.frontend()->elementBounds(id);CHECK(b.x>=vp.x && b.y>=vp.y && b.x+b.width<=vp.x+vp.width+1 && b.y+b.height<=vp.y+vp.height+1);}

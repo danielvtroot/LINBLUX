@@ -95,6 +95,10 @@ RLIMGUIAPI void rlImGuiShutdown(void);
 // Loblox extension: RML text controls use this backend's ordered character
 // queue too. This is an ownership hint, not a second keyboard event reader.
 RLIMGUIAPI void rlImGuiSetExternalTextInput(bool active);
+// Loblox extension: specialized native popups render once, after the RML
+// compositor, so they cannot be covered by ribbon/panel chrome.
+RLIMGUIAPI void rlImGuiDeferPopupRendering(bool active);
+RLIMGUIAPI void rlImGuiRenderDeferredPopups(void);
 
 // Advanced StartupAPI
 

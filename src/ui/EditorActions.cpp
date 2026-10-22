@@ -118,10 +118,17 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                 else {const auto split=name.find('.');int axis=std::stoi(name.substr(split+1));if(axis<0||axis>2)throw std::runtime_error("Invalid axis");const auto field=name.substr(0,split);auto t=p.transform();Vector3 v=field=="Position"?t.position:field=="Size"?t.size:p.rotationEulerDegrees();(&v.x)[axis]=Number(c.value);if(field=="Size"&&(v.x<.2f||v.y<.2f||v.z<.2f))throw std::runtime_error("Minimum size is 0.2");if(field=="Position")p.setPosition(v);else if(field=="Size")p.setSize(v);else p.setRotationEulerDegrees(v);}
                 e.physics_.applyChanges(&p);
             } else if(node==e.scene_.lighting()) {
-                auto* l=e.scene_.lighting();float v=Number(c.value);
-                if(name=="SkyEnabled")l->setSkyEnabled(v!=0);else if(name=="SunIntensity")l->setSunIntensity(v);
+                auto* l=e.scene_.lighting();
+                if(name=="SkyEnabled")l->setSkyEnabled(c.value=="true"||c.value=="1");
+                else if(name=="SkyZenithColor")l->setSkyZenithColor(ReadColor(c.value));else if(name=="SkyHorizonColor")l->setSkyHorizonColor(ReadColor(c.value));
+                else if(name=="SkyGroundColor")l->setSkyGroundColor(ReadColor(c.value));else if(name=="SunColor")l->setSunColor(ReadColor(c.value));else if(name=="FogColor")l->setFogColor(ReadColor(c.value));
+                else if(name.rfind("SunDirection.",0)==0) {const int axis=std::stoi(name.substr(13));if(axis<0||axis>2)throw std::runtime_error("Invalid axis");auto direction=l->sunDirection();(&direction.x)[axis]=Number(c.value);l->setSunDirection(direction);}
+                else {const float v=Number(c.value);
+                if(name=="SunIntensity")l->setSunIntensity(v);
                 else if(name=="Brightness")l->setBrightness(v);else if(name=="FogDensity")l->setFogDensity(v);
                 else if(name=="CloudCoverage")l->setCloudDensity(v);else if(name=="SkyRotation")l->setSkyRotation(v);
+                else if(name=="CloudScale")l->setCloudScale(v);else if(name=="CloudSpeed")l->setCloudSpeed(v);else if(name=="CloudSoftness")l->setCloudSoftness(v);else if(name=="SunSize")l->setSunSize(v);
+                }
             } else if(node==e.scene_.workspace() && name=="VoidHeight")e.scene_.workspace()->setFallenPartsDestroyHeight(Number(c.value));
             else if(IsScriptClass(node->instanceClass()) && name=="Enabled")static_cast<Script*>(node)->enabled=c.value=="true";
         } else return false;

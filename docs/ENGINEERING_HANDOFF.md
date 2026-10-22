@@ -1,5 +1,8 @@
 # Continuidade — R6 e primeiro runtime local — 2026-10-21
 
+Migração atual do frontend: [RMLUI_HANDOFF.md](RMLUI_HANDOFF.md).
+O histórico abaixo antecede RmlUi; não descreve a UI padrão atual.
+
 Retomada atual: [STUDIO3_HANDOFF.md](STUDIO3_HANDOFF.md), com correções de
 rig, Fall, céu procedural, frontend e evidências Release/Debug/Sway.
 
@@ -135,6 +138,16 @@ do frame anterior e repetição automática. A sessão continuava sob popup/widg
   gizmo/drag_*, scene/selection_change e physics/edit_*.
 - `LOBLOX_TRACE_INPUT=1`: dispatch nas bordas de mouse/ações de teclado/scroll;
   sem registrar movimento por frame.
+- `RmlFrontendSupport.*`: política de textura da interface (ícones em 96 px,
+  logo/PNG reduzidos por média de área, alfa premultiplicado, cadeia de mip e
+  filtro trilinear com bias de LOD). O atlas de fontes continua no caminho
+  original do RmlUi.
+- `ImageAssets.cpp` + `SceneRenderer.cpp`: texturas 3D com cadeia de mip, filtro
+  trilinear (anisotropia quando a extensão existe) e mistura com alfa
+  premultiplicado. Sem isso a textura preto e branco minificada virava ruído
+  serrilhado e o RGB sob alfa zero vazava para a arte.
+- Ordem do blend mode e do `rlSetTexture` nos quads texturados: trocar o modo de
+  mistura esvazia o batch do raylib e apaga a textura registrada.
 
 ## Evidência atual e próximos passos
 

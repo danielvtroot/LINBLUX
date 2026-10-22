@@ -1,6 +1,7 @@
 #include "ui/StudioFrontend.h"
 #include "ui/EditorActions.h"
 #include "ui/ImageSafety.h"
+#include "ui/RmlFrontendSupport.h"
 #include "editor/EditorUI.h"
 #include "rendering/EditorCamera.h"
 #include "scene/Scene.h"
@@ -27,89 +28,10 @@ namespace {
 std::string Escape(const std::string& s) {std::string out;for(char c:s)out+=c=='&'?"&amp;":c=='<'?"&lt;":c=='>'?"&gt;":c=='\"'?"&quot;":std::string(1,c);return out;}
 std::string Num(float v) {std::ostringstream s;s<<std::setprecision(6)<<v;return s.str();}
 std::string Hex(Color c) {char s[8];std::snprintf(s,sizeof(s),"#%02x%02x%02x",c.r,c.g,c.b);return s;}
-std::string Button(const std::string& action,const std::string& label,const std::string& icon="",const std::string& value="") {
-    return "<button id=\"cmd-"+action+"-"+Escape(value)+"\" data-action=\""+action+"\" data-value=\""+Escape(value)+"\">"+(icon.empty()?"":"<img src=\"icon-"+icon+"\"/>")+Escape(label)+"</button>";
+std::string Button(const std::string& action,const std::string& label,const std::string& icon="",const std::string& value="",const std::string& scope="cmd") {
+    return "<button id=\""+scope+"-"+action+"-"+Escape(value)+"\" data-action=\""+action+"\" data-value=\""+Escape(value)+"\">"+(icon.empty()?"":"<img src=\"icon-"+icon+"\"/>")+Escape(label)+"</button>";
 }
 bool Within(Vector2 p,Rectangle r){return r.width>0 && CheckCollisionPointRec(p,r);}
-struct Platform final:Rml::SystemInterface {
-    int cursor=MOUSE_CURSOR_DEFAULT;
-    double GetElapsedTime() override{return GetTime();}
-    bool LogMessage(Rml::Log::Type type,const Rml::String& message) override {
-        if(type<=Rml::Log::LT_WARNING)std::fprintf(stderr,"RmlUi: %s\n",message.c_str());
-        return true;
-    }
-    void SetClipboardText(const Rml::String& s)override{::SetClipboardText(s.c_str());}
-    void GetClipboardText(Rml::String& s)override{const char* text=::GetClipboardText();s=text?text:"";}
-    void SetMouseCursor(const Rml::String& name)override {
-        cursor=name=="pointer"?MOUSE_CURSOR_POINTING_HAND:name=="text"?MOUSE_CURSOR_IBEAM:name=="ew-resize"?MOUSE_CURSOR_RESIZE_EW:name=="ns-resize"?MOUSE_CURSOR_RESIZE_NS:MOUSE_CURSOR_DEFAULT;
-    }
-    void JoinPath(Rml::String& result,const Rml::String& document,const Rml::String& path)override {
-        // RmlUi's default treats '/image.png' as a virtual web-root path and
-        // strips '/'. Loblox resources use actual Linux filesystem paths.
-        if(path.rfind("icon-",0)==0||path=="loblox-logo"){result=path;return;}
-        const auto resource=std::filesystem::path(path);
-        result=(resource.is_absolute()?resource:std::filesystem::path(document).parent_path()/resource).lexically_normal().string();
-    }
-};
-// Original Loblox line-art icons. CPU rasterization runs once per image name;
-// RmlUi owns and caches the generated premultiplied texture, including fonts.
-Image IconImage(std::string name) {
-    Image image=GenImageColor(48,48,BLANK);Color ink{231,236,245,255};
-    if(name=="workspace"||name=="part"||name=="move"||name=="spawn")ink={124,188,242,255};
-    if(name=="folder"||name=="storage"||name=="lighting"||name=="rotate")ink={241,203,105,255};
-    if(name=="model"||name=="module"||name=="rig")ink={178,155,237,255};
-    if(name=="script"||name=="local-script"||name=="animation"||name=="scale")ink={115,210,173,255};
-    auto line=[&](int x,int y,int a,int b){ImageDrawLineEx(&image,{float(x),float(y)},{float(a),float(b)},name.rfind("chevron-",0)==0?6:3,ink);};
-    auto box=[&](int x,int y,int w,int h){line(x,y,x+w,y);line(x+w,y,x+w,y+h);line(x+w,y+h,x,y+h);line(x,y+h,x,y);};
-    if(name=="chevron-right"){line(18,11,31,24);line(31,24,18,37);}
-    else if(name=="chevron-down"){line(11,18,24,31);line(24,31,37,18);}
-    else if(name=="workspace") {ImageDrawCircleLines(&image,24,24,18,ink);line(7,24,41,24);line(24,6,24,42);box(16,9,16,30);}
-    else if(name=="lighting") {ImageDrawCircleLines(&image,24,19,12,ink);box(18,30,12,8);line(18,43,30,43);for(int x:{5,43})line(x,16,x,22);line(24,0,24,3);}
-    else if(name=="color") {ImageDrawCircle(&image,16,16,10,{225,111,114,255});ImageDrawCircle(&image,32,16,10,{104,185,234,255});ImageDrawCircle(&image,24,32,10,{109,210,157,255});}
-    else if(name=="image") {box(5,7,38,34);ImageDrawCircle(&image,32,17,4,ink);line(7,36,19,22);line(19,22,30,36);line(27,32,35,25);line(35,25,41,36);}
-    else if(name=="anchor") {line(24,6,24,39);ImageDrawCircleLines(&image,24,9,5,ink);line(15,21,33,21);line(10,29,10,36);line(10,36,24,43);line(24,43,38,36);line(38,36,38,29);}
-    else if(name=="delete") {box(13,14,23,28);line(8,11,40,11);line(19,5,29,5);line(20,20,20,36);line(29,20,29,36);}
-    else if(name=="copy"||name=="paste"||name=="duplicate") {box(7,6,25,29);box(16,16,25,29);}
-    else if(name=="focus") {box(14,14,20,20);line(5,15,5,5);line(5,5,15,5);line(33,5,43,5);line(43,5,43,15);line(5,33,5,43);line(5,43,15,43);line(33,43,43,43);line(43,43,43,33);}
-    else if(name=="info") {ImageDrawCircleLines(&image,24,24,18,ink);ImageDrawCircle(&image,24,14,2,ink);line(24,22,24,35);}
-    else if(name=="play"||name=="select")ImageDrawTriangle(&image,{15,8},{15,40},{39,24},ink);
-    else if(name=="stop")ImageDrawRectangle(&image,12,12,25,25,ink);
-    else if(name=="menu")for(int y:{13,24,35})line(9,y,39,y);
-    else if(name=="move") {line(5,24,43,24);line(24,5,24,43);line(5,24,12,17);line(5,24,12,31);line(43,24,36,17);line(43,24,36,31);line(24,5,17,12);line(24,5,31,12);line(24,43,17,36);line(24,43,31,36);}
-    else if(name=="scale") {box(13,13,22,22);for(int x:{8,35})for(int y:{8,35})ImageDrawRectangle(&image,x,y,6,6,ink);}
-    else if(name=="rotate"||name=="respawn") {ImageDrawCircleLines(&image,24,25,15,ink);ImageDrawTriangle(&image,{33,5},{44,17},{29,18},ink);}
-    else if(name=="folder"||name=="toolbox"||name=="storage") {box(6,15,36,25);box(8,8,14,7);line(6,24,42,24);}
-    else if(name=="script"||name=="output"||name=="module"||name=="local-script") {box(12,5,25,37);for(int y:{15,23,31})line(18,y,30,y);if(name=="module")box(5,24,13,17);}
-    else if(name=="model") {box(4,21,17,20);box(27,21,17,20);box(15,5,18,19);}
-    else if(name=="explorer"||name=="properties"||name=="settings")for(int y:{12,24,36}) {line(8,y,40,y);ImageDrawCircle(&image,y==24?30:17,y,4,ink);}
-    else if(name=="save") {box(8,6,32,36);box(14,6,18,13);box(15,27,19,15);}
-    else if(name=="heart") {ImageDrawCircle(&image,16,18,10,ink);ImageDrawCircle(&image,32,18,10,ink);ImageDrawTriangle(&image,{6,21},{24,43},{42,21},ink);}
-    else if(name=="rig") {box(17,3,14,12);box(14,18,20,15);line(10,19,7,32);line(38,19,41,32);line(19,34,16,45);line(29,34,32,45);}
-    else if(name=="animation") {box(5,10,38,29);ImageDrawTriangle(&image,{20,16},{20,33},{33,24},ink);}
-    else if(name=="sphere") {ImageDrawCircleLines(&image,24,24,18,ink);line(6,24,42,24);line(24,6,24,42);}
-    else if(name=="spawn") {box(6,31,36,10);line(24,6,24,30);line(24,6,38,11);line(38,11,24,17);}
-    else {box(9,14,25,27);line(9,14,20,6);line(34,14,43,6);line(20,6,43,6);line(43,6,43,31);line(34,41,43,31);}
-    return image;
-}
-class Renderer final:public RenderInterface_GL3 {
-public:
-    int drawCalls=0;
-    void RenderGeometry(Rml::CompiledGeometryHandle geometry,Rml::Vector2f translation,Rml::TextureHandle texture)override {
-        ++drawCalls;RenderInterface_GL3::RenderGeometry(geometry,translation,texture);
-    }
-    Rml::TextureHandle LoadTexture(Rml::Vector2i& dimensions,const Rml::String& source)override {
-        const auto name=std::filesystem::path(source).filename().string();
-        Image image{};
-        if(name.rfind("icon-",0)==0)image=IconImage(name.substr(5));
-        else {std::string path=name=="loblox-logo"?game::BuiltinAssetPath("loblox.png"):source;if(!loblox::ui::SafeImageFile(path))return 0;image=LoadImage(path.c_str());}
-        if(!image.data)return 0;
-        if(image.width>4096||image.height>4096){UnloadImage(image);return 0;}
-        if(name=="loblox-logo" && image.width>256)ImageResize(&image,256,256*image.height/image.width);
-        ImageFormat(&image,PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);ImageAlphaPremultiply(&image);
-        dimensions={image.width,image.height};const auto handle=GenerateTexture({static_cast<const Rml::byte*>(image.data),size_t(image.width)*image.height*4},dimensions);
-        UnloadImage(image);return handle;
-    }
-};
 std::filesystem::path LayoutPath() {
     if(const char* p=std::getenv("XDG_CONFIG_HOME"))return std::filesystem::path(p)/"loblox/ui-layout.json";
     if(const char* p=std::getenv("HOME"))return std::filesystem::path(p)/".config/loblox/ui-layout.json";
@@ -118,7 +40,7 @@ std::filesystem::path LayoutPath() {
 }
 
 struct StudioFrontend::Impl final:Rml::EventListener {
-    EditorUI& ui;EditorActions actions;Platform system;std::unique_ptr<Renderer> renderer;
+    EditorUI& ui;EditorActions actions;ui::RmlPlatform system;std::unique_ptr<ui::StudioRenderer> renderer;
     Rml::Context* context=nullptr;Rml::ElementDocument* document=nullptr;
     Rectangle view{},advancedRect{};float left=204,right=292,bottom=330,propertySplit=.52f,dpi=1;
     std::string tab="Home",advanced,search,page="game",dialog,focusValue,split,propertySearch;
@@ -126,7 +48,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     std::string treeMarkup,propertyMarkup,ribbonMarkup,advancedMarkup;size_t treeHash=0;
     std::map<std::pair<std::string,std::string>,std::string> styles;
     std::vector<game::ImageAsset> images;double imageScan=-10;
-    std::set<InstanceId> collapsed;InstanceId dragNode=0;Vector2 dragStart{};
+    std::set<InstanceId> collapsed;InstanceId dragNode=0,dragTarget=0;Vector2 dragStart{};
     bool dragging=false,mouseOwned=false,escapeConsumed=false,dialogOpen=false,treeKeyboard=false,restoreFocus=false;
     bool initialized=false,syncing=false,keyboardOwned=false;float shownHealth=100;int w=0,h=0;
     std::vector<EditorCommand> commands;
@@ -144,8 +66,8 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     std::string value(Rml::Element* e)const {if(auto* form=dynamic_cast<Rml::ElementFormControl*>(e))return form->GetValue();return "";}
     bool editing()const {auto* focus=context?context->GetFocusElement():nullptr;return focus&&(focus->GetTagName()=="input"||focus->GetTagName()=="textarea"||focus->GetTagName()=="select");}
     Rectangle bounds(const std::string& id)const {auto* e=el(id);if(!e)return {};auto p=e->GetAbsoluteOffset(Rml::BoxArea::Border);auto s=e->GetBox().GetSize(Rml::BoxArea::Border);return {p.x,p.y,s.x,s.y};}
-    void loadLayout(){try{std::ifstream file(LayoutPath());nlohmann::json j;if(file>>j){left=j.value("left",left);right=j.value("right",right);bottom=j.value("bottom",bottom);propertySplit=j.value("properties",propertySplit);}}catch(...) {}}
-    void saveLayout(){try {const auto path=LayoutPath();if(path.empty())return;std::filesystem::create_directories(path.parent_path());auto temp=path;temp+=".tmp";{std::ofstream file(temp);file<<nlohmann::json{{"left",left},{"right",right},{"bottom",bottom},{"properties",propertySplit}};if(!file)return;}std::filesystem::rename(temp,path);}catch(...) {}}
+    void loadLayout(){try{std::ifstream file(LayoutPath());nlohmann::json j;if(file>>j){left=j.value("left",left);right=j.value("right",right);bottom=j.value("bottom",bottom);propertySplit=j.value("properties",propertySplit);ui.showToolbox_=j.value("showToolbox",true);ui.showExplorer_=j.value("showExplorer",true);ui.showProperties_=j.value("showProperties",true);}}catch(...) {}}
+    void saveLayout(){try {const auto path=LayoutPath();if(path.empty())return;std::filesystem::create_directories(path.parent_path());auto temp=path;temp+=".tmp";{std::ofstream file(temp);file<<nlohmann::json{{"left",left},{"right",right},{"bottom",bottom},{"properties",propertySplit},{"showToolbox",ui.showToolbox_},{"showExplorer",ui.showExplorer_},{"showProperties",ui.showProperties_}};if(!file)return;}std::filesystem::rename(temp,path);}catch(...) {}}
     void layout() {
         w=GetScreenWidth();h=GetScreenHeight();dpi=float(GetRenderWidth())/std::max(1,w);
         context->SetDimensions({GetRenderWidth(),GetRenderHeight()});
@@ -185,6 +107,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     void prompt(const std::string& kind) {
         auto* selected=ui.scene_.selection();
         if((kind=="color"||kind=="material")&&(!selected||!selected->isPart())){ui.setStatus("Select a Part first",true);return;}
+        if(kind.rfind("color:",0)==0&&!selected)return;
         ui.endGizmoSession(true,"dialog");ui.cancelRigGizmo();ui.camera_.releaseCapture();dialog=kind;dialogOpen=true;
         text("dialog-title",kind=="rename"?"Rename object":kind=="open"?"Open project":kind=="import-image"?"Import image":"Save project as");
         text("dialog-description",kind=="rename"?"Names are preserved with the object's stable ID.":kind=="import-image"?"PNG or JPEG path · maximum 4096 × 4096. The original is preserved.":"Project files use the existing transactional JSON format.");text("dialog-error","");
@@ -192,8 +115,9 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         const auto* node=ui.scene_.selection();const auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);
         std::string initial=kind=="rename"?(node?node->name():rig?rig->name:""):kind=="import-image"?"":ui.projectPath_;
         el("appearance-controls")->SetInnerRML("");
-        if(kind=="color") {
-            dialog="property:Color";initial=Hex(static_cast<Part*>(selected)->color());text("dialog-title","Part color");text("dialog-description","Choose a swatch or enter #RRGGBB. Transparency is preserved.");
+        if(kind=="color"||kind.rfind("color:",0)==0) {
+            const auto property=kind=="color"?std::string("Color"):kind.substr(6);
+            dialog="property:"+property;initial=kind=="color"?Hex(static_cast<Part*>(selected)->color()):value(el("prop-"+property));text("dialog-title",property);text("dialog-description","Choose a swatch or enter #RRGGBB. Transparency is preserved.");
             std::string colors="<div class=\"palette\">";for(const char* color:{"#f2f2f2","#b0b3b9","#363a44","#111318","#e56e70","#ed964d","#f2d477","#78c195","#4f9dcc","#4969b7","#9a7ccc","#d69cba","#a57d59","#d5b482","#9bc2b8","#afc3d8"})colors+="<button data-action=\"choose-color\" data-value=\""+std::string(color)+"\" style=\"background-color:"+color+";\"/>";colors+="</div>";el("appearance-controls")->SetInnerRML(colors);
         }else if(kind=="material") {
             dialog="property:Material";initial=std::to_string(int(static_cast<Part*>(selected)->material()));text("dialog-title","Part material");text("dialog-description","Select a supported engine material.");
@@ -225,7 +149,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(syncing)return;
         auto* target=event.GetTargetElement();const auto type=event.GetType();
         if(type=="focus") {focusValue=value(target);return;}
-        if(type=="blur") {if(!restoreFocus && value(target)!=focusValue)commit(target);restoreFocus=false;return;}
+        if(type=="blur") {const auto& tag=target->GetTagName();if((tag=="input"||tag=="select"||tag=="textarea")&&!restoreFocus&&value(target)!=focusValue)commit(target);restoreFocus=false;return;}
         if(type=="change") {
             if(target->GetId()=="tree-search") {search=value(target);treeHash=0;return;}
             if(target->GetId()=="property-search") {propertySearch=value(target);filterProperties();return;}
@@ -240,6 +164,11 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(auto* row=ancestor(target,"data-node-row")) {dragNode=row->GetAttribute<InstanceId>("data-node-row",0);dragStart=GetMousePosition();treeKeyboard=true;}
             return;
         }
+        if(type=="dblclick") {
+            if(auto* row=ancestor(target,"data-node-row")) {const auto id=row->GetAttribute<InstanceId>("data-node-row",0);if(auto* node=ui.scene_.find(id);node&&IsScriptClass(node->instanceClass()))commands.push_back({"open-script","",id});}
+            else if(ancestor(target,"data-rig"))showAdvanced("rig");
+            return;
+        }
         if(type=="contextmenu")return;
         if(type!="click"||dragging)return;
         if(auto* button=ancestor(target,"data-tab")){tab=attr(button,"data-tab");ribbonMarkup.clear();return;}
@@ -251,20 +180,22 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(!button) {if(auto* row=ancestor(target,"data-node-row"))commands.push_back({"select","",row->GetAttribute<InstanceId>("data-node-row",0)});return;}
         if(button->GetTagName()=="input"||button->GetTagName()=="select")return;
         const auto action=attr(button,"data-action"),v=attr(button,"data-value");
+        if(contextOpen&&button->GetParentNode()==el("context-menu")){display("context-menu",false);contextOpen=false;}
         if(action=="rename"){prompt("rename");return;}
         if(action=="open-dialog"||action=="save-dialog"){prompt(action=="open-dialog"?"open":"save-as");return;}
         if(action=="import-dialog"){prompt("import-image");return;}
         if(action=="color-dialog"||action=="material-dialog"){prompt(action=="color-dialog"?"color":"material");return;}
+        if(action=="edit-color"){prompt("color:"+v);return;}
         if(action=="choose-color"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
         if(action=="insert-menu") {std::string menu;for(const auto& item:std::vector<std::pair<std::string,std::string>>{{"part","Part"},{"folder","Folder"},{"model","Model"},{"script","Script"},{"local-script","LocalScript"},{"module","ModuleScript"},{"r6","R6 rig"}})menu+=Button(item.first,item.second);el("context-menu")->SetInnerRML(menu);auto b=bounds("new-object");rect("context-menu",{b.x-160,b.y+23,184,183});display("context-menu",true);contextOpen=true;return;}
         if(action=="cancel-dialog") {dialogOpen=false;context->GetRootElement()->Focus();return;}
         if(action=="confirm-dialog") {const auto v=value(el("dialog-value"));const auto id=ui.scene_.selection()?ui.scene_.selection()->id():0;
             if(actions.dispatch({dialog,v,id})) {if(dialog=="import-image")imageScan=-10;dialogOpen=false;context->GetRootElement()->Focus();treeHash=0;}else text("dialog-error",ui.status_);return;}
         if(action=="close-advanced"){showAdvanced("");return;}
-        if(action=="toggle-toolbox"){ui.showToolbox_=!ui.showToolbox_;return;}
-        if(action=="toggle-explorer"){ui.showExplorer_=!ui.showExplorer_;return;}
-        if(action=="toggle-properties"){ui.showProperties_=!ui.showProperties_;return;}
-        if(action=="reset-layout"){left=204;right=292;bottom=330;propertySplit=.52f;saveLayout();return;}
+        if(action=="toggle-toolbox"){ui.showToolbox_=!ui.showToolbox_;saveLayout();return;}
+        if(action=="toggle-explorer"){ui.showExplorer_=!ui.showExplorer_;saveLayout();return;}
+        if(action=="toggle-properties"){ui.showProperties_=!ui.showProperties_;saveLayout();return;}
+        if(action=="reset-layout"){left=204;right=292;bottom=330;propertySplit=.52f;ui.showToolbox_=ui.showExplorer_=ui.showProperties_=true;saveLayout();return;}
         if(action.rfind("show:",0)==0){showAdvanced(action.substr(5)=="assets"?"assets":action.substr(5));return;}
         commands.push_back({action,v,action=="open-script"?InstanceId(std::stoull(v)):0});display("context-menu",false);contextOpen=false;
     }
@@ -313,7 +244,10 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         const auto id=std::to_string(node->id());
         el("property-title")->SetInnerRML(Escape(node->name())+"<span>"+Escape(node->className())+" · #"+id+"</span>");
         auto group=[&](const std::string& name){s+="<div class=\"property-group\">"+name+"</div>";};
-        auto input=[&](const std::string& name,const std::string& v,const std::string& caption=""){s+="<div class=\"property\" data-property-name=\""+name+"\"><label>"+Escape(caption.empty()?name:caption)+"</label><input id=\"prop-"+name+"\" title=\""+Escape(caption.empty()?name:caption)+" · Enter to commit / Esc to cancel\" data-node=\""+id+"\" data-property=\""+name+"\" value=\""+Escape(v)+"\"/></div>";};
+        auto input=[&](const std::string& name,const std::string& v,const std::string& caption=""){s+="<div class=\"property\" data-property-name=\""+name+"\"><label>"+Escape(caption.empty()?name:caption)+"</label><input id=\"prop-"+name+"\" title=\""+Escape(caption.empty()?name:caption)+" · Enter to commit / Esc to cancel\" data-node=\""+id+"\" data-property=\""+name+"\" value=\""+Escape(v)+"\"/>";
+            if(v.size()==7&&v[0]=='#')s+="<button id=\"color-"+name+"\" class=\"color-button\" data-action=\"edit-color\" data-value=\""+name+"\" style=\"background-color:"+v+"\" title=\"Choose color\"/>";
+            s+="</div>";
+        };
         auto check=[&](const std::string& name,bool checked){s+="<div class=\"property\" data-property-name=\""+name+"\"><label>"+name+"</label><input type=\"checkbox\" data-node=\""+id+"\" data-property=\""+name+"\" "+(checked?"checked=\"checked\"":"")+"/></div>";};
         group("DATA");input("Name",node->name());
         s+="<div class=\"property\" data-property-name=\"ClassName\"><label>ClassName</label><span class=\"readonly\">"+Escape(node->className())+"</span></div>";
@@ -342,7 +276,14 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                 auto it=p.attributes().find(field);if(it!=p.attributes().end()){if(auto* text=std::get_if<std::string>(&it->second))v=*text;else if(auto* number=std::get_if<double>(&it->second))v=Num(*number);}
                 input(field,v);
             }
-        } else if(node==ui.scene_.lighting()) {const auto* l=ui.scene_.lighting();group("PROCEDURAL ATMOSPHERE");input("SkyEnabled",l->skyEnabled()?"1":"0");input("Brightness",Num(l->brightness()));input("SunIntensity",Num(l->sunIntensity()));input("CloudCoverage",Num(l->cloudDensity()));input("SkyRotation",Num(l->skyRotation()));input("FogDensity",Num(l->fogDensity()));}
+        } else if(node==ui.scene_.lighting()) {
+            const auto* l=ui.scene_.lighting();group("PROCEDURAL ATMOSPHERE");check("SkyEnabled",l->skyEnabled());input("Brightness",Num(l->brightness()));input("SunIntensity",Num(l->sunIntensity()));
+            input("CloudCoverage",Num(l->cloudDensity()));input("SkyRotation",Num(l->skyRotation()));input("FogDensity",Num(l->fogDensity()));
+            input("SkyZenithColor",Hex(l->skyZenithColor()));input("SkyHorizonColor",Hex(l->skyHorizonColor()));input("SkyGroundColor",Hex(l->skyGroundColor()));
+            input("SunColor",Hex(l->sunColor()));input("SunSize",Num(l->sunSize()));input("FogColor",Hex(l->fogColor()));
+            input("CloudScale",Num(l->cloudScale()));input("CloudSpeed",Num(l->cloudSpeed()));input("CloudSoftness",Num(l->cloudSoftness()));
+            for(int axis=0;axis<3;++axis){const auto direction=l->sunDirection();input("SunDirection."+std::to_string(axis),Num((&direction.x)[axis]),"Sun direction "+std::string(1,char('X'+axis)));}
+        }
         else if(node==ui.scene_.workspace()){group("WORLD");input("VoidHeight",Num(ui.scene_.workspace()->fallenPartsDestroyHeight()));}
         else if(IsScriptClass(node->instanceClass())) {group("SCRIPT");check("Enabled",static_cast<Script*>(node)->enabled);s+=Button("open-script","Open source","script",id);}
         if(!node->attributes().empty()) {group("ATTRIBUTES");for(const auto& a:node->attributes()){std::string v;if(const auto* text=std::get_if<std::string>(&a.second))v=*text;else if(const auto* number=std::get_if<double>(&a.second))v=Num(*number);else if(const auto* flag=std::get_if<bool>(&a.second))v=*flag?"true":"false";input("Attribute:"+a.first,v,a.first);}}
@@ -369,15 +310,26 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                 context->ProcessMouseButtonDown(0,mods);
             }
             if(ImGui::IsMouseClicked(1)) {
-                if(auto* row=ancestor(hover,"data-node-row")) {actions.dispatch({"select","",row->GetAttribute<InstanceId>("data-node-row",0)});std::string menu;for(const auto* cmd:{"rename","duplicate","copy","paste","folder","model","script","delete","focus"})menu+=Button(cmd,cmd);el("context-menu")->SetInnerRML(menu);rect("context-menu",{std::min(mouse.x,float(w)-190),std::min(mouse.y,float(h)-235),184,231});display("context-menu",true);contextOpen=true;treeKeyboard=true;}
+                auto* row=ancestor(hover,"data-node-row");auto* rig=ancestor(hover,"data-rig");
+                if(row||rig) {
+                    if(row)actions.dispatch({"select","",row->GetAttribute<InstanceId>("data-node-row",0)});else actions.dispatch({"rig-select",attr(rig,"data-rig")});
+                    std::string menu;for(const auto* cmd:{"rename","duplicate","copy","paste","folder","model","script","delete","focus"})if(row||std::string(cmd)=="rename"||std::string(cmd)=="duplicate"||std::string(cmd)=="delete"||std::string(cmd)=="focus")menu+=Button(cmd,cmd,"","","context");
+                    el("context-menu")->SetInnerRML(menu);rect("context-menu",{std::min(mouse.x,float(w)-190),std::min(mouse.y,float(h)-235),184,row?231.f:106.f});display("context-menu",true);contextOpen=true;treeKeyboard=true;
+                }
             }
             if(io.MouseWheel!=0 && mouseOwned)context->ProcessMouseWheel(-io.MouseWheel,mods);
         }
         if(!split.empty()&&ImGui::IsMouseDown(0)){if(split=="left")left=mouse.x;else if(split=="right")right=w-mouse.x;else if(split=="properties")propertySplit=(mouse.y-144)/std::max(1.f,h-167.f);else bottom=h-23-mouse.y;}
         if(dragNode && ImGui::IsMouseDown(0) && Vector2Distance(mouse,dragStart)>7)dragging=true;
+        if(dragging) {
+            auto* target=ancestor(hover,"data-node-row");const auto id=target?target->GetAttribute<InstanceId>("data-node-row",0):0;
+            if(id!=dragTarget){if(auto* old=el("node-"+std::to_string(dragTarget)))old->SetClass("drop-target",false);dragTarget=id;if(target)target->SetClass("drop-target",true);}
+        }
         if(ImGui::IsMouseReleased(0)) {
             if(dragging) {if(auto* row=ancestor(hover,"data-node-row")){const auto target=row->GetAttribute<InstanceId>("data-node-row",0);if(target!=dragNode)actions.dispatch({"reparent",std::to_string(target),dragNode});}}
             context->ProcessMouseButtonUp(0,mods);if(!split.empty())saveLayout();split.clear();dragNode=0;dragging=false;
+            if(auto* target=el("node-"+std::to_string(dragTarget)))target->SetClass("drop-target",false);
+            dragTarget=0;
         }
         auto* focused=context->GetFocusElement();
         keyboardOwned=keyboardOwned||editing()||dialogOpen;
@@ -388,7 +340,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             const std::pair<ImGuiKey,Rml::Input::KeyIdentifier> keys[]={{ImGuiKey_Backspace,Rml::Input::KI_BACK},{ImGuiKey_Delete,Rml::Input::KI_DELETE},{ImGuiKey_LeftArrow,Rml::Input::KI_LEFT},{ImGuiKey_RightArrow,Rml::Input::KI_RIGHT},{ImGuiKey_Home,Rml::Input::KI_HOME},{ImGuiKey_End,Rml::Input::KI_END},{ImGuiKey_Tab,Rml::Input::KI_TAB},{ImGuiKey_A,Rml::Input::KI_A},{ImGuiKey_C,Rml::Input::KI_C},{ImGuiKey_V,Rml::Input::KI_V},{ImGuiKey_X,Rml::Input::KI_X},{ImGuiKey_Z,Rml::Input::KI_Z},{ImGuiKey_Y,Rml::Input::KI_Y}};
             for(auto key:keys){if(ImGui::IsKeyPressed(key.first))context->ProcessKeyDown(key.second,mods);if(ImGui::IsKeyReleased(key.first))context->ProcessKeyUp(key.second,mods);}
             if(ImGui::IsKeyPressed(ImGuiKey_Enter,false)){if(dialogOpen) {EditorCommand c{dialog,value(el("dialog-value")),ui.scene_.selection()?ui.scene_.selection()->id():0};if(actions.dispatch(c)){if(dialog=="import-image")imageScan=-10;dialogOpen=false;}else text("dialog-error",ui.status_);}else {commit(focused);focusValue=value(focused);}focused->Blur();}
-            if(ImGui::IsKeyPressed(ImGuiKey_Escape,false)){if(auto* form=dynamic_cast<Rml::ElementFormControl*>(focused))form->SetValue(focusValue);restoreFocus=true;focused->Blur();escapeConsumed=true;}
+            if(ImGui::IsKeyPressed(ImGuiKey_Escape,false)){if(auto* form=dynamic_cast<Rml::ElementFormControl*>(focused))form->SetValue(focusValue);restoreFocus=true;focused->Blur();if(dialogOpen)dialogOpen=false;escapeConsumed=true;}
         } else if(dialogOpen && ImGui::IsKeyPressed(ImGuiKey_Escape,false)){dialogOpen=false;escapeConsumed=true;}
         if(treeKeyboard&&!editing()&&!dialogOpen&&!ui.runtime_.active()) {
             if(ImGui::IsKeyPressed(ImGuiKey_F2,false))prompt("rename");
@@ -440,7 +392,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             s+="</select></label>";field("MinZoom",p.minZoom);field("MaxZoom",p.maxZoom);field("CameraDistance",p.cameraDistance);field("Sensitivity",p.sensitivity);toggle("ShiftLock",p.enableShiftLock);toggle("FirstPerson",p.allowFirstPerson);s+="</div>";
         } else {
             if(GetTime()-imageScan>2){images=game::ListImages(game::AssetsDir());imageScan=GetTime();}
-            s="<h2>Project images</h2><p class=\"muted\">PNG / JPEG · select a Part, then apply a decal or repeating texture.</p>"+Button("import-dialog","Import image","folder");
+            s="<h2>Local images</h2><p class=\"muted\">PNG / JPEG · select a Part, then apply a decal or repeating texture.</p>"+Button("import-dialog","Import image","folder");
             if(images.empty())s+="<p>No imported images yet.</p>";
             s+="<div class=\"asset-grid\">";
             for(const auto& image:images){const auto path=std::filesystem::path(game::AssetsDir())/image.filename;
@@ -469,17 +421,32 @@ struct StudioFrontend::Impl final:Rml::EventListener {
 };
 
 StudioFrontend::StudioFrontend(EditorUI& e):impl_(std::make_unique<Impl>(e)){}
-StudioFrontend::~StudioFrontend(){rlImGuiSetExternalTextInput(false);auto& p=*impl_;if(p.context)Rml::RemoveContext("loblox");if(p.initialized)Rml::Shutdown();p.renderer.reset();RmlGL3::Shutdown();}
+StudioFrontend::~StudioFrontend(){rlImGuiSetExternalTextInput(false);rlImGuiDeferPopupRendering(false);auto& p=*impl_;if(p.context)Rml::RemoveContext("loblox");if(p.initialized)Rml::Shutdown();p.renderer.reset();RmlGL3::Shutdown();}
 bool StudioFrontend::initialize(std::string& error) {
     auto& p=*impl_;Rml::String message;
     if(!RmlGL3::Initialize(&message)){error=message;return false;}
-    p.renderer=std::make_unique<Renderer>();if(!*p.renderer){error="RmlUi GL3 renderer unavailable";return false;}
+    p.renderer=std::make_unique<ui::StudioRenderer>();if(!*p.renderer){error="RmlUi GL3 renderer unavailable";return false;}
     Rml::SetSystemInterface(&p.system);Rml::SetRenderInterface(p.renderer.get());
     if(!Rml::Initialise()){error="RmlUi initialization failed";return false;}p.initialized=true;
-    const char* fonts[]={"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"};bool font=false;
-    for(auto* path:fonts)if(std::filesystem::exists(path)&&Rml::LoadFontFace(path,"DejaVu Sans",Rml::Style::FontStyle::Normal)){font=true;break;}
+    // The stylesheet asks for the "DejaVu Sans" family. Register a regular
+    // and a bold face of the SAME family so `font-weight: bold` is honoured
+    // instead of silently falling back to the regular weight, and so the
+    // fallback font never mixes two different typefaces.
+    struct FontSet{const char* regular;const char* bold;};
+    const FontSet fontSets[]={
+        {"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"},
+        {"/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf","/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf"},
+        {"/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf","/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"},
+    };
+    bool font=false;
+    for(const auto& set:fontSets) {
+        if(!std::filesystem::exists(set.regular))continue;
+        if(!Rml::LoadFontFace(set.regular,"DejaVu Sans",Rml::Style::FontStyle::Normal,Rml::Style::FontWeight::Normal))continue;
+        font=true;
+        if(std::filesystem::exists(set.bold))Rml::LoadFontFace(set.bold,"DejaVu Sans",Rml::Style::FontStyle::Normal,Rml::Style::FontWeight::Bold);
+        break;
+    }
     if(!font){error="A TrueType sans-serif font is required";return false;}
-    if(std::filesystem::exists("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))Rml::LoadFontFace("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
     p.context=Rml::CreateContext("loblox",{GetScreenWidth(),GetScreenHeight()});if(!p.context){error="RmlUi context creation failed";return false;}
     auto root=std::filesystem::path(GetApplicationDirectory())/"share/loblox/ui";if(!std::filesystem::exists(root))root=LOBLOX_UI_DIR;
     p.document=p.context->LoadDocument((root/"documents/studio.rml").string());if(!p.document){error="Failed to load studio.rml";return false;}
@@ -487,13 +454,13 @@ bool StudioFrontend::initialize(std::string& error) {
     if(!ribbonFile){error="Failed to load ribbon.rml";return false;}
     const std::string ribbon((std::istreambuf_iterator<char>(ribbonFile)),std::istreambuf_iterator<char>());
     p.el("ribbon-tools")->SetInnerRML(ribbon);
-    for(const char* type:{"click","change","focus","blur","mousedown"})p.document->AddEventListener(type,&p,true);
+    for(const char* type:{"click","dblclick","change","focus","blur","mousedown"})p.document->AddEventListener(type,&p,true);
     p.document->Show();p.display("context-menu",false);p.display("tooltip",false);p.display("dialog-overlay",false);p.display("game-layer",false);p.display("advanced-content",false);
     p.syncing=true;p.loadLayout();p.layout();p.ribbon();p.tree();p.properties();p.context->Update();p.syncing=false;
     if(std::getenv("LOBLOX_TRACE_UI")) {
         std::function<void(Rml::Element*,int)> trace=[&](Rml::Element* e,int depth){if(depth>3)return;const auto b=e->GetBox().GetSize(Rml::BoxArea::Border);std::fprintf(stderr,"RML box %d %s #%s .%s: %.1fx%.1f display=%s width=%s\n",depth,e->GetTagName().c_str(),e->GetId().c_str(),e->GetClassNames().c_str(),b.x,b.y,e->GetProperty("display")->ToString().c_str(),e->GetProperty("width")->ToString().c_str());for(int i=0;i<e->GetNumChildren();++i)trace(e->GetChild(i),depth+1);};trace(p.document,0);
     }
-    error.clear();return true;
+    rlImGuiDeferPopupRendering(true);error.clear();return true;
 }
 void StudioFrontend::draw() {
     auto& p=*impl_;const double started=GetTime();p.layout();p.input();p.syncing=true;p.ribbon();p.tree();p.properties();p.commonAdvanced();
@@ -521,6 +488,7 @@ void StudioFrontend::draw() {
     if(p.timing){p.presentationTime+=beforeScene-started;p.sceneTime+=afterScene-beforeScene;p.updateTime+=GetTime()-afterScene;p.frameTime+=GetFrameTime();}
 }
 void StudioFrontend::render(){auto& p=*impl_;const double started=GetTime();p.renderer->drawCalls=0;rlDrawRenderBatchActive();p.renderer->SetViewport(GetRenderWidth(),GetRenderHeight());p.renderer->BeginFrame();p.context->Render();p.renderer->EndFrame();
+    rlImGuiRenderDeferredPopups();
     if(p.mouseOwned && !(Within(GetMousePosition(),p.advancedRect)&&p.advanced!="settings"&&p.advanced!="assets"))SetMouseCursor(p.system.cursor);
     if(p.timing){p.renderTime+=GetTime()-started;if(++p.timingFrames==30){std::fprintf(stderr,"RML timing ms: presentation=%.2f scene=%.2f update=%.2f render=%.2f frame=%.2f draws=%d\n",p.presentationTime*1000/30,p.sceneTime*1000/30,p.updateTime*1000/30,p.renderTime*1000/30,p.frameTime*1000/30,p.renderer->drawCalls);p.timingFrames=0;p.presentationTime=p.sceneTime=p.updateTime=p.renderTime=p.frameTime=0;}}
 }

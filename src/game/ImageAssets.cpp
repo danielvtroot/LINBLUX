@@ -4,10 +4,20 @@
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <unordered_map>
 #include <unistd.h>
+
+// The anisotropic filter probe needs the GL entry points. The header is
+// optional: without it the surfaces simply stay trilinear.
+#if defined(__has_include)
+#  if __has_include(<GL/gl.h>)
+#    include <GL/gl.h>
+#    define LOBLOX_GL_HEADER 1
+#  endif
+#endif
 
 namespace loblox::game {
 namespace {
@@ -28,6 +38,21 @@ std::string LowerExt(const std::filesystem::path& path) {
     std::string ext = path.extension().string();
     for (auto& c : ext) c = static_cast<char>(std::tolower(c));
     return ext;
+}
+
+// GL_EXT_texture_filter_anisotropic is optional. Asking for
+// GL_MAX_ANISOTROPY_EXT on a driver without it is a GL error, so the
+// extension is probed once before any texture asks for anisotropic filtering.
+bool AnisotropicFilteringSupported() {
+#if defined(LOBLOX_GL_HEADER)
+    static const bool supported = []() {
+        const char* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+        return extensions && std::strstr(extensions, "GL_EXT_texture_filter_anisotropic") != nullptr;
+    }();
+    return supported;
+#else
+    return false;
+#endif
 }
 }  // namespace
 
@@ -132,8 +157,29 @@ Texture2D AssetTexture(const std::string& relativePath) {
     if (it != textureCache.end()) return it->second;
     Texture2D tex{};
     if (std::filesystem::exists(relativePath)) {
-        tex = LoadTexture(relativePath.c_str());
-        if(tex.id)SetTextureFilter(tex,TEXTURE_FILTER_BILINEAR);
+        Image image=LoadImage(relativePath.c_str());
+        if(image.data) {
+            ImageFormat(&image,PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+            if(image.format==PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) {
+                // The quads that sample these textures blend with premultiplied
+                // alpha, so the stored colour has to be premultiplied as well.
+                // Otherwise the mip chain averages the arbitrary colour that
+                // source PNGs keep under alpha = 0 (the Loblox logo stores
+                // magenta there) into the visible artwork.
+                ImageAlphaPremultiply(&image);
+                tex=LoadTextureFromImage(image);
+                UnloadImage(image);
+                if(tex.id) {
+                    // raylib uploads with a plain bilinear filter and no mip
+                    // chain, so a 1600x1600 image minified onto a wall turned
+                    // into aliased black and white noise. Mipmaps plus trilinear
+                    // minification keep the surface readable at any distance.
+                    GenTextureMipmaps(&tex);
+                    SetTextureFilter(tex,TEXTURE_FILTER_TRILINEAR);
+                    if(AnisotropicFilteringSupported())SetTextureFilter(tex,TEXTURE_FILTER_ANISOTROPIC_4X);
+                }
+            } else UnloadImage(image);
+        }
     }
     textureCache.emplace(relativePath, tex);
     return tex;

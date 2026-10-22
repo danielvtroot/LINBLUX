@@ -31,6 +31,7 @@
 #include "rlgl.h"
 
 #include "imgui.h"
+#include "imgui_internal.h"
 
 #include <math.h>
 #include <limits>
@@ -48,6 +49,14 @@ ImGuiContext* GlobalContext = nullptr;
 static constexpr size_t MAX_RAYLIB_KEY = 349;
 static bool ExternalTextInput=false; // Loblox RML keyboard owner
 void rlImGuiSetExternalTextInput(bool active) { ExternalTextInput=active; }
+static bool DeferPopups=false, RenderingDeferredPopups=false, HasDeferredPopups=false;
+void rlImGuiDeferPopupRendering(bool active) { DeferPopups=active; }
+void rlImGuiRenderDeferredPopups(void) {
+    if(!DeferPopups||!HasDeferredPopups||!ImGui::GetCurrentContext())return;
+    RenderingDeferredPopups=true;
+    ImGui_ImplRaylib_RenderDrawData(ImGui::GetDrawData());
+    RenderingDeferredPopups=false;HasDeferredPopups=false;
+}
 static ImGuiKey RaylibKeyMap[MAX_RAYLIB_KEY];
 static bool KeyMapInitialized = false;
 
@@ -771,6 +780,7 @@ void ImGui_ImplRaylib_UpdateTexture(ImTextureData* tex)
 
 void ImGui_ImplRaylib_RenderDrawData(ImDrawData* draw_data)
 {
+    if(!RenderingDeferredPopups)HasDeferredPopups=false;
     if (draw_data->Textures != nullptr)
     {
         for (ImTextureData* tex : *draw_data->Textures)
@@ -786,6 +796,13 @@ void ImGui_ImplRaylib_RenderDrawData(ImDrawData* draw_data)
     for (int l = 0; l < draw_data->CmdLists.Size; ++l)
     {
         const ImDrawList* commandList = draw_data->CmdLists[l];
+        if(DeferPopups) {
+            bool popup=false;
+            for(auto* window=commandList->_OwnerName?ImGui::FindWindowByName(commandList->_OwnerName):nullptr;window;window=window->ParentWindow)
+                if(window->Flags&(ImGuiWindowFlags_Popup|ImGuiWindowFlags_Tooltip)){popup=true;break;}
+            if(popup&&!RenderingDeferredPopups)HasDeferredPopups=true;
+            if(popup!=RenderingDeferredPopups)continue;
+        }
 
         for (const auto& cmd : commandList->CmdBuffer)
         {

@@ -90,10 +90,21 @@ int main() {
         EditorCamera camera; SceneRenderer renderer; AppConfig config;
         config.defaultProjectPath = std::string(directory)+"/game.json";
         EditorUI ui(scene,physics,camera,renderer,config);
+        bool observeQuickJump=false,quickWasJumping=false;
+        int quickFrames=0,quickLaunchFrame=-1,quickTransitions=0;
+        float quickPeakVelocity=0,quickPeakHeight=0;
         auto frames = [&](int n = 3) {
             for (int i = 0; i < n; ++i) {
                 if (!ui.playing()) physics.simulate(scene, 1.f/60);
                 BeginDrawing(); ClearBackground(RAYWHITE); rlImGuiBegin(); ui.draw(); rlImGuiEnd(); EndDrawing();
+                if(observeQuickJump) {
+                    auto& rt=EditorUITestAccess::runtime(ui);++quickFrames;
+                    quickPeakVelocity=std::max(quickPeakVelocity,rt.velocity().y);
+                    quickPeakHeight=std::max(quickPeakHeight,rt.position().y);
+                    const bool jumping=rt.humanoidState()==game::HumanoidState::Jumping;
+                    if(jumping&&!quickWasJumping){++quickTransitions;if(quickLaunchFrame<0)quickLaunchFrame=quickFrames;}
+                    quickWasJumping=jumping;
+                }
             }
         };
         auto command = [&](const std::string& arguments) {
@@ -234,7 +245,13 @@ int main() {
         frames(70); CHECK(runtime.grounded());
         // Both X11 edges arrive between two frames, as with a quick Space tap
         // at low FPS. The backend must not discard the press because it is up.
-        command("keydown space keyup space");frames(2);CHECK(runtime.velocity().y>1);
+        // At low FPS those five rendered frames can already cross the apex.
+        // Observe the real trajectory and launch latency instead of sampling
+        // vertical velocity only after the complete input helper returns.
+        const float jumpStartY=runtime.position().y;quickPeakHeight=jumpStartY;observeQuickJump=true;
+        command("keydown space keyup space");frames(2);observeQuickJump=false;
+        CHECK(quickPeakVelocity>1);CHECK(quickPeakHeight>jumpStartY+.1f);
+        CHECK(quickLaunchFrame>0&&quickLaunchFrame<=3);CHECK(quickTransitions==1);
         frames(70);CHECK(runtime.grounded());
         v = viewport(); mouse({v.x+v.width*.5f,v.y+v.height*.6f}); command("mousedown 3");
         CHECK(EditorUITestAccess::captured(ui));

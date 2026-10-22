@@ -672,15 +672,25 @@ void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
         world[i] = Vector3Add(part.position(),
                               Vector3RotateByQuaternion(local[i], rotationQuat));
     }
+    // The texture is uploaded premultiplied (see game::AssetTexture) and the
+    // mip chain filters it in that space, so the quad has to blend the same
+    // way. The result is identical to straight alpha, but the filtered
+    // colour no longer bleeds the colour stored under alpha = 0.
+    // The blend mode is switched BEFORE the texture: switching it flushes
+    // raylib's vertex batch, and the flush resets the batch entry that
+    // holds the texture id.
+    BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);
     rlSetTexture(tex.id);
     rlBegin(RL_QUADS);
-    rlColor4ub(tint.r, tint.g, tint.b, static_cast<unsigned char>(lround(std::clamp(alpha, 0.0f, 1.0f) * 255.0f)));
+    const auto channel=[alpha](unsigned char value){return static_cast<unsigned char>(std::lround(std::clamp(alpha,0.0f,1.0f)*value));};
+    rlColor4ub(channel(tint.r),channel(tint.g),channel(tint.b),static_cast<unsigned char>(lround(std::clamp(alpha, 0.0f, 1.0f) * 255.0f)));
     for (int i = 0; i < 4; ++i) {
         const auto uv = rotateUv(cornerUv[i][0], cornerUv[i][1]);
         rlTexCoord2f(uv.first, uv.second);
         rlVertex3f(world[i].x, world[i].y, world[i].z);
     }
     rlEnd();
+    EndBlendMode();
     rlSetTexture(0);
 }
 void DrawLayer(const Part& part, const char* imageKey, const char* faceKey,
@@ -758,6 +768,10 @@ void DrawHeadFace(const game::RigidTransform& headWorld, Vector3 headSize) {
     // Face -Z: o observador na frente olha para +Z, então +X aparece à ESQUERDA;
     // mapear u de +X -> -X deixa a imagem sem espelhamento.
     const float uv[4][2] = {{1, 0}, {0, 0}, {0, 1}, {1, 1}};
+    // The blend mode is switched BEFORE the texture: switching it flushes
+    // raylib's vertex batch, and the flush resets the batch entry that
+    // holds the texture id.
+    BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);
     rlSetTexture(tex.id);
     rlBegin(RL_QUADS);
     rlColor4ub(255, 255, 255, 255);
@@ -766,6 +780,7 @@ void DrawHeadFace(const game::RigidTransform& headWorld, Vector3 headSize) {
         rlVertex3f(world[i].x, world[i].y, world[i].z);
     }
     rlEnd();
+    EndBlendMode();
     rlSetTexture(0);
 }
 

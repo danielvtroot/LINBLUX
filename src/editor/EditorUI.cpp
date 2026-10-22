@@ -558,6 +558,9 @@ bool EditorUI::enableModernFrontend(std::string& error) {
     if(frontend_){error.clear();return true;}
     auto candidate=std::make_unique<StudioFrontend>(*this);
     if(!candidate->initialize(error))return false;
+    // Modern splits have their own preference file. Do not overwrite the
+    // legacy docking layout with the embedded components' fixed positions.
+    ImGui::GetIO().IniFilename=nullptr;
     frontend_=std::move(candidate);return true;
 }
 void EditorUI::renderModernFrontend(){if(frontend_)frontend_->render();}

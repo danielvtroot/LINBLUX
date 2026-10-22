@@ -107,6 +107,7 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 .property .readonly { flex: 1; padding: 4px 5px; font-size: 10px; color: #abb5c5; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .empty-state { padding: 9px 8px; color: #aeb4c1; font-size: 11px; }
 .property-action { margin: 5px; height: 25px; font-size: 11px; }
+.property .color-button { flex: 0 0 19px; width: 19px; height: 17px; padding: 0; margin-right: 5px; border: 1px #8799b1; }
 #viewport-label { position: absolute; height: 26px; padding: 5px 9px; background-color: #35383f; border-top: 1px #545b66; display: flex; justify-content: space-between; font-size: 11px; }
 #viewport-title img { width: 14px; height: 14px; margin-right: 5px; vertical-align: middle; }
 .divider { position: absolute; background-color: #191b20; }
@@ -125,7 +126,7 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 .config-field input[type=checkbox] { width: 14px; height: 14px; }
 .asset-grid { display: flex; flex-wrap: wrap; padding: 10px 0; }
 .asset-card { width: 164px; margin: 0 8px 8px 0; padding: 7px; border: 1px #515967; background-color: #30343c; }
-.asset-card .asset-preview { display: block; width: 100px; height: 80px; margin: 0 auto 5px; }
+.asset-card .asset-preview { display: block; width: auto; height: auto; max-width: 110px; max-height: 90px; margin: 0 auto 5px; }
 .asset-card span { display: block; font-size: 10px; margin-bottom: 7px; }
 .asset-card button { font-size: 10px; padding: 3px; }
 #status { position: absolute; bottom: 0; left: 0; right: 0; height: 23px; padding: 5px 9px; display: flex; justify-content: space-between; background-color: #22252b; border-top: 1px #4a4f5a; font-size: 10px; color: #b8c3d4; }
