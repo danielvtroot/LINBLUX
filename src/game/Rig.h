@@ -139,7 +139,7 @@ struct GameAssets {
     std::string defaultRig;
     PlayerSettings player;
     Rig& createR6();
-    bool removeAnimation(const std::string& id,std::string& error);
+    bool removeAnimation(const std::string& id,std::string& error,bool clearAssignments=false);
     Rig* findRig(const std::string& id);
     const Rig* findRig(const std::string& id) const;
     bool removeRig(const std::string& id);

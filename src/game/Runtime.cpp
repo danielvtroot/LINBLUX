@@ -277,6 +277,22 @@ RigidTransform RuntimeSession::characterRoot() const {
 }
 bool RuntimeSession::grounded() const {
     if (!body_ || velocity().y > 1) return false;
+    // A capsule can stand on a platform edge with no ground under its centre
+    // ray. Use Bullet's actual supporting contacts before the proximity ray.
+    for(int i=0;i<physics_->dispatcher_->getNumManifolds();++i) {
+        const auto* manifold=physics_->dispatcher_->getManifoldByIndexInternal(i);
+        const bool first=manifold->getBody0()==body_.get();
+        if(!first && manifold->getBody1()!=body_.get())continue;
+        const auto* other=first?manifold->getBody1():manifold->getBody0();
+        if(!other->hasContactResponse())continue;
+        for(int j=0;j<manifold->getNumContacts();++j) {
+            const auto& contact=manifold->getContactPoint(j);
+            const auto normal=first?contact.m_normalWorldOnB:-contact.m_normalWorldOnB;
+            const auto point=first?contact.getPositionWorldOnA():contact.getPositionWorldOnB();
+            if(contact.getDistance()<=.04f && normal.y()>=.65f &&
+               point.y()<body_->getWorldTransform().getOrigin().y()-settings_.collisionHeight*.25f)return true;
+        }
+    }
     const Vector3 p = position();
     const btVector3 from = Bt(p), to = Bt(Vector3Add(p, {0, -settings_.collisionHeight*.5f - .12f, 0}));
     SolidRay ray(from, to, body_.get()); physics_->world_->rayTest(from, to, ray);
@@ -317,19 +333,28 @@ void RuntimeSession::step(float dt, Vector3 desired, bool jump) {
 
     // Pulo: permite pular se estava no chão (coyote time) ou se há buffer de pulo
     const bool canJump = coyoteTime_ > 0;
-    if (jumpBufferTime_ > 0 && canJump) {
+    bool jumped = false;
+    const auto launch = [&] {
         speed.y = std::sqrt(2 * settings_.gravity * settings_.jumpHeight);
+        body_->setLinearVelocity(Bt(speed));
         Event("player", "jump", correlation_);
         coyoteTime_ = 0;
         jumpBufferTime_ = 0;
-    }
+        jumped = true;
+    };
+    if (jumpBufferTime_ > 0 && canJump) launch();
     body_->setLinearVelocity(Bt(speed));
     physics_->syncScene(*scene_);
     physics_->world_->stepSimulation(dt, 0); // exactly one fixed step; no second accumulator
     physics_->syncFromBodies(*scene_);
     const Vector3 actual = Vector3Scale(Vector3Subtract(position(), before), 1/dt);
     const float horizontal = std::hypot(actual.x, actual.z);
-    const bool onGround = grounded();
+    bool onGround = grounded();
+    // Landing can happen inside this very physics step. Consume the buffered
+    // edge now, not one tick later; never apply a second impulse in this step.
+    if(onGround && !jumped && jumpBufferTime_>0) {
+        speed=velocity();launch();onGround=false;
+    }
     if (!onGround) transition(velocity().y > 1 ? HumanoidState::Jumping : HumanoidState::Freefall);
     else if (!wasGrounded) transition(HumanoidState::Landing);
     else transition(horizontal > .2f ? HumanoidState::Walking : HumanoidState::Idle);

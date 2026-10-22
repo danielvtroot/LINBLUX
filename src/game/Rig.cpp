@@ -260,12 +260,14 @@ Rig& GameAssets::createR6() {
     event.context = {{"rig", rigs.back().id}}; event.result = "ok"; diag::log(event);
     return rigs.back();
 }
-bool GameAssets::removeAnimation(const std::string& id,std::string& error) {
+bool GameAssets::removeAnimation(const std::string& id,std::string& error,bool clearAssignments) {
     const auto* clip=findAnimation(id);
     if(!clip) {error="Animation no longer exists";return false;}
     for(const auto* reference:{&player.idleAnimation,&player.walkAnimation,&player.jumpAnimation,&player.fallAnimation})
-        if(findAnimation(*reference)==clip) {error="Animation is assigned in Game Config. Choose another clip there before deleting it.";return false;}
+        if(findAnimation(*reference)==clip && !clearAssignments) {error="Animation is assigned in Game Config; confirm deletion to clear its assignments.";return false;}
     const std::string key=clip->id;
+    for(auto* reference:{&player.idleAnimation,&player.walkAnimation,&player.jumpAnimation,&player.fallAnimation})
+        if(findAnimation(*reference)==clip)reference->clear();
     animations.erase(std::remove_if(animations.begin(),animations.end(),[&](const auto& value){return value.id==key;}),animations.end());
     error.clear();return true;
 }
@@ -314,7 +316,8 @@ bool GameAssets::validate(std::string& error) const {
     if ((!player.fallAnimation.empty() && !findAnimation(player.fallAnimation)) ||
         (!player.jumpAnimation.empty() && !findAnimation(player.jumpAnimation)) ||
         ((!defaultRig.empty() || !rigs.empty()) && !findRig(defaultRig)) || (!reservedDefaults &&
-        (!findAnimation(player.walkAnimation) || !findAnimation(player.idleAnimation)))) {
+        ((!player.walkAnimation.empty() && !findAnimation(player.walkAnimation)) ||
+         (!player.idleAnimation.empty() && !findAnimation(player.idleAnimation))))) {
         error = "game: missing default rig or animation reference"; return false;
     }
     error.clear(); return true;

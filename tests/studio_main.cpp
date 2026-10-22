@@ -60,6 +60,7 @@ void Hierarchy() {
     CHECK(scene.selection()==nullptr); CHECK(!physics.hasBody(id)); CHECK(scene.validate(error));
     CHECK(!scene.remove(scene.workspace()));
     auto* guarded=scene.createContainer(InstanceClass::Folder);
+    scene.parts()[0]->setDeletable(false);
     CHECK(scene.reparent(scene.parts()[0],guarded,error)); CHECK(!scene.remove(guarded));
     auto* depth=scene.createContainer(InstanceClass::Folder); int levels=0;
     while(auto* next=scene.createContainer(InstanceClass::Folder,depth)) { depth=next; ++levels; }
@@ -296,6 +297,72 @@ void JumpTiming() {
     CHECK(queued && bounced); // a single press before contact executes after landing
     CHECK(runtime.validate(error));runtime.stop();
 }
+void ObbyLanding() {
+    Scene scene;auto* platform=scene.createSpawnLocation({0,.5f,0},{.4f,1,6});
+    scene.gameAssets().createR6();std::string error;game::RuntimeSession runtime;
+    CHECK(runtime.start(scene,error));for(int i=0;i<90;++i)runtime.update(1.f/60,{});
+    const float rest=runtime.position().y;
+    game::PlayerInput jump;jump.jump=true;
+    // A key queued in the exact fixed step which makes contact must launch
+    // without spending another physics tick standing on the small platform.
+    for(float frame:{1.f/60,1.f/30}) {
+        runtime.stop();CHECK(runtime.start(scene,error));
+        for(int i=0;i<90;++i)runtime.update(1.f/60,{});
+        runtime.update(frame,jump);bool pressed=false;
+        for(int i=0;i<120;++i) {
+            const float gap=runtime.position().y-rest,vy=runtime.velocity().y;
+            if(vy< -5 && gap>.13f && gap< -vy*frame+.08f) {
+                runtime.update(frame,jump);pressed=true;
+                CHECK(runtime.velocity().y>1);break;
+            }
+            runtime.update(frame,{});
+        }
+        CHECK(pressed);
+        for(int i=0;i<120 && !runtime.grounded();++i)runtime.update(1.f/60,{});
+        CHECK(runtime.grounded());
+    }
+    // Capsule supported at an edge, with no surface under its centre ray.
+    auto* support=runtime.mutableScene().findPart(platform->id());
+    support->setSize({1.4f,1,6});support->setPosition({.75f,.5f,0});
+    for(int i=0;i<6;++i)runtime.update(1.f/60,{});
+    CHECK(runtime.grounded());runtime.update(1.f/60,jump);CHECK(runtime.velocity().y>1);
+    const float first=runtime.velocity().y;runtime.update(1.f/60,jump);
+    CHECK(runtime.velocity().y<first); // no second impulse from old contacts
+    CHECK(runtime.validate(error));runtime.stop();
+}
+void ConsecutivePlatforms() {
+    for(float dt:{1.f/60,1.f/30}) {
+        Scene scene;scene.createSpawnLocation({0,.5f,0},{1.4f,1,3});
+        for(float x:{2.4f,4.8f,7.2f})scene.createPart(PartShape::Block,{x,.5f,0},{1.4f,1,3})->setAnchored(true);
+        scene.gameAssets().createR6();scene.gameAssets().player.walkSpeed=6;scene.gameAssets().player.jumpHeight=2;
+        game::RuntimeSession runtime;std::string error;CHECK(runtime.start(scene,error));
+        for(int i=0;i<90;++i)runtime.update(1.f/60,{});
+        const float floor=runtime.position().y;game::PlayerInput input;input.movement={1,0};input.jump=true;
+        runtime.update(dt,input);int launches=0;bool queued=false;
+        for(int frame=0;frame<150 && launches<3;++frame) {
+            const float vy=runtime.velocity().y;
+            input.jump=!queued && vy< -1 && runtime.position().y<floor+.5f;
+            queued|=input.jump;runtime.update(dt,input);
+            if(queued && runtime.velocity().y>1) {++launches;queued=false;CHECK(runtime.position().x>launches*1.7f);}
+        }
+        CHECK(launches==3);CHECK(runtime.validate(error));runtime.stop();
+    }
+}
+void AnimationDeletion() {
+    Scene scene;scene.gameAssets().createR6();auto& assets=scene.gameAssets();std::string error;
+    auto clip=game::MakeIdle();clip.id="delete-me";clip.name="Renamed animation";assets.animations.push_back(clip);
+    CHECK(assets.removeAnimation(clip.id,error));CHECK(!assets.findAnimation(clip.id));
+    const auto jump=assets.player.jumpAnimation,fall=assets.player.fallAnimation;
+    CHECK(!assets.removeAnimation(assets.player.walkAnimation,error));
+    const auto walk=assets.player.walkAnimation;
+    CHECK(assets.removeAnimation(walk,error,true));CHECK(assets.player.walkAnimation.empty());
+    CHECK(assets.player.jumpAnimation==jump && assets.player.fallAnimation==fall);
+    for(const auto id:{assets.player.idleAnimation,jump,fall})CHECK(assets.removeAnimation(id,error,true));
+    CHECK(assets.animations.empty());CHECK(assets.validate(error));
+    Scene loaded;CHECK(projectio::fromJson(loaded,projectio::toJson(scene),error));
+    CHECK(loaded.gameAssets().animations.empty());game::RuntimeSession runtime;
+    CHECK(runtime.start(loaded,error));runtime.update(.1f,{});CHECK(runtime.validate(error));runtime.stop();
+}
 void NativeCloneBudget() {
     Scene scene;scene.buildDefaultScene();auto* folder=scene.createContainer(InstanceClass::Folder,nullptr,"Payload");
     for(int i=0;i<17;++i) {
@@ -315,6 +382,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Scripts();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();NativeCloneBudget();
+    Hierarchy();Scripts();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }
