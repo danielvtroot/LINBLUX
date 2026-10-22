@@ -6,6 +6,8 @@
 #include <map>
 #include <variant>
 #include <vector>
+#include <cmath>
+#include "raylib.h"
 
 namespace loblox {
 
@@ -26,6 +28,8 @@ enum class InstanceClass {
     ServerScriptService,
     ServerStorage,
     ReplicatedStorage,
+    Decal,
+    Texture,
 };
 
 
@@ -33,6 +37,7 @@ const char* InstanceClassName(InstanceClass instanceClass);
 bool InstanceClassFromName(const std::string& name, InstanceClass& out);
 bool IsScriptClass(InstanceClass type);
 bool IsRootServiceClass(InstanceClass type);
+inline bool IsSurfaceClass(InstanceClass type) { return type==InstanceClass::Decal || type==InstanceClass::Texture; }
 
 class Scene;
 
@@ -103,6 +108,35 @@ public:
     bool enabled = true;
 private:
     InstanceClass type_;
+};
+
+// A surface is an independently selectable/deletable child of a block Part.
+// Front=-Z, Back=+Z, Left=-X, Right=+X, Top=+Y, Bottom=-Y.
+struct SurfaceProperties {
+    std::string image;
+    int face=0;
+    float transparency=0, rotation=0;
+    Color tint{255,255,255,255};
+    float studsPerTileU=4, studsPerTileV=4, offsetU=0, offsetV=0;
+    bool valid() const {
+        return image.size()<=512 && face>=0 && face<6 &&
+            std::isfinite(transparency) && transparency>=0 && transparency<=1 &&
+            std::isfinite(rotation) && std::fabs(rotation)<=36000 &&
+            std::isfinite(studsPerTileU) && studsPerTileU>=.05f && studsPerTileU<=10000 &&
+            std::isfinite(studsPerTileV) && studsPerTileV>=.05f && studsPerTileV<=10000 &&
+            std::isfinite(offsetU) && std::fabs(offsetU)<=10000 && std::isfinite(offsetV) && std::fabs(offsetV)<=10000;
+    }
+};
+class Surface final : public Instance {
+public:
+    Surface(InstanceId id,std::string name,InstanceClass type):Instance(id,std::move(name)),type_(type){}
+    const char* className() const override { return InstanceClassName(type_); }
+    InstanceClass instanceClass() const override { return type_; }
+    const SurfaceProperties& properties() const { return properties_; }
+    bool setProperties(const SurfaceProperties& value) { if(!value.valid())return false;properties_=value;return true; }
+private:
+    InstanceClass type_;
+    SurfaceProperties properties_;
 };
 
 }  // namespace loblox

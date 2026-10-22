@@ -7,6 +7,12 @@
 
 namespace loblox {
 
+// Modo de renderização do céu.
+enum class SkyMode {
+    Classic,      // Skybox cúbico (legado)
+    Atmospheric   // Skydome hemisférico com gradiente atmosférico
+};
+
 // Servico de iluminacao/ceu. Guarda apenas configuracao; a renderizacao le
 // estes valores a cada frame (nada de recursos graficos aqui).
 class Lighting : public Instance {
@@ -34,6 +40,10 @@ public:
     // Céu procedural: ligado por padrão, desligável por projeto.
     bool skyEnabled() const { return skyEnabled_; }
     void setSkyEnabled(bool enabled) { skyEnabled_ = enabled; }
+
+    // Modo de céu: Classic (cubo) ou Atmospheric (skydome hemisférico).
+    SkyMode skyMode() const { return skyMode_; }
+    void setSkyMode(SkyMode mode) { skyMode_ = mode; }
 
     // Cores do céu procedural (gradiente vertical: zenith -> horizon -> ground)
     Color skyZenithColor() const { return skyZenithColor_; }
@@ -95,6 +105,7 @@ private:
     Color fogColor_{120, 180, 240, 255};
     float fogDensity_ = 0.0f;
     bool skyEnabled_ = true;
+    SkyMode skyMode_ = SkyMode::Atmospheric;
     
     // Céu procedural
     Color skyZenithColor_{80, 140, 220, 255};    // Azul profundo no topo

@@ -26,6 +26,8 @@ const char* InstanceClassName(InstanceClass instanceClass) {
         case InstanceClass::ServerScriptService: return "ServerScriptService";
         case InstanceClass::ServerStorage: return "ServerStorage";
         case InstanceClass::ReplicatedStorage: return "ReplicatedStorage";
+        case InstanceClass::Decal: return "Decal";
+        case InstanceClass::Texture: return "Texture";
     }
     return "Instance";
 }
@@ -34,6 +36,8 @@ bool InstanceClassFromName(const std::string& name, InstanceClass& out) {
     for (auto type : {InstanceClass::Script,InstanceClass::LocalScript,InstanceClass::ModuleScript,
         InstanceClass::ServerScriptService,InstanceClass::ServerStorage,InstanceClass::ReplicatedStorage})
         if (name == InstanceClassName(type)) { out=type; return true; }
+    if (name == "Decal") { out=InstanceClass::Decal;return true; }
+    if (name == "Texture") { out=InstanceClass::Texture;return true; }
     if (name == "Folder") { out = InstanceClass::Folder; return true; }
     if (name == "Model") { out = InstanceClass::Model; return true; }
     if (name == "Workspace") {

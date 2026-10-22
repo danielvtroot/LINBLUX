@@ -52,6 +52,7 @@ public:
 
     // Copy properties in place, with a fresh ID and unique name. Selection is unchanged.
     Part* duplicatePart(const Part& source);
+    Surface* createSurface(InstanceClass type,Instance* parent,const std::string& name="",InstanceId forcedId=0);
     Container* createContainer(InstanceClass type, Instance* parent = nullptr,
                               const std::string& name = "", InstanceId forcedId = 0);
     // World transforms and object addresses remain unchanged. Depth is capped at 128.
