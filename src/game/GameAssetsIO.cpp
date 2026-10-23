@@ -33,11 +33,17 @@ nlohmann::json EncodeAssets(const GameAssets& a) {
     for (const auto& r : a.rigs) {
         json rig{{"id", r.id}, {"name", r.name}, {"root", Transform(r.root)},
                  {"bodies", json::array()}, {"joints", json::array()}};
+        if(r.nextDecalId>1)rig["nextDecalId"]=r.nextDecalId;
         for (const auto& b : r.bodies) {
             json body{{"name", b.name}, {"size", Vec(b.size)},
                       {"color", {b.color.r, b.color.g, b.color.b, b.color.a}},
                       {"material", PartMaterialName(b.material)}};
             if (!b.image.empty()) body["image"] = b.image;
+            if(!b.decals.empty()) {
+                body["decals"]=json::array();
+                for(const auto& d:b.decals)body["decals"].push_back({{"id",d.id},{"name",d.name},
+                    {"image",d.surface.image},{"face",d.surface.face},{"transparency",d.surface.transparency}});
+            }
             rig["bodies"].push_back(std::move(body));
         }
         for (int i = 0; i < kJointCount; ++i) {
@@ -90,6 +96,7 @@ bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& erro
             Rig r;
             r.id = value.at("id").get<std::string>(); r.name = value.at("name").get<std::string>();
             r.root = ReadTransform(value.at("root"));
+            r.nextDecalId=value.value("nextDecalId",1ull);
             const auto& bodies = value.at("bodies"); const auto& joints = value.at("joints");
             Require(bodies.is_array() && bodies.size() == kBodyCount && joints.is_array() && joints.size() == kJointCount, "R6 needs six bodies and six joints");
             for (int i = 0; i < kBodyCount; ++i) {
@@ -101,6 +108,14 @@ bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& erro
                 body.color = {rgba[0], rgba[1], rgba[2], rgba[3]};
                 Require(PartMaterialFromName(b.at("material").get<std::string>(), body.material), "unknown body material");
                 body.image = b.value("image", std::string());
+                if(b.contains("decals")) {
+                    Require(b["decals"].is_array()&&b["decals"].size()<=64,"invalid rig decals array");
+                    for(const auto& d:b["decals"]) {
+                        RigDecal decal;decal.id=d.at("id").get<std::string>();decal.name=d.at("name").get<std::string>();
+                        decal.surface.image=d.at("image").get<std::string>();decal.surface.face=ReadInt(d.at("face"),0,5);
+                        decal.surface.transparency=d.value("transparency",0.f);body.decals.push_back(std::move(decal));
+                    }
+                }
             }
             for (int i = 0; i < kJointCount; ++i) {
                 const auto& v = joints.at(i); auto& joint = r.joints[i];

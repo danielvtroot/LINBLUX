@@ -195,11 +195,20 @@ void Advance(RuntimeSession& runtime, float seconds, PlayerInput input = {}, flo
 void RuntimeTests() {
     Scene author; author.buildDefaultScene();
     author.gameAssets().createR6();
+    auto& character=*author.gameAssets().findRig(author.gameAssets().defaultRig);
+    auto& front=character.addDecal(Torso);front.surface.image="front.png";
+    const auto frontId=front.id;
+    auto& back=character.addDecal(Torso);back.surface.image="back.png";back.surface.face=1;
+    const auto backId=back.id;
     auto* wall = author.createPart(PartShape::Block, {0, 5, -15}, {30, 10, 1}, "Wall");
     wall->setAnchored(true);
     const std::string original = projectio::toJson(author);
     RuntimeSession runtime; std::string error;
     CHECK(runtime.start(author, error));
+    CHECK(runtime.rig().bodies[Torso].decals.size()==2);
+    CHECK(runtime.rig().bodies[Torso].decals[0].id==frontId);
+    CHECK(runtime.rig().bodies[Torso].decals[1].id==backId);
+    CHECK(runtime.rig().bodies[Torso].decals[1].surface.face==1);
     CHECK(runtime.validate(error));
     CHECK(runtime.bodyCount() == author.parts().size()+1);
     Advance(runtime, 1);
@@ -211,6 +220,7 @@ void RuntimeTests() {
     Advance(runtime, .4f, forward);
     CHECK(runtime.position().z < spawn.z - 3);
     CHECK(runtime.humanoidState() == HumanoidState::Walking);
+    CHECK(runtime.rig().bodies[Torso].decals[1].surface.image=="back.png");
     CHECK(std::fabs(runtime.pose()[LeftHip].rotation.x) > .01f);
     const auto walkPose = runtime.pose()[LeftHip].rotation;
     Advance(runtime, .13f, forward);
@@ -227,6 +237,7 @@ void RuntimeTests() {
     runtime.update(1.f/60, jump);
     CHECK(runtime.velocity().y > 10);
     CHECK(runtime.humanoidState() == HumanoidState::Jumping);
+    CHECK(runtime.rig().bodies[Torso].decals[0].surface.image=="front.png");
     const auto airPose = runtime.pose()[LeftShoulder].rotation;
     const float firstJump = runtime.velocity().y;
     runtime.update(1.f/60, jump); // a repeated press in midair cannot jump again

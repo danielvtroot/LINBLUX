@@ -781,7 +781,7 @@ void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
                  repeatUv, offsetUv, rotation, lightDirection, sunIntensity, brightness,
                  outward);
 }
-// R6 body images reuse the Part decal path: every face gets the same image,
+// Legacy R6 images use Front only; the previous six-face loop was the bug.
 // offset just enough to avoid z-fighting while staying glued to the animated
 // body transform. The default head face is drawn afterwards, in front.
 void DrawBodyImage(const game::RigidTransform& body, Vector3 size,
@@ -792,11 +792,9 @@ void DrawBodyImage(const game::RigidTransform& body, Vector3 size,
     if (resolved.empty()) return;
     const Texture2D tex = game::AssetTexture(resolved);
     if (tex.id == 0) return;
-    for (int face = 0; face < 6; ++face) {
-        DrawFaceQuad(body.position, body.rotation, size, face, tex, 1.0f,
+        DrawFaceQuad(body.position, body.rotation, size, 0, tex, 1.0f,
                      Color{255, 255, 255, 255}, {1, 1}, {0, 0}, 0,
                      lightDirection, sunIntensity, brightness, 0.02f);
-    }
 }
 void DrawLayer(const Part& part, const char* imageKey, const char* faceKey,
                const char* alphaKey, const char* tintKey, const char* rotationKey,
@@ -987,10 +985,22 @@ void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float in
     // Body decals are drawn after every body so depth testing keeps limbs in
     // front of the torso. They share the evaluated pose, so animation and pose
     // previews move the image with the body automatically.
+    rlDrawRenderBatchActive();rlDisableDepthMask();
     for (int i = 0; i < game::kBodyCount; ++i) {
         skins::DrawBodyImage(world[i], rig.bodies[i].size, rig.bodies[i].image,
                              light, intensity, brightness);
+        // All body geometry already wrote depth. Coplanar decals test against
+        // it without writing depth themselves: vector order is the stable
+        // compositing order, including transparent layers on the same face.
+        for(const auto& decal:rig.bodies[i].decals) {
+            const auto& p=decal.surface;
+            if(!p.valid()||p.image.empty())continue;
+            const auto tex=game::AssetTexture(game::ResolveImagePath(game::AssetsDir(),p.image));
+            if(tex.id)skins::DrawFaceQuad(world[i].position,world[i].rotation,rig.bodies[i].size,p.face,
+                tex,1-p.transparency,p.tint,{1,1},{0,0},0,light,intensity,brightness,.02f);
+        }
     }
+    rlDrawRenderBatchActive();rlEnableDepthMask();
     for (int i = 0; i < game::kBodyCount; ++i) {
         if (i == state.selectedBody) DrawRotatedBoxWires(world[i].position,
             Vector3Scale(rig.bodies[i].size, 1.02f), world[i].rotation, GOLD);

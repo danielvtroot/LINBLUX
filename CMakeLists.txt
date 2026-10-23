@@ -187,6 +187,8 @@ if(XVFB_RUN_EXECUTABLE)
     # software rasteriser. Four-sample UI MSAA makes that pass slower, so keep
     # a timeout with headroom for slower CI machines.
     set_tests_properties(loblox_rml_ui PROPERTIES TIMEOUT 480 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
+    add_test(NAME loblox_rig_decals_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:loblox_rml_ui_tests>)
+    set_tests_properties(loblox_rig_decals_ui PROPERTIES TIMEOUT 120 ENVIRONMENT "LOBLOX_RIG_DECALS_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
     add_executable(loblox_rig_input_tests tests/rig_input_main.cpp)
     target_link_libraries(loblox_rig_input_tests PRIVATE loblox_editor)
     add_test(NAME loblox_rig_input COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1366x768x24 -noreset" $<TARGET_FILE:loblox_rig_input_tests>)

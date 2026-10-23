@@ -90,6 +90,65 @@ int main() {
         // Optional fast iteration path; the registered CTest always exercises
         // the full editor + player sequence without this environment variable.
         capture("studio-1366");
+        // A separate short path exercises real Explorer/Properties controls
+        // with X11 events, including dropdowns and independent child deletion.
+        if(std::getenv("LOBLOX_RIG_DECALS_ONLY")) {
+            std::filesystem::create_directories("assets");
+            Image image=GenImageColor(32,32,MAGENTA);CHECK(ExportImage(image,"assets/front.png"));UnloadImage(image);
+            image=GenImageColor(32,32,SKYBLUE);CHECK(ExportImage(image,"assets/back.png"));UnloadImage(image);
+            const auto rigId=scene.gameAssets().createR6().id;
+            auto rig=[&](){return scene.gameAssets().findRig(rigId);};
+            click("tree-search");event("type --clearmodifiers R6");key("Return");
+            click("rig-"+rigId);click("rig-body-"+rigId+"-0");
+            click("cmd-rig-decal-add-");CHECK(rig()->bodies[game::Torso].decals.size()==1);
+            const auto first=rig()->bodies[game::Torso].decals.front().id;
+            click("rig-prop-Name");key("ctrl+a");event("type --clearmodifiers DecalFront");key("Return");
+            CHECK(rig()->findDecal(first)->name=="DecalFront");
+            click("rig-prop-Image");capture("rig-image-open");key("Down");key("Down");key("Return");
+            CHECK(rig()->findDecal(first)->surface.image=="front.png");
+            click("cmd-rig-decal-add-");CHECK(rig()->bodies[game::Torso].decals.size()==2);
+            const auto second=rig()->bodies[game::Torso].decals.back().id;
+            click("rig-prop-Name");key("ctrl+a");event("type --clearmodifiers DecalBack");key("Return");
+            click("rig-prop-Face");key("Down");key("Return");
+            CHECK(rig()->findDecal(second)->surface.face==1);
+            click("rig-prop-Image");key("Down");key("Return");
+            CHECK(rig()->findDecal(second)->surface.image=="back.png");
+            click("rig-prop-Transparency");key("ctrl+a");event("type --clearmodifiers 0.25");key("Return");
+            CHECK(NearlyEqual(rig()->findDecal(second)->surface.transparency,.25f));
+            capture("rig-decals-properties");
+            // Import through the existing dialog; choose the imported image
+            // for this child without replacing its sibling or face.
+            image=GenImageColor(32,32,ORANGE);CHECK(ExportImage(image,"external.png"));UnloadImage(image);
+            click("cmd-import-dialog-");
+            click("dialog-value");SetClipboardText((std::string(directory)+"/external.png").c_str());key("ctrl+a");key("ctrl+v");key("Return");
+            auto imported=game::ListImages(game::AssetsDir());
+            CHECK(imported.size()==3);
+            std::string importedImage;for(const auto& item:imported)if(item.filename!="front.png"&&item.filename!="back.png")importedImage=item.filename;
+            CHECK(!importedImage.empty());
+            if(importedImage.empty()) {std::fprintf(stderr,"Import dialog error: %s\n",ui.frontend()->elementText("dialog-error").c_str());capture("rig-import-error");key("Escape");}
+            else {
+            click("rig-prop-Image");
+            for(int i=0;i<5;++i)key("Up"); // first option: None
+            for(const auto& item:imported){key("Down");if(item.filename==importedImage)break;}
+            key("Return");
+            if(rig()->findDecal(second)->surface.image!=importedImage)std::fprintf(stderr,"Imported image selection: expected=%s actual=%s markup=%s\n",importedImage.c_str(),rig()->findDecal(second)->surface.image.c_str(),ui.frontend()->elementText("rig-prop-Image").c_str());
+            CHECK(rig()->findDecal(second)->surface.image==importedImage);
+            }
+            CHECK(rig()->findDecal(first)->surface.image=="front.png");CHECK(rig()->findDecal(second)->surface.face==1);
+            CHECK(projectio::save(scene,config.defaultProjectPath,error));
+            Scene roundTrip;CHECK(projectio::load(roundTrip,config.defaultProjectPath,error));
+            const auto* saved=roundTrip.gameAssets().findRig(rigId);CHECK(saved&&saved->bodies[game::Torso].decals.size()==2);
+            click("rig-decal-"+rigId+"-"+first);key("F2");key("ctrl+a");event("type --clearmodifiers FrontRenamed");key("Return");
+            CHECK(rig()->findDecal(first)->name=="FrontRenamed");
+            click("rig-decal-"+rigId+"-"+first);key("Delete");
+            CHECK(rig()->findDecal(first)==nullptr);CHECK(rig()->findDecal(second)!=nullptr);
+            CHECK(ui.frontend()->elementBounds("rig-decal-"+rigId+"-"+first).width==0);
+            CHECK(ui.frontend()->elementBounds("rig-decal-"+rigId+"-"+second).width>0);
+            CHECK(projectio::save(scene,config.defaultProjectPath,error));
+            CHECK(projectio::load(roundTrip,config.defaultProjectPath,error));
+            CHECK(roundTrip.gameAssets().findRig(rigId)->bodies[game::Torso].decals.size()==1);
+            CHECK(scene.validate(error));capture("rig-decals-deleted");
+        } else {
         const auto cameraStart=camera.camera();
         CHECK(camera.navigationMode()==EditorCamera::NavigationMode::FPS);
         auto checkStudioLook=[&](bool selected){
@@ -453,6 +512,7 @@ int main() {
         CHECK(ui.frontend()->elementBounds("document-"+std::to_string(errorId)).width==0);
         CHECK(scene.validate(error));
         Scene restored;CHECK(projectio::load(restored,config.defaultProjectPath,error));CHECK(projectio::toJson(restored)==original);
+        }
     }
     game::ClearImageTextures();rlImGuiShutdown();CloseWindow();
     std::printf("RML UI: %d checks, %d failures; screenshots: %s\n",checks,failures,directory);return failures?1:0;

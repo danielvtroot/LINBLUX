@@ -65,6 +65,8 @@ int main() {
     CHECK(ExportImage(source, imagePath.c_str()));
     UnloadImage(source);
     CHECK(std::filesystem::is_regular_file(imagePath));
+    Image backSource=GenImageColor(64,64,{25,230,210,255});
+    CHECK(ExportImage(backSource,"assets/back.png"));UnloadImage(backSource);
 
     using namespace loblox;
     using namespace loblox::game;
@@ -110,6 +112,37 @@ int main() {
     CHECK(projectio::fromJson(loaded, projectJson, error));
     CHECK(loaded.gameAssets().rigs[0].bodies[Torso].image == "body.png");
     CHECK(loaded.gameAssets().rigs[0].bodies[Head].image == "body.png");
+
+    // Independent child identity, face and image survive the actual project
+    // format. Erasing one child must not erase its sibling or reuse its ID.
+    auto& frontDecal=projectRig.addDecal(Torso);
+    frontDecal.name="DecalFront";frontDecal.surface.image="body.png";
+    const auto frontId=frontDecal.id;
+    auto& backDecal=projectRig.addDecal(Torso);
+    backDecal.name="DecalBack";backDecal.surface.face=1;backDecal.surface.image="back.png";backDecal.surface.transparency=.25f;
+    const auto backId=backDecal.id;
+    auto& armDecal=projectRig.addDecal(LeftArm);
+    armDecal.surface.face=2;armDecal.surface.image="back.png";
+    CHECK(projectio::fromJson(loaded,projectio::toJson(project),error));
+    auto& savedRig=loaded.gameAssets().rigs.front();
+    CHECK(savedRig.bodies[Torso].decals.size()==2);
+    CHECK(savedRig.findDecal(frontId)->name=="DecalFront");
+    CHECK(savedRig.findDecal(backId)->surface.face==1);
+    CHECK(savedRig.findDecal(backId)->surface.image=="back.png");
+    CHECK(savedRig.findDecal(backId)->surface.transparency==.25f);
+    CHECK(savedRig.bodies[LeftArm].decals.front().surface.face==2);
+    savedRig.resizeBody(Torso,{2.5f,2.2f,1.2f});
+    CHECK(savedRig.bodies[Torso].decals.size()==2);
+    CHECK(savedRig.eraseDecal(frontId));CHECK(!savedRig.eraseDecal(frontId));
+    CHECK(savedRig.findDecal(backId)!=nullptr);
+    const auto replacement=savedRig.addDecal(Torso).id;CHECK(replacement!=frontId&&replacement!=backId);
+    Scene reloaded;CHECK(projectio::fromJson(reloaded,projectio::toJson(loaded),error));
+    CHECK(reloaded.gameAssets().rigs[0].findDecal(frontId)==nullptr);
+    CHECK(reloaded.gameAssets().rigs[0].findDecal(backId)!=nullptr);
+    auto badFace=EncodeAssets(loaded.gameAssets());badFace["rigs"][0]["bodies"][Torso]["decals"][0]["face"]=6;
+    CHECK(!DecodeAssets(badFace,decoded,error));
+    auto duplicate=loaded.gameAssets();duplicate.rigs[0].bodies[Head].decals.push_back(duplicate.rigs[0].bodies[Torso].decals.front());
+    CHECK(!duplicate.validate(error));
 
     // ---- Rendered R6 skin ------------------------------------------------
     SetTraceLogLevel(LOG_WARNING);
@@ -203,6 +236,50 @@ int main() {
         CHECK(!Magenta(Sample(missing, torsoAt)));
         UnloadImage(missing);
         renderRig.bodies[Torso].image = "body.png";
+
+        // Real renderer, two different images on opposing LOCAL faces. A
+        // six-face paint loop would fail these front/back/side pixel probes.
+        for(auto& body:renderRig.bodies)body.image.clear();
+        auto& a=renderRig.addDecal(Torso);a.name="Front";a.surface.image="body.png";
+        const auto renderedFrontId=a.id;
+        auto& b=renderRig.addDecal(Torso);b.name="Back";b.surface.face=1;b.surface.image="back.png";
+        auto cyan=[](Color c){return c.g>100&&c.b>95&&c.r<90;};
+        auto frontOnly=render(pose);CHECK(Magenta(Sample(frontOnly,torsoAt)));
+        ExportImage(frontOnly,(std::string(directory)+"/decals-front.png").c_str());UnloadImage(frontOnly);
+        camera.position={0,6,12};
+        const auto backAt=GetWorldToScreen(neutral[Torso].position,camera);
+        auto backOnly=render(pose);CHECK(cyan(Sample(backOnly,backAt)));CHECK(!Magenta(Sample(backOnly,backAt)));
+        ExportImage(backOnly,(std::string(directory)+"/decals-back.png").c_str());UnloadImage(backOnly);
+        camera.position={-12,6,0};
+        const auto sideAt=GetWorldToScreen(neutral[Torso].position,camera);
+        auto side=render(pose);CHECK(!Magenta(Sample(side,sideAt)));CHECK(!cyan(Sample(side,sideAt)));UnloadImage(side);
+        // A limb decal follows the evaluated shoulder, including rotation.
+        camera.position={0,6,-12};
+        auto& arm=renderRig.addDecal(RightArm);arm.surface.image="body.png";
+        auto animated=render(raised);CHECK(Magenta(Sample(animated,raisedAt)));
+        ExportImage(animated,(std::string(directory)+"/decals-animated.png").c_str());UnloadImage(animated);
+        // Same-face layers compose in persistent child order with no depth
+        // fighting. Last opaque child wins on repeated frames.
+        auto& layer=renderRig.addDecal(Torso);layer.surface.image="back.png";
+        const auto layerId=layer.id;
+        for(int pass=0;pass<3;++pass){auto image=render(pose);CHECK(cyan(Sample(image,torsoAt)));UnloadImage(image);}
+        renderRig.findDecal(layerId)->surface.transparency=1;
+        auto transparent=render(pose);CHECK(Magenta(Sample(transparent,torsoAt)));UnloadImage(transparent);
+        CHECK(renderRig.eraseDecal(layerId));CHECK(renderRig.eraseDecal(renderedFrontId));
+        auto deleted=render(pose);CHECK(!Magenta(Sample(deleted,torsoAt)));UnloadImage(deleted);
+        camera.position={0,6,12};auto kept=render(pose);CHECK(cyan(Sample(kept,backAt)));UnloadImage(kept);
+        const Vector3 normals[]={{0,0,-1},{0,0,1},{-1,0,0},{1,0,0},{0,1,0},{0,-1,0}};
+        for(int face=2;face<6;++face) {
+            const int body=face==2?LeftArm:RightArm;
+            auto& surface=renderRig.addDecal(body);surface.surface.face=face;surface.surface.image="back.png";
+            const auto surfaceId=surface.id;
+            camera.target=neutral[body].position;camera.up=face>=4?Vector3{0,0,1}:Vector3{0,1,0};
+            camera.position=Vector3Add(camera.target,Vector3Scale(normals[face],12));
+            auto selectedFace=render(pose);CHECK(cyan(Sample(selectedFace,{256,256})));UnloadImage(selectedFace);
+            camera.position=Vector3Subtract(camera.target,Vector3Scale(normals[face],12));
+            auto oppositeFace=render(pose);CHECK(!cyan(Sample(oppositeFace,{256,256})));UnloadImage(oppositeFace);
+            CHECK(renderRig.eraseDecal(surfaceId));
+        }
 
         UnloadRenderTexture(target);
     }

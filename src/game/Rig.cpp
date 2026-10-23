@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <set>
+#include <stdexcept>
 
 #include "core/Diagnostics.h"
 
@@ -49,6 +50,16 @@ Rig MakeR6() {
 }
 
 bool Rig::validate(std::string& error) const {
+    if(nextDecalId==0||nextDecalId>1000000000000ull){error="rig: invalid decal counter";return false;}
+    std::set<std::string> decalIds;
+    for(const auto& body:bodies) {
+        if(body.decals.size()>64){error="rig: at most 64 decals per body";return false;}
+        for(const auto& decal:body.decals)if(decal.id.empty()||decal.id.size()>128||decal.id.find('\0')!=std::string::npos||!decalIds.insert(decal.id).second||
+            decal.name.empty()||decal.name.size()>128||decal.name.find('\0')!=std::string::npos||
+            !decal.surface.valid()||decal.surface.image.find('\0')!=std::string::npos) {
+            error="rig: invalid/duplicate decal id, name, image or face";return false;
+        }
+    }
     if (id.empty() || id.size() > 128 || name.empty() || name.size() > 128 || !Valid(root)) {
         error = "rig: invalid id, name or root transform"; return false;
     }
@@ -75,6 +86,22 @@ bool Rig::validate(std::string& error) const {
         }
     }
     error.clear(); return true;
+}
+
+RigDecal* Rig::findDecal(const std::string& id) {
+    for(auto& body:bodies)for(auto& decal:body.decals)if(decal.id==id)return &decal;
+    return nullptr;
+}
+RigDecal& Rig::addDecal(int body) {
+    if(body<0||body>=kBodyCount||bodies[body].decals.size()>=64||nextDecalId>=1000000000000ull)
+        throw std::runtime_error("Invalid body or decal limit reached");
+    std::string id;do{id="decal-"+std::to_string(nextDecalId++);}while(findDecal(id));
+    bodies[body].decals.push_back({id,"Decal",{}});
+    return bodies[body].decals.back();
+}
+bool Rig::eraseDecal(const std::string& id) {
+    for(auto& body:bodies)for(auto it=body.decals.begin();it!=body.decals.end();++it)if(it->id==id){body.decals.erase(it);return true;}
+    return false;
 }
 
 std::array<RigidTransform, kBodyCount> Rig::evaluate(const Pose& pose,

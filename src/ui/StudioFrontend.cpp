@@ -13,6 +13,7 @@
 #include "RmlUi_Renderer_GL3.h"
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/Elements/ElementFormControl.h>
+#include <RmlUi/Core/Elements/ElementFormControlSelect.h>
 #include "imgui.h"
 #include "rlImGui.h"
 #include "rlgl.h"
@@ -46,6 +47,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     Rectangle view{},advancedRect{};float left=204,right=292,bottom=330,propertySplit=.52f,dpi=1;
     std::string tab="Home",advanced,search,page="game",dialog,focusValue,split,propertySearch;
     bool pauseWasOpen=false;
+    std::string selectedRigDecal,selectedDecalRig;
     std::string tooltip;double tooltipSince=0;bool contextOpen=false;
     std::string treeMarkup,propertyMarkup,ribbonMarkup,advancedMarkup,documentMarkup;size_t treeHash=0;
     std::map<std::pair<std::string,std::string>,std::string> styles;
@@ -81,7 +83,14 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     std::string attr(Rml::Element* e,const char* name)const{return e?e->GetAttribute<Rml::String>(name,""):"";}
     Rml::Element* ancestor(Rml::Element* e,const char* name)const{while(e&&e!=document){if(e->HasAttribute(name))return e;e=e->GetParentNode();}return nullptr;}
     std::string value(Rml::Element* e)const {if(auto* form=dynamic_cast<Rml::ElementFormControl*>(e))return form->GetValue();return "";}
-    bool editing()const {auto* focus=context?context->GetFocusElement():nullptr;return focus&&(focus->GetTagName()=="input"||focus->GetTagName()=="textarea"||focus->GetTagName()=="select");}
+    Rml::Element* formOwner(Rml::Element* element)const {
+        // Native selects focus their internal selectvalue/selectarrow nodes.
+        // The owning form remains the keyboard consumer throughout that focus.
+        for(auto* e=element;e&&e!=document;e=e->GetParentNode())
+            if(dynamic_cast<Rml::ElementFormControl*>(e))return e;
+        return nullptr;
+    }
+    bool editing()const {return context&&formOwner(context->GetFocusElement());}
     Rectangle bounds(const std::string& id)const {auto* e=el(id);if(!e||!e->IsVisible(true))return {};auto p=e->GetAbsoluteOffset(Rml::BoxArea::Border);auto s=e->GetBox().GetSize(Rml::BoxArea::Border);return {p.x,p.y,s.x,s.y};}
     void loadLayout(){try{std::ifstream file(LayoutPath());nlohmann::json j;if(file>>j){left=j.value("left",left);right=j.value("right",right);bottom=j.value("bottom",bottom);propertySplit=j.value("properties",propertySplit);ui.showToolbox_=j.value("showToolbox",true);ui.showExplorer_=j.value("showExplorer",true);ui.showProperties_=j.value("showProperties",true);}}catch(...) {}}
     void saveLayout(){try {const auto path=LayoutPath();if(path.empty())return;std::filesystem::create_directories(path.parent_path());auto temp=path;temp+=".tmp";{std::ofstream file(temp);file<<nlohmann::json{{"left",left},{"right",right},{"bottom",bottom},{"properties",propertySplit},{"showToolbox",ui.showToolbox_},{"showExplorer",ui.showExplorer_},{"showProperties",ui.showProperties_}};if(!file)return;}std::filesystem::rename(temp,path);}catch(...) {}}
@@ -192,6 +201,21 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     }
     void commit(Rml::Element* e) {
         if(!e)return;
+        if(e->HasAttribute("data-rig-property")) {
+            if(ui.runtime_.active())return;
+            auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);
+            auto* decal=rig&&selectedDecalRig==rig->id?rig->findDecal(selectedRigDecal):nullptr;if(!decal)return;
+            auto next=*decal;const auto property=attr(e,"data-rig-property"),v=value(e);
+            try {
+                if(property=="Name")next.name=v;
+                else if(property=="Image")next.surface.image=v;
+                else if(property=="Face")next.surface.face=std::stoi(v);
+                else if(property=="Transparency") {size_t n=0;next.surface.transparency=std::stof(v,&n);if(n!=v.size())throw std::runtime_error("Enter a finite transparency");}
+                if(next.name.empty()||next.name.size()>128||!next.surface.valid())throw std::runtime_error("Invalid decal name, face or transparency (0..1)");
+                *decal=std::move(next);treeHash=0;
+            }catch(const std::exception& error){ui.setStatus(error.what(),true);}
+            return;
+        }
         const auto action=attr(e,"data-action"),property=attr(e,"data-property"),setting=attr(e,"data-setting");
         std::string v=value(e);if(attr(e,"type")=="checkbox")v=e->HasAttribute("checked")?"true":"false";
         if(action=="choose-material"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
@@ -204,8 +228,8 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         // A presentation refresh is never an editor command.
         if(syncing)return;
         auto* target=event.GetTargetElement();const auto type=event.GetType();
-        if(type=="focus") {focusValue=value(target);return;}
-        if(type=="blur") {const auto& tag=target->GetTagName();if((tag=="input"||tag=="select"||tag=="textarea")&&!restoreFocus&&value(target)!=focusValue)commit(target);restoreFocus=false;return;}
+        if(type=="focus") {if(auto* form=formOwner(target))focusValue=value(form);return;}
+        if(type=="blur") {if(auto* form=formOwner(target);form&&!restoreFocus&&value(form)!=focusValue)commit(form);restoreFocus=false;return;}
         if(type=="change") {
             if(target->GetId()=="tree-search") {search=value(target);treeHash=0;return;}
             if(target->GetId()=="property-search") {propertySearch=value(target);filterProperties();return;}
@@ -218,6 +242,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(editing()&&!form)context->GetRootElement()->Focus();
             if(auto* handle=ancestor(target,"data-split")) {split=attr(handle,"data-split");mouseOwned=true;}
             if(auto* row=ancestor(target,"data-node-row")) {dragNode=row->GetAttribute<InstanceId>("data-node-row",0);dragStart=GetMousePosition();treeKeyboard=true;}
+            if(ancestor(target,"data-rig"))treeKeyboard=true;
             return;
         }
         if(type=="dblclick") {
@@ -227,6 +252,11 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         }
         if(type=="contextmenu")return;
         if(type!="click"||dragging)return;
+        if(auto* row=ancestor(target,"data-rig-body")) {
+            if(ui.runtime_.active())return;
+            ui.selectRig(attr(row,"data-rig"),row->GetAttribute<int>("data-rig-body",-1));
+            selectedRigDecal=attr(row,"data-rig-decal");selectedDecalRig=ui.selectedRig_;treeHash=0;return;
+        }
         if(auto* button=ancestor(target,"data-player-page")) {
             if(!ui.runtime_.active())return;
             const auto chosen=attr(button,"data-player-page");
@@ -252,11 +282,28 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         }
         if(auto* button=ancestor(target,"data-advanced")){showAdvanced(attr(button,"data-advanced"));return;}
         if(auto* fold=ancestor(target,"data-fold")) {auto id=fold->GetAttribute<InstanceId>("data-fold",0);if(collapsed.erase(id)==0)collapsed.insert(id);treeHash=0;return;}
-        if(auto* rig=ancestor(target,"data-rig")) {commands.push_back({"rig-select",attr(rig,"data-rig")});return;}
+        if(auto* rig=ancestor(target,"data-rig")) {selectedRigDecal.clear();commands.push_back({"rig-select",attr(rig,"data-rig")});return;}
         auto* button=ancestor(target,"data-action");
         if(!button) {if(auto* row=ancestor(target,"data-node-row"))commands.push_back({"select","",row->GetAttribute<InstanceId>("data-node-row",0)});return;}
         if(button->GetTagName()=="input"||button->GetTagName()=="select")return;
         const auto action=attr(button,"data-action"),v=attr(button,"data-value");
+        if(action=="rig-decal-add"||action=="rig-decal-delete"||
+            (action=="apply-image"&&!ui.scene_.selection()&&ui.selectedRigBody_>=0)) {
+            if(ui.runtime_.active())return;
+            auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);if(!rig)return;
+            try {
+                if(action=="rig-decal-delete"){rig->eraseDecal(selectedRigDecal);selectedRigDecal.clear();}
+                else {
+                    auto* decal=action=="apply-image"&&selectedDecalRig==rig->id?rig->findDecal(selectedRigDecal):nullptr;
+                    if(!decal)decal=&rig->addDecal(ui.selectedRigBody_);
+                    if(action=="apply-image")decal->surface.image=std::filesystem::path(v).filename().string();
+                    selectedRigDecal=decal->id;
+                    selectedDecalRig=rig->id;
+                }
+                treeHash=0;
+            }catch(const std::exception& error){ui.setStatus(error.what(),true);}
+            contextOpen=false;display("context-menu",false);return;
+        }
         if(contextOpen&&button->GetParentNode()==el("context-menu")){display("context-menu",false);contextOpen=false;}
         if(action=="rename"){prompt("rename");return;}
         if(action=="open-dialog"||action=="save-dialog"){prompt(action=="open-dialog"?"open":"save-as");return;}
@@ -296,7 +343,10 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     void tree() {
         size_t hash=ui.scene_.objects().size()+size_t(ui.scene_.selection()?ui.scene_.selection()->id():0)*399;
         for(const auto& n:ui.scene_.objects())hash^=std::hash<std::string>{}(n->name())+(n->id()*911)+(n->parent()?n->parent()->id()*235:0);
-        for(const auto& rig:ui.scene_.gameAssets().rigs)hash^=std::hash<std::string>{}(rig.id+rig.name+ui.selectedRig_);
+        for(const auto& rig:ui.scene_.gameAssets().rigs) {
+            hash^=std::hash<std::string>{}(rig.id+rig.name+ui.selectedRig_+selectedRigDecal+std::to_string(ui.selectedRigBody_));
+            for(const auto& body:rig.bodies)for(const auto& d:body.decals)hash^=std::hash<std::string>{}(d.id+d.name);
+        }
         if(treeHash==hash && hash!=0)return;
         treeHash=hash;
         std::string s;auto matches=[&](const Instance* node){std::string name=node->name()+" "+node->className(),q=search;std::transform(name.begin(),name.end(),name.begin(),::tolower);std::transform(q.begin(),q.end(),q.begin(),::tolower);return q.empty()||name.find(q)!=std::string::npos;};
@@ -311,12 +361,44 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(!collapsed.count(node->id())||!search.empty())for(auto* c:node->children())row(c,depth+1);
         };
         for(const auto& n:ui.scene_.objects())if(!n->parent())row(n.get(),0);
-        for(const auto& rig:ui.scene_.gameAssets().rigs)s+="<div id=\"rig-"+Escape(rig.id)+"\" class=\"tree-row"+std::string(ui.selectedRig_==rig.id?" selected":"")+"\" data-rig=\""+Escape(rig.id)+"\"><span class=\"leaf\"/><img src=\"icon-rig\"/><span class=\"node-name\">"+Escape(rig.name)+"</span></div>";
+        for(const auto& rig:ui.scene_.gameAssets().rigs) {
+            const auto rid=Escape(rig.id);const bool active=ui.selectedRig_==rig.id;
+            s+="<div id=\"rig-"+rid+"\" class=\"tree-row"+std::string(active&&ui.selectedRigBody_<0?" selected":"")+"\" data-rig=\""+rid+"\"><span class=\"leaf\"/><img src=\"icon-rig\"/><span class=\"node-name\">"+Escape(rig.name)+"</span></div>";
+            if(active)for(int b=0;b<game::kBodyCount;++b) {
+                const auto attributes=" data-rig=\""+rid+"\" data-rig-body=\""+std::to_string(b)+"\"";
+                s+="<div id=\"rig-body-"+rid+"-"+std::to_string(b)+"\" class=\"tree-row"+std::string(ui.selectedRigBody_==b&&selectedRigDecal.empty()?" selected":"")+"\""+attributes+" style=\"padding-left:25px\"><img src=\"icon-part\"/><span class=\"node-name\">"+Escape(rig.bodies[b].name)+"</span></div>";
+                for(const auto& d:rig.bodies[b].decals)s+="<div id=\"rig-decal-"+rid+"-"+Escape(d.id)+"\" class=\"tree-row"+std::string(ui.selectedRigBody_==b&&selectedRigDecal==d.id?" selected":"")+"\""+attributes+" data-rig-decal=\""+Escape(d.id)+"\" style=\"padding-left:43px\"><img src=\"icon-image\"/><span class=\"node-name\">"+Escape(d.name)+"</span></div>";
+            }
+        }
         html("tree",s,treeMarkup);
     }
     void properties() {
-        if(editing())return;
+        // A field blur may change markup during a button's mouse-down. Keep
+        // that DOM alive until mouse-up, otherwise its click is discarded.
+        if(editing()||ImGui::IsMouseDown(0))return;
         auto* node=ui.scene_.selection();std::string s;
+        if(!node)if(auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);rig&&ui.selectedRigBody_>=0) {
+            auto& body=rig->bodies[ui.selectedRigBody_];
+            if(selectedDecalRig!=rig->id)selectedRigDecal.clear();
+            game::RigDecal* decal=nullptr;for(auto& candidate:body.decals)if(candidate.id==selectedRigDecal)decal=&candidate;
+            if(!decal)selectedRigDecal.clear();
+            text("property-title",decal?decal->name+" · Decal":body.name+" · R6 body");
+            auto field=[&](const char* key,const std::string& v){s+="<div class=\"property\"><label>"+std::string(key)+"</label><input id=\"rig-prop-"+key+"\" data-rig-property=\""+key+"\" value=\""+Escape(v)+"\"/></div>";};
+            if(decal) {
+                s=Button("rig-decal-add","Add Decal","image")+Button("import-dialog","Import image…","folder")+"<div class=\"property-group\">DECAL</div>";field("Name",decal->name);
+                s+="<div class=\"property\"><label>Face</label><select id=\"rig-prop-Face\" data-rig-property=\"Face\">";
+                const char* faces[]={"Front (-Z)","Back (+Z)","Left (-X)","Right (+X)","Top (+Y)","Bottom (-Y)"};
+                for(int i=0;i<6;++i)s+="<option value=\""+std::to_string(i)+"\" "+(decal->surface.face==i?"selected=\"selected\"":"")+">"+faces[i]+"</option>";
+                s+="</select></div><div class=\"property\"><label>Image Asset</label><select id=\"rig-prop-Image\" data-rig-property=\"Image\"><option value=\"\">None</option>";
+                if(GetTime()-imageScan>2){images=game::ListImages(game::AssetsDir());imageScan=GetTime();}
+                bool found=false;for(const auto& image:images){bool selected=decal->surface.image==image.filename;found|=selected;s+="<option value=\""+Escape(image.filename)+"\" "+(selected?"selected=\"selected\"":"")+">"+Escape(image.filename)+"</option>";}
+                if(!found&&!decal->surface.image.empty())s+="<option selected=\"selected\" value=\""+Escape(decal->surface.image)+"\">"+Escape(decal->surface.image)+" (missing)</option>";
+                s+="</select></div>";field("Transparency",Num(decal->surface.transparency));
+                s+=Button("rig-decal-delete","Delete this Decal","delete")+Button("show:rig","Edit body","rig");
+                s+="<div class=\"property-help\">ID: rig://"+Escape(rig->id)+"/"+Escape(decal->id)+"<br/>Parent: "+Escape(body.name)+"</div>";
+            }else s="<div class=\"property-help\">Select a Decal child to edit its own face and image. Front is local -Z.</div>"+Button("rig-decal-add","Add Decal","image")+Button("import-dialog","Import image…","folder")+Button("show:rig","Edit body","rig");
+            html("property-body",s,propertyMarkup);return;
+        }
         if(!node) {auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);text("property-title",rig?rig->name:"No selection");s=rig?Button("show:rig","Edit character","rig")+Button("show:animation","Animate","animation")+Button("rename","Rename")+Button("duplicate","Duplicate")+Button("delete","Delete"):"<div class=\"empty-state\">Select an object to edit properties.</div>";html("property-body",s,propertyMarkup);return;}
         const auto id=std::to_string(node->id());
         el("property-title")->SetInnerRML(Escape(node->name())+"<span>"+Escape(node->className())+" · #"+id+"</span>");
@@ -404,6 +486,14 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             }
             if(ImGui::IsMouseClicked(1)) {
                 auto* row=ancestor(hover,"data-node-row");auto* rig=ancestor(hover,"data-rig");
+                if(rig&&rig->HasAttribute("data-rig-body")&&!ui.runtime_.active()) {
+                    ui.selectRig(attr(rig,"data-rig"),rig->GetAttribute<int>("data-rig-body",-1));
+                    selectedRigDecal=attr(rig,"data-rig-decal");selectedDecalRig=ui.selectedRig_;
+                    std::string menu=Button("rig-decal-add","Add Decal","image","","context");
+                    if(!selectedRigDecal.empty())menu+=Button("rig-decal-delete","Delete Decal","delete","","context");
+                    el("context-menu")->SetInnerRML(menu);rect("context-menu",{std::min(mouse.x,float(w)-190),std::min(mouse.y,float(h)-80),184,60});
+                    display("context-menu",true);contextOpen=true;treeKeyboard=true;rig=nullptr;
+                }
                 if(row||rig) {
                     if(row)actions.dispatch({"select","",row->GetAttribute<InstanceId>("data-node-row",0)});else actions.dispatch({"rig-select",attr(rig,"data-rig")});
                     std::string menu;for(const auto* cmd:{"rename","duplicate","copy","paste","folder","model","script","delete","focus"})if(row||std::string(cmd)=="rename"||std::string(cmd)=="duplicate"||std::string(cmd)=="delete"||std::string(cmd)=="focus")menu+=Button(cmd,cmd,"","","context");
@@ -425,6 +515,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             dragTarget=0;
         }
         auto* focused=context->GetFocusElement();
+        if(auto* form=formOwner(focused))focused=form;
         keyboardOwned=keyboardOwned||editing()||dialogOpen;
         // Player buttons participate in RmlUi's native Tab/Enter navigation.
         // Only the paused context receives these events; gameplay gets none.
@@ -465,9 +556,15 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(editing()) {
             for(auto c:io.InputQueueCharacters)context->ProcessTextInput(Rml::Character(c));
             for(int c=GetCharPressed();c;c=GetCharPressed())context->ProcessTextInput(Rml::Character(c));
+            // Selects need vertical keyboard navigation too; keeping their
+            // events here prevents arrows leaking into viewport navigation.
+            for(const auto& key:{std::pair{ImGuiKey_UpArrow,Rml::Input::KI_UP},std::pair{ImGuiKey_DownArrow,Rml::Input::KI_DOWN}}) {
+                if(ImGui::IsKeyPressed(key.first))context->ProcessKeyDown(key.second,mods);
+                if(ImGui::IsKeyReleased(key.first))context->ProcessKeyUp(key.second,mods);
+            }
             const std::pair<ImGuiKey,Rml::Input::KeyIdentifier> keys[]={{ImGuiKey_Backspace,Rml::Input::KI_BACK},{ImGuiKey_Delete,Rml::Input::KI_DELETE},{ImGuiKey_LeftArrow,Rml::Input::KI_LEFT},{ImGuiKey_RightArrow,Rml::Input::KI_RIGHT},{ImGuiKey_Home,Rml::Input::KI_HOME},{ImGuiKey_End,Rml::Input::KI_END},{ImGuiKey_Tab,Rml::Input::KI_TAB},{ImGuiKey_A,Rml::Input::KI_A},{ImGuiKey_C,Rml::Input::KI_C},{ImGuiKey_V,Rml::Input::KI_V},{ImGuiKey_X,Rml::Input::KI_X},{ImGuiKey_Z,Rml::Input::KI_Z},{ImGuiKey_Y,Rml::Input::KI_Y}};
             for(auto key:keys){if(playerPaused&&key.first==ImGuiKey_Tab)continue;if(ImGui::IsKeyPressed(key.first))context->ProcessKeyDown(key.second,mods);if(ImGui::IsKeyReleased(key.first))context->ProcessKeyUp(key.second,mods);}
-            if(ImGui::IsKeyPressed(ImGuiKey_Enter,false)){if(dialogOpen) {EditorCommand c{dialog,value(el("dialog-value")),ui.scene_.selection()?ui.scene_.selection()->id():0};if(actions.dispatch(c)){if(dialog=="import-image")imageScan=-10;dialogOpen=false;}else text("dialog-error",ui.status_);}else {commit(focused);focusValue=value(focused);}focused->Blur();}
+            if(ImGui::IsKeyPressed(ImGuiKey_Enter,false)){if(dialogOpen) {EditorCommand c{dialog,value(el("dialog-value")),ui.scene_.selection()?ui.scene_.selection()->id():0};if(actions.dispatch(c)){if(dialog=="import-image")imageScan=-10;dialogOpen=false;}else text("dialog-error",ui.status_);}else {commit(focused);focusValue=value(focused);}if(auto* select=dynamic_cast<Rml::ElementFormControlSelect*>(focused))select->HideSelectBox();if(context->GetFocusElement()!=focused)focused->Focus();focused->Blur();}
             if(ImGui::IsKeyPressed(ImGuiKey_Escape,false)) {
                 if(playerPaused&&attr(focused,"type")=="range") {
                     // A slider is live, not an unfinished text edit. Escape
@@ -481,8 +578,13 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             }
         } else if(dialogOpen && ImGui::IsKeyPressed(ImGuiKey_Escape,false)){dialogOpen=false;escapeConsumed=true;}
         if(treeKeyboard&&!editing()&&!dialogOpen&&!ui.runtime_.active()) {
-            if(ImGui::IsKeyPressed(ImGuiKey_F2,false))prompt("rename");
-            if(ImGui::IsKeyPressed(ImGuiKey_Delete,false))commands.push_back({"delete",""});
+            if(ImGui::IsKeyPressed(ImGuiKey_F2,false)) {if(!ui.scene_.selection()&&!selectedRigDecal.empty()){if(auto* name=el("rig-prop-Name"))name->Focus();}else prompt("rename");}
+            if(ImGui::IsKeyPressed(ImGuiKey_Delete,false)) {
+                if(!ui.scene_.selection()&&ui.selectedRigBody_>=0) {
+                    if(auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);rig&&selectedDecalRig==rig->id)rig->eraseDecal(selectedRigDecal);
+                    selectedRigDecal.clear();treeHash=0;
+                }else commands.push_back({"delete",""});
+            }
             if(io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_D,false))commands.push_back({"duplicate",""});
             if(io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_C,false))commands.push_back({"copy",""});
             if(io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_V,false))commands.push_back({"paste",""});

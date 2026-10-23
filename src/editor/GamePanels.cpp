@@ -547,7 +547,7 @@ void EditorUI::drawRigEditor() {
             const auto images = game::ListImages(game::AssetsDir());
             const std::string imageLabel = body.image.empty() ? "None" :
                 std::filesystem::path(body.image).filename().string();
-            if (ImGui::BeginCombo("Body image", imageLabel.c_str())) {
+            if (ImGui::BeginCombo("Front image (legacy)", imageLabel.c_str())) {
                 if (ImGui::Selectable("None", body.image.empty())) body.image.clear();
                 for (const auto& image : images) {
                     const bool selected = std::filesystem::path(body.image).filename().string() == image.filename;
@@ -562,7 +562,7 @@ void EditorUI::drawRigEditor() {
                 const auto lo=ImGui::GetItemRectMin(),hi=ImGui::GetItemRectMax();
                 rigImageRemoveControl_={lo.x,lo.y,hi.x-lo.x,hi.y-lo.y};
             }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Images imported into assets/ can decorate any R6 body face.");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Single Front image. For multiple faces use Explorer > body > Properties > Add Decal.");
             auto size = body.size;
             ImGui::BeginDisabled(rigContext_ != RigContext::Edit);
             if (ImGui::DragFloat3("Dimensions", &size.x, .05f, .2f, 10, "%.2f", ImGuiSliderFlags_AlwaysClamp)) rig->resizeBody(selectedRigBody_, size);

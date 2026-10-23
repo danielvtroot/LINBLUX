@@ -24,14 +24,19 @@ RigidTransform Inverse(const RigidTransform& value);
 bool Valid(const RigidTransform& value);
 
 using Pose = std::array<RigidTransform, kJointCount>;
+struct RigDecal {
+    std::string id, name="Decal";
+    SurfaceProperties surface;
+};
 struct Body {
     std::string name;
     Vector3 size{1, 2, 1};
     Color color{240, 190, 80, 255};
     PartMaterial material = PartMaterial::SmoothPlastic;
-    // Optional image decal applied to every face of this R6 body. Stored as an
-    // asset-relative filename so saved projects stay portable across machines.
+    // Legacy single front image; kept for JSON compatibility. New decals are
+    // independent children. Front=-Z, Back=+Z, Left=-X, Right=+X, Top=+Y.
     std::string image;
+    std::vector<RigDecal> decals{};
 };
 struct Joint {
     std::string name;
@@ -48,6 +53,10 @@ struct Rig {
     // Topological order is part of the contract. No cycles or multiple parents.
     std::array<Joint, kJointCount> joints;
     Pose restPose{};
+    unsigned long long nextDecalId=1;
+    RigDecal& addDecal(int body);
+    RigDecal* findDecal(const std::string& id);
+    bool eraseDecal(const std::string& id);
 
     bool validate(std::string& error) const;
     std::array<RigidTransform, kBodyCount> evaluate(const Pose& pose,

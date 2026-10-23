@@ -2,7 +2,10 @@
 
 Migração atual do frontend: [RMLUI_HANDOFF.md](RMLUI_HANDOFF.md).
 
-Última correção: [CAMERA_HUD_FIXES.md](CAMERA_HUD_FIXES.md) — câmera Studio
+Últimas correções: [SHIFT_RIG_DECALS.md](SHIFT_RIG_DECALS.md) — Shift Lock
+após a física, indicador original e decals independentes por face do R6.
+
+Anterior: [CAMERA_HUD_FIXES.md](CAMERA_HUD_FIXES.md) — câmera Studio
 FPS/Focus explícita e retorno à Health minimalista, preservando menu/topbar.
 
 Player UI 2026 (23/10): [PLAYER_UI_2026.md](PLAYER_UI_2026.md). Escopo separado
