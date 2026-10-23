@@ -71,6 +71,7 @@ add_library(loblox_core STATIC
   src/game/GameAssetsIO.cpp
   src/game/ImageAssets.cpp
   src/game/Runtime.cpp
+  src/game/Spawn.cpp
   src/core/Diagnostics.cpp
   src/objects/Instance.cpp
   src/objects/Part.cpp
@@ -132,6 +133,9 @@ add_test(NAME loblox_game COMMAND loblox_game_tests)
 add_executable(loblox_tests tests/test_main.cpp)
 target_link_libraries(loblox_tests PRIVATE loblox_core)
 add_test(NAME loblox_tests COMMAND loblox_tests)
+add_executable(loblox_spawn_tests tests/spawn_main.cpp)
+target_link_libraries(loblox_spawn_tests PRIVATE loblox_core)
+add_test(NAME loblox_spawn COMMAND loblox_spawn_tests)
 add_test(NAME loblox_startup_no_display
   COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/startup_no_display.sh
           $<TARGET_FILE:loblox>)

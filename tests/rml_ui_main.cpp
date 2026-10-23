@@ -104,6 +104,16 @@ int main() {
         click("node-"+std::to_string(partId));auto row=ui.frontend()->elementBounds("node-"+std::to_string(partId));
         event("mousemove "+std::to_string(int(row.x+row.width/2))+" "+std::to_string(int(row.y+row.height/2)));event("mousedown 3");event("mouseup 3");
         CHECK(ui.frontend()->elementBounds("context-menu").height>100);click("context-rename-");key("Escape");CHECK(part->name()=="PreciseWall");
+        // Any Part can opt into spawning from the real properties panel. The
+        // SPAWN group is below the fold at 1366x768, so use the property filter
+        // like a user would instead of clicking clipped coordinates.
+        click("property-search");event("type --clearmodifiers Spawn");key("Return");frames();
+        CHECK(ui.frontend()->elementBounds("prop-Spawn").width>0);capture("spawn-properties");
+        click("prop-Spawn");frames();CHECK(part->attributes().count("spawn"));
+        click("property-title");frames();
+        CHECK(ui.frontend()->elementBounds("prop-SpawnPriority").width>0);
+        click("prop-Spawn");frames();CHECK(!part->attributes().count("spawn"));
+        click("property-search");key("ctrl+a");key("BackSpace");key("Return");frames();
         click("tab-Script");capture("ribbon-script");click("cmd-script-");frames();
         CHECK(scene.selection()&&IsScriptClass(scene.selection()->instanceClass()));
         const InstanceId scriptId=scene.selection()?scene.selection()->id():0;

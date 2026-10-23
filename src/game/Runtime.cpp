@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 #include <btBulletDynamicsCommon.h>
 #include "core/Diagnostics.h"
+#include "game/Spawn.h"
 #include "serialization/ProjectIO.h"
 
 namespace loblox::game {
@@ -222,20 +224,29 @@ void RuntimeSession::resume() {
 bool RuntimeSession::respawn(std::string& error) {
     if (!physics_) { error = "No runtime physics"; return false; }
     if (!settings_.validate(error)) return false;
-    Part* spawn = nullptr;
-    for (Part* part : scene_->parts()) if (part->instanceClass() == InstanceClass::SpawnLocation &&
-        part->canCollide() && (!spawn || part->id() < spawn->id())) spawn = part;
-    Vector3 start = spawn ? spawn->position() : Vector3{};
-    // Vertical query chooses a solid surface, including obstacles above a spawn.
-    const btVector3 from(start.x, start.y + 1000, start.z), to(start.x, start.y - 1000, start.z);
-    SolidRay ray(from, to, body_.get()); physics_->world_->rayTest(from, to, ray);
-    start.y = ray.hasHit() ? ray.m_hitPointWorld.y() + settings_.collisionHeight*.5f + .08f : 20;
-    if (start.y-settings_.collisionHeight*.5f <= scene_->workspace()->fallenPartsDestroyHeight()) {
-        error="Spawn is below FallenPartsDestroyHeight; adjust Workspace or spawn";return false;
+    const float halfHeight=settings_.collisionHeight*.5f;
+    const float spawnMargin=.08f;
+    const float voidHeight=scene_->workspace()->fallenPartsDestroyHeight();
+    const auto spawnPoints=game::OrderedSpawnPoints(*scene_);
+    std::vector<Vector3> starts;
+    if(spawnPoints.empty()) {
+        // Legacy maps without any spawn marker keep the original deterministic
+        // fallback: find the first solid surface on the vertical axis at origin.
+        Vector3 start{};
+        const btVector3 from(start.x, start.y + 1000, start.z), to(start.x, start.y - 1000, start.z);
+        SolidRay ray(from, to, body_.get()); physics_->world_->rayTest(from, to, ray);
+        start.y = ray.hasHit() ? ray.m_hitPointWorld.y() + halfHeight + spawnMargin : 20;
+        starts.push_back(start);
+    } else {
+        for(const auto& spawn:spawnPoints) {
+            // SpawnTopCenter is the upper surface (not the centre) and accounts
+            // for rotation. The capsule starts fully above it with a small gap.
+            starts.push_back({spawn.position.x,spawn.position.y+halfHeight+spawnMargin,spawn.position.z});
+        }
     }
     auto capsule = std::make_unique<btCapsuleShape>(settings_.collisionRadius,
                            settings_.collisionHeight - 2*settings_.collisionRadius);
-    btTransform transform; transform.setIdentity(); transform.setOrigin(Bt(start));
+    btTransform transform; transform.setIdentity();
     auto motion = std::make_unique<btDefaultMotionState>(transform);
     btVector3 inertia; capsule->calculateLocalInertia(1, inertia);
     btRigidBody::btRigidBodyConstructionInfo info(1, motion.get(), capsule.get(), inertia);
@@ -243,14 +254,24 @@ bool RuntimeSession::respawn(std::string& error) {
     auto body = std::make_unique<btRigidBody>(info);
     body->setAngularFactor({0, 0, 0}); body->setActivationState(DISABLE_DEACTIVATION);
     body->setCcdMotionThreshold(.2f); body->setCcdSweptSphereRadius(settings_.collisionRadius * .8f);
-    // Resolve a cramped spawn deterministically, never teleport a running body each frame.
+    // A spawn is accepted only when the capsule is fully clear at the computed
+    // surface offset. Lifting an obstructed capsule can tunnel it through a
+    // ceiling, so try the next candidate instead.
     bool clear = false;
-    for (int attempt = 0; attempt < 64; ++attempt) {
-        Overlap overlap; overlap.ignored = body_.get(); physics_->world_->contactTest(body.get(), overlap);
-        if (!overlap.overlapping) { clear = true; break; }
-        transform.getOrigin().setY(transform.getOrigin().y()+.5f); body->setWorldTransform(transform);
+    std::size_t belowFloor = 0;
+    for(const Vector3& start:starts) {
+        if(start.y-halfHeight<=voidHeight) { ++belowFloor; continue; }
+        transform.setOrigin(Bt(start)); body->setWorldTransform(transform);
+        Overlap overlap; overlap.ignored=body_.get(); physics_->world_->contactTest(body.get(),overlap);
+        if(!overlap.overlapping) { clear=true; break; }
     }
-    if (!clear) { error = "Spawn is obstructed: cannot place character capsule"; return false; }
+    if(!clear) {
+        error = belowFloor==starts.size()
+            ? "Spawn is below FallenPartsDestroyHeight; adjust Workspace or spawn"
+            : spawnPoints.empty() ? "Spawn is obstructed: cannot place character capsule"
+                                  : "All spawn points are obstructed; cannot place character capsule";
+        return false;
+    }
     // Only replace the old avatar after the candidate is collision-safe.
     motion->setWorldTransform(body->getWorldTransform());
     destroyCharacter();

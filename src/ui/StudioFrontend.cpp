@@ -8,6 +8,7 @@
 #include "objects/Lighting.h"
 #include "objects/Workspace.h"
 #include "game/ImageAssets.h"
+#include "game/Spawn.h"
 #include "core/Diagnostics.h"
 #include "RmlUi_Renderer_GL3.h"
 #include <RmlUi/Core.h>
@@ -286,7 +287,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(v.size()==7&&v[0]=='#')s+="<button id=\"color-"+name+"\" class=\"color-button\" data-action=\"edit-color\" data-value=\""+name+"\" style=\"background-color:"+v+"\" title=\"Choose color\"/>";
             s+="</div>";
         };
-        auto check=[&](const std::string& name,bool checked){s+="<div class=\"property\" data-property-name=\""+name+"\"><label>"+name+"</label><input type=\"checkbox\" data-node=\""+id+"\" data-property=\""+name+"\" "+(checked?"checked=\"checked\"":"")+"/></div>";};
+        auto check=[&](const std::string& name,bool checked){s+="<div class=\"property\" data-property-name=\""+name+"\"><label>"+name+"</label><input id=\"prop-"+name+"\" type=\"checkbox\" data-node=\""+id+"\" data-property=\""+name+"\" "+(checked?"checked=\"checked\"":"")+"/></div>";};
         group("DATA");input("Name",node->name());
         s+="<div class=\"property\" data-property-name=\"ClassName\"><label>ClassName</label><span class=\"readonly\">"+Escape(node->className())+"</span></div>";
         if(node->parent()){s+="<div class=\"property\" data-property-name=\"Parent\"><label>Parent</label><select data-property=\"Parent\" data-node=\""+id+"\">";for(const auto& parent:ui.scene_.objects())if(!IsScriptClass(parent->instanceClass()) && parent.get()!=node && !node->isAncestorOf(parent.get()))s+="<option value=\""+std::to_string(parent->id())+"\" "+(parent.get()==node->parent()?"selected=\"selected\"":"")+">"+Escape(parent->name())+"</option>";s+="</select></div>";}
@@ -299,6 +300,13 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                 s+="<option value=\""+std::to_string(i)+"\" "+(i==int(p.material())?"selected=\"selected\"":"")+">"+PartMaterialName(PartMaterialFromIndex(i))+"</option>";
             }
             s+="</select></div>";group("PHYSICS");check("Anchored",p.anchored());check("CanCollide",p.canCollide());
+            group("SPAWN");
+            const bool legacySpawn=p.instanceClass()==InstanceClass::SpawnLocation;
+            const bool spawnEnabled=legacySpawn||game::IsSpawnPart(p);
+            if(legacySpawn)s+="<div class=\"property\" data-property-name=\"Spawn\"><label>Spawn point</label><span class=\"readonly\">Legacy SpawnLocation</span></div>";
+            else check("Spawn",spawnEnabled);
+            if(spawnEnabled)input("SpawnPriority",Num(static_cast<float>(game::SpawnPriority(p))),"Spawn priority");
+            s+="<div class=\"property-help\">Higher priority wins; ties use the oldest instance.</div>";
             group("SURFACES");s+=Button("show:assets","Import / apply image","image");
             for(const char* prefix:{"decal","texture"}) {
                 const std::string field=std::string(prefix)+"_face";
@@ -324,7 +332,16 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         }
         else if(node==ui.scene_.workspace()){group("WORLD");input("VoidHeight",Num(ui.scene_.workspace()->fallenPartsDestroyHeight()));}
         else if(IsScriptClass(node->instanceClass())) {group("SCRIPT");check("Enabled",static_cast<Script*>(node)->enabled);s+=Button("open-script","Open source","script",id);}
-        if(!node->attributes().empty()) {group("ATTRIBUTES");for(const auto& a:node->attributes()){std::string v;if(const auto* text=std::get_if<std::string>(&a.second))v=*text;else if(const auto* number=std::get_if<double>(&a.second))v=Num(*number);else if(const auto* flag=std::get_if<bool>(&a.second))v=*flag?"true":"false";input("Attribute:"+a.first,v,a.first);}}
+        bool attributesOpen=false;
+        for(const auto& a:node->attributes()) {
+            if(a.first=="spawn"||a.first=="Spawn"||a.first=="spawn_priority"||a.first=="SpawnPriority")continue;
+            if(!attributesOpen){group("ATTRIBUTES");attributesOpen=true;}
+            std::string v;
+            if(const auto* text=std::get_if<std::string>(&a.second))v=*text;
+            else if(const auto* number=std::get_if<double>(&a.second))v=Num(*number);
+            else if(const auto* flag=std::get_if<bool>(&a.second))v=*flag?"true":"false";
+            input("Attribute:"+a.first,v,a.first);
+        }
         s+=Button("focus","Focus object","focus");html("property-body",s,propertyMarkup);filterProperties();
     }
     void input() {

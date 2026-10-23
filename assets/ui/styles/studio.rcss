@@ -105,6 +105,7 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 .property input:hover { border-color: #525f70; }
 .property input[type=checkbox] { flex: 0 0 14px; width: 14px; height: 14px; margin-left: 7px; padding: 0; border: 1px #7d8492; }
 .property .readonly { flex: 1; padding: 4px 5px; font-size: 10px; color: #abb5c5; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.property-help { padding: 4px 8px 7px; color: #98a3b4; font-size: 10px; }
 .empty-state { padding: 9px 8px; color: #aeb4c1; font-size: 11px; }
 .property-action { margin: 5px; height: 25px; font-size: 11px; }
 .property .color-button { flex: 0 0 19px; width: 19px; height: 17px; padding: 0; margin-right: 5px; border: 1px #8799b1; }

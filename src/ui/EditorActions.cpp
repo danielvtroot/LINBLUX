@@ -110,6 +110,15 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                 auto& p=*static_cast<Part*>(node);e.endGizmoSession(true,"property");
                 if(name=="Anchored")p.setAnchored(c.value=="true");
                 else if(name=="CanCollide")p.setCanCollide(c.value=="true");
+                else if(name=="Spawn") {
+                    if(c.value=="true"||c.value=="1") {if(!p.setAttribute("spawn",true))throw std::runtime_error("Attribute limit reached");}
+                    else p.removeAttribute("spawn");
+                }
+                else if(name=="SpawnPriority") {
+                    const float value=Number(c.value);
+                    if(value<-1000000.f||value>1000000.f)throw std::runtime_error("Spawn priority must be between -1000000 and 1000000");
+                    if(!p.setAttribute("spawn_priority",double(value)))throw std::runtime_error("Attribute limit reached");
+                }
                 else if(name=="Material")p.setMaterial(PartMaterialFromIndex(std::stoi(c.value)));
                 else if(name=="Color") {auto color=ReadColor(c.value);color.a=p.color().a;p.setColor(color);}
                 else if(name=="Transparency") {const float v=Number(c.value);if(v<0||v>1)throw std::runtime_error("Transparency must be 0..1");auto color=p.color();color.a=static_cast<unsigned char>(std::lround((1-v)*255));p.setColor(color);}

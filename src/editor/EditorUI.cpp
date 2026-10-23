@@ -20,6 +20,7 @@
 #include "imgui_internal.h"
 #include "raylib.h"
 
+#include "game/Spawn.h"
 #include "objects/Baseplate.h"
 #include "objects/Lighting.h"
 #include "objects/SpawnLocation.h"
@@ -1850,6 +1851,22 @@ void EditorUI::drawPartProperties(Part& part) {
     std::snprintf(shape, sizeof(shape), "%s", PartShapeName(part.shape()));
     ImGui::InputText("Shape", shape, sizeof(shape));
     ImGui::EndDisabled();
+
+    ImGui::SeparatorText("Spawn");
+    const bool legacySpawn=part.instanceClass()==InstanceClass::SpawnLocation;
+    bool spawnEnabled=legacySpawn||game::IsSpawnPart(part);
+    if(legacySpawn) {
+        ImGui::TextDisabled("Legacy SpawnLocation (always a spawn point)");
+    } else if(ImGui::Checkbox("Spawn point",&spawnEnabled)) {
+        if(spawnEnabled)part.setAttribute("spawn",true);
+        else part.removeAttribute("spawn");
+    }
+    if(spawnEnabled) {
+        float priority=static_cast<float>(game::SpawnPriority(part));
+        if(ImGui::DragFloat("Spawn priority",&priority,0.1f,-1000000.0f,1000000.0f,"%.2f"))
+            part.setAttribute("spawn_priority",static_cast<double>(priority));
+        ImGui::TextDisabled("Highest priority wins; ties use the oldest instance.");
+    }
 
     ImGui::SeparatorText("Physics");
     bool anchored = part.anchored();
