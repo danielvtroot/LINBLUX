@@ -89,8 +89,30 @@ int main() {
         };
         // Optional fast iteration path; the registered CTest always exercises
         // the full editor + player sequence without this environment variable.
-        if(!std::getenv("LOBLOX_PLAYER_UI_ONLY")) {
         capture("studio-1366");
+        const auto cameraStart=camera.camera();
+        CHECK(camera.navigationMode()==EditorCamera::NavigationMode::FPS);
+        auto checkStudioLook=[&](bool selected){
+            scene.select(selected?part:nullptr);frames();
+            const auto view=ui.frontend()->viewport();
+            const auto eye=camera.position(),target=camera.target();
+            event("mousemove "+std::to_string(int(view.x+view.width*.5f))+" "+std::to_string(int(view.y+view.height*.4f)));
+            event("mousedown 3");event("mousemove_relative -- 23 -13");event("mouseup 3");
+            CHECK(NearlyEqual(camera.position(),eye,.0001f));
+            CHECK(Vector3Distance(camera.target(),target)>.01f);
+        };
+        checkStudioLook(true);checkStudioLook(false);scene.select(part);
+        const auto fpsEye=camera.position();click("editor-camera-focus");
+        CHECK(camera.navigationMode()==EditorCamera::NavigationMode::Focus);
+        CHECK(NearlyEqual(camera.position(),fpsEye,.0001f));
+        const auto pivot=camera.target(),orbitEye=camera.position();
+        const auto orbitView=ui.frontend()->viewport();
+        event("mousemove "+std::to_string(int(orbitView.x+50))+" "+std::to_string(int(orbitView.y+90)));
+        event("mousedown 3");event("mousemove_relative -- 23 13");event("mouseup 3");
+        CHECK(Vector3Distance(camera.position(),orbitEye)>.01f);CHECK(NearlyEqual(camera.target(),pivot));
+        const auto focusedEye=camera.position();click("editor-camera-fps");CHECK(NearlyEqual(camera.position(),focusedEye,.0001f));
+        camera.setOrbit(cameraStart.target,Vector3Distance(cameraStart.position,cameraStart.target),.75f,.48f);frames();
+        if(!std::getenv("LOBLOX_PLAYER_UI_ONLY")) {
         CHECK(projectio::toJson(scene)==untouched);
         CHECK(ui.frontend()->viewport().x>0);CHECK(scene.selection()==part);
         // RML owns the pointer in the editor: hovering a panel must not leave
@@ -242,6 +264,8 @@ int main() {
         for(auto size:{Vector2{1280,720},Vector2{1366,768},Vector2{1600,900},Vector2{1920,1080}}) {
             if(const char* requested=std::getenv("LOBLOX_PLAYER_UI_SIZE");requested&&int(size.x)!=std::atoi(requested))continue;
             resizeWindow(int(size.x),int(size.y));capture("studio-"+std::to_string(int(size.x)));
+            if(size.x==1366)click("editor-camera-focus");
+            const auto editorMode=camera.navigationMode();const auto editorEye=camera.position();
             click("play");auto& rt=EditorUITestAccess::runtime(ui);CHECK(rt.state()==game::RuntimeState::Playing);
             if(size.x==1366) {
                 click("game-settings");CHECK(rt.state()==game::RuntimeState::Paused);
@@ -389,6 +413,8 @@ int main() {
             }else {click("resume");CHECK(rt.state()==game::RuntimeState::Playing);}
             CHECK(rt.shiftLockActive());key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);
             click("leave");CHECK(!rt.active());CHECK(!EditorUITestAccess::captured(ui));CHECK(projectio::toJson(scene)==original);
+            CHECK(camera.navigationMode()==editorMode);CHECK(NearlyEqual(camera.position(),editorEye,.0001f));
+            if(editorMode==EditorCamera::NavigationMode::Focus)click("editor-camera-fps");
         }
         // Output rows are real navigation targets: click the runtime error and
         // land on its script/line; deleting that script closes its tab safely.

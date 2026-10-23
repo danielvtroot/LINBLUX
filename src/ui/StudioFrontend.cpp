@@ -134,6 +134,9 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(name=="animation") {auto& a=ui.scene_.gameAssets();if(!a.animations.empty())ui.openAnimation(a.findAnimation(a.player.walkAnimation)?a.player.walkAnimation:a.animations.front().id);}
     }
     void documents() {
+        display("editor-camera-modes",!ui.runtime_.active()&&ui.activeDocument_==0);
+        el("editor-camera-fps")->SetClass("active",ui.camera_.navigationMode()==EditorCamera::NavigationMode::FPS);
+        el("editor-camera-focus")->SetClass("active",ui.camera_.navigationMode()==EditorCamera::NavigationMode::Focus);
         ui.pruneScriptDocuments();
         std::string s=std::string("<div class=\"document-tab ")+(ui.activeDocument_==0?"active":"")+"\" id=\"document-tab-0\"><button id=\"document-0\" class=\"doc-activate\" data-action=\"activate-document\" data-value=\"0\" title=\"3D place viewport\"><img src=\"icon-workspace\"/><span class=\"doc-label\">Place · Perspective</span></button></div>";
         for(const InstanceId id:ui.openDocuments_) {

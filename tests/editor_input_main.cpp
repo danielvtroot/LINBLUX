@@ -125,17 +125,34 @@ int main() {
         frames();
         mouse(handle());
         const Vector3 beforeCapture = camera.position();
+        const Vector3 beforeLookTarget = camera.target();
         command("mousedown 3");
         CHECK(camera.cursorCaptured()); // Hover must not deny legitimate RMB.
         CHECK(NearlyEqual(camera.position(), beforeCapture));
         command("mousemove_relative -- 12 7");
-        CHECK(Vector3Distance(camera.position(), beforeCapture) > 0.01f);
+        CHECK(NearlyEqual(camera.position(), beforeCapture,.0001f));
+        CHECK(Vector3Distance(camera.target(),beforeLookTarget)>.01f);
         command("mouseup 3");
         const Vector3 afterOrbit = camera.position();
         const Vector3 afterOrbitTarget = camera.target();
         frames(6);
         CHECK(NearlyEqual(camera.position(), afterOrbit));
         CHECK(NearlyEqual(camera.target(), afterOrbitTarget));
+
+        scene.select(nullptr);
+        mouse(Vector2{viewport().x+40,viewport().y+90});
+        const auto emptyEye=camera.position();
+        command("mousedown 3");command("mousemove_relative -- -19 14");command("mouseup 3");
+        CHECK(NearlyEqual(camera.position(),emptyEye,.0001f));
+        scene.select(part);
+        camera.setNavigationMode(EditorCamera::NavigationMode::Focus);
+        const auto focusEye=camera.position(),focusPivot=camera.target();
+        command("mousedown 3");command("mousemove_relative -- 21 -11");command("mouseup 3");
+        CHECK(Vector3Distance(camera.position(),focusEye)>.01f);
+        CHECK(NearlyEqual(camera.target(),focusPivot));
+        const auto orbitEye=camera.position();
+        camera.setNavigationMode(EditorCamera::NavigationMode::FPS);
+        CHECK(NearlyEqual(camera.position(),orbitEye,.0001f));
 
         // Losing focus while orbiting releases the captured cursor and must not
         // replay the warp delta into the camera when focus returns.

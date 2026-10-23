@@ -31,6 +31,8 @@ EditorCamera::EditorCamera() = default;
 EditorCamera::~EditorCamera() { releaseCapture(); }
 
 void EditorCamera::reset() {
+    releaseCapture();
+    navigationMode_ = NavigationMode::FPS;
     target_ = Vector3{0.0f, 2.0f, 0.0f};
     distance_ = 42.0f;
     yaw_ = 0.75f;
@@ -100,10 +102,27 @@ void EditorCamera::releaseCapture() {
 
 void EditorCamera::rotateBy(Vector2 mouseDelta) {
     if (!Finite(mouseDelta)) return;
+    const Vector3 eye = position();
     const Vector2 delta{std::clamp(mouseDelta.x, -kMaxPointerDelta, kMaxPointerDelta),
                         std::clamp(mouseDelta.y, -kMaxPointerDelta, kMaxPointerDelta)};
     yaw_ -= delta.x * lookSensitivity_;
     pitch_ = std::clamp(pitch_ + delta.y * lookSensitivity_, kMinPitch, kMaxPitch);
+    if (navigationMode_ == NavigationMode::FPS) {
+        // Keep the eye fixed; move the look target, not the camera, when
+        // yaw/pitch change. Focus deliberately leaves its pivot fixed instead.
+        const Vector3 offset = Vector3Scale(Vector3{
+            std::cos(pitch_) * std::sin(yaw_), std::sin(pitch_),
+            std::cos(pitch_) * std::cos(yaw_)}, distance_);
+        target_ = Vector3Subtract(eye, offset);
+    }
+}
+
+void EditorCamera::setNavigationMode(NavigationMode mode) {
+    if (mode == navigationMode_) return;
+    releaseCapture();
+    navigationMode_ = mode; // No transform change: switching never teleports.
+    diag::Event event; event.subsystem="camera"; event.name="editor_mode_change";
+    event.context={{"mode",mode==NavigationMode::FPS?"fps":"focus"}};diag::log(event);
 }
 
 void EditorCamera::setNavigationSettings(float moveSpeed, float lookSensitivity) {

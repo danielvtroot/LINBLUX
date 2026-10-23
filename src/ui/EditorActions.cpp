@@ -30,6 +30,10 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="maximize-game")e.toggleGameMaximized();
         else if(c.action=="fullscreen-game")e.toggleGameFullscreen();
         else if(e.runtime_.active())return false;
+        else if(c.action=="editor-camera") {
+            if(c.value!="fps"&&c.value!="focus")throw std::runtime_error("Unknown Studio camera mode");
+            e.camera_.setNavigationMode(c.value=="fps"?EditorCamera::NavigationMode::FPS:EditorCamera::NavigationMode::Focus);
+        }
         else if(c.action=="select") {e.endGizmoSession(true,"tree_selection");e.cancelRigGizmo();e.selectedRig_.clear();e.scene_.select(e.scene_.find(c.instance));}
         else if(c.action=="rig-select")e.selectRig(c.value);
         else if(c.action=="tool") {const int tool=std::stoi(c.value);if(tool<0||tool>3)throw std::runtime_error("Invalid tool");e.setTool(static_cast<ToolMode>(tool),"rml_ribbon");}

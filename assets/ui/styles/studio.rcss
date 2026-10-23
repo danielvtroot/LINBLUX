@@ -121,6 +121,8 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 .document-tab .doc-close:hover { background-color: #ffffff20; color: #ffffff; }
 .document-tab .doc-dirty { width: 7px; height: 7px; margin-left: 4px; border-radius: 4px; background-color: #f4b85c; flex-shrink: 0; }
 #viewport-hint { flex-shrink: 0; margin: 6px 9px 0 10px; white-space: nowrap; }
+#editor-camera-modes { display: flex; flex-shrink: 0; padding: 2px 5px; }
+#editor-camera-modes button { height: 21px; width: 43px; padding: 2px 4px; border-radius: 2px; font-size: 10px; margin: 0 1px; }
 .compact #viewport-hint { display: none; }
 #viewport-title img { width: 14px; height: 14px; margin-right: 5px; vertical-align: middle; }
 .divider { position: absolute; background-color: #191b20; }

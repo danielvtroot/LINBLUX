@@ -5,10 +5,10 @@
 
 namespace loblox {
 
-// Camera orbital de editor. Nao conhece ImGui: recebe apenas estado de mouse e
-// se o viewport esta sob o cursor.
+// Explicit Studio navigation. Selection never chooses look vs. orbit.
 class EditorCamera {
 public:
+    enum class NavigationMode { FPS, Focus };
     EditorCamera();
     ~EditorCamera();
 
@@ -19,6 +19,8 @@ public:
     float fovDegrees() const { return fovDegrees_; }
     float moveSpeed() const { return moveSpeed_; }
     float lookSensitivity() const { return lookSensitivity_; }
+    NavigationMode navigationMode() const { return navigationMode_; }
+    void setNavigationMode(NavigationMode mode);
 
     // Profundidade em espaco de visao: negativa atras da camera.
     float depthOf(Vector3 world) const;
@@ -56,6 +58,7 @@ public:
     static constexpr float kNearClipDistance = 0.05f;
 
 private:
+    NavigationMode navigationMode_ = NavigationMode::FPS;
     Vector3 target_{0.0f, 2.0f, 0.0f};
     float distance_ = 42.0f;
     float yaw_ = 0.75f;
