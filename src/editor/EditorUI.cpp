@@ -134,6 +134,8 @@ EditorInput ReadEditorInput() {
     input.play = !input.modified && !input.shift && ImGui::IsKeyPressed(ImGuiKey_F5, false);
     input.stop = !input.modified && input.shift && ImGui::IsKeyPressed(ImGuiKey_F5, false);
     input.jump = !input.modified && ImGui::IsKeyPressed(ImGuiKey_Space, false);
+    input.maximizeGame = !input.modified && ImGui::IsKeyPressed(ImGuiKey_F10, false);
+    input.fullscreen = !input.modified && ImGui::IsKeyPressed(ImGuiKey_F11, false);
     input.save = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false);
     input.open = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O, false);
     input.duplicate = io.KeyCtrl && !io.KeyShift && !io.KeyAlt && !io.KeySuper &&
@@ -831,7 +833,10 @@ bool EditorUI::saveProjectAt(const std::string& path, std::string& error) {
     }
     if (!projectio::save(scene_, path, error)) return false;
     animationDirty_ = false;
-    for (auto& pair:scriptDrafts_) pair.second.dirty=false;
+    for (auto& pair:scriptDrafts_) {
+        pair.second.dirty=false;
+        pair.second.baseline=pair.second.text;
+    }
     return true;
 }
 
@@ -850,6 +855,7 @@ void EditorUI::draw() {
     healthHud_={};
     diag::setFrame(++frame_);
     explorerFocused_=false;
+    pruneScriptDocuments();
     if (!runtime_.active() && !selectedRig_.empty() && !scene_.gameAssets().findRig(selectedRig_)) {
         cancelRigGizmo(false); selectedRig_.clear(); animationSource_.clear(); previewPlaying_ = false;
     }
@@ -1312,11 +1318,15 @@ void EditorUI::drawToolbox() {
 
 void EditorUI::drawViewport() {
     EditorInput input = ReadEditorInput();
+    if(input.fullscreen)toggleGameFullscreen();
+    if(input.maximizeGame)toggleGameMaximized();
+    const bool centralScript=frontend_&&activeDocument_!=0&&!runtime_.active();
     if(frontend_) {
         const auto r=frontend_->viewport();
         ImGui::SetNextWindowPos({r.x,r.y},ImGuiCond_Always);ImGui::SetNextWindowSize({r.width,r.height},ImGuiCond_Always);
         ImGui::SetNextWindowDockID(0,ImGuiCond_Always);
     }
+    if(centralScript)ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4(.105f,.115f,.135f,1));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     const bool visible = ImGui::Begin("Viewport", nullptr,
                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
@@ -1331,6 +1341,18 @@ void EditorUI::drawViewport() {
         viewportFocused_ = false;
         ImGui::End();
         ImGui::PopStyleVar();
+        if(centralScript)ImGui::PopStyleColor();
+        return;
+    }
+
+    if(centralScript) {
+        camera_.releaseCapture();
+        endGizmoSession(true,"script_document");
+        cancelRigGizmo();
+        drawCentralScriptWorkspace();
+        ImGui::End();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
         return;
     }
 
@@ -2120,7 +2142,7 @@ void EditorUI::drawDialogs() {
             std::string error;
             endGizmoSession(true);
             if (projectio::load(scene_, pathBuffer_, error)) {
-                scriptDrafts_.clear();activeScript_=0;
+                scriptDrafts_.clear();openDocuments_.clear();activeScript_=activeDocument_=requestedScript_=0;
                 cancelRigGizmo(false); selectedRig_.clear(); animationSource_.clear();
                 previewPlaying_ = false; previewPose_ = {}; animationDirty_ = false;
                 std::error_code pathError;

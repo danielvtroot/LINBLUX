@@ -137,20 +137,63 @@ void EditorUI::drawGameToolbar() {
 void EditorUI::startPlay() {
     if (runtime_.active()) return;
     endGizmoSession(true, "play"); cancelRigGizmo(); camera_.releaseCapture();
+    exitGameDisplayModes();
     previewPlaying_ = false;
     std::string error;
     if (!commitScriptDrafts(error)) { setStatus(error,true); return; }
     if (!runtime_.start(scene_, error)) { setStatus(error, true); return; }
     for (const auto& message:runtime_.scripts().messages()) if (message.error) showOutput_=true;
-    pausePage_ = 0; gameplaySkipDelta_ = true;
+    pausePage_ = 0; gameplaySkipDelta_ = true; gameMaximized_=false; gameFullscreen_=false;
     ImGui::SetWindowFocus("Viewport");
-    setStatus("Play iniciado. WASD, Space, RMB para camera; Esc para menu.");
+    setStatus("Play iniciado. F10 maximiza, F11 tela cheia; Esc abre o menu.");
 }
 void EditorUI::stopPlay() {
+    exitGameDisplayModes();
     setGameplayCapture(false);
     if (!runtime_.active()) return;
     runtime_.stop(); pausePage_ = 0; camera_.releaseCapture();
+    setStatus("Play finalizado. Alterações da sessão foram descartadas.");
     checkInvariants("runtime_stop");
+}
+bool EditorUI::gameImmersive() const {
+    return runtime_.active()&&(gameMaximized_||gameFullscreen_);
+}
+void EditorUI::toggleGameMaximized() {
+    if(!runtime_.active()) {setStatus("Maximize a view do jogo durante o Play (F10).",true);return;}
+    gameMaximized_=!gameMaximized_;
+    diag::Event event; event.subsystem="display"; event.name="maximize_toggle";
+    event.context={{"enabled",gameMaximized_},{"screen_width",GetScreenWidth()},{"screen_height",GetScreenHeight()}};
+    diag::log(event);
+    setStatus(gameMaximized_?"Jogo maximizado (F10 para restaurar).":"Layout do Studio restaurado.");
+}
+void EditorUI::toggleGameFullscreen() {
+    if(!runtime_.active()) {setStatus("Tela cheia do jogo disponivel durante o Play (F11).",true);return;}
+    if(!gameFullscreen_) {
+        savedWindowX_=GetWindowPosition().x;savedWindowY_=GetWindowPosition().y;
+        savedWindowWidth_=GetScreenWidth();savedWindowHeight_=GetScreenHeight();
+        gameFullscreen_=true;
+        ToggleBorderlessWindowed();
+        setStatus("Tela cheia (F11 para sair). Esc abre o menu do jogo.");
+    } else {
+        gameFullscreen_=false;
+        ToggleBorderlessWindowed();
+        if(savedWindowWidth_>0&&savedWindowHeight_>0)SetWindowSize(savedWindowWidth_,savedWindowHeight_);
+        SetWindowPosition(savedWindowX_,savedWindowY_);
+        setStatus("Janela do Studio restaurada.");
+    }
+    diag::Event event; event.subsystem="display"; event.name="fullscreen_toggle";
+    event.context={{"enabled",gameFullscreen_},{"borderless",IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE)},
+        {"screen_width",GetScreenWidth()},{"screen_height",GetScreenHeight()}};
+    diag::log(event);
+}
+void EditorUI::exitGameDisplayModes() {
+    if(gameFullscreen_) {
+        gameFullscreen_=false;
+        ToggleBorderlessWindowed();
+        if(savedWindowWidth_>0&&savedWindowHeight_>0)SetWindowSize(savedWindowWidth_,savedWindowHeight_);
+        SetWindowPosition(savedWindowX_,savedWindowY_);
+    }
+    gameMaximized_=false;
 }
 void EditorUI::setGameplayCapture(bool capture) {
     if (gameplayCapture_ == capture) return;

@@ -82,6 +82,13 @@ Image IconImage(const std::string& name, int resolution) {
         line(7, 24, 41, 24);
         line(24, 6, 24, 42);
         box(16, 9, 16, 30);
+    } else if (name == "window") {
+        box(6, 9, 36, 28);
+        line(6, 17, 42, 17);
+        line(35, 12, 38, 12);
+        line(30, 22, 42, 22);
+        line(30, 22, 30, 32);
+        line(30, 32, 42, 32);
     } else if (name == "lighting") {
         circle(24, 19, 12);
         box(18, 30, 12, 8);

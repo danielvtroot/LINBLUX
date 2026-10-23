@@ -27,6 +27,8 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="pause") {e.runtime_.pause();e.setGameplayCapture(false);}
         else if(c.action=="resume")e.runtime_.resume();
         else if(c.action=="respawn") {std::string error;if(!e.runtime_.respawn(error))throw std::runtime_error(error);}
+        else if(c.action=="maximize-game")e.toggleGameMaximized();
+        else if(c.action=="fullscreen-game")e.toggleGameFullscreen();
         else if(e.runtime_.active())return false;
         else if(c.action=="select") {e.endGizmoSession(true,"tree_selection");e.cancelRigGizmo();e.selectedRig_.clear();e.scene_.select(e.scene_.find(c.instance));}
         else if(c.action=="rig-select")e.selectRig(c.value);
@@ -40,6 +42,8 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="local-script")e.insertScript(InstanceClass::LocalScript);
         else if(c.action=="module")e.insertScript(InstanceClass::ModuleScript);
         else if(c.action=="open-script")e.openScript(c.instance);
+        else if(c.action=="activate-document")e.activateDocument(InstanceId(std::stoull(c.value)));
+        else if(c.action=="close-document")e.closeDocument(InstanceId(std::stoull(c.value)));
         else if(c.action=="r6")e.insertR6();
         else if(c.action=="duplicate")e.duplicateSelection();
         else if(c.action=="delete")e.deleteSelection();
@@ -49,7 +53,7 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="save")return e.saveCurrentProject();
         else if(c.action=="save-as") {std::string error;if(!e.saveProjectAt(c.value,error))throw std::runtime_error(error);e.setProjectPath(c.value);}
         else if(c.action=="open") {std::string error;e.endGizmoSession(true,"load");e.cancelRigGizmo();if(!projectio::load(e.scene_,c.value,error))throw std::runtime_error(error);
-            e.scriptDrafts_.clear();e.activeScript_=e.requestedScript_=0;e.selectedRig_.clear();e.animationSource_.clear();
+            e.scriptDrafts_.clear();e.openDocuments_.clear();e.activeScript_=e.activeDocument_=e.requestedScript_=0;e.selectedRig_.clear();e.animationSource_.clear();
             e.previewPlaying_=false;e.previewPose_={};e.animationDirty_=false;e.timelineDragJoint_=-1;e.hasCopiedKey_=false;e.clipboardId_=0;
             e.camera_.releaseCapture();e.setProjectPath(c.value);if(e.onSceneLoaded_)e.onSceneLoaded_();e.checkInvariants("rml_load");
         }

@@ -258,7 +258,9 @@ bool RuntimeSession::respawn(std::string& error) {
     physics_->world_->addRigidBody(body_.get());
     pose_ = {}; walkTime_ = 0; idleTime_ = 0; airTime_=0; walkWeight_ = 0; accumulator_ = 0; yaw_ = 0; jumpPending_ = false;
     coyoteTime_=jumpBufferTime_=0;
-    shiftLockRequested_ = false; lastShiftKey_ = 0; // respawn começa sem lock
+    // Shift Lock is a player choice, not a property of the old character.
+    // Keep it across respawns, but swallow a key already held during respawn.
+    lastShiftKey_ = 1;
     health_=respawns_==0?settings_.health:settings_.maxHealth;deadTime_=damageCooldown_=0;
     humanoidState_ = health_>0?HumanoidState::Idle:HumanoidState::Dead;
     camera_.reset(characterRoot().position, settings_);

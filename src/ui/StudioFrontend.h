@@ -17,6 +17,7 @@ public:
     void prepareAdvanced();
     // Diagnostic geometry/state, also used by actual GUI integration tests.
     Rectangle elementBounds(const std::string& id) const;
+    std::string elementText(const std::string& id) const;
     bool textFocused() const;
 private:
     struct Impl;std::unique_ptr<Impl> impl_;

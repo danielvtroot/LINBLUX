@@ -44,8 +44,9 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     Rml::Context* context=nullptr;Rml::ElementDocument* document=nullptr;
     Rectangle view{},advancedRect{};float left=204,right=292,bottom=330,propertySplit=.52f,dpi=1;
     std::string tab="Home",advanced,search,page="game",dialog,focusValue,split,propertySearch;
+    bool pauseWasOpen=false;
     std::string tooltip;double tooltipSince=0;bool contextOpen=false;
-    std::string treeMarkup,propertyMarkup,ribbonMarkup,advancedMarkup;size_t treeHash=0;
+    std::string treeMarkup,propertyMarkup,ribbonMarkup,advancedMarkup,documentMarkup;size_t treeHash=0;
     std::map<std::pair<std::string,std::string>,std::string> styles;
     std::vector<game::ImageAsset> images;double imageScan=-10;
     std::set<InstanceId> collapsed;InstanceId dragNode=0,dragTarget=0;Vector2 dragStart{};
@@ -57,7 +58,22 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     explicit Impl(EditorUI& editor):ui(editor),actions(editor){}
     Rml::Element* el(const std::string& id)const{return document?document->GetElementById(id):nullptr;}
     void style(const std::string& id,const std::string& key,const std::string& value) {auto* e=el(id);if(!e)return;auto& cached=styles[{id,key}];if(cached!=value){e->SetProperty(key,value);cached=value;}}
-    void display(const std::string& id,bool show,const char* layout="block") {style(id,"display",show?layout:"none");}
+    void display(const std::string& id,bool show,const char* layout=nullptr) {
+        auto* e=el(id);if(!e)return;
+        const std::pair<std::string,std::string> key{id,"display"};
+        auto it=styles.find(key);
+        if(!show) {
+            if(it==styles.end()||it->second!="none") {e->SetProperty("display","none");styles[key]="none";}
+            return;
+        }
+        // Revealing an element must not turn a styled flex container into a
+        // block. Drop our inline override and let the RCSS layout apply.
+        if(it!=styles.end()&&it->second=="none") {e->RemoveProperty("display");styles.erase(it);}
+        if(layout) {
+            auto& cached=styles[key];
+            if(cached!=layout) {e->SetProperty("display",layout);cached=layout;}
+        }
+    }
     void text(const std::string& id,const std::string& value){if(auto* e=el(id);e&&e->GetInnerRML()!=Escape(value))e->SetInnerRML(Escape(value));}
     void html(const std::string& id,const std::string& value,std::string& old){if(value!=old){el(id)->SetInnerRML(value);old=value;}}
     void rect(const std::string& id,Rectangle r){style(id,"left",Num(r.x)+"px");style(id,"top",Num(r.y)+"px");style(id,"width",Num(r.width)+"px");style(id,"height",Num(r.height)+"px");}
@@ -65,7 +81,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     Rml::Element* ancestor(Rml::Element* e,const char* name)const{while(e&&e!=document){if(e->HasAttribute(name))return e;e=e->GetParentNode();}return nullptr;}
     std::string value(Rml::Element* e)const {if(auto* form=dynamic_cast<Rml::ElementFormControl*>(e))return form->GetValue();return "";}
     bool editing()const {auto* focus=context?context->GetFocusElement():nullptr;return focus&&(focus->GetTagName()=="input"||focus->GetTagName()=="textarea"||focus->GetTagName()=="select");}
-    Rectangle bounds(const std::string& id)const {auto* e=el(id);if(!e)return {};auto p=e->GetAbsoluteOffset(Rml::BoxArea::Border);auto s=e->GetBox().GetSize(Rml::BoxArea::Border);return {p.x,p.y,s.x,s.y};}
+    Rectangle bounds(const std::string& id)const {auto* e=el(id);if(!e||!e->IsVisible(true))return {};auto p=e->GetAbsoluteOffset(Rml::BoxArea::Border);auto s=e->GetBox().GetSize(Rml::BoxArea::Border);return {p.x,p.y,s.x,s.y};}
     void loadLayout(){try{std::ifstream file(LayoutPath());nlohmann::json j;if(file>>j){left=j.value("left",left);right=j.value("right",right);bottom=j.value("bottom",bottom);propertySplit=j.value("properties",propertySplit);ui.showToolbox_=j.value("showToolbox",true);ui.showExplorer_=j.value("showExplorer",true);ui.showProperties_=j.value("showProperties",true);}}catch(...) {}}
     void saveLayout(){try {const auto path=LayoutPath();if(path.empty())return;std::filesystem::create_directories(path.parent_path());auto temp=path;temp+=".tmp";{std::ofstream file(temp);file<<nlohmann::json{{"left",left},{"right",right},{"bottom",bottom},{"properties",propertySplit},{"showToolbox",ui.showToolbox_},{"showExplorer",ui.showExplorer_},{"showProperties",ui.showProperties_}};if(!file)return;}std::filesystem::rename(temp,path);}catch(...) {}}
     void layout() {
@@ -74,6 +90,15 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         style("studio","width",std::to_string(w)+"px");style("studio","height",std::to_string(h)+"px");
         style("studio","transform-origin","0px 0px");style("studio","transform",dpi==1?"none":"scale("+Num(dpi)+")");
         document->SetClass("compact",w<1400);
+        const bool immersive=ui.gameImmersive();
+        display("header",!immersive);display("tabs",!immersive);display("ribbon",!immersive);display("status",!immersive);
+        if(immersive) {
+            for(const char* id:{"toolbox","explorer","properties","viewport-label","left-divider","right-divider","property-divider","advanced","bottom-divider"})display(id,false);
+            view={0,0,float(w),float(h)};
+            advancedRect={0,0,0,0};
+            rect("game-layer",view);display("game-layer",true);
+            return;
+        }
         left=std::isfinite(left)?std::clamp(left,180.f,float(w)*.25f):222;
         right=std::isfinite(right)?std::clamp(right,270.f,float(w)*.34f):326;
         bottom=std::isfinite(bottom)?std::clamp(bottom,180.f,float(h)*.52f):290;
@@ -81,7 +106,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         const float l=ui.showToolbox_?left+5:0,r=(ui.showExplorer_||ui.showProperties_)?right+5:0;
         constexpr float panelTop=144, statusHeight=23;
         const float usable=h-panelTop-statusHeight,exHeight=ui.showExplorer_&&ui.showProperties_?usable*propertySplit:usable;
-        display("toolbox",ui.showToolbox_);display("explorer",ui.showExplorer_);display("properties",ui.showProperties_);
+        display("toolbox",ui.showToolbox_);display("explorer",ui.showExplorer_);display("properties",ui.showProperties_);display("viewport-label",true);
         rect("toolbox",{0,panelTop,left,usable});rect("explorer",{float(w)-right,panelTop,right,exHeight});
         rect("properties",{float(w)-right,ui.showExplorer_?panelTop+5+exHeight:panelTop,right,ui.showExplorer_?usable-exHeight-5:usable});
         style("toolbox-content","height",Num(usable-94)+"px");
@@ -101,8 +126,21 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         rect("bottom-divider",{l,float(h)-statusHeight-5-bottom,view.width,5});display("bottom-divider",hasAdvanced);
     }
     void showAdvanced(const std::string& name) {
-        advanced=name;advancedMarkup.clear();ui.showScriptEditor_=name=="script";ui.showAnimationEditor_=name=="animation";ui.showRigEditor_=name=="rig";ui.showGameSettings_=false;ui.showOutput_=name=="output";
+        if(name=="script") {advanced.clear();advancedMarkup.clear();ui.showScriptEditor_=false;ui.openScriptEditor();return;}
+        advanced=name;advancedMarkup.clear();ui.showScriptEditor_=false;ui.showAnimationEditor_=name=="animation";ui.showRigEditor_=name=="rig";ui.showGameSettings_=false;ui.showOutput_=name=="output";
         if(name=="animation") {auto& a=ui.scene_.gameAssets();if(!a.animations.empty())ui.openAnimation(a.findAnimation(a.player.walkAnimation)?a.player.walkAnimation:a.animations.front().id);}
+    }
+    void documents() {
+        ui.pruneScriptDocuments();
+        std::string s=std::string("<div class=\"document-tab ")+(ui.activeDocument_==0?"active":"")+"\" id=\"document-tab-0\"><button id=\"document-0\" class=\"doc-activate\" data-action=\"activate-document\" data-value=\"0\" title=\"3D place viewport\"><img src=\"icon-workspace\"/><span class=\"doc-label\">Place · Perspective</span></button></div>";
+        for(const InstanceId id:ui.openDocuments_) {
+            auto* node=ui.scene_.find(id);if(!node||!IsScriptClass(node->instanceClass()))continue;
+            const auto it=ui.scriptDrafts_.find(id);const bool dirty=it!=ui.scriptDrafts_.end()&&it->second.dirty;
+            const std::string sid=std::to_string(id);
+            s+=std::string("<div class=\"document-tab ")+(ui.activeDocument_==id?"active":"")+"\" id=\"document-tab-"+sid+"\"><button id=\"document-"+sid+"\" class=\"doc-activate\" data-action=\"activate-document\" data-value=\""+sid+"\" title=\""+Escape(node->name())+"\"><img src=\"icon-script\"/><span class=\"doc-label\">"+Escape(node->name())+"</span>"+(dirty?"<span class=\"doc-dirty\" title=\"Unsaved changes\"/>":"")+"</button><button id=\"close-document-"+sid+"\" class=\"doc-close\" data-action=\"close-document\" data-value=\""+sid+"\" title=\"Close script\">×</button></div>";
+        }
+        html("document-list",s,documentMarkup);
+        text("viewport-hint",ui.activeDocument_==0?"RMB + WASD · Q / E":"Ctrl+S save · Ctrl+W close");
     }
     void prompt(const std::string& kind) {
         auto* selected=ui.scene_.selection();
@@ -351,7 +389,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         }
         // Dispatch may blur a field and enqueue its commit. Drain by index so
         // a blur cannot invalidate an iterator while an action changes focus.
-        for(size_t i=0;i<commands.size();++i){const auto c=commands[i];actions.dispatch(c);if(c.action=="open-script"||c.action=="script"||c.action=="local-script"||c.action=="module")showAdvanced("script");if(c.action=="r6")showAdvanced("rig");}commands.clear();
+        for(size_t i=0;i<commands.size();++i){const auto c=commands[i];actions.dispatch(c);if(c.action=="r6")showAdvanced("rig");}commands.clear();
     }
     void updateTooltip() {
         auto* owner=ancestor(context->GetHoverElement(),"title");const std::string label=attr(owner,"title");
@@ -403,6 +441,10 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     }
     void syncGame() {
         const bool active=ui.runtime_.active(),paused=ui.runtime_.state()==game::RuntimeState::Paused;
+        // A fresh pause opens on the session page; a tab chosen during the
+        // same pause remains selected until play resumes.
+        if(paused&&!pauseWasOpen)page="game";
+        pauseWasOpen=paused;
         display("pause",paused,"flex");display("health",active&&!paused,"flex");display("game-topbar",active&&!paused,"flex");display("reticle",active&&!paused&&ui.runtime_.shiftLockActive());
         for(const auto* name:{"game","settings","controls","about"}) {display(std::string(name)+"-page",page==name);el(std::string("page-")+name)->SetClass("active",page==name);}
         if(!active)return;
@@ -466,7 +508,7 @@ bool StudioFrontend::initialize(std::string& error) {
     rlImGuiDeferPopupRendering(true);error.clear();return true;
 }
 void StudioFrontend::draw() {
-    auto& p=*impl_;const double started=GetTime();p.layout();p.input();p.syncing=true;p.ribbon();p.tree();p.properties();p.commonAdvanced();
+    auto& p=*impl_;const double started=GetTime();p.layout();p.input();p.syncing=true;p.ribbon();p.tree();p.properties();p.commonAdvanced();p.documents();
     p.ui.explorerFocused_=p.treeKeyboard&&!p.editing();
     if(!p.advanced.empty()&&!p.ui.runtime_.active()&&!p.dialogOpen) {
         p.ui.showScriptEditor_=p.advanced=="script";p.ui.showAnimationEditor_=p.advanced=="animation";p.ui.showRigEditor_=p.advanced=="rig";p.ui.showGameSettings_=false;p.ui.showOutput_=p.advanced=="output";
@@ -481,7 +523,7 @@ void StudioFrontend::draw() {
     if(p.ui.requestSavePopup_){p.ui.requestSavePopup_=false;p.prompt("save-as");}
     if(p.ui.requestOpenPopup_){p.ui.requestOpenPopup_=false;p.prompt("open");}
     if(!p.dialogOpen)p.ui.drawDialogs();
-    const double beforeScene=GetTime();p.ui.drawViewport();const double afterScene=GetTime();p.syncGame();p.updateTooltip();
+    const double beforeScene=GetTime();p.ui.drawViewport();p.documents();const double afterScene=GetTime();p.syncGame();p.updateTooltip();
     p.display("dialog-overlay",p.dialogOpen,"flex");
     p.text("project",std::filesystem::path(p.ui.projectPath_).filename().string());p.text("message",p.ui.status_);
     p.text("scene-count",std::to_string(p.ui.scene_.parts().size())+" parts · "+std::to_string(p.ui.scene_.objects().size())+" instances");
@@ -499,7 +541,8 @@ void StudioFrontend::filter(EditorInput& in,InputContext& c) {
     auto& p=*impl_;if(p.keyboardOwned||p.editing()||p.dialogOpen){c.text=true;c.widget=true;c.keyboardCaptured=true;in.play=in.save=in.open=in.remove=in.rename=in.duplicate=false;in.tool=-1;in.jump=false;in.movement={};}
     if(p.mouseOwned){in.leftPressed=in.leftDown=in.rightPressed=in.rightDown=in.middlePressed=in.middleDown=false;in.wheel=0;c.hovered=false;
         if(!p.ui.runtime_.active()&&(p.dialogOpen||p.contextOpen||p.dragging||!p.split.empty()))c.widget=true;
-        else if(p.ui.runtime_.state()==game::RuntimeState::Playing) {in.movement={};in.jump=false;in.shift=false;}
+        // Hovering the visible HUD/topbar must not steal WASD, jump or Shift
+        // from a running game; only actual text/modal focus captures keys.
     }
     if(p.ui.runtime_.active()&&!p.editing()&&!p.dialogOpen)c.focused=true;
     if(p.escapeConsumed)in.escape=false;
@@ -507,6 +550,7 @@ void StudioFrontend::filter(EditorInput& in,InputContext& c) {
 }
 Rectangle StudioFrontend::viewport()const{return impl_->view;}
 Rectangle StudioFrontend::elementBounds(const std::string& id)const{return impl_->bounds(id);}
+std::string StudioFrontend::elementText(const std::string& id)const{auto* e=impl_->el(id);return e?e->GetInnerRML():std::string();}
 bool StudioFrontend::textFocused()const{return impl_->editing();}
 void StudioFrontend::prepareAdvanced(){auto r=impl_->advancedRect;ImGui::SetNextWindowDockID(0,ImGuiCond_Always);ImGui::SetNextWindowPos({r.x,r.y},ImGuiCond_Always);ImGui::SetNextWindowSize({r.width,r.height},ImGuiCond_Always);}
 }

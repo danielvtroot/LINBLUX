@@ -154,10 +154,16 @@ void DrawLuaSyntax(ImDrawList* draw, ImVec2 textOrigin, float lineHeight, float 
 // callback de Edit, confirmamos que foi UMA inserção e replicamos a indentação
 // da linha anterior (pastes ficam intactos; campos usam o mesmo canal do imgui
 // para reconciliar undo/redo corretamente).
-struct LuaEditCtx { bool singleNewline = false; int insertPos = 0; unsigned prevLen = 0; bool* dirty = nullptr; int* jumpLine=nullptr; };
+struct LuaEditCtx { bool singleNewline = false; int insertPos = 0; unsigned prevLen = 0; bool* dirty = nullptr; int* jumpLine=nullptr; int* jumpCursor=nullptr; };
 
 int LuaEditCallback(ImGuiInputTextCallbackData* data) {
     auto* ctx = static_cast<LuaEditCtx*>(data->UserData);
+    if(data->EventFlag==ImGuiInputTextFlags_CallbackAlways && ctx && ctx->jumpCursor && *ctx->jumpCursor>=0) {
+        data->CursorPos=data->SelectionStart=data->SelectionEnd=
+            std::clamp(*ctx->jumpCursor,0,data->BufTextLen);
+        GImGui->InputTextState.CursorFollow=true;
+        *ctx->jumpCursor=-1;
+    }
     if(data->EventFlag==ImGuiInputTextFlags_CallbackAlways && ctx && ctx->jumpLine && *ctx->jumpLine>0) {
         int line=1,offset=0;
         while(offset<data->BufTextLen && line<*ctx->jumpLine)if(data->Buf[offset++]=='\n')++line;
@@ -400,10 +406,90 @@ void EditorUI::insertScript(InstanceClass type) {
     else setStatus("Esse Parent nao aceita scripts.",true);
 }
 void EditorUI::openScript(InstanceId id) {
-    auto* node=scene_.find(id);if(!node || !IsScriptClass(node->instanceClass()))return;
-    if (!scriptDrafts_.count(id)) scriptDrafts_[id].text=static_cast<Script&>(*node).source;
-    activeScript_=requestedScript_=id;showScriptEditor_=true;scene_.select(node);
+    auto* node=scene_.find(id);
+    if(!node||!IsScriptClass(node->instanceClass()))return;
+    auto& draft=scriptDrafts_[id];
+    if(draft.text.empty()&&draft.baseline.empty()) {
+        draft.text=static_cast<Script&>(*node).source;
+        draft.baseline=draft.text;
+    }
+    if(std::find(openDocuments_.begin(),openDocuments_.end(),id)==openDocuments_.end())
+        openDocuments_.push_back(id);
+    activeScript_=id;activeDocument_=id;draft.restoreFocus=true;
+    showScriptEditor_=frontend_?false:true;
+    scene_.select(node);
 }
+
+void EditorUI::openScriptAtLine(InstanceId id,int line) {
+    openScript(id);
+    auto it=scriptDrafts_.find(id);
+    if(it!=scriptDrafts_.end()) {
+        it->second.line=std::max(1,line);
+        it->second.pendingLine=std::max(1,line);
+        it->second.pendingCursor=-1;
+        it->second.restoreFocus=true;
+    }
+}
+
+void EditorUI::openScriptEditor() {
+    if(activeDocument_!=0&&scriptDrafts_.count(activeDocument_))return;
+    if(auto* selected=scene_.selection();selected&&IsScriptClass(selected->instanceClass())) {
+        openScript(selected->id());return;
+    }
+    if(!openDocuments_.empty()) {
+        if(scriptDrafts_.count(openDocuments_.back())) {
+            activateDocument(openDocuments_.back());return;
+        }
+    }
+    for(const auto& object:scene_.objects()) {
+        if(IsScriptClass(object->instanceClass())) {openScript(object->id());return;}
+    }
+    setStatus("Crie ou selecione um Script para abrir no editor central.",true);
+}
+
+void EditorUI::activateDocument(InstanceId id) {
+    if(id==0) {
+        activeDocument_=0;activeScript_=0;showScriptEditor_=false;
+        return;
+    }
+    auto* node=scene_.find(id);
+    if(!node||!IsScriptClass(node->instanceClass()))return;
+    if(std::find(openDocuments_.begin(),openDocuments_.end(),id)==openDocuments_.end())
+        openDocuments_.push_back(id);
+    activeDocument_=activeScript_=id;
+    scriptDrafts_[id].restoreFocus=true;
+    showScriptEditor_=frontend_?false:true;
+    scene_.select(node);
+}
+
+void EditorUI::closeDocument(InstanceId id) {
+    auto it=std::find(openDocuments_.begin(),openDocuments_.end(),id);
+    if(it==openDocuments_.end())return;
+    const int index=static_cast<int>(std::distance(openDocuments_.begin(),it));
+    const bool active=activeDocument_==id;
+    openDocuments_.erase(it);
+    scriptDrafts_.erase(id);
+    if(!active)return;
+    InstanceId next=0;
+    if(!openDocuments_.empty()) {
+        const int nextIndex=std::min(index,static_cast<int>(openDocuments_.size())-1);
+        next=openDocuments_[nextIndex];
+    }
+    activateDocument(next);
+}
+
+void EditorUI::pruneScriptDocuments() {
+    for(auto it=openDocuments_.begin();it!=openDocuments_.end();) {
+        auto* node=scene_.find(*it);
+        if(node&&IsScriptClass(node->instanceClass())) {++it;continue;}
+        const InstanceId id=*it;it=openDocuments_.erase(it);scriptDrafts_.erase(id);
+        if(activeDocument_==id) {activeDocument_=0;activeScript_=0;showScriptEditor_=false;}
+    }
+    if(activeDocument_!=0&&!scriptDrafts_.count(activeDocument_)) {
+        activeDocument_=0;activeScript_=0;showScriptEditor_=false;
+    }
+}
+
 bool EditorUI::commitScriptDrafts(std::string& error) {
     for(const auto& pair:scriptDrafts_) if (pair.second.dirty) {
         if (pair.second.text.size()>262144) { error="Script excede 256 KiB; reduza o source antes de salvar/Play.";return false; }
@@ -415,6 +501,153 @@ bool EditorUI::commitScriptDrafts(std::string& error) {
     }
     return true;
 }
+
+void EditorUI::drawCentralScriptWorkspace() {
+    auto* object=scene_.find(activeDocument_);
+    if(!object||!IsScriptClass(object->instanceClass())){activeDocument_=0;return;}
+    auto& draft=scriptDrafts_[activeDocument_];
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(10,8));
+    ImGui::SetCursorPos(ImVec2(10,8));
+    ImGui::PushID(static_cast<int>(activeDocument_));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("SCRIPT");
+    ImGui::SameLine();
+    ImGui::TextDisabled("%s",object->name().c_str());
+    if(draft.dirty){ImGui::SameLine();ImGui::TextColored(ImVec4(1,.72f,.35f,1),"modified");}
+    const float closeWidth=ImGui::CalcTextSize("Close tab").x+ImGui::GetStyle().FramePadding.x*2;
+    ImGui::SameLine(std::max(ImGui::GetCursorPosX(),ImGui::GetWindowContentRegionMax().x-closeWidth));
+    if(ImGui::SmallButton("Close tab"))closeDocument(activeDocument_);
+    drawScriptEditorBody(*object,draft,true);
+    ImGui::PopID();
+    ImGui::PopStyleVar();
+}
+
+void EditorUI::drawScriptEditorBody(Instance& object,ScriptDraft& draft,bool central) {
+    const auto& io=ImGui::GetIO();
+    const bool windowFocused=ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+    if(ImGui::SmallButton("Reveal in Explorer"))scene_.select(&object);
+    ImGui::SameLine();
+    if(ImGui::SmallButton("Save project"))saveCurrentProject();
+    ImGui::SameLine();
+    if(ImGui::SmallButton("Revert source")) {
+        draft.text=static_cast<Script&>(object).source;draft.baseline=draft.text;
+        draft.dirty=false;draft.undo.clear();draft.redo.clear();
+        draft.pendingCursor=0;draft.restoreFocus=true;
+    }
+    ImGui::SameLine();ImGui::TextDisabled("%zu / 262144 bytes | Lua 5.4",draft.text.size());
+    ImGui::SetNextItemWidth(180);ImGui::InputTextWithHint("##find","Find text",draft.search,sizeof(draft.search));
+    if(*draft.search) {
+        const auto found=draft.text.find(draft.search);
+        ImGui::SameLine();if(found==std::string::npos)ImGui::TextDisabled("Not found");
+        else {
+            const int line=1+static_cast<int>(std::count(draft.text.begin(),draft.text.begin()+found,'\n'));
+            ImGui::Text("Line %d",line);ImGui::SameLine();
+            if(ImGui::SmallButton("Go to match")) {
+                draft.line=line;draft.pendingLine=line;
+                draft.pendingCursor=static_cast<int>(found);
+                draft.restoreFocus=true;
+            }
+        }
+    }
+    ImGui::SetNextItemWidth(80);
+    ImGui::InputInt("Line",&draft.line,0,0);ImGui::SameLine();
+    if(ImGui::SmallButton("Go")) {
+        draft.pendingLine=std::max(1,draft.line);
+        draft.pendingCursor=-1;
+        draft.restoreFocus=true;
+    }
+    ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // native monospace for code and gutter
+    const auto origin=ImGui::GetCursorScreenPos();
+    const float height=std::max(120.f,ImGui::GetContentRegionAvail().y-24);
+    ImGui::Dummy({42,height});ImGui::SameLine();
+    bool typedNewline=false;
+    LuaEditCtx editCtx;editCtx.dirty=&typedNewline;editCtx.jumpLine=&draft.pendingLine;
+    editCtx.jumpCursor=&draft.pendingCursor;
+    // Tudo é desenhado pelo tokenizer; o widget nativo cuida de seleção,
+    // cursor, teclado e acessibilidade. O undo por documento é próprio para
+    // sobreviver à troca de abas (o ImGui mantém apenas um estado ativo).
+    ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0,0,0,0));
+    const bool restoreFocus=draft.restoreFocus||draft.pendingLine>0||draft.pendingCursor>=0;
+    if(restoreFocus) {
+        ImGui::SetKeyboardFocusHere();
+        if(draft.pendingLine<=0&&draft.pendingCursor<0)
+            ImGui::SetNextWindowScroll(ImVec2(0,draft.scrollY));
+    }
+    const std::string beforeText=draft.text;
+    const int beforeCursor=draft.cursor;
+    const bool changed=ImGui::InputTextMultiline("##source",&draft.text,{-1,height},
+            ImGuiInputTextFlags_AllowTabInput|ImGuiInputTextFlags_NoUndoRedo|
+            ImGuiInputTextFlags_CallbackCharFilter|ImGuiInputTextFlags_CallbackEdit|ImGuiInputTextFlags_CallbackAlways,
+            LuaEditCallback,&editCtx);
+    ImGui::PopStyleColor();
+    auto* state=ImGui::GetInputTextState(ImGui::GetItemID());
+    const float lineHeight=ImGui::GetTextLineHeight();
+    const ImVec2 fieldMin=ImGui::GetItemRectMin(),fieldMax=ImGui::GetItemRectMax();
+    scriptSourceControl_={fieldMin.x,fieldMin.y,fieldMax.x-fieldMin.x,fieldMax.y-fieldMin.y};
+    int caretByte=beforeCursor;bool caretVisible=false;
+    if(state) {
+        caretByte=state->GetCursorPos();
+        caretVisible=state->ID==ImGui::GetItemID();
+    }
+    draft.cursor=caretByte;
+    const auto& children=ImGui::GetCurrentWindow()->DC.ChildWindows;
+    if(!children.empty())draft.scrollY=children.back()->Scroll.y;
+    else if(state)draft.scrollY=state->Scroll.y;
+    const float scrollPixels=draft.scrollY;
+    const float scrollX=state?state->Scroll.x:0;
+    if(changed||typedNewline) {
+        const double now=ImGui::GetTime();
+        if(now-draft.lastEditTime>0.75) {
+            draft.undo.push_back({beforeText,beforeCursor});
+            if(draft.undo.size()>200)draft.undo.erase(draft.undo.begin());
+        }
+        draft.redo.clear();draft.lastEditTime=now;
+        draft.dirty=draft.text!=draft.baseline;
+    }
+    if(windowFocused&&io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_Z,false)) {
+        if(!draft.undo.empty()) {
+            draft.redo.push_back({draft.text,caretByte});
+            const auto restore=draft.undo.back();draft.undo.pop_back();
+            draft.text=restore.text;draft.cursor=restore.cursor;draft.pendingCursor=restore.cursor;
+            draft.dirty=draft.text!=draft.baseline;draft.restoreFocus=true;
+            ImGui::ClearActiveID();
+        }
+    } else if(windowFocused&&io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_Y,false)) {
+        if(!draft.redo.empty()) {
+            draft.undo.push_back({draft.text,caretByte});
+            const auto restore=draft.redo.back();draft.redo.pop_back();
+            draft.text=restore.text;draft.cursor=restore.cursor;draft.pendingCursor=restore.cursor;
+            draft.dirty=draft.text!=draft.baseline;draft.restoreFocus=true;
+            ImGui::ClearActiveID();
+        }
+    }
+    static std::vector<LuaTokenRun> luaRuns;TokenizeLua(draft.text.c_str(),luaRuns);
+    auto* draw=ImGui::GetWindowDrawList();
+    DrawLuaSyntax(draw,
+        ImVec2(fieldMin.x+ImGui::GetStyle().FramePadding.x-scrollX,fieldMin.y+ImGui::GetStyle().FramePadding.y),
+        lineHeight,0, // native InputTextMultiline is not word-wrapped
+        scrollPixels,draft.text.c_str(),(int)draft.text.size(),luaRuns,
+        caretVisible,caretByte,fieldMin,fieldMax,kLuaColorCaret);
+    int scriptErrors=0;
+    for(const auto& msg:runtime_.scripts().messages())
+        if(msg.error&&msg.scriptId==object.id())++scriptErrors;
+    draw->PushClipRect(origin,{origin.x+40,origin.y+height},true);
+    const auto count=1+std::count(draft.text.begin(),draft.text.end(),'\n');
+    for(int i=std::max(0,int(scrollPixels/lineHeight));i<count&&(i*lineHeight-scrollPixels)<height;++i){
+        char number[16];std::snprintf(number,sizeof(number),"%d",i+1);
+        draw->AddText({origin.x+3,origin.y+ImGui::GetStyle().FramePadding.y+i*lineHeight-scrollPixels},IM_COL32(130,145,160,255),number);
+    }
+    if(scriptErrors>0)
+        draw->AddRectFilled(origin,ImVec2(origin.x+2.5f,origin.y+height),IM_COL32(198,58,70,235));
+    draw->PopClipRect();
+    ImGui::PopFont();
+    if(scriptErrors>0)ImGui::TextColored(ImVec4(1,.45f,.4f,1),"Erros de runtime: %d (veja o Output)",scriptErrors);
+    else ImGui::TextDisabled("Tab indents | Ctrl+Z/Y undo/redo | Ctrl+S save | Ctrl+W close tab | so executa no Play");
+    if(restoreFocus)draft.restoreFocus=false;
+    if(windowFocused&&io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_S,false))saveCurrentProject();
+    if(central&&windowFocused&&io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_W,false))closeDocument(activeDocument_);
+}
+
 void EditorUI::drawScriptEditor() {
     if (!ImGui::FindWindowByName("Script Editor")) {
         if(auto* view=ImGui::FindWindowByName("Viewport");view && view->DockId) {
@@ -442,72 +675,9 @@ void EditorUI::drawScriptEditor() {
             const bool active=ImGui::BeginTabItem(label.c_str(),nullptr,requestedScript_==it->first?ImGuiTabItemFlags_SetSelected:0);
             if(requestedScript_==it->first)requestedScript_=0;
             if(active) {
-                activeScript_=it->first;
+                activeScript_=it->first;activeDocument_=it->first;
                 ImGui::PushID(static_cast<int>(it->first));
-                if(ImGui::SmallButton("Reveal in Explorer"))scene_.select(object);
-                ImGui::SameLine(); if(ImGui::SmallButton("Revert source")){draft.text=static_cast<Script&>(*object).source;draft.dirty=false;}
-                ImGui::SameLine();ImGui::TextDisabled("%zu / 262144 bytes | Lua 5.4",draft.text.size());
-                ImGui::SetNextItemWidth(180);ImGui::InputTextWithHint("##find","Find text",draft.search,sizeof(draft.search));
-                if(*draft.search) {
-                    const auto found=draft.text.find(draft.search);
-                    ImGui::SameLine();if(found==std::string::npos)ImGui::TextDisabled("Not found");
-                    else {
-                        const int line=1+static_cast<int>(std::count(draft.text.begin(),draft.text.begin()+found,'\n'));
-                        ImGui::Text("Line %d",line);ImGui::SameLine();
-                        if(ImGui::SmallButton("Go to match"))draft.pendingLine=line;
-                    }
-                }
-                ImGui::SetNextItemWidth(80);
-                ImGui::InputInt("Line",&draft.line,0,0);ImGui::SameLine();
-                if(ImGui::SmallButton("Go"))draft.pendingLine=std::max(1,draft.line);
-                ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // native monospace for code and gutter
-                const auto origin=ImGui::GetCursorScreenPos();const float height=std::max(100.f,ImGui::GetContentRegionAvail().y-22);
-                ImGui::Dummy({42,height});ImGui::SameLine();
-                bool typedNewline=false;
-                LuaEditCtx editCtx;editCtx.dirty=&typedNewline;editCtx.jumpLine=&draft.pendingLine;
-                // O texto nativo fica invisível (canal alpha 0): o realce do
-                // TokenizerLua desenha tudo por cima; seleção/undo/scroll nativos.
-                ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0,0,0,0));
-                if(draft.pendingLine>0)ImGui::SetKeyboardFocusHere();
-                if(ImGui::InputTextMultiline("##source",&draft.text,{-1,height},
-                        ImGuiInputTextFlags_AllowTabInput|
-                        ImGuiInputTextFlags_CallbackCharFilter|ImGuiInputTextFlags_CallbackEdit|ImGuiInputTextFlags_CallbackAlways,
-                        LuaEditCallback,&editCtx))draft.dirty=true;
-                if(typedNewline)draft.dirty=true;
-                ImGui::PopStyleColor();
-                const auto* state=ImGui::GetInputTextState(ImGui::GetItemID());
-                const float lineHeight=ImGui::GetTextLineHeight();
-                const ImVec2 fieldMin=ImGui::GetItemRectMin(),fieldMax=ImGui::GetItemRectMax();
-                scriptSourceControl_={fieldMin.x,fieldMin.y,fieldMax.x-fieldMin.x,fieldMax.y-fieldMin.y};
-                const auto& children=ImGui::GetCurrentWindow()->DC.ChildWindows;
-                const auto* field=children.empty()?nullptr:children.back();
-                const float scrollPixels=state?state->Scroll.y:field?field->Scroll.y:0;
-                const float scrollX=state?state->Scroll.x:0;
-                static std::vector<LuaTokenRun> luaRuns;TokenizeLua(draft.text.c_str(),luaRuns);
-                int caretByte=0;bool caretVisible=false;
-                if(state){caretByte=state->GetCursorPos();caretVisible=state->ID==ImGui::GetItemID();}
-                auto* draw=ImGui::GetWindowDrawList();
-                DrawLuaSyntax(draw,
-                    ImVec2(fieldMin.x+ImGui::GetStyle().FramePadding.x-scrollX,fieldMin.y+ImGui::GetStyle().FramePadding.y),
-                    lineHeight,0, // native InputTextMultiline is not word-wrapped
-                    scrollPixels,draft.text.c_str(),(int)draft.text.size(),luaRuns,
-                    caretVisible,caretByte,fieldMin,fieldMax,kLuaColorCaret);
-                // Erros de runtime deste script: barra vermelha na margem + contagem.
-                int scriptErrors=0;
-                for(const auto& msg:runtime_.scripts().messages())
-                    if(msg.error&&msg.script==object->name())++scriptErrors;
-                draw->PushClipRect(origin,{origin.x+40,origin.y+height},true);
-                const auto count=1+std::count(draft.text.begin(),draft.text.end(),'\n');
-                for(int i=std::max(0,int(scrollPixels/lineHeight));i<count&&(i*lineHeight-scrollPixels)<height;++i){
-                    char number[16];std::snprintf(number,sizeof(number),"%d",i+1);
-                    draw->AddText({origin.x+3,origin.y+ImGui::GetStyle().FramePadding.y+i*lineHeight-scrollPixels},IM_COL32(130,145,160,255),number);
-                }
-                if(scriptErrors>0)
-                    draw->AddRectFilled(origin,ImVec2(origin.x+2.5f,origin.y+height),IM_COL32(198,58,70,235));
-                draw->PopClipRect();
-                ImGui::PopFont();
-                if(scriptErrors>0)ImGui::TextColored(ImVec4(1,.45f,.4f,1),"Erros de runtime: %d (veja o Output)",scriptErrors);
-                else ImGui::TextDisabled("Tab indents | Ctrl+Z/Y undo/redo | Enter indenta a linha | so executa no Play");
+                drawScriptEditorBody(*object,draft,false);
                 ImGui::PopID();ImGui::EndTabItem();
             }
             ++it;
@@ -528,18 +698,25 @@ void EditorUI::drawOutput() {
     ImGui::Text("Lua: %zu KiB / 8192 | %zu / 128 tasks",runtime_.scripts().memoryUsed()/1024,runtime_.scripts().taskCount());
     ImGui::Separator();
     int messageIndex=0;
+    outputMessageRects_.clear();
     for(const auto& message:runtime_.scripts().messages()) {
         ImGui::PushID(++messageIndex);
         ImGui::PushStyleColor(ImGuiCol_Text,message.error?ImVec4(1,.4f,.35f,1):ImVec4(.7f,.85f,.75f,1));
         ImGui::TextWrapped("[%s] %s",message.script.c_str(),message.text.c_str());
+        const ImVec2 messageMin=ImGui::GetItemRectMin(), messageMax=ImGui::GetItemRectMax();
+        outputMessageRects_.push_back({messageMin.x,messageMin.y,messageMax.x-messageMin.x,messageMax.y-messageMin.y});
         ImGui::PopStyleColor();
         if(ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Clique para abrir o script");
-            if(ImGui::IsItemClicked(0))
-                for(const auto& node:scene_.objects())
-                    if(IsScriptClass(node->instanceClass()) && message.script==node->name()) {
-                        openScript(node->id());break;
-                    }
+            ImGui::SetTooltip(message.error&&message.line>0?"Clique para abrir o script na linha %d":"Clique para abrir o script",message.line);
+            if(ImGui::IsItemClicked(0)) {
+                if(auto* node=scene_.find(message.scriptId);node&&IsScriptClass(node->instanceClass()))
+                    openScriptAtLine(node->id(),message.line);
+                else
+                    for(const auto& node:scene_.objects())
+                        if(IsScriptClass(node->instanceClass()) && message.script==node->name()) {
+                            openScriptAtLine(node->id(),message.line);break;
+                        }
+            }
         }
         ImGui::PopID();
     }

@@ -108,7 +108,19 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 .empty-state { padding: 9px 8px; color: #aeb4c1; font-size: 11px; }
 .property-action { margin: 5px; height: 25px; font-size: 11px; }
 .property .color-button { flex: 0 0 19px; width: 19px; height: 17px; padding: 0; margin-right: 5px; border: 1px #8799b1; }
-#viewport-label { position: absolute; height: 26px; padding: 5px 9px; background-color: #35383f; border-top: 1px #545b66; display: flex; justify-content: space-between; font-size: 11px; }
+#viewport-label { position: absolute; height: 26px; padding: 0; background-color: #35383f; border-top: 1px #545b66; display: flex; align-items: stretch; justify-content: flex-start; font-size: 11px; overflow: hidden; }
+#document-list { display: flex; flex: 1; min-width: 0; height: 26px; overflow: hidden; }
+.document-tab { display: flex; flex: 0 1 auto; min-width: 0; height: 26px; border-right: 1px #555d69; background-color: #30333a; }
+.document-tab.active { background-color: #414954; border-top: 2px #75b4ee; }
+.document-tab .doc-activate { display: flex; align-items: center; height: 24px; max-width: 190px; padding: 2px 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; background-color: transparent; border: 0px; border-radius: 0px; font-size: 11px; }
+.document-tab .doc-activate img { width: 13px; height: 13px; margin-right: 5px; flex-shrink: 0; }
+.document-tab .doc-label { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.document-tab.active .doc-activate { color: #eef5ff; }
+.document-tab .doc-close { flex-shrink: 0; width: 20px; height: 20px; margin: 2px 3px 0 0; padding: 0; border: 0px; border-radius: 3px; background-color: transparent; color: #aeb8c6; font-size: 15px; line-height: 18px; }
+.document-tab .doc-close:hover { background-color: #ffffff20; color: #ffffff; }
+.document-tab .doc-dirty { width: 7px; height: 7px; margin-left: 4px; border-radius: 4px; background-color: #f4b85c; flex-shrink: 0; }
+#viewport-hint { flex-shrink: 0; margin: 6px 9px 0 10px; white-space: nowrap; }
+.compact #viewport-hint { display: none; }
 #viewport-title img { width: 14px; height: 14px; margin-right: 5px; vertical-align: middle; }
 .divider { position: absolute; background-color: #191b20; }
 .divider:hover { background-color: #4b8ac8; }
@@ -170,6 +182,11 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 .control-row { display: flex; align-items: center; padding: 5px; border-bottom: 1px #636b792a; }
 kbd { display: block; width: 118px; min-width: 118px; margin-right: 16px; padding: 5px; text-align: center; border: 1px #656e7c; border-radius: 3px; background-color: #3d424d; font-size: 11px; }
 .control-row span { color: #d0d6e0; font-size: 12px; }
+.session-actions { display: flex; margin: 9px 0 4px; }
+.session-actions button { flex: 1; height: 34px; margin-right: 7px; padding: 7px 5px; border: 1px #66738770; border-radius: 5px; background-color: #3b4350; font-size: 12px; }
+.session-actions button:last-child { margin-right: 0; }
+.session-actions button:hover { background-color: #4b5a70; border-color: #8fa9c7; }
+.session-actions button img { width: 15px; height: 15px; margin-right: 6px; }
 .pause-footer { display: flex; flex: 0 0 56px; height: 56px; padding-top: 11px; border-top: 1px #65718455; }
 .pause-footer button { flex: 1; height: 43px; margin-right: 7px; padding: 11px 3px; border: 1px #79839855; background-color: #494e59b3; font-size: 13px; }
 .pause-footer button:last-child { margin-right: 0; }

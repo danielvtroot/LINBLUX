@@ -13,6 +13,8 @@
 #include "imgui_internal.h"
 #include "rlImGui.h"
 #include <filesystem>
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 
@@ -23,6 +25,17 @@ struct EditorUITestAccess {
     static bool captured(EditorUI& ui){return ui.gameplayCapture_;}
     static ToolMode tool(EditorUI& ui){return ui.tool_;}
     static Rectangle source(EditorUI& ui){return ui.scriptSourceControl_;}
+    static InstanceId activeDocument(EditorUI& ui){return ui.activeDocument_;}
+    static size_t documentCount(EditorUI& ui){return ui.openDocuments_.size();}
+    static const std::string& scriptText(EditorUI& ui,InstanceId id){return ui.scriptDrafts_[id].text;}
+    static int scriptCursor(EditorUI& ui,InstanceId id){return ui.scriptDrafts_[id].cursor;}
+    static int scriptLine(EditorUI& ui,InstanceId id){return ui.scriptDrafts_[id].line;}
+    static Rectangle outputMessage(EditorUI& ui,size_t index){return index<ui.outputMessageRects_.size()?ui.outputMessageRects_[index]:Rectangle{};}
+    static int pendingLine(EditorUI& ui,InstanceId id){return ui.scriptDrafts_[id].pendingLine;}
+    static bool scriptDirty(EditorUI& ui,InstanceId id){return ui.scriptDrafts_[id].dirty;}
+    static void openAtLine(EditorUI& ui,InstanceId id,int line){ui.openScriptAtLine(id,line);}
+    static bool maximized(EditorUI& ui){return ui.gameMaximized_;}
+    static bool fullscreen(EditorUI& ui){return ui.gameFullscreen_;}
     static void rigArm(EditorUI& ui,const std::string& id){ui.selectRig(id,game::RightArm);ui.rigContext_=EditorUI::RigContext::Edit;ui.selectedJoint_=game::RightShoulder;ui.showJointPivots_=true;}
     static const Part& proxy(EditorUI& ui){return ui.jointProxy_;}
     static bool dragging(EditorUI& ui){return ui.rigGizmo_.dragging();}
@@ -52,11 +65,24 @@ int main() {
         auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames();};
         auto key=[&](const std::string& name){event("keydown "+name);event("keyup "+name);};
         auto clickAt=[&](Vector2 p){event("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));event("mousedown 1");event("mouseup 1");};
-        auto click=[&](const std::string& id){auto b=ui.frontend()->elementBounds(id);CHECK(b.width>0&&b.height>0);clickAt({b.x+b.width/2,b.y+b.height/2});};
+        auto click=[&](const std::string& id){auto b=ui.frontend()->elementBounds(id);if(b.width<=0||b.height<=0)std::fprintf(stderr,"MISSING element: %s\n",id.c_str());CHECK(b.width>0&&b.height>0);clickAt({b.x+b.width/2,b.y+b.height/2});};
         auto capture=[&](const std::string& name){frames();TakeScreenshot((std::string(directory)+"/"+name+".png").c_str());};
-        frames(6);event("search --name '^Loblox RML integration$' windowfocus --sync");capture("studio-1366");
+        frames(6);event("search --name '^Loblox RML integration$' windowfocus --sync");
+        std::string windowId;
+        {FILE* pipe=popen("xdotool search --name '^Loblox RML integration$' | head -1","r");char buffer[64]{};if(pipe&&std::fgets(buffer,sizeof(buffer),pipe))windowId=buffer;if(pipe)pclose(pipe);while(!windowId.empty()&&(windowId.back()=='\n'||windowId.back()=='\r'))windowId.pop_back();}
+        // Resize like a user/window manager would instead of calling raylib's
+        // SetWindowSize between GL frames; llvmpipe can otherwise expose a
+        // half-resized back buffer to the immediate screenshot.
+        auto resizeWindow=[&](int width,int height){
+            CHECK(!windowId.empty());
+            CHECK(std::system(("xdotool windowsize "+windowId+" "+std::to_string(width)+" "+std::to_string(height)).c_str())==0);
+            for(int i=0;i<120&&(GetScreenWidth()!=width||GetScreenHeight()!=height);++i)frames(1);
+            frames(12);
+        };
+        capture("studio-1366");
         CHECK(projectio::toJson(scene)==untouched);
         CHECK(ui.frontend()->viewport().x>0);CHECK(scene.selection()==part);
+        EditorActions actions(ui);
         click("cmd-tool-1");CHECK(EditorUITestAccess::tool(ui)==ToolMode::Move);
         const bool snap=EditorUITestAccess::snap(ui);click("snap");CHECK(EditorUITestAccess::snap(ui)!=snap);click("snap");CHECK(EditorUITestAccess::snap(ui)==snap);
         // Real field editing must not route M/R/S/Delete to scene tools.
@@ -81,11 +107,47 @@ int main() {
         click("tab-Script");capture("ribbon-script");click("cmd-script-");frames();
         CHECK(scene.selection()&&IsScriptClass(scene.selection()->instanceClass()));
         const InstanceId scriptId=scene.selection()?scene.selection()->id():0;
+        CHECK(EditorUITestAccess::activeDocument(ui)==scriptId);
+        CHECK(EditorUITestAccess::documentCount(ui)==1);
+        CHECK(ui.frontend()->elementBounds("document-"+std::to_string(scriptId)).width>45);
+        CHECK(ui.frontend()->elementBounds("close-document-"+std::to_string(scriptId)).width>8);
         auto source=EditorUITestAccess::source(ui);CHECK(source.width>100&&source.height>40);
         clickAt({source.x+25,source.y+18});key("ctrl+a");event("type --clearmodifiers 'print(123)'");key("ctrl+s");
         CHECK(scene.find(scriptId)&&static_cast<Script*>(scene.find(scriptId))->source=="print(123)");capture("script-editor");
-        click("advanced-settings");const auto beforeConfig=projectio::toJson(scene);frames(5);CHECK(projectio::toJson(scene)==beforeConfig);
+        CHECK(ui.frontend()->elementText("document-"+std::to_string(scriptId)).find("Script")!=std::string::npos);
+        CHECK(!EditorUITestAccess::scriptDirty(ui,scriptId));
+        // One tab per script; opening the same source does not duplicate.
+        click("cmd-script-");frames();
+        const InstanceId script2=scene.selection()?scene.selection()->id():0;
+        CHECK(script2!=0&&script2!=scriptId);CHECK(EditorUITestAccess::documentCount(ui)==2);
+        CHECK(ui.frontend()->elementBounds("document-"+std::to_string(script2)).width>45);
+        clickAt({source.x+25,source.y+18});key("ctrl+a");event("type --clearmodifiers 'print(456)'");frames();
+        CHECK(EditorUITestAccess::scriptText(ui,script2)=="print(456)");
+        CHECK(actions.dispatch({"open-script","",scriptId}));frames();
+        CHECK(EditorUITestAccess::documentCount(ui)==2);CHECK(EditorUITestAccess::activeDocument(ui)==scriptId);
+        CHECK(EditorUITestAccess::scriptText(ui,scriptId)=="print(123)");
+        const int savedCursor=EditorUITestAccess::scriptCursor(ui,scriptId);
+        click("document-"+std::to_string(script2));frames();CHECK(EditorUITestAccess::activeDocument(ui)==script2);
+        CHECK(EditorUITestAccess::scriptText(ui,script2)=="print(456)");
+        click("document-"+std::to_string(scriptId));frames();CHECK(EditorUITestAccess::activeDocument(ui)==scriptId);
+        CHECK(EditorUITestAccess::scriptText(ui,scriptId)=="print(123)");
+        CHECK(EditorUITestAccess::scriptCursor(ui,scriptId)==savedCursor);
+        key("ctrl+z");frames();CHECK(EditorUITestAccess::scriptText(ui,scriptId)!="print(123)");
+        key("ctrl+y");frames();CHECK(EditorUITestAccess::scriptText(ui,scriptId)=="print(123)");
+        // Rename updates the tab title without losing the draft.
+        click("prop-Name");key("ctrl+a");event("type --clearmodifiers --delay 20 ScriptOne");key("Return");frames();
+        CHECK(scene.find(scriptId)&&scene.find(scriptId)->name()=="ScriptOne");
+        CHECK(ui.frontend()->elementText("document-"+std::to_string(scriptId)).find("ScriptOne")!=std::string::npos);
+        CHECK(EditorUITestAccess::scriptText(ui,scriptId)=="print(123)");
+        // Place restores the 3D viewport; script tabs restore the central editor.
+        click("document-0");frames();CHECK(EditorUITestAccess::activeDocument(ui)==0);CHECK(!ui.frontend()->textFocused());
+        click("document-"+std::to_string(script2));frames();CHECK(EditorUITestAccess::activeDocument(ui)==script2);
+        click("close-document-"+std::to_string(script2));frames();
+        CHECK(EditorUITestAccess::documentCount(ui)==1);CHECK(EditorUITestAccess::activeDocument(ui)==scriptId);
+        click("tab-Game");click("cmd-show:settings-");frames();
+        const auto beforeConfig=projectio::toJson(scene);frames(5);CHECK(projectio::toJson(scene)==beforeConfig);
         click("game-WalkSpeed");key("ctrl+a");event("type --clearmodifiers 18");key("Return");CHECK(scene.gameAssets().player.walkSpeed==18);capture("game-config");
+        click("document-0");frames();CHECK(EditorUITestAccess::activeDocument(ui)==0);
         click("tab-Avatar");capture("ribbon-avatar");click("cmd-show:rig-");
         const auto rigId=scene.gameAssets().rigs.front().id;EditorUITestAccess::rigArm(ui,rigId);frames();
         auto& rig=*scene.gameAssets().findRig(rigId);camera.setOrbit(Vector3Add(rig.root.position,{0,1,0}),12,.7f,.23f);
@@ -126,7 +188,7 @@ int main() {
         const auto imported=game::ListImages(game::AssetsDir());CHECK(imported.size()==1);
         if(!imported.empty()) {click("cmd-apply-image-assets/"+imported.front().filename);CHECK(part->attributes().count("decal_image"));capture("image-library-decal");}
         // Close the embedded panel through its RML close button.
-        EditorActions actions(ui);CHECK(actions.dispatch({"select","",partId}));
+        CHECK(actions.dispatch({"select","",partId}));
         // A native scene action does not implicitly change panel layout.
         auto close=ui.frontend()->elementBounds("advanced-tabs");clickAt({close.x+close.width-15,close.y+13});frames();camera.reset();
         const auto wallPosition=part->position();part->setPosition({40,3,0});CHECK(actions.dispatch({"select","",0}));
@@ -134,7 +196,7 @@ int main() {
         part->setPosition(wallPosition);camera.reset();CHECK(actions.dispatch({"select","",partId}));
         CHECK(projectio::save(scene,config.defaultProjectPath,error));const auto original=projectio::toJson(scene);
         for(auto size:{Vector2{1280,720},Vector2{1366,768},Vector2{1600,900},Vector2{1920,1080}}) {
-            SetWindowSize(int(size.x),int(size.y));frames(6);capture("studio-"+std::to_string(int(size.x)));
+            resizeWindow(int(size.x),int(size.y));capture("studio-"+std::to_string(int(size.x)));
             click("play");auto& rt=EditorUITestAccess::runtime(ui);CHECK(rt.state()==game::RuntimeState::Playing);
             frames(12);auto vp=ui.frontend()->viewport();auto hud=ui.frontend()->elementBounds("health");
             CHECK(hud.x>=vp.x && hud.y>=vp.y);CHECK(hud.x+hud.width<=vp.x+vp.width+1);CHECK(hud.y+hud.height<=vp.y+vp.height+1);
@@ -155,6 +217,19 @@ int main() {
             const auto fill100=ui.frontend()->elementBounds("health-fill");
             CHECK(fill100.width>=hud.width-6);
             capture("health-100-"+std::to_string(int(size.x)));
+            // Shift Lock reticle is screen space: jumping, falling, walking and
+            // resizing the window must never move it away from the viewport centre.
+            key("Shift_L");frames(2);CHECK(rt.shiftLockActive());
+            auto checkReticle=[&](const char* phase){
+                auto viewport=ui.frontend()->viewport();auto reticle=ui.frontend()->elementBounds("reticle");
+                CHECK(reticle.width>5&&reticle.height>5);
+                CHECK(std::fabs((reticle.x+reticle.width*.5f)-(viewport.x+viewport.width*.5f))<1.5f);
+                CHECK(std::fabs((reticle.y+reticle.height*.5f)-(viewport.y+viewport.height*.5f))<1.5f);
+                if(std::string(phase)=="jump")capture("reticle-jump-"+std::to_string(int(size.x)));
+            };
+            checkReticle("idle");
+            key("space");frames(8);checkReticle("jump");frames(42);checkReticle("fall");
+            event("keydown d");frames(8);checkReticle("walk");event("keyup d");frames(2);
             CHECK(rt.takeDamage(75,error));frames(20);CHECK(rt.health()==25);capture("health-25-"+std::to_string(int(size.x)));
             const auto fill25=ui.frontend()->elementBounds("health-fill");
             CHECK(fill25.width>25 && fill25.width<hud.width*.45f);
@@ -167,15 +242,83 @@ int main() {
             }
             key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);CHECK(!EditorUITestAccess::captured(ui));
             auto overlay=ui.frontend()->elementBounds("pause");CHECK(std::fabs(overlay.x-vp.x)<1 && std::fabs(overlay.y-vp.y)<1);
-            for(const char* id:{"page-game","leave","respawn","resume"}) {auto b=ui.frontend()->elementBounds(id);CHECK(b.x>=vp.x && b.y>=vp.y && b.x+b.width<=vp.x+vp.width+1 && b.y+b.height<=vp.y+vp.height+1);}
+            for(const char* id:{"page-game","leave","respawn","resume","game-maximize","game-fullscreen"}) {auto b=ui.frontend()->elementBounds(id);CHECK(b.x>=vp.x && b.y>=vp.y && b.x+b.width<=vp.x+vp.width+1 && b.y+b.height<=vp.y+vp.height+1);}
             capture("pause-game-"+std::to_string(int(size.x)));
+            if(size.x==1366) {
+                // Maximize from the real pause overlay, then restore with F10.
+                const auto normalView=ui.frontend()->viewport();
+                click("game-maximize");frames(4);CHECK(EditorUITestAccess::maximized(ui));
+                auto maximizedView=ui.frontend()->viewport();
+                CHECK(maximizedView.x==0&&maximizedView.y==0);
+                CHECK(maximizedView.width==GetScreenWidth()&&maximizedView.height==GetScreenHeight());
+                CHECK(ui.frontend()->elementBounds("header").height==0);
+                CHECK(ui.frontend()->elementBounds("viewport-label").height==0);
+                auto pauseMax=ui.frontend()->elementBounds("pause");
+                CHECK(pauseMax.width>=maximizedView.width-1&&pauseMax.height>=maximizedView.height-1);
+                capture("pause-maximized-1366");
+                click("resume");CHECK(rt.state()==game::RuntimeState::Playing);
+                key("F10");frames(4);CHECK(!EditorUITestAccess::maximized(ui));
+                auto restoredView=ui.frontend()->viewport();
+                CHECK(std::fabs(restoredView.x-normalView.x)<1&&std::fabs(restoredView.y-normalView.y)<1);
+                CHECK(std::fabs(restoredView.width-normalView.width)<1&&std::fabs(restoredView.height-normalView.height)<1);
+                CHECK(ui.frontend()->elementBounds("header").height>0);
+                // Real borderless fullscreen via F11, not a resized ImGui panel.
+                key("F11");frames(8);CHECK(EditorUITestAccess::fullscreen(ui));
+                CHECK(IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE));
+                auto fullView=ui.frontend()->viewport();
+                CHECK(fullView.x==0&&fullView.y==0);
+                CHECK(fullView.width==GetScreenWidth()&&fullView.height==GetScreenHeight());
+                CHECK(ui.frontend()->elementBounds("health").width>150);
+                if(rt.shiftLockActive())checkReticle("fullscreen");
+                capture("game-fullscreen-1366");
+                key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);
+                auto fullPause=ui.frontend()->elementBounds("pause");
+                CHECK(fullPause.width>=fullView.width-1&&fullPause.height>=fullView.height-1);
+                capture("pause-fullscreen-1366");
+                // The overlay button restores the previous Studio window and layout.
+                click("game-fullscreen");frames(8);CHECK(!EditorUITestAccess::fullscreen(ui));
+                CHECK(!IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE));
+                CHECK(std::fabs(ui.frontend()->viewport().width-normalView.width)<1);
+                CHECK(rt.state()==game::RuntimeState::Paused);
+            }
             click("page-settings");capture("pause-settings-"+std::to_string(int(size.x)));
             click("page-controls");capture("pause-controls-"+std::to_string(int(size.x)));
             const auto generation=rt.characterGeneration();click("respawn");CHECK(rt.characterGeneration()==generation+1);CHECK(rt.health()==100);
             click("resume");CHECK(rt.state()==game::RuntimeState::Playing);
-            key("Shift_L");CHECK(rt.shiftLockActive());key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);
+            CHECK(rt.shiftLockActive());key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);
             click("leave");CHECK(!rt.active());CHECK(!EditorUITestAccess::captured(ui));CHECK(projectio::toJson(scene)==original);
         }
+        // Output rows are real navigation targets: click the runtime error and
+        // land on its script/line; deleting that script closes its tab safely.
+        click("tab-Script");click("cmd-script-");frames();
+        auto* errorNode=scene.selection();CHECK(errorNode&&IsScriptClass(errorNode->instanceClass()));
+        const InstanceId errorId=errorNode?errorNode->id():0;
+        const auto errorSource=EditorUITestAccess::source(ui);
+        clickAt({errorSource.x+25,errorSource.y+18});key("ctrl+a");
+        event("type --clearmodifiers 'print(1)'");key("Return");
+        event("type --clearmodifiers 'error(\"boom\")'");frames(2);
+        CHECK(EditorUITestAccess::scriptText(ui,errorId).find("boom")!=std::string::npos);
+        const size_t documentsBefore=EditorUITestAccess::documentCount(ui);
+        click("document-0");frames();
+        click("play");auto& errorRuntime=EditorUITestAccess::runtime(ui);frames(20);
+        CHECK(errorRuntime.state()==game::RuntimeState::Playing);
+        const auto& messages=errorRuntime.scripts().messages();
+        int errorIndex=-1;
+        for(size_t i=0;i<messages.size();++i)
+            if(messages[i].error&&messages[i].scriptId==errorId)errorIndex=static_cast<int>(i);
+        CHECK(errorIndex>=0);
+        click("stop");frames();CHECK(!errorRuntime.active());
+        click("tab-Game");click("cmd-show:settings-");frames();click("advanced-output");frames(2);capture("output-error");
+        const auto errorRow=EditorUITestAccess::outputMessage(ui,static_cast<size_t>(std::max(0,errorIndex)));
+        CHECK(errorRow.width>10&&errorRow.height>5);
+        clickAt({errorRow.x+10,errorRow.y+errorRow.height*.5f});frames(3);
+        CHECK(EditorUITestAccess::activeDocument(ui)==errorId);
+        CHECK(EditorUITestAccess::scriptLine(ui,errorId)==2);
+        capture("script-error-navigation");
+        CHECK(scene.removeById(errorId));frames();
+        CHECK(EditorUITestAccess::documentCount(ui)==documentsBefore-1);
+        CHECK(EditorUITestAccess::activeDocument(ui)==0);
+        CHECK(ui.frontend()->elementBounds("document-"+std::to_string(errorId)).width==0);
         CHECK(scene.validate(error));
         Scene restored;CHECK(projectio::load(restored,config.defaultProjectPath,error));CHECK(projectio::toJson(restored)==original);
     }

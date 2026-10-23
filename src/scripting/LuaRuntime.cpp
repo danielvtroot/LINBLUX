@@ -4,6 +4,7 @@
 #include "core/Diagnostics.h"
 #include <lua.hpp>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -23,6 +24,15 @@ constexpr std::size_t kNativeContentLimit=8*1024*1024, kNativeNodes=10000;
 constexpr int kInstructions=100000;
 bool Eq(const char* a,const char* b) { return std::strcmp(a,b)==0; }
 void Require(bool condition,const char* message) { if(!condition) throw std::runtime_error(message); }
+int LuaErrorLine(const char* text) {
+    if(!text)return 0;
+    for(const char* p=text;*p;++p) {
+        if(*p!=':'||!std::isdigit(static_cast<unsigned char>(p[1])))continue;
+        char* end=nullptr;const long line=std::strtol(p+1,&end,10);
+        if(end&&*end==':'&&line>0&&line<=10000000)return static_cast<int>(line);
+    }
+    return 0;
+}
 double Number(lua_State* L,int index) {
     Require(lua_type(L,index)==LUA_TNUMBER,"expected finite number");
     const auto n=lua_tonumber(L,index); Require(std::isfinite(n),"non-finite number rejected"); return n;
@@ -117,7 +127,8 @@ struct LuaRuntime::Impl {
         const auto* object=runtime?runtime->scene().find(id):nullptr;
         const std::string name=object?object->name():"Runtime";
         if(output.size()>=256) output.erase(output.begin());
-        output.push_back({error,name,std::string(text?text:"").substr(0,2048)});
+        const std::string detail=std::string(text?text:"").substr(0,2048);
+        output.push_back({error,name,detail,id,error?LuaErrorLine(text):0});
         diag::Event event; event.subsystem="script"; event.name=error?"error":"output";
         event.entityId=id; event.level=error?diag::Level::Error:diag::Level::Info;
         event.error=error?output.back().text:""; event.context={{"script",name},{"message",output.back().text}}; diag::log(event);

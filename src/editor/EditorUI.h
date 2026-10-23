@@ -5,6 +5,7 @@
 #include <map>
 #include <optional>
 #include <memory>
+#include <vector>
 
 #include "core/Config.h"
 #include "core/Math.h"
@@ -60,6 +61,7 @@ private:
     friend struct EditorUITestAccess;
     friend class StudioFrontend;
     friend class EditorActions;
+    struct ScriptDraft;
     void buildDockLayout();
     void handleShortcuts(const EditorInput& input, const InputRoute& route);
     bool saveCurrentProject();
@@ -78,9 +80,20 @@ private:
     void renameSelection();
     void insertScript(InstanceClass type = InstanceClass::Script);
     void openScript(InstanceId id);
+    void openScriptAtLine(InstanceId id, int line);
+    void openScriptEditor();
+    void activateDocument(InstanceId id);
+    void closeDocument(InstanceId id);
+    void pruneScriptDocuments();
+    void drawCentralScriptWorkspace();
     void drawScriptEditor();
+    void drawScriptEditorBody(Instance& object, ScriptDraft& draft, bool central);
     void drawOutput();
     bool commitScriptDrafts(std::string& error);
+    bool gameImmersive() const;
+    void toggleGameMaximized();
+    void toggleGameFullscreen();
+    void exitGameDisplayModes();
     void drawProperties();
     void drawPartProperties(Part& part);
     void drawInstanceProperties(Instance& instance);
@@ -138,6 +151,9 @@ private:
     // harness de teste usa o centro real dos widgets em vez de adivinhar
     // coordenadas de leiaute.
     float pauseTabRect_[4] = {}, pauseSensitivityRect_[4] = {}, pauseResetRect_[4] = {};
+    // Screen-space Output rows captured while the panel is drawn so the
+    // integration harness can click a real error line instead of guessing.
+    std::vector<Rectangle> outputMessageRects_;
     bool showRigEditor_ = false, showAnimationEditor_ = false, showGameSettings_ = false;
     enum class RigContext { Edit, Pose, Animation };
     RigContext rigContext_ = RigContext::Edit;
@@ -217,12 +233,27 @@ private:
     std::pair<InstanceId,InstanceId> pendingReparent_{0,0};
     bool pendingDuplicate_ = false;
     int pendingInsert_ = 0;
-    struct ScriptDraft { std::string text; bool dirty=false; char search[128]{}; int line=1,pendingLine=0; };
+    struct ScriptUndo { std::string text; int cursor=0; };
+    struct ScriptDraft {
+        std::string text;
+        std::string baseline;
+        bool dirty=false;
+        char search[128]{};
+        int line=1,pendingLine=0;
+        int cursor=0;
+        int pendingCursor=-1;
+        float scrollY=0;
+        bool restoreFocus=false;
+        std::vector<ScriptUndo> undo,redo;
+        double lastEditTime=-1;
+    };
     std::map<InstanceId,ScriptDraft> scriptDrafts_;
-    InstanceId activeScript_=0;
-    InstanceId requestedScript_=0;
+    std::vector<InstanceId> openDocuments_;
+    InstanceId activeScript_=0, activeDocument_=0, requestedScript_=0;
     Rectangle scriptSourceControl_{};
     bool showScriptEditor_=false, showOutput_=false;
+    bool gameMaximized_=false, gameFullscreen_=false;
+    int savedWindowX_=0, savedWindowY_=0, savedWindowWidth_=0, savedWindowHeight_=0;
     float displayedHealth_=100;
 
     std::string status_;
