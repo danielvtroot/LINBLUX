@@ -1,5 +1,10 @@
 # Player UI — referência e validação
 
+Atualização prioritária: [CAMERA_HUD_FIXES.md](CAMERA_HUD_FIXES.md).
+O cartão rotulado de Health descrito abaixo foi rejeitado e substituído pela
+barra minimalista anterior. Não restaurar esse cartão ao polir menu/topbar.
+O restante deste documento registra a reconstrução anterior.
+
 Referências locais examinadas diretamente: `referencias/topbar.jpeg` (1600×738)
 e `referencias/menudojogo.jpeg` (1777×1408). Originais preservados.
 

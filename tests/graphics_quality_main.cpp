@@ -126,7 +126,7 @@ std::string HudFixtureDocument(const std::string& productionCss, int width, int 
     )" << R"(</style></head><body>
     <div id="game-layer">
       <div id="game-topbar"><button id="game-menu" class="logo-button" title="Loblox menu"><img id="game-menu-image" src="loblox-logo"/></button><div id="game-capsule"><button id="game-controls" title="Pause"><img id="game-controls-image" src="icon-player-menu"/></button><button><img src="icon-player-settings"/></button></div></div>
-      <div id="health"><div class="health-heading"><img src="icon-player-heart"/><span id="health-state">Health</span><b id="health-value">100 / 100</b></div><div class="health-track"><div id="health-trail"/><div id="health-fill"/></div></div>
+      <div id="health"><div class="health-track"><div id="health-trail"/><div id="health-fill"/></div></div>
       <div class="probe-row">
         <div id="probe-42-logo" class="probe probe-42"><img src="loblox-logo"/></div>
         <div id="probe-42-menu" class="probe probe-42"><img src="icon-menu"/></div>
@@ -652,7 +652,7 @@ int main(int argc, char** argv) {
                         Check(capsule.w == 102 && capsule.h == 46, "two controls share a 102x46 capsule");
                         Check(menuImage.w == 28 && menuImage.h == 28, "game logo preserves its square aspect at 28px");
                         Check(controlsImage.w == 26 && controlsImage.h == 26, "game menu icon is 26x26");
-                        Check(health.w == 206 && health.h == 47, "labelled health component is 206x47");
+                        Check(health.w == 180 && health.h == 20, "minimal health bar is 180x20, not an information card");
 
                         const bool brightEdge=PixelLuma(background.color)<100;
                         const Color logoInk=GetImageColor(capture,menu.x+3,menu.y+menu.h/2);
@@ -663,29 +663,15 @@ int main(int argc, char** argv) {
                         const auto menuCoverage = MeasureArcCoverage(
                             capture, capsule.x + capsule.h * 0.5f, capsule.y + capsule.h * 0.5f,
                             capsule.h * 0.5f, 0.85f, 1.45f, background.color, brightEdge,-1,&capsuleInk);
-                        // On a light page the white 10%-alpha border has
-                        // virtually no contrast: inspect the inner fill edge.
-                        // On a dark page inspect the high-contrast border.
-                        const float healthRadius = brightEdge?9.f:8.f;
-                        const float corner=9.f;
-                        const Color healthInk=GetImageColor(capture,health.x+(brightEdge?0:3),health.y+health.h/2);
+                        const float healthRadius = health.h*.5f;
+                        const float corner=healthRadius;
+                        const Color healthInk=GetImageColor(capture,health.x+1,health.y+health.h/2);
                         auto healthLeft = MeasureArcCoverage(
                             capture, health.x + corner, health.y + corner, healthRadius,
                             0.85f, 1.45f, background.color, brightEdge, -1,&healthInk);
                         auto healthRight = MeasureArcCoverage(
                             capture, health.x + health.w - corner, health.y + corner,
                             healthRadius, 0.85f, 1.45f, background.color, brightEdge, 1,&healthInk);
-                        // The new Health surface has four 9px corners, not two
-                        // 10px semicircular caps. Measure BOTH corners on each
-                        // side, retaining the same partial-coverage criterion.
-                        const auto lowerLeft=MeasureArcCoverage(capture,health.x+corner,
-                            health.y+health.h-corner,healthRadius,.85f,1.45f,background.color,brightEdge,-1,&healthInk);
-                        const auto lowerRight=MeasureArcCoverage(capture,health.x+health.w-corner,
-                            health.y+health.h-corner,healthRadius,.85f,1.45f,background.color,brightEdge,1,&healthInk);
-                        healthLeft.partial+=lowerLeft.partial;healthLeft.samples+=lowerLeft.samples;
-                        healthRight.partial+=lowerRight.partial;healthRight.samples+=lowerRight.samples;
-                        healthLeft.levels=std::max(healthLeft.levels,lowerLeft.levels);
-                        healthRight.levels=std::max(healthRight.levels,lowerRight.levels);
 
                         std::printf(
                             "HUD %s logo edge: %d partial/%d samples, %d levels; menu edge: %d/%d, %d levels; "

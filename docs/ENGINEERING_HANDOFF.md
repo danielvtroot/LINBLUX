@@ -2,6 +2,9 @@
 
 Migração atual do frontend: [RMLUI_HANDOFF.md](RMLUI_HANDOFF.md).
 
+Última correção: [CAMERA_HUD_FIXES.md](CAMERA_HUD_FIXES.md) — câmera Studio
+FPS/Focus explícita e retorno à Health minimalista, preservando menu/topbar.
+
 Player UI 2026 (23/10): [PLAYER_UI_2026.md](PLAYER_UI_2026.md). Escopo separado
 do Studio: topbar, menu, Settings e Health. Referências JPEG novas analisadas.
 O histórico abaixo antecede RmlUi; não descreve a UI padrão atual.

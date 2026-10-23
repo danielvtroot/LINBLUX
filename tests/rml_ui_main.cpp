@@ -279,11 +279,9 @@ int main() {
             }
             frames(12);auto vp=ui.frontend()->viewport();auto hud=ui.frontend()->elementBounds("health");
             CHECK(hud.x>=vp.x && hud.y>=vp.y);CHECK(hud.x+hud.width<=vp.x+vp.width+1);CHECK(hud.y+hud.height<=vp.y+vp.height+1);
-            // Player health is a labelled, viewport-local component. Neither
-            // supplied JPEG contains Health: do not pretend this is a pixel
-            // copy of a Roblox CoreGui health widget.
-            CHECK(hud.width>=200 && hud.width<=210);
-            CHECK(hud.height>=44 && hud.height<=50);
+            // Regression: keep the slim bar, never restore the rejected card.
+            CHECK(hud.width==180);CHECK(hud.height==20);
+            CHECK(ui.frontend()->elementText("health").find("health-heading")==std::string::npos);
             CHECK(hud.y-vp.y>=8 && hud.y-vp.y<=20);
             CHECK(vp.x+vp.width-(hud.x+hud.width)>=8 && vp.x+vp.width-(hud.x+hud.width)<=20);
             if(size.x==1366) {
@@ -301,7 +299,6 @@ int main() {
             const auto fill100=ui.frontend()->elementBounds("health-fill");
             const auto track=ui.frontend()->elementBounds("health-track");
             CHECK(fill100.width>=track.width-1);
-            CHECK(ui.frontend()->elementText("health-value")=="100 / 100");
             capture("health-100-"+std::to_string(int(size.x)));
             // Shift Lock reticle is screen space: jumping, falling, walking and
             // resizing the window must never move it away from the viewport centre.
@@ -317,9 +314,15 @@ int main() {
             key("space");frames(8);checkReticle("jump");frames(42);checkReticle("fall");
             event("keydown d");frames(8);checkReticle("walk");event("keyup d");frames(2);
             CHECK(rt.takeDamage(75,error));frames(20);CHECK(rt.health()==25);capture("health-25-"+std::to_string(int(size.x)));
-            CHECK(ui.frontend()->elementText("health-value")=="25 / 100");
             const auto fill25=ui.frontend()->elementBounds("health-fill");
             CHECK(fill25.width>25 && fill25.width<hud.width*.45f);
+            if(size.x==1366) {
+                CHECK(rt.heal(25,error));frames(18);CHECK(rt.health()==50);capture("health-50-1366");
+                CHECK(std::fabs(ui.frontend()->elementBounds("health-fill").width/track.width-.5f)<.02f);
+                CHECK(rt.takeDamage(30,error));frames(18);CHECK(rt.health()==20);capture("health-20-1366");
+                CHECK(std::fabs(ui.frontend()->elementBounds("health-fill").width/track.width-.2f)<.02f);
+                CHECK(rt.heal(5,error));frames(8);
+            }
             if(size.x==1280) {
                 CHECK(rt.takeDamage(25,error));frames(1);CHECK(rt.health()==0);capture("health-0");
                 CHECK(ui.frontend()->elementBounds("health-fill").width<=1);

@@ -552,7 +552,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             el("pause-panel")->Animate("opacity",Rml::Property(1.f,Rml::Unit::NUMBER),.12f,Rml::Tween{},1,false,0,&from);
         }
         pauseWasOpen=paused;
-        display("pause",paused,"flex");display("health",active&&!paused,"flex");display("game-topbar",active,"flex");display("reticle",active&&!paused&&ui.runtime_.shiftLockActive());
+        display("pause",paused,"flex");display("health",active&&!paused);display("game-topbar",active,"flex");display("reticle",active&&!paused&&ui.runtime_.shiftLockActive());
         const std::string menuIcon=paused?"icon-player-close":"icon-player-menu";
         if(attr(el("game-menu-icon"),"src")!=menuIcon)el("game-menu-icon")->SetAttribute("src",menuIcon);
         el("game-settings")->SetClass("selected",paused&&page=="settings");
@@ -565,8 +565,9 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         else shownHealth=Lerp(shownHealth,health,1-std::exp(-10*std::min(GetFrameTime(),.1f)));
         if(health<=0.f||health>=maximum)healthTrail=health;
         else healthTrail=std::max(shownHealth,Lerp(healthTrail,health,1-std::exp(-3*std::min(GetFrameTime(),.1f))));
-        char s[64];std::snprintf(s,sizeof(s),"%.0f / %.0f",health,maximum);text("pause-health",s);text("health-value",s);
-        text("health-state",health<=0?"Respawning":health/maximum<=.3f?"Low health":"Health");
+        char s[64];std::snprintf(s,sizeof(s),"%.0f / %.0f",health,maximum);text("pause-health",s);
+        const std::string healthLabel="Health "+std::string(s);
+        if(attr(el("health"),"aria-label")!=healthLabel)el("health")->SetAttribute("aria-label",healthLabel);
         style("health-fill","width",Num(100*std::clamp(shownHealth/maximum,0.f,1.f))+"%");
         style("health-trail","width",Num(100*std::clamp(healthTrail/maximum,0.f,1.f))+"%");
         style("health-fill","background-color",health/maximum<=.3f?"#f16b74":health/maximum<=.7f?"#edc464":"#49d78a");

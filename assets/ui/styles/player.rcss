@@ -16,13 +16,10 @@
 #game-topbar button:active { background-color: #5d6269e0; }
 #game-topbar button.selected { background-color: #ffffff19; }
 #game-topbar button:focus { border-color: #c8d9f5; }
-#health { position: absolute; top: 17px; right: 18px; width: 206px; height: 47px; display: flex; flex-direction: column; padding: 8px 11px; border: 1px #ffffff1a; border-radius: 9px; background-color: #11161bbd; pointer-events: none; }
-.health-heading { display: flex; align-items: center; height: 17px; margin-bottom: 5px; font-size: 12px; }
-.health-heading img { width: 15px; height: 15px; margin-right: 6px; }
-#health-state { flex: 1; color: #dce2e8; }
-#health-value { font-size: 12px; font-weight: bold; }
-.health-track { height: 5px; width: 100%; border-radius: 3px; background-color: #ffffff2b; position: relative; }
-#health-fill, #health-trail { position: absolute; left: 0; top: 0; height: 100%; width: 100%; border-radius: 3px; decorator: none; }
+/* Restore the slim gameplay bar, not a labelled/debug information card. */
+#health { position: absolute; top: 14px; right: 14px; width: 180px; height: 20px; display: block; padding: 0; border: 2px #08090bee; border-radius: 10px; background-color: #3a3d42f2; pointer-events: none; }
+.health-track { height: 100%; width: 100%; border-radius: 8px; background-color: #5b5e63; position: relative; overflow: hidden; }
+#health-fill, #health-trail { position: absolute; left: 0; top: 0; height: 100%; width: 100%; border-radius: 8px; decorator: none; }
 #health-trail { background-color: #ffffff91; }
 #health-fill { background-color: #49d78a; }
 #reticle { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; pointer-events: none; }
