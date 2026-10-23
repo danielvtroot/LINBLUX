@@ -33,12 +33,12 @@ bool Valid(const RigidTransform& t) {
 
 Rig MakeR6() {
     Rig r;
-    r.bodies = {{{"Torso", {2, 2, 1}, {55, 120, 205, 255}},
-                 {"Head", {2, 1, 1}, {245, 201, 91, 255}},
-                 {"Left Arm", {1, 2, 1}, {245, 201, 91, 255}},
-                 {"Right Arm", {1, 2, 1}, {245, 201, 91, 255}},
-                 {"Left Leg", {1, 2, 1}, {83, 150, 85, 255}},
-                 {"Right Leg", {1, 2, 1}, {83, 150, 85, 255}}}};
+    r.bodies = {{{"Torso", {2, 2, 1}, {55, 120, 205, 255}, PartMaterial::SmoothPlastic, ""},
+                 {"Head", {2, 1, 1}, {245, 201, 91, 255}, PartMaterial::SmoothPlastic, ""},
+                 {"Left Arm", {1, 2, 1}, {245, 201, 91, 255}, PartMaterial::SmoothPlastic, ""},
+                 {"Right Arm", {1, 2, 1}, {245, 201, 91, 255}, PartMaterial::SmoothPlastic, ""},
+                 {"Left Leg", {1, 2, 1}, {83, 150, 85, 255}, PartMaterial::SmoothPlastic, ""},
+                 {"Right Leg", {1, 2, 1}, {83, 150, 85, 255}, PartMaterial::SmoothPlastic, ""}}};
     r.joints = {{{"RootJoint", -1, Torso, {}, {}},
                  {"Neck", Torso, Head, {{0, 1, 0}}, {{0, -0.5f, 0}}},
                  {"Left Shoulder", Torso, LeftArm, {{-1, 1, 0}}, {{0.5f, 1, 0}}},
