@@ -71,7 +71,41 @@ Image IconImage(const std::string& name, int resolution) {
                            std::max(1, ix(static_cast<float>(h))), ink);
     };
 
-    if (name == "chevron-right") {
+    if (name == "player-close") {
+        line(10, 10, 38, 38); line(38, 10, 10, 38);
+    } else if (name == "player-menu") {
+        for (int y : {13, 24, 35}) line(7, y, 41, y);
+    } else if (name == "player-left" || name == "player-right") {
+        const bool left = name == "player-left";
+        line(left ? 31 : 17, 8, left ? 16 : 32, 24);
+        line(left ? 16 : 32, 24, left ? 31 : 17, 40);
+    } else if (name == "player-settings") {
+        // Original cog silhouette, not a downloaded brand/icon asset.
+        circle(24, 24, 13);
+        circle(24, 24, 5);
+        for (int i = 0; i < 8; ++i) {
+            const float angle = i * PI / 4.f;
+            line(24 + int(14 * std::cos(angle)), 24 + int(14 * std::sin(angle)),
+                 24 + int(19 * std::cos(angle)), 24 + int(19 * std::sin(angle)));
+        }
+    } else if (name == "player-person") {
+        circle(24, 14, 8);
+        line(17, 27, 31, 27); line(17, 27, 12, 33);
+        line(31, 27, 36, 33); line(12, 33, 10, 42);
+        line(36, 33, 38, 42); line(10, 42, 38, 42);
+    } else if (name == "player-controls") {
+        box(5, 12, 38, 27);
+        line(12, 25, 24, 25); line(18, 19, 18, 31);
+        disc(33, 22, 2, ink); disc(37, 29, 2, ink);
+    } else if (name == "player-leave") {
+        line(23, 8, 9, 8); line(9, 8, 9, 40); line(9, 40, 23, 40);
+        line(20, 24, 41, 24); line(32, 15, 41, 24); line(41, 24, 32, 33);
+    } else if (name == "player-heart") {
+        line(24, 39, 9, 24); line(9, 24, 9, 15); line(9, 15, 15, 9);
+        line(15, 9, 21, 9); line(21, 9, 24, 14); line(24, 14, 28, 9);
+        line(28, 9, 34, 9); line(34, 9, 40, 15); line(40, 15, 40, 24);
+        line(40, 24, 24, 39);
+    } else if (name == "chevron-right") {
         line(18, 11, 31, 24);
         line(31, 24, 18, 37);
     } else if (name == "chevron-down") {

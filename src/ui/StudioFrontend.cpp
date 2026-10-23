@@ -52,7 +52,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     std::vector<game::ImageAsset> images;double imageScan=-10;
     std::set<InstanceId> collapsed;InstanceId dragNode=0,dragTarget=0;Vector2 dragStart{};
     bool dragging=false,mouseOwned=false,escapeConsumed=false,dialogOpen=false,treeKeyboard=false,restoreFocus=false;
-    bool initialized=false,syncing=false,keyboardOwned=false;float shownHealth=100;int w=0,h=0;
+    bool initialized=false,syncing=false,keyboardOwned=false;float shownHealth=100,healthTrail=100;int w=0,h=0;
     std::vector<EditorCommand> commands;
     const bool timing=std::getenv("LOBLOX_UI_TIMINGS")!=nullptr;
     double presentationTime=0,sceneTime=0,updateTime=0,renderTime=0,frameTime=0;int timingFrames=0;
@@ -96,6 +96,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(immersive) {
             for(const char* id:{"toolbox","explorer","properties","viewport-label","left-divider","right-divider","property-divider","advanced","bottom-divider"})display(id,false);
             view={0,0,float(w),float(h)};
+            document->SetClass("player-compact",view.width<950);
             advancedRect={0,0,0,0};
             rect("game-layer",view);display("game-layer",true);
             return;
@@ -120,6 +121,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         const bool hasAdvanced=!advanced.empty()&&!ui.runtime_.active();
         const float bh=hasAdvanced?bottom+5:0;
         view={l,panelTop+26,std::max(16.f,w-l-r),std::max(16.f,h-panelTop-26-statusHeight-bh)};
+        document->SetClass("player-compact",view.width<950);
         rect("viewport-label",{l,panelTop,view.width,26});
         rect("game-layer",view);display("game-layer",ui.runtime_.active());
         advancedRect={l,float(h)-statusHeight-bottom+29,view.width,bottom-29};
@@ -166,6 +168,25 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         }
         field->SetValue(initial);focusValue=initial;display("dialog-overlay",true,"flex");field->Focus();
     }
+    void applyPlayerSetting(const std::string& setting,const std::string& v) {
+        if(ui.runtime_.state()!=game::RuntimeState::Paused)return;
+        auto next=ui.runtime_.settings();
+        try {
+            size_t count=0;
+            auto number=[&]{const float result=std::stof(v,&count);if(count!=v.size()||!std::isfinite(result))throw std::runtime_error("Enter a finite number");return result;};
+            if(setting=="cameraMode")next.cameraMode=static_cast<game::CameraMode>(int(number()));
+            else if(setting=="sensitivity")next.sensitivity=number();
+            else if(setting=="sensitivityPercent")next.sensitivity=.0001f+(number()-1.f)/99.f*.0299f;
+            else if(setting=="cameraDistance")next.cameraDistance=number();
+            else if(setting=="enableShiftLock")next.enableShiftLock=v=="true";
+            else if(setting=="allowFirstPerson")next.allowFirstPerson=v=="true";
+            else return;
+            std::string error;if(!next.validate(error))throw std::runtime_error(error);
+            ui.runtime_.settings()=next;
+            if(setting=="cameraDistance")ui.runtime_.playerCamera().setDistance(next.cameraDistance);
+            text("player-setting-error","");
+        }catch(const std::exception& e){text("player-setting-error",e.what());}
+    }
     void commit(Rml::Element* e) {
         if(!e)return;
         const auto action=attr(e,"data-action"),property=attr(e,"data-property"),setting=attr(e,"data-setting");
@@ -173,14 +194,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(action=="choose-material"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
         if(!property.empty())commands.push_back({"property:"+property,v,e->GetAttribute<InstanceId>("data-node",0)});
         else if(!action.empty())commands.push_back({action,v});
-        else if(!setting.empty()) {
-            try {auto& p=ui.runtime_.settings();const auto old=p;
-                if(setting=="cameraMode")p.cameraMode=static_cast<game::CameraMode>(std::stoi(v));
-                else if(setting=="sensitivity")p.sensitivity=std::stof(v);else if(setting=="cameraDistance")p.cameraDistance=std::stof(v);
-                else if(setting=="enableShiftLock")p.enableShiftLock=v=="true";else if(setting=="allowFirstPerson")p.allowFirstPerson=v=="true";
-                std::string error;if(!p.validate(error)){p=old;throw std::runtime_error(error);}if(setting=="cameraDistance")ui.runtime_.playerCamera().setDistance(p.cameraDistance);
-            }catch(const std::exception& e){ui.setStatus(e.what(),true);}
-        }
+        else if(!setting.empty())applyPlayerSetting(setting,v);
     }
     void ProcessEvent(Rml::Event& event)override {
         // Form controls emit change while their options/values are installed.
@@ -210,8 +224,29 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         }
         if(type=="contextmenu")return;
         if(type!="click"||dragging)return;
+        if(auto* button=ancestor(target,"data-player-page")) {
+            if(!ui.runtime_.active())return;
+            const auto chosen=attr(button,"data-player-page");
+            if(ui.runtime_.state()==game::RuntimeState::Paused&&page==chosen)commands.push_back({"resume",""});
+            else {if(ui.runtime_.state()!=game::RuntimeState::Paused){actions.dispatch({"pause",""});pauseWasOpen=true;}page=chosen;el("pause-content")->SetScrollTop(0);}
+            return;
+        }
+        if(auto* button=ancestor(target,"data-player-step")) {
+            const auto setting=attr(button,"data-player-step");const auto& p=ui.runtime_.settings();
+            if(setting=="cameraMode") {
+                const int mode=(int(p.cameraMode)+std::stoi(attr(button,"data-value"))+3)%3;
+                applyPlayerSetting(setting,std::to_string(mode));
+            }else if(setting=="enableShiftLock")applyPlayerSetting(setting,p.enableShiftLock?"false":"true");
+            else if(setting=="allowFirstPerson")applyPlayerSetting(setting,p.allowFirstPerson?"false":"true");
+            return;
+        }
         if(auto* button=ancestor(target,"data-tab")){tab=attr(button,"data-tab");ribbonMarkup.clear();return;}
-        if(auto* button=ancestor(target,"data-page")){page=attr(button,"data-page");return;}
+        if(auto* button=ancestor(target,"data-page")) {
+            page=attr(button,"data-page");el("pause-content")->SetScrollTop(0);
+            const Rml::Property from(.85f,Rml::Unit::NUMBER);
+            el("pause-content")->Animate("opacity",Rml::Property(1.f,Rml::Unit::NUMBER),.09f,Rml::Tween{},1,false,0,&from);
+            return;
+        }
         if(auto* button=ancestor(target,"data-advanced")){showAdvanced(attr(button,"data-advanced"));return;}
         if(auto* fold=ancestor(target,"data-fold")) {auto id=fold->GetAttribute<InstanceId>("data-fold",0);if(collapsed.erase(id)==0)collapsed.insert(id);treeHash=0;return;}
         if(auto* rig=ancestor(target,"data-rig")) {commands.push_back({"rig-select",attr(rig,"data-rig")});return;}
@@ -351,7 +386,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(!IsWindowFocused()){context->ProcessMouseLeave();context->ProcessMouseButtonUp(0,0);context->ProcessMouseButtonUp(1,0);split.clear();dragNode=0;dragging=false;return;}
         const bool capture=ui.gameplayCapture_||ui.camera_.cursorCaptured();
         if(!capture)context->ProcessMouseMove(int(mouse.x*dpi),int(mouse.y*dpi),0);
-        auto* hover=context->GetHoverElement();bool controls=ancestor(hover,"data-action")||ancestor(hover,"data-page")||ancestor(hover,"data-split");
+        auto* hover=context->GetHoverElement();bool controls=ancestor(hover,"data-action")||ancestor(hover,"data-page")||ancestor(hover,"data-player-page")||ancestor(hover,"data-player-step")||ancestor(hover,"data-split");
         const bool transforming=ui.transform_.active()||ui.rigGizmo_.dragging();
         mouseOwned=!capture&&(dialogOpen || (!transforming&&(!Within(mouse,view) || (ui.runtime_.state()==game::RuntimeState::Paused) || controls || dragging || !split.empty())));
         const int mods=(io.KeyCtrl?Rml::Input::KM_CTRL:0)|(io.KeyShift?Rml::Input::KM_SHIFT:0)|(io.KeyAlt?Rml::Input::KM_ALT:0);
@@ -388,14 +423,58 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         }
         auto* focused=context->GetFocusElement();
         keyboardOwned=keyboardOwned||editing()||dialogOpen;
+        // Player buttons participate in RmlUi's native Tab/Enter navigation.
+        // Only the paused context receives these events; gameplay gets none.
+        const bool playerPaused=ui.runtime_.state()==game::RuntimeState::Paused;
+        if(playerPaused) {
+            if(ImGui::IsKeyPressed(ImGuiKey_Tab,false)) {
+                // Trap navigation in the pause subtree instead of reaching
+                // Studio controls that remain visible around a docked game.
+                Rml::ElementList candidates;
+                std::function<void(Rml::Element*)> collect=[&](Rml::Element* e){
+                    if(!e->IsVisible(true))return;
+                    const auto& tag=e->GetTagName();
+                    if((tag=="button"||tag=="input")&&!e->HasAttribute("disabled"))candidates.push_back(e);
+                    for(int i=0;i<e->GetNumChildren();++i)collect(e->GetChild(i));
+                };
+                collect(el("pause-panel"));
+                if(!candidates.empty()) {
+                    auto it=std::find(candidates.begin(),candidates.end(),focused);
+                    int index=it==candidates.end()?(io.KeyShift?0:-1):int(it-candidates.begin());
+                    index=(index+(io.KeyShift?-1:1)+int(candidates.size()))%int(candidates.size());
+                    candidates[index]->Focus();candidates[index]->ScrollIntoView();
+                    if(ui.traceInput_)std::fprintf(stderr,"Player Tab: from=%s to=%s focused=%s\n",focused?focused->GetId().c_str():"none",candidates[index]->GetId().c_str(),context->GetFocusElement()?context->GetFocusElement()->GetId().c_str():"none");
+                }
+            }
+            constexpr std::pair<ImGuiKey,Rml::Input::KeyIdentifier> activationKeys[]={{ImGuiKey_Enter,Rml::Input::KI_RETURN},{ImGuiKey_Space,Rml::Input::KI_SPACE}};
+            for(const auto& key:activationKeys)if(!editing()) {
+                if(ImGui::IsKeyPressed(key.first,false)) {
+                    if(ui.traceInput_)std::fprintf(stderr,"Player activate: focus=%s key=%d\n",context->GetFocusElement()?context->GetFocusElement()->GetId().c_str():"none",int(key.second));
+                    // Activate the focused control once through the same RML
+                    // click path as the mouse. Do not also send a default
+                    // document action that could activate it a second time.
+                    if(auto* button=context->GetFocusElement();button&&button->GetTagName()=="button"&&!button->HasAttribute("disabled"))button->Click();
+                }
+            }
+        }
         if(contextOpen&&ImGui::IsKeyPressed(ImGuiKey_Escape,false)){contextOpen=false;display("context-menu",false);escapeConsumed=true;}
         if(editing()) {
             for(auto c:io.InputQueueCharacters)context->ProcessTextInput(Rml::Character(c));
             for(int c=GetCharPressed();c;c=GetCharPressed())context->ProcessTextInput(Rml::Character(c));
             const std::pair<ImGuiKey,Rml::Input::KeyIdentifier> keys[]={{ImGuiKey_Backspace,Rml::Input::KI_BACK},{ImGuiKey_Delete,Rml::Input::KI_DELETE},{ImGuiKey_LeftArrow,Rml::Input::KI_LEFT},{ImGuiKey_RightArrow,Rml::Input::KI_RIGHT},{ImGuiKey_Home,Rml::Input::KI_HOME},{ImGuiKey_End,Rml::Input::KI_END},{ImGuiKey_Tab,Rml::Input::KI_TAB},{ImGuiKey_A,Rml::Input::KI_A},{ImGuiKey_C,Rml::Input::KI_C},{ImGuiKey_V,Rml::Input::KI_V},{ImGuiKey_X,Rml::Input::KI_X},{ImGuiKey_Z,Rml::Input::KI_Z},{ImGuiKey_Y,Rml::Input::KI_Y}};
-            for(auto key:keys){if(ImGui::IsKeyPressed(key.first))context->ProcessKeyDown(key.second,mods);if(ImGui::IsKeyReleased(key.first))context->ProcessKeyUp(key.second,mods);}
+            for(auto key:keys){if(playerPaused&&key.first==ImGuiKey_Tab)continue;if(ImGui::IsKeyPressed(key.first))context->ProcessKeyDown(key.second,mods);if(ImGui::IsKeyReleased(key.first))context->ProcessKeyUp(key.second,mods);}
             if(ImGui::IsKeyPressed(ImGuiKey_Enter,false)){if(dialogOpen) {EditorCommand c{dialog,value(el("dialog-value")),ui.scene_.selection()?ui.scene_.selection()->id():0};if(actions.dispatch(c)){if(dialog=="import-image")imageScan=-10;dialogOpen=false;}else text("dialog-error",ui.status_);}else {commit(focused);focusValue=value(focused);}focused->Blur();}
-            if(ImGui::IsKeyPressed(ImGuiKey_Escape,false)){if(auto* form=dynamic_cast<Rml::ElementFormControl*>(focused))form->SetValue(focusValue);restoreFocus=true;focused->Blur();if(dialogOpen)dialogOpen=false;escapeConsumed=true;}
+            if(ImGui::IsKeyPressed(ImGuiKey_Escape,false)) {
+                if(playerPaused&&attr(focused,"type")=="range") {
+                    // A slider is live, not an unfinished text edit. Escape
+                    // closes the pause menu in one press after dragging it.
+                    focused->Blur();commands.push_back({"resume",""});
+                }else {
+                    if(auto* form=dynamic_cast<Rml::ElementFormControl*>(focused))form->SetValue(focusValue);
+                    restoreFocus=true;focused->Blur();if(dialogOpen)dialogOpen=false;
+                }
+                escapeConsumed=true;
+            }
         } else if(dialogOpen && ImGui::IsKeyPressed(ImGuiKey_Escape,false)){dialogOpen=false;escapeConsumed=true;}
         if(treeKeyboard&&!editing()&&!dialogOpen&&!ui.runtime_.active()) {
             if(ImGui::IsKeyPressed(ImGuiKey_F2,false))prompt("rename");
@@ -460,9 +539,19 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         const bool active=ui.runtime_.active(),paused=ui.runtime_.state()==game::RuntimeState::Paused;
         // A fresh pause opens on the session page; a tab chosen during the
         // same pause remains selected until play resumes.
-        if(paused&&!pauseWasOpen)page="game";
+        if(paused&&!pauseWasOpen) {
+            page="game";
+            el("pause-content")->SetScrollTop(0);
+        }
+        if(paused&&!pauseWasOpen) {
+            const Rml::Property from(.8f,Rml::Unit::NUMBER);
+            el("pause-panel")->Animate("opacity",Rml::Property(1.f,Rml::Unit::NUMBER),.12f,Rml::Tween{},1,false,0,&from);
+        }
         pauseWasOpen=paused;
-        display("pause",paused,"flex");display("health",active&&!paused,"flex");display("game-topbar",active&&!paused,"flex");display("reticle",active&&!paused&&ui.runtime_.shiftLockActive());
+        display("pause",paused,"flex");display("health",active&&!paused,"flex");display("game-topbar",active,"flex");display("reticle",active&&!paused&&ui.runtime_.shiftLockActive());
+        const std::string menuIcon=paused?"icon-player-close":"icon-player-menu";
+        if(attr(el("game-menu-icon"),"src")!=menuIcon)el("game-menu-icon")->SetAttribute("src",menuIcon);
+        el("game-settings")->SetClass("selected",paused&&page=="settings");
         for(const auto* name:{"game","settings","controls","about"}) {display(std::string(name)+"-page",page==name);el(std::string("page-")+name)->SetClass("active",page==name);}
         if(!active)return;
         const float health=ui.runtime_.health(),maximum=std::max(1.f,ui.runtime_.settings().maxHealth);
@@ -470,14 +559,23 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         // intermediate damage still animates.
         if(health<=0.f||health>=maximum)shownHealth=health;
         else shownHealth=Lerp(shownHealth,health,1-std::exp(-10*std::min(GetFrameTime(),.1f)));
-        char s[64];std::snprintf(s,sizeof(s),"%.0f / %.0f",health,maximum);text("pause-health",s);
+        if(health<=0.f||health>=maximum)healthTrail=health;
+        else healthTrail=std::max(shownHealth,Lerp(healthTrail,health,1-std::exp(-3*std::min(GetFrameTime(),.1f))));
+        char s[64];std::snprintf(s,sizeof(s),"%.0f / %.0f",health,maximum);text("pause-health",s);text("health-value",s);
+        text("health-state",health<=0?"Respawning":health/maximum<=.3f?"Low health":"Health");
         style("health-fill","width",Num(100*std::clamp(shownHealth/maximum,0.f,1.f))+"%");
+        style("health-trail","width",Num(100*std::clamp(healthTrail/maximum,0.f,1.f))+"%");
+        style("health-fill","background-color",health/maximum<=.3f?"#f16b74":health/maximum<=.7f?"#edc464":"#49d78a");
         text("player-name",ui.runtime_.rig().name);text("map-name",std::filesystem::path(ui.projectPath_).filename().string());
-        if(paused&&!editing()) {
-            auto set=[&](const char* id,const std::string& v){if(auto* f=dynamic_cast<Rml::ElementFormControl*>(el(id)))f->SetValue(v);};
-            const auto& p=ui.runtime_.settings();set("camera-mode",std::to_string(int(p.cameraMode)));set("sensitivity",Num(p.sensitivity));set("camera-distance",Num(p.cameraDistance));
-            if(p.enableShiftLock)el("shift-lock")->SetAttribute("checked","");else el("shift-lock")->RemoveAttribute("checked");
-            if(p.allowFirstPerson)el("first-person")->SetAttribute("checked","");else el("first-person")->RemoveAttribute("checked");
+        if(paused) {
+            auto set=[&](const char* id,const std::string& v){if(auto* f=dynamic_cast<Rml::ElementFormControl*>(el(id));f&&context->GetFocusElement()!=f&&f->GetValue()!=v)f->SetValue(v);};
+            const auto& p=ui.runtime_.settings();text("camera-mode",p.cameraMode==game::CameraMode::Classic?"Classic":p.cameraMode==game::CameraMode::Follow?"Follow":"First person");
+            set("sensitivity",Num(p.sensitivity));set("camera-distance",Num(p.cameraDistance));
+            set("sensitivity-slider",Num(1+(p.sensitivity-.0001f)/.0299f*99));
+            el("distance-slider")->SetAttribute("min",Num(p.minZoom));el("distance-slider")->SetAttribute("max",Num(p.maxZoom));
+            set("distance-slider",Num(p.cameraDistance));
+            text("shift-lock",p.enableShiftLock?"On":"Off");text("first-person",p.allowFirstPerson?"On":"Off");
+            text("fullscreen-value",ui.gameFullscreen_?"On":"Off");
         }
     }
 };

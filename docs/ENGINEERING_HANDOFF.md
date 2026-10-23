@@ -1,6 +1,9 @@
 # Continuidade — R6 e primeiro runtime local — 2026-10-21
 
 Migração atual do frontend: [RMLUI_HANDOFF.md](RMLUI_HANDOFF.md).
+
+Player UI 2026 (23/10): [PLAYER_UI_2026.md](PLAYER_UI_2026.md). Escopo separado
+do Studio: topbar, menu, Settings e Health. Referências JPEG novas analisadas.
 O histórico abaixo antecede RmlUi; não descreve a UI padrão atual.
 
 Retomada atual: [STUDIO3_HANDOFF.md](STUDIO3_HANDOFF.md), com correções de

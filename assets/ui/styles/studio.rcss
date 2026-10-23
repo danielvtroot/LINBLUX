@@ -145,56 +145,7 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 #status { position: absolute; bottom: 0; left: 0; right: 0; height: 23px; padding: 5px 9px; display: flex; justify-content: space-between; background-color: #22252b; border-top: 1px #4a4f5a; font-size: 10px; color: #b8c3d4; }
 #message { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 #scene-count { margin-left: 15px; }
-/* Gameplay deliberately has larger controls and translucent surfaces. */
-#game-layer { position: absolute; overflow: hidden; }
-#game-topbar { position: absolute; top: 14px; left: 14px; display: flex; }
-#game-topbar button { flex-shrink: 0; width: 48px; height: 48px; padding: 6px; margin-right: 6px; border: 1px #ffffff21; border-radius: 24px; background-color: #101317eb; }
-#game-topbar button:hover { background-color: #272e38f2; border-color: #ffffff4a; }
-#game-topbar button:active { background-color: #37414ef2; border-color: #8fc3ff8c; }
-#game-topbar img { display: block; width: 34px; height: 34px; margin: 0 auto; }
-#game-topbar .menu-button img { width: 34px; height: 34px; margin: 0 auto; }
-/* Roblox CoreGui health bar: slim green fill over a grey track, top right. */
-#health { position: absolute; top: 14px; right: 14px; width: 180px; height: 20px; padding: 0; border: 2px #08090bee; border-radius: 10px; background-color: #3a3d42f2; }
-.health-track { position: relative; width: 100%; height: 100%; border-radius: 6px; background-color: #5b5e63; overflow: hidden; }
-#health-fill { height: 100%; width: 100%; border-radius: 6px; background-color: #2ef267; decorator: linear-gradient(180deg, #55ff87, #20dc4d); }
-#reticle { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; pointer-events: none; }
-.cross-horizontal { position: absolute; top: 6px; left: 0; width: 14px; height: 2px; background-color: #ffffffdb; }
-.cross-vertical { position: absolute; top: 0; left: 6px; height: 14px; width: 2px; background-color: #ffffffdb; }
-#pause { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; background-color: #06090fb0; }
-.pause-panel { display: flex; flex-direction: column; width: 90%; height: 91%; max-width: 850px; max-height: 650px; min-height: 250px; padding: 12px 16px; border: 1px #727b8b4a; border-radius: 8px; background-color: #1d2026eb; }
-.pause-brand { display: flex; flex: 0 0 33px; height: 33px; align-items: center; padding-bottom: 7px; }
-.pause-brand img { width: 24px; height: 24px; margin-right: 8px; }
-.pause-brand b { font-size: 14px; letter-spacing: 1px; }
-.pause-brand span { margin-left: auto; color: #b7c1d0; font-size: 10px; }
-.pause-tabs { flex: 0 0 43px; height: 43px; display: flex; border-bottom: 1px #5b616c; }
-.pause-tabs button { flex: 1; height: 40px; padding: 10px 5px; margin: 0; background-color: transparent; border: 0px; border-radius: 0px; font-size: 13px; }
-.pause-tabs button.active { border-bottom: 2px #d7e4f5; background-color: #3f465455; }
-.pause-tabs button img { width: 17px; height: 17px; margin-right: 7px; }
-#pause-content { flex: 1; min-height: 0; width: 100%; padding: 14px 4px 8px; overflow: auto; }
-.player-card { display: flex; align-items: center; padding: 10px; margin: 8px 0; border-radius: 5px; background-color: #3a3f47a6; }
-.player-card h2 { margin: 4px 0; font-size: 17px; }
-.player-emblem { flex: 0 0 48px; width: 48px; height: 48px; margin-right: 12px; padding: 7px; background-color: #52627566; border-radius: 6px; }
-.player-emblem img { width: 34px; height: 34px; }
-.session-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px #5b64714a; }
-.setting { display: flex; align-items: center; justify-content: space-between; height: 42px; padding: 7px; border-bottom: 1px #70798b40; font-size: 12px; }
-.setting:nth-child(even) { background-color: #646d7c17; }
-.setting input, .setting select { width: 46%; height: 28px; }
-.setting input[type=checkbox] { width: 17px; height: 17px; margin-right: 12px; }
-.control-row { display: flex; align-items: center; padding: 5px; border-bottom: 1px #636b792a; }
-kbd { display: block; width: 118px; min-width: 118px; margin-right: 16px; padding: 5px; text-align: center; border: 1px #656e7c; border-radius: 3px; background-color: #3d424d; font-size: 11px; }
-.control-row span { color: #d0d6e0; font-size: 12px; }
-.session-actions { display: flex; margin: 9px 0 4px; }
-.session-actions button { flex: 1; height: 34px; margin-right: 7px; padding: 7px 5px; border: 1px #66738770; border-radius: 5px; background-color: #3b4350; font-size: 12px; }
-.session-actions button:last-child { margin-right: 0; }
-.session-actions button:hover { background-color: #4b5a70; border-color: #8fa9c7; }
-.session-actions button img { width: 15px; height: 15px; margin-right: 6px; }
-.pause-footer { display: flex; flex: 0 0 56px; height: 56px; padding-top: 11px; border-top: 1px #65718455; }
-.pause-footer button { flex: 1; height: 43px; margin-right: 7px; padding: 11px 3px; border: 1px #79839855; background-color: #494e59b3; font-size: 13px; }
-.pause-footer button:last-child { margin-right: 0; }
-.pause-footer button.primary { background-color: #3055b6; border-color: #7799ee; }
-.pause-footer button:hover { background-color: #586b88; }
-#about-page { text-align: center; padding: 8px; }
-.about-logo { width: 60px; height: 60px; margin-bottom: 6px; }
+/* Player composition lives in player.rcss, independently of Studio panels. */
 #context-menu { position: absolute; width: 184px; padding: 3px; background-color: #2c3037; border: 1px #737e90; border-radius: 3px; }
 #context-menu button { display: block; width: 100%; height: 25px; padding: 5px 8px; text-align: left; border: 0px; background-color: transparent; border-radius: 0px; font-size: 11px; }
 #context-menu button:hover { background-color: #365c8c; }
@@ -210,4 +161,3 @@ kbd { display: block; width: 118px; min-width: 118px; margin-right: 16px; paddin
 .compact .group-tools button { width: 48px; min-width: 48px; flex-basis: 48px; font-size: 10px; }
 .compact .ribbon-group { padding: 0 4px; margin-right: 4px; }
 .compact .group-tools img { width: 24px; height: 24px; }
-.compact .pause-tabs button { font-size: 12px; }

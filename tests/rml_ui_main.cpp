@@ -65,7 +65,15 @@ int main() {
         auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames();};
         auto key=[&](const std::string& name){event("keydown "+name);event("keyup "+name);};
         auto clickAt=[&](Vector2 p){event("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));event("mousedown 1");event("mouseup 1");};
-        auto click=[&](const std::string& id){auto b=ui.frontend()->elementBounds(id);if(b.width<=0||b.height<=0)std::fprintf(stderr,"MISSING element: %s\n",id.c_str());CHECK(b.width>0&&b.height>0);clickAt({b.x+b.width/2,b.y+b.height/2});};
+        auto click=[&](const std::string& id){
+            auto b=ui.frontend()->elementBounds(id);
+            // RmlUi may need another layout after a hidden parent is revealed.
+            // Wait for a real hitbox, never synthesize a phantom click at 0,0.
+            for(int i=0;i<8&&(b.width<=0||b.height<=0);++i){frames(1);b=ui.frontend()->elementBounds(id);}
+            if(b.width<=0||b.height<=0)std::fprintf(stderr,"MISSING element: %s\n",id.c_str());
+            CHECK(b.width>0&&b.height>0);if(b.width<=0||b.height<=0)return;
+            clickAt({b.x+b.width/2,b.y+b.height/2});
+        };
         auto capture=[&](const std::string& name){frames();TakeScreenshot((std::string(directory)+"/"+name+".png").c_str());};
         frames(6);event("search --name '^Loblox RML integration$' windowfocus --sync");
         std::string windowId;
@@ -79,6 +87,9 @@ int main() {
             for(int i=0;i<120&&(GetScreenWidth()!=width||GetScreenHeight()!=height);++i)frames(1);
             frames(12);
         };
+        // Optional fast iteration path; the registered CTest always exercises
+        // the full editor + player sequence without this environment variable.
+        if(!std::getenv("LOBLOX_PLAYER_UI_ONLY")) {
         capture("studio-1366");
         CHECK(projectio::toJson(scene)==untouched);
         CHECK(ui.frontend()->viewport().x>0);CHECK(scene.selection()==part);
@@ -226,28 +237,47 @@ int main() {
         const auto wallPosition=part->position();part->setPosition({40,3,0});CHECK(actions.dispatch({"select","",0}));
         const auto world=rig.evaluate({},rig.root);camera.setOrbit(world[game::Head].position,4,PI,0);capture("r6-front");
         part->setPosition(wallPosition);camera.reset();CHECK(actions.dispatch({"select","",partId}));
+        }
         CHECK(projectio::save(scene,config.defaultProjectPath,error));const auto original=projectio::toJson(scene);
         for(auto size:{Vector2{1280,720},Vector2{1366,768},Vector2{1600,900},Vector2{1920,1080}}) {
+            if(const char* requested=std::getenv("LOBLOX_PLAYER_UI_SIZE");requested&&int(size.x)!=std::atoi(requested))continue;
             resizeWindow(int(size.x),int(size.y));capture("studio-"+std::to_string(int(size.x)));
             click("play");auto& rt=EditorUITestAccess::runtime(ui);CHECK(rt.state()==game::RuntimeState::Playing);
+            if(size.x==1366) {
+                click("game-settings");CHECK(rt.state()==game::RuntimeState::Paused);
+                CHECK(ui.frontend()->elementBounds("sensitivity-slider").width>40);
+                CHECK(!EditorUITestAccess::captured(ui));
+                key("Escape");CHECK(rt.state()==game::RuntimeState::Playing);
+                click("game-controls");CHECK(rt.state()==game::RuntimeState::Paused);
+                click("game-controls");CHECK(rt.state()==game::RuntimeState::Playing);
+                click("game-controls");CHECK(rt.state()==game::RuntimeState::Paused);
+                click("respawn");key("Tab");key("Return");CHECK(rt.state()==game::RuntimeState::Playing);
+            }
             frames(12);auto vp=ui.frontend()->viewport();auto hud=ui.frontend()->elementBounds("health");
             CHECK(hud.x>=vp.x && hud.y>=vp.y);CHECK(hud.x+hud.width<=vp.x+vp.width+1);CHECK(hud.y+hud.height<=vp.y+vp.height+1);
-            // Roblox CoreGui proportions: a slim fixed-size bar pinned to the
-            // top-right, not the old labelled bottom-left pill.
-            CHECK(hud.width>=170 && hud.width<=190);
-            CHECK(hud.height>=18 && hud.height<=22);
+            // Player health is a labelled, viewport-local component. Neither
+            // supplied JPEG contains Health: do not pretend this is a pixel
+            // copy of a Roblox CoreGui health widget.
+            CHECK(hud.width>=200 && hud.width<=210);
+            CHECK(hud.height>=44 && hud.height<=50);
             CHECK(hud.y-vp.y>=8 && hud.y-vp.y<=20);
             CHECK(vp.x+vp.width-(hud.x+hud.width)>=8 && vp.x+vp.width-(hud.x+hud.width)<=20);
             if(size.x==1366) {
                 const auto logo=ui.frontend()->elementBounds("game-menu");
                 const auto menu=ui.frontend()->elementBounds("game-controls");
-                CHECK(std::fabs(logo.width-48)<1 && std::fabs(logo.height-48)<1);
-                CHECK(std::fabs(menu.width-48)<1 && std::fabs(menu.height-48)<1);
+                CHECK(std::fabs(logo.width-46)<1 && std::fabs(logo.height-46)<1);
+                CHECK(std::fabs(menu.width-46)<1 && std::fabs(menu.height-46)<1);
                 CHECK(logo.x-vp.x>=10 && logo.y-vp.y>=10);
                 CHECK(menu.x-(logo.x+logo.width)>=2);
+                const auto capsule=ui.frontend()->elementBounds("game-capsule");
+                const auto settings=ui.frontend()->elementBounds("game-settings");
+                CHECK(capsule.width>menu.width*2&&capsule.height==menu.height);
+                CHECK(settings.x>=menu.x+menu.width-1);
             }
             const auto fill100=ui.frontend()->elementBounds("health-fill");
-            CHECK(fill100.width>=hud.width-6);
+            const auto track=ui.frontend()->elementBounds("health-track");
+            CHECK(fill100.width>=track.width-1);
+            CHECK(ui.frontend()->elementText("health-value")=="100 / 100");
             capture("health-100-"+std::to_string(int(size.x)));
             // Shift Lock reticle is screen space: jumping, falling, walking and
             // resizing the window must never move it away from the viewport centre.
@@ -263,6 +293,7 @@ int main() {
             key("space");frames(8);checkReticle("jump");frames(42);checkReticle("fall");
             event("keydown d");frames(8);checkReticle("walk");event("keyup d");frames(2);
             CHECK(rt.takeDamage(75,error));frames(20);CHECK(rt.health()==25);capture("health-25-"+std::to_string(int(size.x)));
+            CHECK(ui.frontend()->elementText("health-value")=="25 / 100");
             const auto fill25=ui.frontend()->elementBounds("health-fill");
             CHECK(fill25.width>25 && fill25.width<hud.width*.45f);
             if(size.x==1280) {
@@ -270,9 +301,14 @@ int main() {
                 CHECK(ui.frontend()->elementBounds("health-fill").width<=1);
                 CHECK(rt.respawn(error));CHECK(rt.takeDamage(30,error));frames(10);CHECK(rt.health()==70);capture("health-70");
                 CHECK(rt.heal(30,error));CHECK(rt.health()==100);capture("health-respawn");
-                CHECK(ui.frontend()->elementBounds("health-fill").width>=hud.width-6);
+                CHECK(ui.frontend()->elementBounds("health-fill").width>=track.width-1);
             }
             key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);CHECK(!EditorUITestAccess::captured(ui));
+            CHECK(ui.frontend()->elementBounds("health").width==0);
+            const auto panel=ui.frontend()->elementBounds("pause-panel");
+            CHECK(panel.width>=vp.width*.8f&&panel.width<=vp.width*.96f);
+            CHECK(panel.x>=vp.x&&panel.x+panel.width<=vp.x+vp.width);
+            CHECK(panel.y>=vp.y+62&&panel.y+panel.height<=vp.y+vp.height);
             auto overlay=ui.frontend()->elementBounds("pause");CHECK(std::fabs(overlay.x-vp.x)<1 && std::fabs(overlay.y-vp.y)<1);
             for(const char* id:{"page-game","leave","respawn","resume","game-maximize","game-fullscreen"}) {auto b=ui.frontend()->elementBounds(id);CHECK(b.x>=vp.x && b.y>=vp.y && b.x+b.width<=vp.x+vp.width+1 && b.y+b.height<=vp.y+vp.height+1);}
             capture("pause-game-"+std::to_string(int(size.x)));
@@ -307,6 +343,10 @@ int main() {
                 auto fullPause=ui.frontend()->elementBounds("pause");
                 CHECK(fullPause.width>=fullView.width-1&&fullPause.height>=fullView.height-1);
                 capture("pause-fullscreen-1366");
+                click("page-settings");capture("pause-settings-fullscreen");
+                click("page-controls");capture("pause-controls-fullscreen");
+                click("page-about");capture("pause-about-fullscreen");
+                click("page-game");
                 // The overlay button restores the previous Studio window and layout.
                 click("game-fullscreen");frames(8);CHECK(!EditorUITestAccess::fullscreen(ui));
                 CHECK(!IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE));
@@ -314,9 +354,35 @@ int main() {
                 CHECK(rt.state()==game::RuntimeState::Paused);
             }
             click("page-settings");capture("pause-settings-"+std::to_string(int(size.x)));
+            if(size.x==1366) {
+                const auto position=rt.position();const auto originalCamera=rt.settings().cameraMode;
+                click("camera-next");CHECK(rt.settings().cameraMode!=originalCamera);
+                click("camera-previous");CHECK(rt.settings().cameraMode==originalCamera);
+                const bool firstPerson=rt.settings().allowFirstPerson;
+                click("first-person");CHECK(rt.settings().allowFirstPerson!=firstPerson);
+                click("first-person");CHECK(rt.settings().allowFirstPerson==firstPerson);
+                const bool shift=rt.settings().enableShiftLock;
+                click("shift-lock");CHECK(rt.settings().enableShiftLock!=shift);
+                click("shift-lock");CHECK(rt.settings().enableShiftLock==shift);
+                click("sensitivity");key("ctrl+a");event("type --clearmodifiers 0.005");key("Return");CHECK(NearlyEqual(rt.settings().sensitivity,.005f));
+                click("sensitivity");key("ctrl+a");event("type --clearmodifiers nan");key("Return");CHECK(NearlyEqual(rt.settings().sensitivity,.005f));
+                CHECK(!ui.frontend()->elementText("player-setting-error").empty());
+                click("sensitivity");key("ctrl+a");event("type --clearmodifiers 0.003");key("Return");CHECK(NearlyEqual(rt.settings().sensitivity,.003f));
+                const auto range=ui.frontend()->elementBounds("sensitivity-slider");
+                clickAt({range.x+range.width*.7f,range.y+range.height*.5f});frames(3);CHECK(rt.settings().sensitivity>.005f);
+                click("camera-distance");key("ctrl+a");event("type --clearmodifiers 15");key("Return");CHECK(NearlyEqual(rt.settings().cameraDistance,15));
+                CHECK(NearlyEqual(rt.position(),position));CHECK(rt.health()==70||rt.health()==25);
+                capture("settings-interactive-1366");
+            }
             click("page-controls");capture("pause-controls-"+std::to_string(int(size.x)));
+            click("page-about");capture("pause-about-"+std::to_string(int(size.x)));
+            click("page-game");
             const auto generation=rt.characterGeneration();click("respawn");CHECK(rt.characterGeneration()==generation+1);CHECK(rt.health()==100);
-            click("resume");CHECK(rt.state()==game::RuntimeState::Playing);
+            if(size.x==1366) {
+                // Focus after Respawn stays on that footer action: Tab reaches
+                // Resume; Enter must activate it without leaking Space/WASD.
+                key("Tab");key("Return");CHECK(rt.state()==game::RuntimeState::Playing);
+            }else {click("resume");CHECK(rt.state()==game::RuntimeState::Playing);}
             CHECK(rt.shiftLockActive());key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);
             click("leave");CHECK(!rt.active());CHECK(!EditorUITestAccess::captured(ui));CHECK(projectio::toJson(scene)==original);
         }

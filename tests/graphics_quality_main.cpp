@@ -125,8 +125,8 @@ std::string HudFixtureDocument(const std::string& productionCss, int width, int 
         .probe-56 img { width: 38px; height: 38px; }
     )" << R"(</style></head><body>
     <div id="game-layer">
-      <div id="game-topbar"><button id="game-menu" class="logo-button" title="Loblox menu"><img id="game-menu-image" src="loblox-logo"/></button><button id="game-controls" class="menu-button" title="Pause"><img id="game-controls-image" src="icon-menu"/></button></div>
-      <div id="health"><div class="health-track"><div id="health-fill"/></div></div>
+      <div id="game-topbar"><button id="game-menu" class="logo-button" title="Loblox menu"><img id="game-menu-image" src="loblox-logo"/></button><div id="game-capsule"><button id="game-controls" title="Pause"><img id="game-controls-image" src="icon-player-menu"/></button><button><img src="icon-player-settings"/></button></div></div>
+      <div id="health"><div class="health-heading"><img src="icon-player-heart"/><span id="health-state">Health</span><b id="health-value">100 / 100</b></div><div class="health-track"><div id="health-trail"/><div id="health-fill"/></div></div>
       <div class="probe-row">
         <div id="probe-42-logo" class="probe probe-42"><img src="loblox-logo"/></div>
         <div id="probe-42-menu" class="probe probe-42"><img src="icon-menu"/></div>
@@ -254,7 +254,7 @@ struct CoverageProbe {
 // lands on one of those two endpoints; MSAA produces intermediate levels.
 CoverageProbe MeasureArcCoverage(const Image& capture, float centerX, float centerY, float radius,
                                  float innerBand, float outerBand, Color background, bool brightEdge,
-                                 int hemisphere = 0) {
+                                 int hemisphere = 0, const Color* fullyCovered = nullptr) {
     CoverageProbe probe;
     probe.background_luma = PixelLuma(background);
 
@@ -280,8 +280,9 @@ CoverageProbe MeasureArcCoverage(const Image& capture, float centerX, float cent
     // Colour of a fully covered edge pixel, estimated from the same screen
     // region. Sampling the actual pixel keeps alpha, border and background
     // compositing out of the measurement.
-    Color edge{static_cast<unsigned char>(edgeLuma), static_cast<unsigned char>(edgeLuma),
-               static_cast<unsigned char>(edgeLuma), 255};
+    const Color desiredEdge{static_cast<unsigned char>(edgeLuma), static_cast<unsigned char>(edgeLuma),
+                           static_cast<unsigned char>(edgeLuma), 255};
+    Color edge=desiredEdge;
     int bestDistance = 1 << 30;
     for (int y = std::max(0, static_cast<int>(std::floor(centerY - radius - 1.0f)));
          y <= std::min(capture.height - 1, static_cast<int>(std::ceil(centerY + radius + 1.0f))); ++y) {
@@ -292,13 +293,21 @@ CoverageProbe MeasureArcCoverage(const Image& capture, float centerX, float cent
             const float distance = std::sqrt(dx * dx + dy * dy);
             if (distance < radius - 1.0f || distance > radius - 0.1f) continue;
             const Color color = GetImageColor(capture, x, y);
-            const int delta = std::abs(color.r - edge.r) + std::abs(color.g - edge.g) + std::abs(color.b - edge.b);
+            // Compare against the immutable luminance target, not the last
+            // candidate. The old greedy comparison could lock onto a repeated
+            // 50%-coverage pixel, misclassifying real 4x MSAA as one level.
+            const int delta = std::abs(color.r - desiredEdge.r) + std::abs(color.g - desiredEdge.g) + std::abs(color.b - desiredEdge.b);
             if (delta < bestDistance) {
                 bestDistance = delta;
                 edge = color;
             }
         }
     }
+
+    // Production translucent surfaces can be darker OR brighter than a dark
+    // page, and border/fill may have opposite contrast. Calibrate with a fully
+    // covered straight-edge pixel when one is available, not a theme guess.
+    if(fullyCovered)edge=*fullyCovered;
 
     const float bcx = static_cast<float>(background.r), bcy = static_cast<float>(background.g), bcz = static_cast<float>(background.b);
     const float ecx = static_cast<float>(edge.r), ecy = static_cast<float>(edge.g), ecz = static_cast<float>(edge.b);
@@ -541,7 +550,9 @@ int main(int argc, char** argv) {
         // -----------------------------------------------------------------
         const std::string stylesheetPath = game::BuiltinAssetPath("assets/ui/styles/studio.rcss");
         Check(!stylesheetPath.empty(), "the production gameplay stylesheet is reachable");
-        const std::string productionCss = ReadTextFile(stylesheetPath);
+        const std::string playerStylesheetPath = game::BuiltinAssetPath("assets/ui/styles/player.rcss");
+        Check(!playerStylesheetPath.empty(), "the Player stylesheet is reachable");
+        const std::string productionCss = ReadTextFile(stylesheetPath)+"\n"+ReadTextFile(playerStylesheetPath);
         Check(!productionCss.empty(), "the production gameplay stylesheet is readable");
         // Replay the HUD at the requested viewport. raylib can only present a
         // framebuffer the window actually has, so resize it once here, after
@@ -632,28 +643,49 @@ int main(int argc, char** argv) {
 
                         const auto menu = ElementBounds(hudDocument, "game-menu");
                         const auto controls = ElementBounds(hudDocument, "game-controls");
+                        const auto capsule = ElementBounds(hudDocument, "game-capsule");
                         const auto health = ElementBounds(hudDocument, "health");
                         const auto menuImage = ElementBounds(hudDocument, "game-menu-image");
                         const auto controlsImage = ElementBounds(hudDocument, "game-controls-image");
-                        Check(menu.w == 48 && menu.h == 48, "game logo button is 48x48");
-                        Check(controls.w == 48 && controls.h == 48, "game menu button is 48x48");
-                        Check(menuImage.w == 34 && menuImage.h == 34, "game logo icon is 34x34");
-                        Check(controlsImage.w == 34 && controlsImage.h == 34, "game menu icon is 34x34");
-                        Check(health.w == 180 && health.h == 20, "health bar is 180x20");
+                        Check(menu.w == 46 && menu.h == 46, "game logo button is 46x46");
+                        Check(controls.w == 46 && controls.h == 46, "game menu hitbox is 46x46");
+                        Check(capsule.w == 102 && capsule.h == 46, "two controls share a 102x46 capsule");
+                        Check(menuImage.w == 28 && menuImage.h == 28, "game logo preserves its square aspect at 28px");
+                        Check(controlsImage.w == 26 && controlsImage.h == 26, "game menu icon is 26x26");
+                        Check(health.w == 206 && health.h == 47, "labelled health component is 206x47");
 
+                        const bool brightEdge=PixelLuma(background.color)<100;
+                        const Color logoInk=GetImageColor(capture,menu.x+3,menu.y+menu.h/2);
+                        const Color capsuleInk=GetImageColor(capture,capsule.x+3,capsule.y+capsule.h/2);
                         const auto logoCoverage = MeasureArcCoverage(
-                            capture, menu.x + menu.w * 0.5f, menu.y + menu.h * 0.5f, menu.w * 0.5f,
-                            0.85f, 1.45f, background.color, true);
+                            capture, menu.x + menu.w * 0.5f, menu.y + menu.h * 0.5f, menu.w * 0.5f-1.f,
+                            0.85f, 1.45f, background.color, brightEdge,0,&logoInk);
                         const auto menuCoverage = MeasureArcCoverage(
-                            capture, controls.x + controls.w * 0.5f, controls.y + controls.h * 0.5f,
-                            controls.w * 0.5f, 0.85f, 1.45f, background.color, true);
-                        const float healthRadius = health.h * 0.5f;
-                        const auto healthLeft = MeasureArcCoverage(
-                            capture, health.x + healthRadius, health.y + health.h * 0.5f, healthRadius,
-                            0.75f, 1.45f, background.color, false, -1);
-                        const auto healthRight = MeasureArcCoverage(
-                            capture, health.x + health.w - healthRadius, health.y + health.h * 0.5f,
-                            healthRadius, 0.75f, 1.45f, background.color, false, 1);
+                            capture, capsule.x + capsule.h * 0.5f, capsule.y + capsule.h * 0.5f,
+                            capsule.h * 0.5f, 0.85f, 1.45f, background.color, brightEdge,-1,&capsuleInk);
+                        // On a light page the white 10%-alpha border has
+                        // virtually no contrast: inspect the inner fill edge.
+                        // On a dark page inspect the high-contrast border.
+                        const float healthRadius = brightEdge?9.f:8.f;
+                        const float corner=9.f;
+                        const Color healthInk=GetImageColor(capture,health.x+(brightEdge?0:3),health.y+health.h/2);
+                        auto healthLeft = MeasureArcCoverage(
+                            capture, health.x + corner, health.y + corner, healthRadius,
+                            0.85f, 1.45f, background.color, brightEdge, -1,&healthInk);
+                        auto healthRight = MeasureArcCoverage(
+                            capture, health.x + health.w - corner, health.y + corner,
+                            healthRadius, 0.85f, 1.45f, background.color, brightEdge, 1,&healthInk);
+                        // The new Health surface has four 9px corners, not two
+                        // 10px semicircular caps. Measure BOTH corners on each
+                        // side, retaining the same partial-coverage criterion.
+                        const auto lowerLeft=MeasureArcCoverage(capture,health.x+corner,
+                            health.y+health.h-corner,healthRadius,.85f,1.45f,background.color,brightEdge,-1,&healthInk);
+                        const auto lowerRight=MeasureArcCoverage(capture,health.x+health.w-corner,
+                            health.y+health.h-corner,healthRadius,.85f,1.45f,background.color,brightEdge,1,&healthInk);
+                        healthLeft.partial+=lowerLeft.partial;healthLeft.samples+=lowerLeft.samples;
+                        healthRight.partial+=lowerRight.partial;healthRight.samples+=lowerRight.samples;
+                        healthLeft.levels=std::max(healthLeft.levels,lowerLeft.levels);
+                        healthRight.levels=std::max(healthRight.levels,lowerRight.levels);
 
                         std::printf(
                             "HUD %s logo edge: %d partial/%d samples, %d levels; menu edge: %d/%d, %d levels; "
@@ -667,7 +699,7 @@ int main(int argc, char** argv) {
                         Check(logoCoverage.partial >= 20 && logoCoverage.levels >= 2,
                               "game logo circle has antialiased edge coverage" + page);
                         Check(menuCoverage.partial >= 20 && menuCoverage.levels >= 2,
-                              "game menu circle has antialiased edge coverage" + page);
+                              "shared menu capsule has antialiased edge coverage" + page);
                         Check(healthLeft.partial >= 8 && healthLeft.levels >= 2,
                               "health bar left cap has antialiased edge coverage" + page);
                         Check(healthRight.partial >= 8 && healthRight.levels >= 2,
@@ -677,7 +709,7 @@ int main(int argc, char** argv) {
                         // filtered reference: MSAA smooths the circular edge
                         // without softening the artwork or changing its alpha.
                         const Color buttonFill = GetImageColor(capture, menu.x + 4, menu.y + menu.h / 2);
-                        Image menuReference = ReferenceIcon("menu", controlsImage.w, buttonFill);
+                        Image menuReference = ReferenceIcon("player-menu", controlsImage.w, buttonFill);
                         const double menuError = CompareWithReference(capture, controlsImage, menuReference);
                         UnloadImage(menuReference);
                         Check(menuError < 22.0, "the game menu icon stays crisp inside the button (error " +
