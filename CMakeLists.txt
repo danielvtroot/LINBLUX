@@ -32,9 +32,23 @@ FetchContent_MakeAvailable(rmlui)
 add_library(loblox_rml_gl3 STATIC ${rmlui_SOURCE_DIR}/Backends/RmlUi_Renderer_GL3.cpp)
 target_include_directories(loblox_rml_gl3 PUBLIC ${rmlui_SOURCE_DIR}/Backends)
 target_link_libraries(loblox_rml_gl3 PUBLIC RmlUi::Core OpenGL::GL ${CMAKE_DL_LIBS})
-# Zero disables multisample renderbuffers; one is still multisample storage.
-# Font atlas antialiasing and PNG filtering remain enabled on the Low baseline.
-target_compile_definitions(loblox_rml_gl3 PRIVATE RMLUI_NUM_MSAA_SAMPLES=0)
+# The RmlUi GL3 backend draws the interface into its own layer framebuffer and
+# resolves it to the postprocess target before touching raylib's backbuffer.
+# The circular gameplay buttons and the health bar are border-radius geometry,
+# so window MSAA flags cannot smooth them; the layer target itself needs MSAA.
+# Four samples is the smallest count OpenGL 3.3 guarantees (MAX_SAMPLES >= 4),
+# so a conforming context always accepts it, and the cost is limited to the
+# interface layer (never the 3D scene). The layer target is genuinely larger:
+# around 80 MiB at 1920x1080 (multisampled colour and depth/stencil plus the
+# two resolve targets) and around 42 MiB at 1366x768, which still fits the 3 GB
+# target machine. Lighter alternative: -DLOBLOX_RMLUI_MSAA_SAMPLES=2, at the
+# price of visibly fewer coverage levels; 0 is the build-time fallback for a
+# driver that cannot create a multisample target, and the fixtures then report
+# the hard-edged result.
+set(LOBLOX_RMLUI_MSAA_SAMPLES "4" CACHE STRING
+    "MSAA samples for the RmlUi layer framebuffer (0 disables MSAA)")
+target_compile_definitions(loblox_rml_gl3 PRIVATE
+    RMLUI_NUM_MSAA_SAMPLES=${LOBLOX_RMLUI_MSAA_SAMPLES})
 
 # Bullet Physics: Debian/Ubuntu install the headers under /usr/include/bullet.
 find_path(BULLET_INCLUDE_DIR NAMES btBulletDynamicsCommon.h
@@ -169,7 +183,10 @@ if(XVFB_RUN_EXECUTABLE)
     target_link_libraries(loblox_rml_ui_tests PRIVATE loblox_editor)
     add_dependencies(loblox_rml_ui_tests loblox_ui_assets)
     add_test(NAME loblox_rml_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:loblox_rml_ui_tests>)
-    set_tests_properties(loblox_rml_ui PROPERTIES TIMEOUT 300 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
+    # The integration suite renders the interface at four resolutions on the
+    # software rasteriser. Four-sample UI MSAA makes that pass slower, so keep
+    # a timeout with headroom for slower CI machines.
+    set_tests_properties(loblox_rml_ui PROPERTIES TIMEOUT 480 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
     add_executable(loblox_rig_input_tests tests/rig_input_main.cpp)
     target_link_libraries(loblox_rig_input_tests PRIVATE loblox_editor)
     add_test(NAME loblox_rig_input COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1366x768x24 -noreset" $<TARGET_FILE:loblox_rig_input_tests>)
@@ -185,11 +202,19 @@ if(XVFB_RUN_EXECUTABLE)
     set_tests_properties(loblox_sky_capture PROPERTIES TIMEOUT 180 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
 
     # Graphics quality fixture: logo, icons, text, transparency, gradient,
-    # rounded corners, decal, R6 face and a repeating surface texture.
+    # rounded corners, the gameplay HUD circles and health bar, decal, R6 face
+    # and a repeating surface texture.
     add_executable(loblox_graphics_quality_tests tests/graphics_quality_main.cpp)
     target_link_libraries(loblox_graphics_quality_tests PRIVATE loblox_editor)
     add_test(NAME loblox_graphics_quality COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1366x768x24 -noreset" $<TARGET_FILE:loblox_graphics_quality_tests>)
-    set_tests_properties(loblox_graphics_quality PROPERTIES TIMEOUT 180 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
+    set_tests_properties(loblox_graphics_quality PROPERTIES TIMEOUT 240 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
+    # The same HUD checks at 1920x1080: the circular edge quality must be a
+    # property of the interface framebuffer, not of one resolution.
+    add_test(NAME loblox_graphics_quality_1080
+      COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset"
+              $<TARGET_FILE:loblox_graphics_quality_tests>
+              ${CMAKE_CURRENT_BINARY_DIR}/graphics-quality-1080 1920x1080)
+    set_tests_properties(loblox_graphics_quality_1080 PROPERTIES TIMEOUT 240 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
 
     add_executable(loblox_studio_ui_tests tests/studio_ui_main.cpp tests/x11_focus.cpp)
     target_link_libraries(loblox_studio_ui_tests PRIVATE loblox_editor X11::X11)

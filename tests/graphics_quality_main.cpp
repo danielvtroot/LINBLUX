@@ -31,6 +31,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -90,6 +91,52 @@ body { display:block; margin:0; font-family: DejaVu Sans; font-size: 12px; color
 <div class="row"><span class="label">rounded corners</span><div class="panel"><div id="rounded" style="width:140px;height:56px;background-color:#4f9dcc;border-radius:14px;"></div></div></div>
 <div class="row"><span class="label">png with transparency</span><div class="panel" id="logo-panel"><img id="logo-alpha" src="loblox-logo" style="width:48px;height:48px;"/></div></div>
 </body></rml>)";
+}
+
+std::string ReadTextFile(const std::string& path) {
+    std::ifstream file(path);
+    if (!file) return {};
+    std::ostringstream contents;
+    contents << file.rdbuf();
+    return contents.str();
+}
+
+// The HUD fixture deliberately loads the production stylesheet and repeats the
+// production game-layer markup. The circles, the logo image and the health bar
+// are therefore laid out and rasterised by exactly the same rules as gameplay.
+// The layer is generated for the requested viewport so the same rules can be
+// measured at another resolution without touching the production stylesheet.
+std::string HudFixtureDocument(const std::string& productionCss, int width, int height) {
+    std::ostringstream document;
+    document << "<rml><head><title>Loblox HUD antialiasing</title><style>" << productionCss
+             << "\n        #game-layer { left: 0px; top: 0px; width: " << width << "px; height: " << height
+             << "px; }" << R"(
+        .probe-row { position: absolute; left: 20px; top: 104px; display: flex; align-items: center; }
+        .probe { display: flex; align-items: center; justify-content: center; margin-right: 18px;
+                 background-color: #101317eb; border: 1px #ffffff21; }
+        .probe img { display: block; }
+        .probe-42 { width: 42px; height: 42px; border-radius: 21px; padding: 5px; }
+        .probe-42 img { width: 30px; height: 30px; }
+        .probe-44 { width: 44px; height: 44px; border-radius: 22px; padding: 5px; }
+        .probe-44 img { width: 30px; height: 30px; }
+        .probe-48 { width: 48px; height: 48px; border-radius: 24px; padding: 6px; }
+        .probe-48 img { width: 34px; height: 34px; }
+        .probe-56 { width: 56px; height: 56px; border-radius: 28px; padding: 7px; }
+        .probe-56 img { width: 38px; height: 38px; }
+    )" << R"(</style></head><body>
+    <div id="game-layer">
+      <div id="game-topbar"><button id="game-menu" class="logo-button" title="Loblox menu"><img id="game-menu-image" src="loblox-logo"/></button><button id="game-controls" class="menu-button" title="Pause"><img id="game-controls-image" src="icon-menu"/></button></div>
+      <div id="health"><div class="health-track"><div id="health-fill"/></div></div>
+      <div class="probe-row">
+        <div id="probe-42-logo" class="probe probe-42"><img src="loblox-logo"/></div>
+        <div id="probe-42-menu" class="probe probe-42"><img src="icon-menu"/></div>
+        <div id="probe-44-logo" class="probe probe-44"><img src="loblox-logo"/></div>
+        <div id="probe-48-logo" class="probe probe-48"><img src="loblox-logo"/></div>
+        <div id="probe-56-menu" class="probe probe-56"><img src="icon-menu"/></div>
+      </div>
+    </div>
+    </body></rml>)";
+    return document.str();
 }
 
 struct Bounds {
@@ -187,6 +234,101 @@ int MagentaExcess(const Image& capture, const Bounds& bounds) {
     return worst;
 }
 
+int PixelLuma(Color color) {
+    return (color.r * 30 + color.g * 59 + color.b * 11) / 100;
+}
+
+struct CoverageProbe {
+    int samples = 0;
+    int partial = 0;
+    int levels = 0;
+    int background_luma = 0;
+    int edge_luma = 0;
+};
+
+// Measures the transition across the outer edge of a rounded element.
+//
+// The screenshot is already composited over an opaque background, so the
+// coverage of an antialiased pixel shows up as a colour between the known
+// background and the colour of a fully covered edge pixel. Hard rasterisation
+// lands on one of those two endpoints; MSAA produces intermediate levels.
+CoverageProbe MeasureArcCoverage(const Image& capture, float centerX, float centerY, float radius,
+                                 float innerBand, float outerBand, Color background, bool brightEdge,
+                                 int hemisphere = 0) {
+    CoverageProbe probe;
+    probe.background_luma = PixelLuma(background);
+
+    // Find the edge colour in the outermost fully covered pixels. The button
+    // border is brighter than both its fill and the dark page; the health
+    // border is darker than its track and the light page.
+    int edgeLuma = brightEdge ? -1 : 256;
+    for (int y = std::max(0, static_cast<int>(std::floor(centerY - radius - 1.0f)));
+         y <= std::min(capture.height - 1, static_cast<int>(std::ceil(centerY + radius + 1.0f))); ++y) {
+        for (int x = std::max(0, static_cast<int>(std::floor(centerX - radius - 1.0f)));
+             x <= std::min(capture.width - 1, static_cast<int>(std::ceil(centerX + radius + 1.0f))); ++x) {
+            const float dx = (x + 0.5f) - centerX, dy = (y + 0.5f) - centerY;
+            if ((hemisphere < 0 && dx > 0.0f) || (hemisphere > 0 && dx < 0.0f)) continue;
+            const float distance = std::sqrt(dx * dx + dy * dy);
+            if (distance < radius - 1.0f || distance > radius - 0.1f) continue;
+            const int luma = PixelLuma(GetImageColor(capture, x, y));
+            edgeLuma = brightEdge ? std::max(edgeLuma, luma) : std::min(edgeLuma, luma);
+        }
+    }
+    if (edgeLuma < 0 || edgeLuma > 255) return probe;
+    probe.edge_luma = edgeLuma;
+
+    // Colour of a fully covered edge pixel, estimated from the same screen
+    // region. Sampling the actual pixel keeps alpha, border and background
+    // compositing out of the measurement.
+    Color edge{static_cast<unsigned char>(edgeLuma), static_cast<unsigned char>(edgeLuma),
+               static_cast<unsigned char>(edgeLuma), 255};
+    int bestDistance = 1 << 30;
+    for (int y = std::max(0, static_cast<int>(std::floor(centerY - radius - 1.0f)));
+         y <= std::min(capture.height - 1, static_cast<int>(std::ceil(centerY + radius + 1.0f))); ++y) {
+        for (int x = std::max(0, static_cast<int>(std::floor(centerX - radius - 1.0f)));
+             x <= std::min(capture.width - 1, static_cast<int>(std::ceil(centerX + radius + 1.0f))); ++x) {
+            const float dx = (x + 0.5f) - centerX, dy = (y + 0.5f) - centerY;
+            if ((hemisphere < 0 && dx > 0.0f) || (hemisphere > 0 && dx < 0.0f)) continue;
+            const float distance = std::sqrt(dx * dx + dy * dy);
+            if (distance < radius - 1.0f || distance > radius - 0.1f) continue;
+            const Color color = GetImageColor(capture, x, y);
+            const int delta = std::abs(color.r - edge.r) + std::abs(color.g - edge.g) + std::abs(color.b - edge.b);
+            if (delta < bestDistance) {
+                bestDistance = delta;
+                edge = color;
+            }
+        }
+    }
+
+    const float bcx = static_cast<float>(background.r), bcy = static_cast<float>(background.g), bcz = static_cast<float>(background.b);
+    const float ecx = static_cast<float>(edge.r), ecy = static_cast<float>(edge.g), ecz = static_cast<float>(edge.b);
+    const float vx = ecx - bcx, vy = ecy - bcy, vz = ecz - bcz;
+    const float denominator = vx * vx + vy * vy + vz * vz;
+    if (denominator < 1.0f) return probe;
+
+    bool seen[21] = {};
+    for (int y = std::max(0, static_cast<int>(std::floor(centerY - radius - 2.0f)));
+         y <= std::min(capture.height - 1, static_cast<int>(std::ceil(centerY + radius + 2.0f))); ++y) {
+        for (int x = std::max(0, static_cast<int>(std::floor(centerX - radius - 2.0f)));
+             x <= std::min(capture.width - 1, static_cast<int>(std::ceil(centerX + radius + 2.0f))); ++x) {
+            const float dx = (x + 0.5f) - centerX, dy = (y + 0.5f) - centerY;
+            if ((hemisphere < 0 && dx > 0.0f) || (hemisphere > 0 && dx < 0.0f)) continue;
+            const float distance = std::sqrt(dx * dx + dy * dy);
+            if (distance < radius - innerBand || distance > radius + outerBand) continue;
+            const Color color = GetImageColor(capture, x, y);
+            const float t = ((color.r - bcx) * vx + (color.g - bcy) * vy + (color.b - bcz) * vz) / denominator;
+            ++probe.samples;
+            if (t > 0.05f && t < 0.95f) {
+                ++probe.partial;
+                const int level = static_cast<int>(std::lround(t * 20.0f));
+                if (level >= 1 && level <= 19) seen[level] = true;
+            }
+        }
+    }
+    for (bool level : seen) probe.levels += level ? 1 : 0;
+    return probe;
+}
+
 // The pipeline used before the quality fix: 48x48 hard-edged icons, a
 // bicubic logo resize and no mip chain at all. It only lives in the fixture
 // so the improvement can be measured instead of assumed.
@@ -232,6 +374,18 @@ const IconCase kIconCases[] = {
 int main(int argc, char** argv) {
     std::string out = "/tmp/loblox-graphics-quality";
     if (argc > 1) out = argv[1];
+    // Optional HUD viewport, e.g. `... /tmp/out 1920x1080`. The interface
+    // fixture keeps its own 1366x768 layout; only the gameplay HUD is replayed
+    // at the requested size so the circular edges can be measured at
+    // 1280x720, 1366x768 and 1920x1080 with the production rules.
+    int hudWidth = 1366, hudHeight = 768;
+    if (argc > 2) {
+        int width = 0, height = 0;
+        if (std::sscanf(argv[2], "%dx%d", &width, &height) == 2 && width >= 640 && height >= 480) {
+            hudWidth = width;
+            hudHeight = height;
+        }
+    }
     std::filesystem::create_directories(out);
 
     SetTraceLogLevel(LOG_WARNING);
@@ -379,6 +533,181 @@ int main(int argc, char** argv) {
         ui::StudioRenderer renderer;
         const Image after = renderFixture(renderer, "loblox-quality", "interface-after.png");
         Check(after.width == 1366 && after.height == 768, "interface capture has the native size");
+
+        // -----------------------------------------------------------------
+        // Gameplay HUD: the production stylesheet and markup, at native size,
+        // over a light and a dark scene. This is the visual fixture for the
+        // circular buttons and the health bar.
+        // -----------------------------------------------------------------
+        const std::string stylesheetPath = game::BuiltinAssetPath("assets/ui/styles/studio.rcss");
+        Check(!stylesheetPath.empty(), "the production gameplay stylesheet is reachable");
+        const std::string productionCss = ReadTextFile(stylesheetPath);
+        Check(!productionCss.empty(), "the production gameplay stylesheet is readable");
+        // Replay the HUD at the requested viewport. raylib can only present a
+        // framebuffer the window actually has, so resize it once here, after
+        // the 1366x768 interface fixture has been captured.
+        if (GetScreenWidth() != hudWidth || GetScreenHeight() != hudHeight) {
+            SetWindowSize(hudWidth, hudHeight);
+            for (int i = 0; i < 120 &&
+                            (GetScreenWidth() != hudWidth || GetScreenHeight() != hudHeight); ++i) {
+                BeginDrawing();
+                ClearBackground(BLACK);
+                EndDrawing();
+            }
+            for (int i = 0; i < 4; ++i) {
+                BeginDrawing();
+                ClearBackground(BLACK);
+                EndDrawing();
+            }
+        }
+        Check(GetScreenWidth() == hudWidth && GetScreenHeight() == hudHeight,
+              "HUD fixture window matches the requested viewport");
+        const auto hudPath = std::filesystem::path(out) /
+                             ("hud-" + std::to_string(hudWidth) + "x" + std::to_string(hudHeight) + ".rml");
+        {
+            std::ofstream file(hudPath);
+            file << HudFixtureDocument(productionCss, hudWidth, hudHeight);
+        }
+
+        Rml::SetRenderInterface(&renderer);
+        Rml::Context* hudContext = Rml::CreateContext("loblox-hud-quality", {hudWidth, hudHeight});
+        Check(hudContext != nullptr, "HUD fixture context created");
+        if (hudContext) {
+            Rml::ElementDocument* hudDocument = hudContext->LoadDocument(hudPath.string());
+            Check(hudDocument != nullptr, "HUD fixture document loaded");
+            if (hudDocument) {
+                hudDocument->Show();
+                hudContext->SetDimensions({hudWidth, hudHeight});
+                hudContext->Update();
+                // The RmlUi GL3 backend records the interface into its own
+                // layer framebuffer, so the edge quality is measured on the
+                // composited pixels: the coverage checks below only pass when
+                // that target was rasterised with multiple samples.
+                const auto drawHud = [&] {
+                    BeginDrawing();
+                    ClearBackground(BLACK);
+                    rlDrawRenderBatchActive();
+                    renderer.SetViewport(GetRenderWidth(), GetRenderHeight());
+                    renderer.BeginFrame();
+                    hudContext->Render();
+                    renderer.EndFrame();
+                    EndDrawing();
+                };
+                drawHud();
+                std::printf("HUD layer: %dx%d\n", hudWidth, hudHeight);
+
+                struct HudBackground {
+                    const char* name;
+                    Color color;
+                };
+                const HudBackground backgrounds[] = {
+                    {"light", {234, 239, 245, 255}},
+                    {"dark", {20, 23, 28, 255}},
+                };
+                for (const auto& background : backgrounds) {
+                    for (int i = 0; i < 4; ++i) {
+                        BeginDrawing();
+                        ClearBackground(background.color);
+                        rlDrawRenderBatchActive();
+                        renderer.SetViewport(GetRenderWidth(), GetRenderHeight());
+                        renderer.BeginFrame();
+                        hudContext->Render();
+                        renderer.EndFrame();
+                        EndDrawing();
+                    }
+                    const std::string capturePath =
+                        (std::filesystem::path(out) /
+                         (std::string("hud-") + background.name + "-" + std::to_string(hudWidth) + "x" +
+                          std::to_string(hudHeight) + ".png"))
+                            .string();
+                    TakeScreenshot(capturePath.c_str());
+                    Image capture = LoadImage(capturePath.c_str());
+                    Check(capture.width == hudWidth && capture.height == hudHeight,
+                          std::string("HUD ") + background.name + " capture has the viewport size");
+                    if (capture.width > 0) {
+                        Check(GetImageColor(capture, 4, 4).r == background.color.r &&
+                                  GetImageColor(capture, 4, 4).g == background.color.g &&
+                                  GetImageColor(capture, 4, 4).b == background.color.b,
+                              std::string("HUD ") + background.name + " has the expected page background");
+
+                        const auto menu = ElementBounds(hudDocument, "game-menu");
+                        const auto controls = ElementBounds(hudDocument, "game-controls");
+                        const auto health = ElementBounds(hudDocument, "health");
+                        const auto menuImage = ElementBounds(hudDocument, "game-menu-image");
+                        const auto controlsImage = ElementBounds(hudDocument, "game-controls-image");
+                        Check(menu.w == 48 && menu.h == 48, "game logo button is 48x48");
+                        Check(controls.w == 48 && controls.h == 48, "game menu button is 48x48");
+                        Check(menuImage.w == 34 && menuImage.h == 34, "game logo icon is 34x34");
+                        Check(controlsImage.w == 34 && controlsImage.h == 34, "game menu icon is 34x34");
+                        Check(health.w == 180 && health.h == 20, "health bar is 180x20");
+
+                        const auto logoCoverage = MeasureArcCoverage(
+                            capture, menu.x + menu.w * 0.5f, menu.y + menu.h * 0.5f, menu.w * 0.5f,
+                            0.85f, 1.45f, background.color, true);
+                        const auto menuCoverage = MeasureArcCoverage(
+                            capture, controls.x + controls.w * 0.5f, controls.y + controls.h * 0.5f,
+                            controls.w * 0.5f, 0.85f, 1.45f, background.color, true);
+                        const float healthRadius = health.h * 0.5f;
+                        const auto healthLeft = MeasureArcCoverage(
+                            capture, health.x + healthRadius, health.y + health.h * 0.5f, healthRadius,
+                            0.75f, 1.45f, background.color, false, -1);
+                        const auto healthRight = MeasureArcCoverage(
+                            capture, health.x + health.w - healthRadius, health.y + health.h * 0.5f,
+                            healthRadius, 0.75f, 1.45f, background.color, false, 1);
+
+                        std::printf(
+                            "HUD %s logo edge: %d partial/%d samples, %d levels; menu edge: %d/%d, %d levels; "
+                            "health caps: %d/%d and %d/%d, levels %d/%d\n",
+                            background.name, logoCoverage.partial, logoCoverage.samples, logoCoverage.levels,
+                            menuCoverage.partial, menuCoverage.samples, menuCoverage.levels,
+                            healthLeft.partial, healthLeft.samples, healthRight.partial, healthRight.samples,
+                            healthLeft.levels, healthRight.levels);
+
+                        const std::string page = std::string(" (") + background.name + " background)";
+                        Check(logoCoverage.partial >= 20 && logoCoverage.levels >= 2,
+                              "game logo circle has antialiased edge coverage" + page);
+                        Check(menuCoverage.partial >= 20 && menuCoverage.levels >= 2,
+                              "game menu circle has antialiased edge coverage" + page);
+                        Check(healthLeft.partial >= 8 && healthLeft.levels >= 2,
+                              "health bar left cap has antialiased edge coverage" + page);
+                        Check(healthRight.partial >= 8 && healthRight.levels >= 2,
+                              "health bar right cap has antialiased edge coverage" + page);
+
+                        // The interior icon must still match the area-averaged
+                        // filtered reference: MSAA smooths the circular edge
+                        // without softening the artwork or changing its alpha.
+                        const Color buttonFill = GetImageColor(capture, menu.x + 4, menu.y + menu.h / 2);
+                        Image menuReference = ReferenceIcon("menu", controlsImage.w, buttonFill);
+                        const double menuError = CompareWithReference(capture, controlsImage, menuReference);
+                        UnloadImage(menuReference);
+                        Check(menuError < 22.0, "the game menu icon stays crisp inside the button (error " +
+                                                    std::to_string(menuError) + ")" + page);
+                        Check(MagentaExcess(capture, menu) < 40,
+                              "the game logo button has no magenta fringe" + page);
+
+                        for (const char* id : {"probe-42-logo", "probe-42-menu", "probe-44-logo",
+                                               "probe-48-logo", "probe-56-menu"}) {
+                            const auto probeBounds = ElementBounds(hudDocument, id);
+                            Check(probeBounds.w > 0 && probeBounds.w == probeBounds.h,
+                                  std::string(id) + " stays circular");
+                            if (probeBounds.w > 0) {
+                                const auto coverage = MeasureArcCoverage(
+                                    capture, probeBounds.x + probeBounds.w * 0.5f,
+                                    probeBounds.y + probeBounds.h * 0.5f, probeBounds.w * 0.5f,
+                                    0.85f, 1.45f, background.color, true);
+                                std::printf("  %s: %d partial/%d samples, %d levels\n", id, coverage.partial,
+                                            coverage.samples, coverage.levels);
+                                Check(coverage.partial >= 8 && coverage.levels >= 2,
+                                      std::string(id) + " has antialiased coverage (" +
+                                          std::to_string(coverage.partial) + ")" + page);
+                            }
+                        }
+                    }
+                    UnloadImage(capture);
+                }
+            }
+            Rml::RemoveContext("loblox-hud-quality");
+        }
 
         Rml::Shutdown();
     }

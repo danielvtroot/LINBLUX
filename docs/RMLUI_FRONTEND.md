@@ -71,11 +71,34 @@ os quads correspondentes misturam com alfa premultiplicado. Sem isso, uma
 imagem preto e branco minificada virava ruído serrilhado e o RGB guardado sob
 alfa zero (magenta na logo) vazava para a arte visível.
 
+## Antialiasing de geometria
+
+A política de textura acima não suaviza contornos de geometria. O backend GL3
+do RmlUi não desenha na backbuffer do raylib: ele grava a interface em um
+framebuffer de camada próprio (`RenderLayerStack`, aberto em `BeginFrame`),
+resolve em um framebuffer de pós-processamento e só então desenha um quad na
+janela. Por isso
+`FLAG_MSAA_4X_HINT`/`FLAG_WINDOW_HIGHDPI` no `InitWindow` não afetam as bordas
+de `border-radius` dos dois botões circulares do gameplay nem os cantos da barra
+de vida.
+
+A suavização correta é MSAA no alvo da camada, definida em tempo de compilação
+pelo backend: `LOBLOX_RMLUI_MSAA_SAMPLES` (padrão 4, o menor valor que OpenGL
+3.3 garante). O custo é apenas a camada da interface, nunca a cena 3D;
+`-DLOBLOX_RMLUI_MSAA_SAMPLES=0` serve de fallback para um driver sem alvos
+multisample. Não use shaders por elemento nem texturas circulares rasterizadas
+para esse fim: a cobertura passa a vir do rasterizador e vale para qualquer
+raio, resolução ou escala.
+
 A fixture `tests/graphics_quality_main.cpp` (`ctest -R loblox_graphics_quality`)
 reproduz logo, ícones, texto, transparência, gradiente, cantos arredondados,
-decal, textura repetida em superfície inclinada e rosto R6, compara a
-amostra com a referência filtrada e mede a energia de borda da textura 3D antes
-e depois da correção.
+os dois botões circulares do gameplay sobre fundo claro e escuro, a barra de
+vida, decal, textura repetida em superfície inclinada e rosto R6, compara a
+amostra com a referência filtrada, conta os níveis de cobertura das bordas e
+mede a energia de borda da textura 3D antes e depois da correção. O segundo
+argumento opcional permite repetir a HUD em outra resolução:
+`loblox_graphics_quality_tests /tmp/saida 1920x1080` (`loblox_graphics_quality_1080`
+roda exatamente isso no CTest).
 
 ## Execução e diagnóstico
 

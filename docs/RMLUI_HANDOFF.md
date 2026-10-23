@@ -6,7 +6,9 @@
 - Padrão: `build/loblox`; diagnóstico: `build/loblox --ui legacy`.
   Debug não foi recompilado nesta migração.
 - RmlUi 6.3 + GL3 no contexto raylib existente, FreeType, PNG/JPEG com alpha
-  premultiplicado. Sem MSAA da UI no perfil-base. Fonte e ícones cacheados.
+  premultiplicado. MSAA 4× no framebuffer de camada da UI (23/10/2026; antes
+  era 0 e as bordas de `border-radius` saíam serrilhadas). Fonte e ícones
+  cacheados.
 - RML: shell/ribbon agrupada/Toolbox/Explorer/Properties/Game Config/importador,
   HUD/topbar/menu Esc/diálogos. Splitters, visibilidade e layout persistidos.
 - Internos ImGui: código, timeline, rig e Output, dentro do split RML.
