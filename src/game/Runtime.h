@@ -37,6 +37,11 @@ public:
     bool avatarHidden() const { return firstPerson_ || avatarOccluded_; }
     void setDistance(float value) { if (std::isfinite(value)) requestedDistance_ = value; }
     Vector3 moveDirection(Vector2 input) const;
+    Vector3 pivot() const { return target_; }
+    float shoulderOffset() const { return shoulderOffset_; }
+    float followDistance() const { return distance_; }
+    // Camera-local X, in scene units. Independent of Humanoid/head offsets.
+    bool setMouseLockShoulderOffset(float value);
 private:
     Camera3D camera_{};
     Vector3 target_{};
@@ -44,6 +49,9 @@ private:
     float requestedDistance_ = 12, distance_ = 12;
     float followDelay_ = 0;
     float shoulderOffset_ = 0;
+    float mouseLockShoulderOffset_ = 1.75f;
+    Vector3 lockEntryOffset_{};
+    bool wasMouseLocked_ = false;
     CameraMode previousMode_ = CameraMode::Classic;
     bool firstPerson_ = false;
     bool avatarOccluded_ = false; // geometry-derived visibility, not a control mode
@@ -78,6 +86,9 @@ public:
     bool resetCharacter(std::string& error);
     const Rig& rig() const { return rig_; }
     RigidTransform characterRoot() const;
+    // Physics remains authoritative; camera and avatar share this presentation
+    // sample between fixed ticks. Rotation controlled by mouse is not delayed.
+    RigidTransform renderCharacterRoot() const;
     const Pose& pose() const { return pose_; }
     Vector3 position() const;
     Vector3 velocity() const;
@@ -92,6 +103,7 @@ public:
 
     // Shift Lock: estado de sessão (não persistido); toggle pelo Left Shift.
     bool shiftLockActive() const;
+    bool shiftLockRequested() const { return shiftLockRequested_; }
     void setShiftLockRequested(bool requested) { shiftLockRequested_ = requested; }
     PlayerCamera& playerCamera() { return camera_; }
     const PlayerCamera& playerCamera() const { return camera_; }
@@ -115,6 +127,7 @@ private:
     Rig rig_;
     PlayerSettings settings_;
     PlayerCamera camera_;
+    Vector3 previousCharacterPosition_{};
     Pose pose_{};
     float accumulator_ = 0, walkTime_ = 0, idleTime_ = 0, airTime_ = 0, walkWeight_ = 0, yaw_ = 0;
     float rootHeightOffset_ = .1f;

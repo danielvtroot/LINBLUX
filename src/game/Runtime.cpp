@@ -100,12 +100,17 @@ const char* StateName(HumanoidState state) {
 }
 void PlayerCamera::reset(Vector3 root, const PlayerSettings& settings) {
     yaw_ = 0; pitch_ = .25f; followDelay_ = 0; shoulderOffset_ = 0;
+    wasMouseLocked_=false;lockEntryOffset_={};
     requestedDistance_ = distance_ = settings.cameraDistance;
     target_ = Vector3Add(root, {0, 1.2f, 0});
     previousMode_ = settings.cameraMode;
     firstPerson_ = settings.cameraMode == CameraMode::FirstPerson;
     avatarOccluded_ = false;
     camera_ = {Vector3Add(target_, {0, 3, distance_}), target_, {0, 1, 0}, 60, CAMERA_PERSPECTIVE};
+}
+bool PlayerCamera::setMouseLockShoulderOffset(float value) {
+    if(!std::isfinite(value)||std::fabs(value)>5)return false;
+    mouseLockShoulderOffset_=value;return true;
 }
 Vector3 PlayerCamera::moveDirection(Vector2 input) const {
     const float length = Vector2Length(input);
@@ -137,14 +142,28 @@ void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const Player
     }
     const auto bodies = runtime.rig().evaluate(runtime.pose(), {root,runtime.characterRoot().rotation});
     Vector3 desiredTarget = Compose(bodies[Head], {{0,.08f,0}}).position;
-    if(runtime.shiftLockActive()) {
+    const bool mouseLocked=runtime.shiftLockActive();
+    if(mouseLocked) {
         const auto neutral=runtime.rig().evaluate(Pose{},RigidTransform{});
         desiredTarget=Vector3Add(root,{0,neutral[Head].position.y+.08f,0});
     }
-    // Filter the post-physics anchor, never the mouse-controlled yaw/pitch.
-    target_ = firstPerson_ ? desiredTarget : Vector3Lerp(target_,desiredTarget,Response(14,dt));
-    shoulderOffset_=Lerp(shoulderOffset_,!firstPerson_&&runtime.shiftLockActive()?.6f:0.f,Response(12,dt));
-    const Vector3 aimTarget=Vector3Add(target_,Vector3Scale(Vector3{std::cos(yaw_),0,-std::sin(yaw_)},shoulderOffset_));
+    if(mouseLocked) {
+        // Position was already interpolated between Bullet ticks. Following
+        // another filtered sample makes the avatar bob against its own camera.
+        // Only blend the entry discrepancy from the previous free camera.
+        if(!wasMouseLocked_)lockEntryOffset_=Vector3Subtract(target_,desiredTarget);
+        lockEntryOffset_=Vector3Scale(lockEntryOffset_,std::exp(-14*dt));
+        target_=Vector3Add(desiredTarget,lockEntryOffset_);
+    }else target_=firstPerson_?desiredTarget:Vector3Lerp(target_,desiredTarget,Response(14,dt));
+    wasMouseLocked_=mouseLocked;
+    shoulderOffset_=firstPerson_?0.f:Lerp(shoulderOffset_,mouseLocked?mouseLockShoulderOffset_:0.f,Response(12,dt));
+    const Vector3 lateral=Vector3Scale(Vector3{std::cos(yaw_),0,-std::sin(yaw_)},shoulderOffset_);
+    // The shoulder itself may be across a wall. Sweep from the subject before
+    // the usual backwards camera sweep, rather than starting inside/beyond it.
+    const float lateralLength=Vector3Length(lateral);
+    const float lateralHit=lateralLength>.001f?runtime.cameraClearance(target_,Vector3Add(target_,lateral),.25f):1.f;
+    const float lateralFraction=lateralHit<1?std::max(0.f,lateralHit-.02f/lateralLength):1.f;
+    const Vector3 aimTarget=Vector3Add(target_,Vector3Scale(lateral,lateralFraction));
     const Vector3 back{std::sin(yaw_) * std::cos(pitch_), std::sin(pitch_),
                        std::cos(yaw_) * std::cos(pitch_)};
     if (!settings.allowFirstPerson && !firstPerson_) {
@@ -232,12 +251,13 @@ void RuntimeSession::stop() {
 }
 void RuntimeSession::pause() {
     if (state_ != RuntimeState::Playing) return;
-    state_ = RuntimeState::Paused; accumulator_ = 0; jumpPending_ = false;jumpBufferTime_=0;
+    state_ = RuntimeState::Paused; jumpPending_ = false;jumpBufferTime_=0;
     Event("runtime", "pause", correlation_);
 }
 void RuntimeSession::resume() {
     if (state_ != RuntimeState::Paused) return;
     state_ = RuntimeState::Playing;
+    lastShiftKey_=1; // keys held in a menu/another app need a release first
     Event("runtime", "resume", correlation_);
 }
 bool RuntimeSession::respawn(std::string& error) {
@@ -299,6 +319,7 @@ bool RuntimeSession::respawn(std::string& error) {
     capsule_ = std::move(capsule); motion_ = std::move(motion); body_ = std::move(body);
     physics_->world_->addRigidBody(body_.get());
     pose_ = {}; walkTime_ = 0; idleTime_ = 0; airTime_=0; walkWeight_ = 0; accumulator_ = 0; yaw_ = 0; jumpPending_ = false;
+    previousCharacterPosition_=position();
     coyoteTime_=jumpBufferTime_=0;
     // Shift Lock is a player choice, not a property of the old character.
     // Keep it across respawns, but swallow a key already held during respawn.
@@ -318,6 +339,12 @@ bool RuntimeSession::shiftLockActive() const {
 Vector3 RuntimeSession::velocity() const { return body_ ? Vec(body_->getLinearVelocity()) : Vector3{}; }
 RigidTransform RuntimeSession::characterRoot() const {
     return {Vector3Add(position(), {0, rootHeightOffset_, 0}), QuaternionFromEuler(0, yaw_, 0)};
+}
+RigidTransform RuntimeSession::renderCharacterRoot() const {
+    auto root=characterRoot();
+    root.position=Vector3Add(Vector3Lerp(previousCharacterPosition_,position(),
+        std::clamp(accumulator_*60.f,0.f,1.f)),{0,rootHeightOffset_,0});
+    return root;
 }
 bool RuntimeSession::grounded() const {
     if (!body_ || velocity().y > 1) return false;
@@ -430,8 +457,7 @@ void RuntimeSession::step(float dt, Vector3 desired, bool jump) {
     if (!onGround) transition(velocity().y > 1 ? HumanoidState::Jumping : HumanoidState::Freefall);
     else if (!wasGrounded) transition(HumanoidState::Landing);
     else transition(horizontal > .2f ? HumanoidState::Walking : HumanoidState::Idle);
-    if (settings_.cameraLock || shiftLockActive() || camera_.firstPerson()) yaw_ = camera_.yaw();
-    else if (settings_.autoRotate && horizontal > .2f) {
+    if (!(settings_.cameraLock || shiftLockActive() || camera_.firstPerson()) && settings_.autoRotate && horizontal > .2f) {
         const float target = std::atan2(-actual.x, -actual.z);
         yaw_ += std::remainder(target-yaw_, 2*PI) * Response(settings_.turnSpeed, dt);
     }
@@ -579,11 +605,15 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     constexpr float fixed = 1.f / 60;
     int steps = 0;
     while (accumulator_ + .000001f >= fixed && steps++ < 6) {
+        previousCharacterPosition_=position();
         step(fixed, desired, jumpPending_); jumpPending_ = false;
         accumulator_ = std::max(0.f, accumulator_ - fixed);
         if (state_ != RuntimeState::Playing) break;
     }
-    if(state_==RuntimeState::Playing)camera_.update(dt,characterRoot().position,velocity(),input,settings_,*this);
+    // One facing owner in locked modes, at display frequency. A 144/240 Hz
+    // camera must not wait for the next 60 Hz physics tick to turn the body.
+    if(settings_.cameraLock || shiftLockActive() || camera_.firstPerson())yaw_=camera_.yaw();
+    if(state_==RuntimeState::Playing)camera_.update(dt,renderCharacterRoot().position,velocity(),input,settings_,*this);
     std::vector<InstanceId> fallen;
     for(auto* part:scene_->parts()) if(!part->anchored() && part->deletable() && part->position().y<scene_->workspace()->fallenPartsDestroyHeight())fallen.push_back(part->id());
     for(auto id:fallen)scene_->removeById(id);

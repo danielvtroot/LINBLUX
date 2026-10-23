@@ -2,7 +2,10 @@
 
 Migração atual do frontend: [RMLUI_HANDOFF.md](RMLUI_HANDOFF.md).
 
-Últimas correções: [SHIFT_RIG_DECALS.md](SHIFT_RIG_DECALS.md) — Shift Lock
+Mouse Lock atual: [MOUSE_LOCK_FIX.md](MOUSE_LOCK_FIX.md) — captura real,
+orientação por frame, câmera sobre o ombro e validação temporal.
+
+Checkpoint anterior: [SHIFT_RIG_DECALS.md](SHIFT_RIG_DECALS.md) — Shift Lock
 após a física, indicador original e decals independentes por face do R6.
 
 Anterior: [CAMERA_HUD_FIXES.md](CAMERA_HUD_FIXES.md) — câmera Studio

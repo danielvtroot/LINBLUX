@@ -36,6 +36,13 @@ struct LobloxLogo {
 };
 const LobloxLogo& LoadLobloxLogo();
 
+enum class GameCursorVisual { System, Hidden, MouseLock };
+struct GameplayCursorState {
+    bool captured = false;
+    GameCursorVisual visual = GameCursorVisual::System;
+    Vector2 position{}; // logical window coordinates, never a world position
+};
+
 class EditorUI {
 public:
     EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera, SceneRenderer& renderer,
@@ -56,6 +63,7 @@ public:
 
     ToolMode tool() const { return tool_; }
     bool playing() const { return runtime_.active(); }
+    GameplayCursorState gameplayCursor() const;
 
 private:
     friend struct EditorUITestAccess;
@@ -145,6 +153,7 @@ private:
     game::RuntimeSession runtime_;
     bool gameplayCapture_ = false;
     bool gameplaySkipDelta_ = true;
+    bool gameplayRestoreNoCursorChange_ = false, gameplayRestoreDrawCursor_ = false;
     Vector2 gameplayRestoreCursor_{};
     int pausePage_ = 0;
     // Rects do menu Esc capturados no desenho (min.x,min.y,max.x,max.y); o

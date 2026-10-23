@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+unsigned long InputTestRootWindow();
 
 namespace loblox {
 struct EditorUITestAccess {
@@ -61,7 +62,8 @@ int main() {
         EditorUI ui(scene,physics,camera,renderer,config);std::string error;
         CHECK(ui.enableModernFrontend(error));std::fprintf(stderr,"RML init: %s\n",error.c_str());
         if(!ui.frontend())return 1;
-        auto frames=[&](int count=2){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(BLACK);rlImGuiBegin();ui.draw();rlImGuiEnd();ui.renderModernFrontend();EndDrawing();}};
+        std::function<void()> observeFrame;
+        auto frames=[&](int count=2){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(BLACK);rlImGuiBegin();ui.draw();rlImGuiEnd();ui.renderModernFrontend();EndDrawing();if(observeFrame)observeFrame();}};
         auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames();};
         auto key=[&](const std::string& name){event("keydown "+name);event("keyup "+name);};
         auto clickAt=[&](Vector2 p){event("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));event("mousedown 1");event("mouseup 1");};
@@ -92,7 +94,69 @@ int main() {
         capture("studio-1366");
         // A separate short path exercises real Explorer/Properties controls
         // with X11 events, including dropdowns and independent child deletion.
-        if(std::getenv("LOBLOX_RIG_DECALS_ONLY")) {
+        if(std::getenv("LOBLOX_MOUSE_LOCK_ONLY")) {
+            const auto editorEye=camera.position();const auto original=projectio::toJson(scene);
+            const bool originalCursorFlag=(ImGui::GetIO().ConfigFlags&ImGuiConfigFlags_NoMouseCursorChange)!=0;
+            click("play");auto& rt=EditorUITestAccess::runtime(ui);frames(12);
+            event("keydown Shift_L");CHECK(rt.shiftLockActive());CHECK(EditorUITestAccess::captured(ui));event("keyup Shift_L");
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);frames(3);
+            CHECK(EditorUITestAccess::captured(ui));CHECK(IsCursorHidden());
+            CHECK(ImGui::GetIO().ConfigFlags&ImGuiConfigFlags_NoMouseCursorChange);CHECK(!ImGui::GetIO().MouseDrawCursor);
+            auto cursorCheck=[&] {
+                const auto state=ui.gameplayCursor();const auto viewport=ui.frontend()->viewport();
+                const auto cursor=ui.frontend()->elementBounds("mouse-lock-cursor");
+                CHECK(state.captured&&state.visual==GameCursorVisual::MouseLock&&IsCursorHidden());
+                CHECK(cursor.width==28&&cursor.height==28);
+                CHECK(std::fabs(cursor.x+14-state.position.x)<1.5f&&std::fabs(cursor.y+14-state.position.y)<1.5f);
+                CHECK(std::fabs(state.position.x-(viewport.x+viewport.width*.5f))<1.5f);
+                CHECK(std::fabs(state.position.y-(viewport.y+viewport.height*.5f))<1.5f);
+            };
+            cursorCheck();
+            const auto yaw=rt.playerCamera().yaw(),pitch=rt.playerCamera().pitch();
+            event("mousemove_relative -- 40 15");
+            CHECK(std::fabs(std::remainder(rt.playerCamera().yaw()-yaw,2*PI))>.02f);
+            CHECK(std::fabs(rt.playerCamera().pitch()-pitch)>.01f);
+            // Capture every actual rendered frame and state, rather than one
+            // still that says nothing about temporal/body-camera jitter.
+            FILE* csv=std::fopen((std::string(directory)+"/mouse-lock.csv").c_str(),"w");CHECK(csv);
+            if(csv)std::fprintf(csv,"frame,time,physical_y,render_y,camera_x,camera_y,camera_z,pivot_y,yaw,pitch,body_yaw,cursor_x,cursor_y,captured\n");
+            int frameIndex=0;const double started=GetTime();const auto startRoot=rt.position();bool sawJump=false,sawFall=false,sawMovement=false;
+            observeFrame=[&] {
+                cursorCheck();const auto root=rt.renderCharacterRoot();const auto view=rt.playerCamera().camera();const auto pointer=ui.gameplayCursor();
+                const auto front=Vector3RotateByQuaternion({0,0,-1},root.rotation);
+                CHECK(Vector3Distance(front,rt.playerCamera().moveDirection({0,1}))<.0001f);
+                CHECK(std::fabs(front.y)<.0001f);
+                sawJump|=rt.humanoidState()==game::HumanoidState::Jumping;sawFall|=rt.humanoidState()==game::HumanoidState::Freefall;
+                sawMovement|=std::hypot(root.position.x-startRoot.x,root.position.z-startRoot.z)>1;
+                if(csv)std::fprintf(csv,"%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.3f,%.3f,%d\n",frameIndex,GetTime()-started,
+                    rt.position().y,root.position.y,view.position.x,view.position.y,view.position.z,rt.playerCamera().pivot().y,
+                    rt.playerCamera().yaw(),rt.playerCamera().pitch(),std::atan2(-front.x,-front.z),pointer.position.x,pointer.position.y,pointer.captured);
+                char name[64];std::snprintf(name,sizeof(name),"/mouse-lock-%03d.png",frameIndex++);TakeScreenshot((std::string(directory)+name).c_str());
+            };
+            event("keydown w");const char* directions[]={"w","a","s","d"};
+            for(int i=0;i<24;++i) {
+                if(i>0&&i%6==0){event(std::string("keyup ")+directions[i/6-1]);event(std::string("keydown ")+directions[i/6]);}
+                if(i==4||i==16)key("space");
+                event(std::string("mousemove_relative -- 90 ")+(i%2?"-8":"8"));
+            }
+            event("keyup d");observeFrame={};if(csv)std::fclose(csv);CHECK(sawJump&&sawFall&&sawMovement);
+            key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);CHECK(!ui.gameplayCursor().captured);
+            CHECK(!IsCursorHidden());CHECK(ui.frontend()->elementBounds("mouse-lock-cursor").width==0);CHECK(rt.shiftLockRequested());
+            click("respawn");key("Escape");frames(3);cursorCheck();
+            const auto beforeFullscreen=rt.playerCamera().yaw();key("F11");frames(8);cursorCheck();
+            CHECK(std::fabs(std::remainder(rt.playerCamera().yaw()-beforeFullscreen,2*PI))<.001f);capture("mouse-lock-fullscreen");
+            key("F11");frames(8);cursorCheck();
+            rt.settings().cameraMode=game::CameraMode::FirstPerson;frames(3);CHECK(rt.playerCamera().firstPerson());CHECK(rt.playerCamera().shoulderOffset()==0);cursorCheck();
+            rt.settings().cameraMode=game::CameraMode::Classic;frames(3);cursorCheck();
+            event("windowfocus "+std::to_string(InputTestRootWindow()));CHECK(rt.state()==game::RuntimeState::Paused);
+            CHECK(!ui.gameplayCursor().captured);CHECK(!IsCursorHidden());CHECK(ui.frontend()->elementBounds("mouse-lock-cursor").width==0);
+            event("windowfocus --sync "+windowId);key("Escape");frames(3);cursorCheck();
+            event("keydown Shift_L");CHECK(!rt.shiftLockActive());CHECK(!EditorUITestAccess::captured(ui));event("keyup Shift_L");
+            CHECK(!IsCursorHidden());CHECK(ui.frontend()->elementBounds("mouse-lock-cursor").width==0);
+            key("Shift_L");cursorCheck();key("shift+F5");CHECK(!rt.active());CHECK(!ui.gameplayCursor().captured);CHECK(!IsCursorHidden());
+            CHECK(((ImGui::GetIO().ConfigFlags&ImGuiConfigFlags_NoMouseCursorChange)!=0)==originalCursorFlag);
+            CHECK(ui.frontend()->elementBounds("mouse-lock-cursor").width==0);CHECK(NearlyEqual(camera.position(),editorEye));CHECK(projectio::toJson(scene)==original);
+        } else if(std::getenv("LOBLOX_RIG_DECALS_ONLY")) {
             std::filesystem::create_directories("assets");
             Image image=GenImageColor(32,32,MAGENTA);CHECK(ExportImage(image,"assets/front.png"));UnloadImage(image);
             image=GenImageColor(32,32,SKYBLUE);CHECK(ExportImage(image,"assets/back.png"));UnloadImage(image);
@@ -359,13 +423,13 @@ int main() {
             const auto track=ui.frontend()->elementBounds("health-track");
             CHECK(fill100.width>=track.width-1);
             capture("health-100-"+std::to_string(int(size.x)));
-            // Shift Lock reticle is screen space: jumping, falling, walking and
+            // The captured Mouse Lock cursor is screen space: jumping, falling, walking and
             // resizing the window must never move it away from the viewport centre.
             key("Shift_L");frames(2);CHECK(rt.shiftLockActive());
             auto checkReticle=[&](const char* phase){
-                auto viewport=ui.frontend()->viewport();auto reticle=ui.frontend()->elementBounds("reticle");
+                auto viewport=ui.frontend()->viewport();auto reticle=ui.frontend()->elementBounds("mouse-lock-cursor");
                 CHECK(reticle.width==28&&reticle.height==28);
-                CHECK(ui.frontend()->elementText("reticle").find("loblox-lock")!=std::string::npos);
+                CHECK(ui.frontend()->elementText("mouse-lock-cursor").find("loblox-lock")!=std::string::npos);
                 CHECK(std::fabs((reticle.x+reticle.width*.5f)-(viewport.x+viewport.width*.5f))<1.5f);
                 CHECK(std::fabs((reticle.y+reticle.height*.5f)-(viewport.y+viewport.height*.5f))<1.5f);
                 if(std::string(phase)=="jump")capture("reticle-jump-"+std::to_string(int(size.x)));

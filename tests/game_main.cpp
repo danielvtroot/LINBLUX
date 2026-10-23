@@ -508,6 +508,59 @@ void PhysicsPlayTests() {
     }
 }
 }  // namespace
+void MouseLockTests() {
+    Scene scene;scene.createBaseplate({0,-.5f,0},{2000,1,2000});scene.gameAssets().createR6();
+    scene.gameAssets().player.enableShiftLock=true;scene.gameAssets().player.cameraMode=game::CameraMode::Follow;
+    RuntimeSession runtime;std::string error;CHECK(runtime.start(scene,error));
+    Advance(runtime,1);runtime.setShiftLockRequested(true);Advance(runtime,1);
+    auto& camera=runtime.playerCamera();
+    CHECK(!camera.setMouseLockShoulderOffset(std::numeric_limits<float>::quiet_NaN()));
+    CHECK(!camera.setMouseLockShoulderOffset(100));CHECK(camera.setMouseLockShoulderOffset(1.75f));
+    const float headHeight=runtime.rig().evaluate({},{} )[Head].position.y+.08f;
+    const float initialYaw=camera.yaw();bool sawJump=false,sawFall=false;
+    const float intervals[]{1.f/240,1.f/144,1.f/60,1.f/30};
+    for(int frame=0;frame<360;++frame) {
+        PlayerInput input;input.look={-2*PI/(360*runtime.settings().sensitivity),frame%2?1.f:-1.f};
+        const Vector2 directions[]={{0,1},{1,0},{0,-1},{-1,0}};input.movement=directions[(frame/20)%4];
+        input.jump=frame==30||frame==150||frame==270;
+        const float oldYaw=camera.yaw(),oldPitch=camera.pitch();
+        runtime.update(intervals[frame%4],input);
+        CHECK(std::fabs(std::remainder(camera.yaw()-oldYaw+input.look.x*runtime.settings().sensitivity,2*PI))<.0001f);
+        CHECK(std::fabs(camera.pitch()-oldPitch-input.look.y*runtime.settings().sensitivity)<.0001f);
+        const auto root=runtime.renderCharacterRoot();
+        const auto front=Vector3RotateByQuaternion({0,0,-1},root.rotation);
+        CHECK(Vector3Distance(front,camera.moveDirection({0,1}))<.0001f);
+        CHECK(std::fabs(front.y)<.0001f);
+        const auto pivot=Vector3Add(root.position,{0,headHeight,0});
+        CHECK(Vector3Distance(camera.pivot(),pivot)<.0001f);
+        const auto view=camera.camera();const auto direction=Vector3Normalize(Vector3Subtract(view.target,view.position));
+        const auto right=Vector3Normalize(Vector3CrossProduct(direction,view.up));
+        const auto delta=Vector3Subtract(view.position,pivot);
+        CHECK(std::fabs(Vector3DotProduct(delta,right)-1.75f)<.001f);
+        CHECK(std::fabs(-Vector3DotProduct(delta,direction)-camera.followDistance())<.001f);
+        sawJump|=runtime.humanoidState()==HumanoidState::Jumping;sawFall|=runtime.humanoidState()==HumanoidState::Freefall;
+    }
+    CHECK(sawJump&&sawFall);CHECK(std::fabs(std::remainder(camera.yaw()-initialYaw,2*PI))<.0001f);
+    const auto rootBefore=runtime.renderCharacterRoot();const auto eyeBefore=camera.camera();
+    runtime.pause();runtime.update(.1f,{});CHECK(NearlyEqual(rootBefore.position,runtime.renderCharacterRoot().position));
+    CHECK(NearlyEqual(eyeBefore.position,camera.camera().position));CHECK(runtime.shiftLockRequested());CHECK(!runtime.shiftLockActive());
+    runtime.resume();CHECK(runtime.shiftLockActive());
+    PlayerInput heldShift;heldShift.shiftKey=true;runtime.update(0,heldShift);
+    CHECK(runtime.shiftLockActive());runtime.update(0,{});
+    CHECK(runtime.respawn(error));
+    CHECK(runtime.shiftLockActive());CHECK(NearlyEqual(runtime.renderCharacterRoot().position,runtime.characterRoot().position));
+    Advance(runtime,.5f);runtime.settings().cameraMode=game::CameraMode::FirstPerson;runtime.update(1.f/144,{});
+    CHECK(camera.firstPerson());CHECK(camera.shoulderOffset()==0);
+    runtime.settings().cameraMode=game::CameraMode::Classic;Advance(runtime,1);CHECK(std::fabs(camera.shoulderOffset()-1.75f)<.001f);
+    runtime.setShiftLockRequested(false);Advance(runtime,1);CHECK(std::fabs(camera.shoulderOffset())<.001f);
+    runtime.stop();CHECK(!runtime.shiftLockRequested());CHECK(!runtime.shiftLockActive());
+    // A wall between subject and shoulder must not be bypassed by starting the
+    // backwards sweep on the far side. This fails with a shoulder-only offset.
+    auto* wall=scene.createPart(PartShape::Block,{1.25f,8,0},{.2f,16,40});wall->setAnchored(true);
+    CHECK(runtime.start(scene,error));Advance(runtime,1);runtime.setShiftLockRequested(true);Advance(runtime,1);
+    CHECK(runtime.playerCamera().camera().position.x<.95f);runtime.stop();
+}
+
 int main(int argc, char** argv) {
     char temporary[] = "/tmp/loblox-game-headless-XXXXXX";
     if (const char* path = mkdtemp(temporary)) loblox::diag::configure(std::string(path)+"/game.jsonl");
@@ -521,7 +574,7 @@ int main(int argc, char** argv) {
         if (!projectio::save(scene, argv[2], error)) { std::fprintf(stderr,"%s\n",error.c_str()); return 1; }
         return 0;
     }
-    RigTests(); InputTests(); AnimationTests(); PersistenceTests(); RuntimeTests(); PhysicsPlayTests();
+    RigTests(); InputTests(); AnimationTests(); PersistenceTests(); RuntimeTests(); PhysicsPlayTests();MouseLockTests();
     {
         Scene scene;scene.buildDefaultScene();scene.gameAssets().createR6();
         scene.gameAssets().player.enableShiftLock=true;
@@ -540,6 +593,12 @@ int main(int argc, char** argv) {
         pose[Neck].position={0,8,0};
         b.update(.016f,runtime.position(),{}, {},runtime.settings(),runtime);
         CHECK(NearlyEqual(a.camera().position,b.camera().position,.0001f));pose=saved;
+        // Camera input is a render-frame operation, not a 60 Hz physics
+        // operation. A frame with no physics step must still face the camera.
+        PlayerInput fastLook;fastLook.look={8,-3};runtime.update(1.f/240,fastLook);
+        const auto facing=Vector3RotateByQuaternion({0,0,-1},runtime.characterRoot().rotation);
+        const auto forward=runtime.playerCamera().moveDirection({0,1});
+        CHECK(Vector3Distance(facing,forward)<.0001f);
         for(int jump=0;jump<3;++jump) {
             Advance(runtime,1);PlayerInput input;input.jump=true;
             auto before=runtime.playerCamera().camera().position;runtime.update(1.f/60,input);

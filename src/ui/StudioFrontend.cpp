@@ -654,7 +654,11 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             el("pause-panel")->Animate("opacity",Rml::Property(1.f,Rml::Unit::NUMBER),.12f,Rml::Tween{},1,false,0,&from);
         }
         pauseWasOpen=paused;
-        display("pause",paused,"flex");display("health",active&&!paused);display("game-topbar",active,"flex");display("reticle",active&&!paused&&ui.runtime_.shiftLockActive());
+        display("pause",paused,"flex");display("health",active&&!paused);display("game-topbar",active,"flex");
+        const auto cursor=ui.gameplayCursor();
+        display("mouse-lock-cursor",active&&cursor.visual==GameCursorVisual::MouseLock);
+        style("mouse-lock-cursor","left",Num(cursor.position.x-view.x)+"px");
+        style("mouse-lock-cursor","top",Num(cursor.position.y-view.y)+"px");
         const std::string menuIcon=paused?"icon-player-close":"icon-player-menu";
         if(attr(el("game-menu-icon"),"src")!=menuIcon)el("game-menu-icon")->SetAttribute("src",menuIcon);
         el("game-settings")->SetClass("selected",paused&&page=="settings");

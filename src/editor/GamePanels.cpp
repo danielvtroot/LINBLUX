@@ -200,16 +200,39 @@ void EditorUI::setGameplayCapture(bool capture) {
     if (gameplayCapture_ == capture) return;
     gameplaySkipDelta_ = true;
     if (capture) {
+        auto& io=ImGui::GetIO();
+        gameplayRestoreNoCursorChange_=(io.ConfigFlags&ImGuiConfigFlags_NoMouseCursorChange)!=0;
+        gameplayRestoreDrawCursor_=io.MouseDrawCursor;
+        // rlImGui otherwise calls ShowCursor when its cursor shape changes,
+        // which switches GLFW out of relative/disabled mode behind our back.
+        io.ConfigFlags|=ImGuiConfigFlags_NoMouseCursorChange;io.MouseDrawCursor=false;
         gameplayRestoreCursor_ = GetMousePosition(); DisableCursor();
     } else {
-        EnableCursor(); SetMousePosition(static_cast<int>(gameplayRestoreCursor_.x),
-                                         static_cast<int>(gameplayRestoreCursor_.y));
+        EnableCursor();SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+        auto& io=ImGui::GetIO();
+        if(!gameplayRestoreNoCursorChange_)io.ConfigFlags&=~ImGuiConfigFlags_NoMouseCursorChange;
+        io.MouseDrawCursor=gameplayRestoreDrawCursor_;
+        // Alt+Tab must not warp the pointer into the now-unfocused game.
+        if(IsWindowFocused())SetMousePosition(static_cast<int>(gameplayRestoreCursor_.x),
+                                              static_cast<int>(gameplayRestoreCursor_.y));
     }
     gameplayCapture_ = capture;
     diag::Event event; event.subsystem = "camera"; event.name = "capture_change";
     event.context = {{"context", "gameplay"}, {"captured", capture}}; diag::log(event);
 }
+GameplayCursorState EditorUI::gameplayCursor() const {
+    GameplayCursorState cursor;
+    cursor.position={gameViewportX_+gameViewportW_*.5f,gameViewportY_+gameViewportH_*.5f};
+    cursor.captured=gameplayCapture_&&IsWindowFocused()&&IsCursorHidden();
+    if(cursor.captured)cursor.visual=runtime_.shiftLockActive()?GameCursorVisual::MouseLock:GameCursorVisual::Hidden;
+    return cursor;
+}
 void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context, Vector2 image) {
+    const bool resized=std::fabs(gameViewportX_-image.x)>.5f||std::fabs(gameViewportY_-image.y)>.5f||
+        gameViewportW_!=viewportWidth_||gameViewportH_!=viewportHeight_;
+    if(resized)gameplaySkipDelta_=true;
+    gameViewportX_=image.x;gameViewportY_=image.y;
+    gameViewportW_=static_cast<float>(viewportWidth_);gameViewportH_=static_cast<float>(viewportHeight_);
     const Rectangle menuButton{image.x+12,image.y+12,78,38};
     const bool menuHovered=!frontend_ && context.hovered && !gameplayCapture_ && CheckCollisionPointRec(raw.mouse,menuButton);
     EditorInput gameInput=raw;
@@ -232,11 +255,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
         runtime_.resume(); ImGui::SetWindowFocus("Viewport");
     }
     game::PlayerInput input;
-    const bool owns = route.owner == InputOwner::Gameplay;
-    const bool shiftLocked = runtime_.shiftLockActive();
-    const bool wantsCapture = owns && (runtime_.playerCamera().firstPerson() || runtime_.settings().cameraLock ||
-        shiftLocked || (context.hovered && raw.rightPressed) || (gameplayCapture_ && raw.rightDown));
-    setGameplayCapture(wantsCapture);
+    const bool owns = route.owner == InputOwner::Gameplay || route.owner == InputOwner::Resume;
     if (owns) {
         if (!raw.modified) {
             input.movement = {raw.movement.x, raw.movement.z};
@@ -248,6 +267,12 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     }
     gameplaySkipDelta_ = false;
     runtime_.update(GetFrameTime(), input);
+    // The runtime consumes the Shift edge once. Capture follows its resulting
+    // state in this same frame, including zoom to first person and respawn.
+    const bool wantsCapture=owns&&IsWindowFocused()&&runtime_.state()==game::RuntimeState::Playing&&
+        (runtime_.playerCamera().firstPerson()||runtime_.settings().cameraLock||runtime_.shiftLockActive()||
+         (context.hovered&&raw.rightPressed)||(gameplayCapture_&&raw.rightDown));
+    setGameplayCapture(wantsCapture);
     // Retângulo real do gameplay para o menu Esc (evita coordenadas sobre o
     // desktop inteiro):
     gameViewportX_ = image.x;
@@ -255,7 +280,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     gameViewportW_ = static_cast<float>(viewportWidth_);
     gameViewportH_ = static_cast<float>(viewportHeight_);
     BeginTextureMode(viewport_);
-    RigRenderState character{&runtime_.rig(), runtime_.pose(), runtime_.characterRoot()};
+    RigRenderState character{&runtime_.rig(), runtime_.pose(), runtime_.renderCharacterRoot()};
     renderer_.drawScene(runtime_.scene(), runtime_.playerCamera().camera(), viewportWidth_, viewportHeight_,
         kInvalidInstanceId, runtime_.playerCamera().avatarHidden() ? nullptr : &character, false);
     EndTextureMode();
@@ -272,9 +297,9 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     for(int i=0;i<3;++i)dl->AddLine({menuButton.x+47,menuButton.y+12+i*7.f},
         {menuButton.x+65,menuButton.y+12+i*7.f},IM_COL32(238,243,250,255),2);
     if(menuHovered)ImGui::SetTooltip("Game menu (Esc)");
-    // Shift Lock is indicated only by its reticle, never a text banner.
-    if (shiftLocked) {
-        const float cx=image.x+viewportWidth_*.5f,cy=image.y+viewportHeight_*.5f;
+    // Software cursor for the captured virtual pointer, never a world marker.
+    if (gameplayCursor().visual==GameCursorVisual::MouseLock) {
+        const auto cursor=gameplayCursor().position;const float cx=cursor.x,cy=cursor.y;
         const auto texture=game::AssetTexture(game::BuiltinAssetPath("lock.png"));
         if(texture.id) {
             const float scale=28.f/std::max(texture.width,texture.height);
@@ -306,7 +331,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     }
     const auto& settings=runtime_.settings();
     if (!runtime_.playerCamera().avatarHidden() && (settings.healthDisplayType!=2 || settings.nameDisplayDistance>0)) {
-        const auto head=runtime_.rig().evaluate(runtime_.pose(),runtime_.characterRoot())[game::Head];
+        const auto head=runtime_.rig().evaluate(runtime_.pose(),runtime_.renderCharacterRoot())[game::Head];
         const auto eye=runtime_.playerCamera().camera();
         const auto p=Vector3Add(head.position,{0,runtime_.rig().bodies[game::Head].size.y*.5f+.6f,0});
         const float distance=Vector3Distance(eye.position,p);
