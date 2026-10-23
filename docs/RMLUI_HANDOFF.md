@@ -5,6 +5,8 @@ Checkpoint `5538899`; topbar/menu/Settings/Health reconstruídos. Última suíte
 completa: **19/19**, 408,99 s; RML 984 checks; qualidade 83 checks por resolução.
 Último polimento RCSS: altura máxima 800 px / About centralizado; 331 checks
 focados posteriores, zero falhas. Capturas: `build/player-ui-2026/`.
+Último commit funcional: `2b05fc0` (após a base `5538899`); executável Release
+principal recompilado e aberto/encerrado normalmente. Sem push.
 Os resultados/medições abaixo são históricos da migração inicial.
 
 - Branch preservado: `fix/unified-3d-gizmos`. Entrada `c461e38`.
