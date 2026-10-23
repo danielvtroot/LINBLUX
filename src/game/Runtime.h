@@ -98,6 +98,10 @@ private:
     void step(float dt, Vector3 desired, bool jump);
     void transition(HumanoidState state);
     void animate(float dt, float horizontalSpeed);
+    // Sweeps the full capsule down before a fixed step so a fast fall cannot
+    // skip a thin platform. Bullet's CCD swept sphere only covers the body
+    // centre, while the capsule ends are what normally touch the ground.
+    void preventFallThrough(float dt);
 
     std::unique_ptr<Scene> scene_;
     std::unique_ptr<PhysicsWorld> physics_;
@@ -115,6 +119,8 @@ private:
     float coyoteTime_ = 0;        // tempo restante para pular após sair do chão
     float jumpBufferTime_ = 0;    // buffer de pulo pressionado no ar
     bool jumpPending_ = false;
+    bool lastJumpDown_ = false;   // edge detection: holding jump must not bunny-hop
+    bool suppressJump_ = false;   // a key held through respawn/pause needs a release
     unsigned respawns_ = 0;
     std::string correlation_;
     std::string activeAnimation_;

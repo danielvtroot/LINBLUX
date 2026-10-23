@@ -352,6 +352,65 @@ void TestResizeKeepsSingleBody() {
     EndSection();
 }
 
+void TestThinPlatformAndVariedRates() {
+    Section("Plataforma fina, CCD e passos variaveis");
+    // A fast dynamic box must not skip a 0.2-thick platform. This exercises
+    // Bullet CCD independently from the player capsule sweep.
+    {
+        loblox::Scene scene;
+        scene.createBaseplate({0, -.5f, 0}, {200, 1, 200});
+        auto* thin = scene.createPart(loblox::PartShape::Block, {0, 2, 0}, {8, .2f, 8}, "Thin");
+        thin->setAnchored(true);
+        auto* box = scene.createPart(loblox::PartShape::Block, {0, 30, 0}, {.2f, .2f, .2f}, "FastBox");
+        box->setAnchored(false);
+        loblox::PhysicsWorld physics;
+        physics.attach(scene);
+        Simulate(physics, scene, 4.0f);
+        CHECK(box->position().y > 2.05f);
+        CHECK(box->position().y < 3.0f);
+        const float settled = box->position().y;
+        Simulate(physics, scene, 1.0f);
+        CHECK(std::fabs(box->position().y - settled) < .04f);
+    }
+    // A rotated thin ramp must support a dynamic box, and the contact must be
+    // stable rather than letting the box sink through the surface.
+    {
+        loblox::Scene scene;
+        scene.createBaseplate({0, -.5f, 0}, {200, 1, 200});
+        auto* ramp = scene.createPart(loblox::PartShape::Block, {0, 2, 0}, {12, .2f, 12}, "Ramp");
+        ramp->setAnchored(true); ramp->setRotationEulerDegrees({0, 0, 20});
+        auto* box = scene.createPart(loblox::PartShape::Block, {0, 8, 0}, {1, 1, 1}, "RampBox");
+        box->setAnchored(false);
+        loblox::PhysicsWorld physics;
+        physics.attach(scene);
+        Simulate(physics, scene, 4.0f);
+        CHECK(box->position().y > 1.5f);
+        const float settled = box->position().y;
+        Simulate(physics, scene, 1.0f);
+        CHECK(std::fabs(box->position().y - settled) < .05f);
+    }
+    // The same drop at different display rates resolves to the same resting
+    // position, because PhysicsWorld uses a fixed accumulator internally.
+    {
+        auto drop = [](float frameStep) {
+            loblox::Scene scene;
+            scene.createBaseplate({0, -.5f, 0}, {200, 1, 200});
+            auto* stamp = scene.createPart(loblox::PartShape::Block, {0, 20, 0}, {1, 1, 1}, "Drop");
+            stamp->setAnchored(false);
+            loblox::PhysicsWorld physics;
+            physics.attach(scene);
+            const int frames = static_cast<int>(3.0f / frameStep + .5f);
+            for (int i = 0; i < frames; ++i) physics.simulate(scene, frameStep);
+            return stamp->position().y;
+        };
+        const float a = drop(1.0f / 15.0f);
+        const float b = drop(1.0f / 60.0f);
+        const float c = drop(1.0f / 144.0f);
+        CHECK_NEAR(a, b, .06f);
+        CHECK_NEAR(b, c, .06f);
+    }
+}
+
 void TestGizmoMath() {
     Section("Matematica de gizmos, eixos, planos, escala e rotacao");
     using namespace loblox;
@@ -1576,6 +1635,7 @@ int main() {
     TestCanCollide();
     TestTransformSyncAndRaycast();
     TestResizeKeepsSingleBody();
+    TestThinPlatformAndVariedRates();
     TestGizmoMath();
     TestGizmoLayout();
     TestGizmoSessionLifecycle();

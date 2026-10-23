@@ -212,6 +212,9 @@ void RuntimeTests() {
     CHECK(runtime.position().z < spawn.z - 3);
     CHECK(runtime.humanoidState() == HumanoidState::Walking);
     CHECK(std::fabs(runtime.pose()[LeftHip].rotation.x) > .01f);
+    const auto walkPose = runtime.pose()[LeftHip].rotation;
+    Advance(runtime, .13f, forward);
+    CHECK(!NearlyEqual(walkPose, runtime.pose()[LeftHip].rotation, .0001f));
     Advance(runtime, 2, forward);
     CHECK(runtime.position().z > -13.7f); // wall face -14.5 + capsule radius
     Advance(runtime, .5f);
@@ -224,6 +227,7 @@ void RuntimeTests() {
     runtime.update(1.f/60, jump);
     CHECK(runtime.velocity().y > 10);
     CHECK(runtime.humanoidState() == HumanoidState::Jumping);
+    const auto airPose = runtime.pose()[LeftShoulder].rotation;
     const float firstJump = runtime.velocity().y;
     runtime.update(1.f/60, jump); // a repeated press in midair cannot jump again
     CHECK(runtime.velocity().y < firstJump);
@@ -232,6 +236,7 @@ void RuntimeTests() {
     Advance(runtime, 1.5f);
     CHECK(runtime.grounded());
     CHECK(std::fabs(runtime.position().y-groundedY) < .1f);
+    CHECK(!NearlyEqual(airPose, runtime.pose()[LeftShoulder].rotation, .001f));
     runtime.pause(); const auto paused = runtime.position(); const auto pose = runtime.pose();
     Advance(runtime, 1, forward);
     CHECK(NearlyEqual(runtime.position(), paused));
@@ -332,7 +337,166 @@ void RuntimeTests() {
     CHECK(NearlyEqual(runtime.characterRoot().rotation,QuaternionIdentity()));
     runtime.stop();
 }
+void PhysicsPlayTests() {
+    std::string error;
+    // A very high spawn above a 0.2-thick platform exercises the full-capsule
+    // fall sweep; Bullet's centre-sphere CCD alone can miss the capsule foot.
+    {
+        Scene scene;
+        auto* thin = scene.createPart(PartShape::Block, {0, 2, 0}, {8, .2f, 8}, "Thin");
+        thin->setAnchored(true);
+        auto* marker = scene.createPart(PartShape::Block, {0, 100, 0}, {.2f, .2f, .2f}, "HighSpawn");
+        marker->setAnchored(true); marker->setCanCollide(false);
+        marker->setAttribute("spawn", true);
+        RuntimeSession runtime;
+        CHECK(runtime.start(scene, error));
+        Advance(runtime, 2.0f);
+        CHECK(runtime.state() == RuntimeState::Playing);
+        CHECK(runtime.position().y > 4.6f && runtime.position().y < 5.5f);
+        CHECK(runtime.grounded());
+        const float landed = runtime.position().y;
+        Advance(runtime, 1.0f);
+        CHECK(runtime.grounded());
+        CHECK(std::fabs(runtime.position().y - landed) < .05f);
+        runtime.stop();
+    }
+    // A thin rotated platform must still be a valid support, not a surface the
+    // capsule visually clips through or slides off while standing still.
+    {
+        Scene scene;
+        auto* ramp = scene.createPart(PartShape::Block, {0, 2, 0}, {10, .2f, 10}, "Ramp");
+        ramp->setAnchored(true); ramp->setRotationEulerDegrees({0, 0, 22});
+        auto* marker = scene.createPart(PartShape::Block, {0, 15, 0}, {.2f, .2f, .2f}, "RampSpawn");
+        marker->setAnchored(true); marker->setCanCollide(false);
+        marker->setAttribute("spawn", true);
+        RuntimeSession runtime;
+        CHECK(runtime.start(scene, error));
+        Advance(runtime, 2.0f);
+        CHECK(runtime.state() == RuntimeState::Playing);
+        CHECK(runtime.position().y > 3.0f);
+        CHECK(runtime.grounded());
+        const float landed = runtime.position().y;
+        Advance(runtime, 1.0f);
+        CHECK(runtime.grounded());
+        CHECK(std::fabs(runtime.position().y - landed) < .08f);
+        runtime.stop();
+    }
+    // Coyote time: leave a ledge, then press jump inside the grace window.
+    {
+        Scene scene;
+        auto* ledge = scene.createPart(PartShape::Block, {0, 2, 0}, {6, .2f, 6}, "Ledge");
+        ledge->setAnchored(true);
+        auto* marker = scene.createPart(PartShape::Block, {0, 2, 0}, {.2f, .2f, .2f}, "LedgeSpawn");
+        marker->setAnchored(true); marker->setCanCollide(false);
+        marker->setAttribute("spawn", true);
+        RuntimeSession runtime;
+        CHECK(runtime.start(scene, error));
+        Advance(runtime, .5f);
+        PlayerInput forward; forward.movement = {0, 1};
+        int steps = 0;
+        while (runtime.grounded() && steps++ < 120) runtime.update(1.f/60, forward);
+        CHECK(!runtime.grounded());
+        PlayerInput jump; jump.jump = true;
+        runtime.update(1.f/60, jump);
+        CHECK(runtime.velocity().y > 5);
+        CHECK(runtime.humanoidState() == HumanoidState::Jumping);
+        runtime.stop();
+    }
+    // Jump buffer: press in the air just before landing; the landing step must
+    // consume the edge and leave the ground immediately.
+    {
+        Scene scene;
+        scene.createBaseplate({0, -.5f, 0}, {200, 1, 200});
+        auto* marker = scene.createPart(PartShape::Block, {0, 10, 0}, {.2f, .2f, .2f}, "AirSpawn");
+        marker->setAnchored(true); marker->setCanCollide(false);
+        marker->setAttribute("spawn", true);
+        RuntimeSession runtime;
+        CHECK(runtime.start(scene, error));
+        int steps = 0;
+        while (runtime.position().y > 5.0f && steps++ < 240)
+            runtime.update(1.f/60, {});
+        CHECK(!runtime.grounded());
+        CHECK(runtime.position().y > 4.0f);
+        PlayerInput jump; jump.jump = true;
+        runtime.update(1.f/60, jump);
+        Advance(runtime, .2f);
+        CHECK(runtime.velocity().y > 5 || runtime.position().y > 3.7f);
+        runtime.stop();
+    }
+    // Holding jump through a landing must not create an infinite bunny hop.
+    {
+        Scene scene;
+        scene.createBaseplate({0, -.5f, 0}, {200, 1, 200});
+        RuntimeSession runtime;
+        CHECK(runtime.start(scene, error));
+        Advance(runtime, .5f);
+        PlayerInput held; held.jump = true;
+        runtime.update(1.f/60, held);
+        for (int i = 0; i < 180; ++i) runtime.update(1.f/60, held);
+        CHECK(runtime.grounded());
+        CHECK(runtime.velocity().y < 1);
+        CHECK(runtime.humanoidState() != HumanoidState::Jumping);
+        runtime.stop();
+    }
+    // A small obby gap: jump from the start platform to a lower/far platform.
+    {
+        Scene scene;
+        auto* start = scene.createPart(PartShape::Block, {0, 2, 0}, {6, .2f, 6}, "Start");
+        start->setAnchored(true);
+        auto* landing = scene.createPart(PartShape::Block, {0, 2, -10}, {10, .2f, 8}, "Landing");
+        landing->setAnchored(true);
+        auto* marker = scene.createPart(PartShape::Block, {0, 2, 0}, {.2f, .2f, .2f}, "StartSpawn");
+        marker->setAnchored(true); marker->setCanCollide(false);
+        marker->setAttribute("spawn", true);
+        RuntimeSession runtime;
+        CHECK(runtime.start(scene, error));
+        Advance(runtime, .5f);
+        PlayerInput move; move.movement = {0, 1}; move.jump = true;
+        runtime.update(1.f/60, move);
+        move.jump = false;
+        int steps = 0;
+        while (steps++ < 120) {
+            runtime.update(1.f/60, move);
+            if (runtime.grounded() && runtime.position().z < -5.5f) break;
+        }
+        CHECK(runtime.position().z < -5.5f);
+        CHECK(runtime.grounded());
+        CHECK(runtime.humanoidState() != HumanoidState::Dead);
+        runtime.stop();
+    }
+    // Movement and jump/landing are stable across common display rates.
+    {
+        Scene flat; flat.createBaseplate({0, -.5f, 0}, {200, 1, 200});
+        flat.gameAssets().createR6();
+        RuntimeSession runtime;
+        float referenceDistance = 0;
+        for (float step : {1.f/60, 1.f/144, 1.f/30, 1.f/15}) {
+            CHECK(runtime.start(flat, error));
+            Advance(runtime, .5f, {}, step);
+            const auto begin = runtime.position();
+            PlayerInput forward; forward.movement = {0, 1};
+            Advance(runtime, 1.0f, forward, step);
+            const float moved = Vector3Distance(begin, runtime.position());
+            if (referenceDistance == 0) referenceDistance = moved;
+            else CHECK(std::fabs(moved - referenceDistance) < .12f);
+            runtime.stop();
+        }
+        for (float step : {1.f/60, 1.f/144, 1.f/30, 1.f/15}) {
+            CHECK(runtime.start(flat, error));
+            Advance(runtime, .5f, {}, step);
+            const float ground = runtime.position().y;
+            PlayerInput jump; jump.jump = true;
+            runtime.update(step, jump);
+            Advance(runtime, .3f, {}, step);
+            CHECK(runtime.position().y > ground + 2);
+            Advance(runtime, 1.5f, {}, step);
+            CHECK(runtime.grounded());
+            CHECK(std::fabs(runtime.position().y - ground) < .12f);
+            runtime.stop();
+        }
+    }
 }
+}  // namespace
 int main(int argc, char** argv) {
     char temporary[] = "/tmp/loblox-game-headless-XXXXXX";
     if (const char* path = mkdtemp(temporary)) loblox::diag::configure(std::string(path)+"/game.jsonl");
@@ -346,7 +510,7 @@ int main(int argc, char** argv) {
         if (!projectio::save(scene, argv[2], error)) { std::fprintf(stderr,"%s\n",error.c_str()); return 1; }
         return 0;
     }
-    RigTests(); InputTests(); AnimationTests(); PersistenceTests(); RuntimeTests();
+    RigTests(); InputTests(); AnimationTests(); PersistenceTests(); RuntimeTests(); PhysicsPlayTests();
     std::printf("Game: %d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

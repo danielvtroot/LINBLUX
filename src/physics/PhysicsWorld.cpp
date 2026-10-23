@@ -54,7 +54,9 @@ PhysicsWorld::PhysicsWorld() {
     world_ = std::make_unique<btDiscreteDynamicsWorld>(
         dispatcher_.get(), broadphase_.get(), solver_.get(), collisionConfiguration_.get());
     world_->setGravity(btVector3(0.0f, -98.1f, 0.0f));
-    world_->getSolverInfo().m_numIterations = 10;
+    // More solver iterations noticeably reduce jitter for boxes resting on
+    // thin or rotated platforms without changing the fixed-step contract.
+    world_->getSolverInfo().m_numIterations = 16;
     world_->getSolverInfo().m_splitImpulse = 1;
     world_->getSolverInfo().m_splitImpulsePenetrationThreshold = -0.02f;
 }

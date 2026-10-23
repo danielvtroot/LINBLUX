@@ -51,6 +51,27 @@ struct SolidSweep : btCollisionWorld::ClosestConvexResultCallback {
         return object != ignored && object->hasContactResponse() && ClosestConvexResultCallback::needsCollision(proxy);
     }
 };
+// A downward shape sweep for the player capsule. Only up-facing surfaces stop
+// the fall; brushing a vertical wall must not freeze vertical velocity.
+struct DownSweep : btCollisionWorld::ClosestConvexResultCallback {
+    const btCollisionObject* ignored;
+    DownSweep(btVector3 from, btVector3 to, const btCollisionObject* ignore)
+        : ClosestConvexResultCallback(from, to), ignored(ignore) {}
+    bool needsCollision(btBroadphaseProxy* proxy) const override {
+        const auto* object = static_cast<const btCollisionObject*>(proxy->m_clientObject);
+        return object != ignored && object->hasContactResponse() &&
+               ClosestConvexResultCallback::needsCollision(proxy);
+    }
+    btScalar addSingleResult(btCollisionWorld::LocalConvexResult& result,
+                             bool normalInWorldSpace) override {
+        const btVector3 normal = normalInWorldSpace
+            ? result.m_hitNormalLocal
+            : result.m_hitCollisionObject->getWorldTransform().getBasis() *
+                  result.m_hitNormalLocal;
+        if (normal.y() < .2f) return 1.0f;
+        return ClosestConvexResultCallback::addSingleResult(result, normalInWorldSpace);
+    }
+};
 struct Overlap : btCollisionWorld::ContactResultCallback {
     const btCollisionObject* ignored = nullptr;
     bool overlapping = false;
@@ -250,7 +271,9 @@ bool RuntimeSession::respawn(std::string& error) {
     auto motion = std::make_unique<btDefaultMotionState>(transform);
     btVector3 inertia; capsule->calculateLocalInertia(1, inertia);
     btRigidBody::btRigidBodyConstructionInfo info(1, motion.get(), capsule.get(), inertia);
-    info.m_friction = 0; info.m_restitution = 0;
+    // Friction is what keeps an idle capsule from sliding down a rotated
+    // platform; the controller still owns horizontal velocity while walking.
+    info.m_friction = 1.0f; info.m_restitution = 0;
     auto body = std::make_unique<btRigidBody>(info);
     body->setAngularFactor({0, 0, 0}); body->setActivationState(DISABLE_DEACTIVATION);
     body->setCcdMotionThreshold(.2f); body->setCcdSweptSphereRadius(settings_.collisionRadius * .8f);
@@ -326,6 +349,30 @@ void RuntimeSession::transition(HumanoidState state) {
     Event("player", "move_state", correlation_, {{"previous", StateName(humanoidState_)}, {"state", StateName(state)}});
     humanoidState_ = state;
 }
+void RuntimeSession::preventFallThrough(float dt) {
+    if (!body_ || !capsule_ || !physics_ || dt <= 0) return;
+    const btVector3 velocity = body_->getLinearVelocity();
+    const float travel = velocity.y() * dt;
+    if (travel >= -.0001f) return;
+    const btTransform from = body_->getWorldTransform();
+    btTransform to = from;
+    to.getOrigin().setY(from.getOrigin().y() + travel);
+    DownSweep hit(from.getOrigin(), to.getOrigin(), body_.get());
+    physics_->world_->convexSweepTest(capsule_.get(), from, to, hit);
+    if (!hit.hasHit() || hit.m_closestHitFraction >= 1.0f) return;
+    const float fraction = std::clamp(hit.m_closestHitFraction, 0.0f, 1.0f);
+    const float allowed = travel * fraction;
+    const float nudge = fraction > 0 ? .001f : 0;
+    btTransform stopped = from;
+    stopped.getOrigin().setY(from.getOrigin().y() + allowed + nudge);
+    body_->setWorldTransform(stopped);
+    body_->setInterpolationWorldTransform(stopped);
+    if (motion_) motion_->setWorldTransform(stopped);
+    btVector3 clamped = velocity;
+    clamped.setY(0);
+    body_->setLinearVelocity(clamped);
+    physics_->world_->updateSingleAabb(body_.get());
+}
 void RuntimeSession::step(float dt, Vector3 desired, bool jump) {
     if (health_<=0) {
         auto v=body_->getLinearVelocity();v.setX(0);v.setZ(0);body_->setLinearVelocity(v);
@@ -367,7 +414,11 @@ void RuntimeSession::step(float dt, Vector3 desired, bool jump) {
     };
     if (jumpBufferTime_ > 0 && canJump) launch();
     body_->setLinearVelocity(Bt(speed));
+    // Full walking speed while the controller has input; friction only holds
+    // an idle capsule in place on slopes.
+    body_->setFriction(std::hypot(desired.x, desired.z) > .01f ? 0.0f : 1.0f);
     physics_->syncScene(*scene_);
+    if (!jumped) preventFallThrough(dt);
     physics_->world_->stepSimulation(dt, 0); // exactly one fixed step; no second accumulator
     physics_->syncFromBodies(*scene_);
     const Vector3 actual = Vector3Scale(Vector3Subtract(position(), before), 1/dt);
@@ -513,6 +564,9 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     if (settings_.enableShiftLock && shiftDown && !lastShiftKey_)
         shiftLockRequested_ = !shiftLockRequested_;
     lastShiftKey_ = shiftDown ? 1 : 0;
+    if (suppressJump_ && !input.jump) suppressJump_ = false;
+    const bool jumpPressed = input.jump && !lastJumpDown_ && !suppressJump_;
+    lastJumpDown_ = input.jump;
     scripts_.update(dt);
     physics_->syncScene(*scene_);
     damageCooldown_=std::max(0.f,damageCooldown_-dt);
@@ -522,7 +576,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     }
     camera_.update(dt, characterRoot().position, velocity(), input, settings_, *this);
     const Vector3 desired = camera_.moveDirection(input.movement);
-    jumpPending_ = jumpPending_ || input.jump;
+    jumpPending_ = jumpPending_ || jumpPressed;
     accumulator_ += dt;
     constexpr float fixed = 1.f / 60;
     int steps = 0;
