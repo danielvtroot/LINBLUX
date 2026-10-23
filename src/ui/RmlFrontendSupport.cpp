@@ -301,7 +301,7 @@ Rml::TextureHandle StudioRenderer::LoadTexture(Rml::Vector2i& dimensions, const 
     if (name.rfind("icon-", 0) == 0) {
         image = IconImage(name.substr(5));
     } else {
-        const std::string path = name == "loblox-logo" ? game::BuiltinAssetPath("loblox.png") : source;
+        const std::string path = name == "loblox-logo" ? game::BuiltinAssetPath("loblox.png") : name=="loblox-lock"?game::BuiltinAssetPath("lock.png"):source;
         if (path.empty() || !SafeImageFile(path)) return 0;
         image = LoadImage(path.c_str());
     }
@@ -319,7 +319,7 @@ Rml::TextureHandle StudioRenderer::LoadTexture(Rml::Vector2i& dimensions, const 
     // The original logo keeps a wide transparent margin around its artwork.
     // Trim it so the small circular menu button shows the mark at the same
     // visual weight as the Roblox reference instead of shrinking it twice.
-    if (name == "loblox-logo") ImageAlphaCrop(&image, 0.02f);
+    if (name == "loblox-logo" || name=="loblox-lock") ImageAlphaCrop(&image, 0.02f);
     const int longest = std::max(image.width, image.height);
     if (longest > kUiTextureMaxEdge) {
         // Area-average instead of raylib's bicubic ImageResize: a 1600 px

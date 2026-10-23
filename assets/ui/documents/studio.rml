@@ -20,7 +20,7 @@
  <div id="status"><span id="message">Ready</span><span id="scene-count"/></div>
  <div id="game-layer">
   <div id="game-topbar"><button id="game-menu" data-player-page="game" class="logo-button" title="Loblox · Game menu"><img src="loblox-logo"/></button><div id="game-capsule"><button id="game-controls" data-player-page="game" title="Menu · Esc"><img id="game-menu-icon" src="icon-player-menu"/></button><button id="game-settings" data-player-page="settings" title="Camera and controls"><img src="icon-player-settings"/></button></div></div>
-  <div id="health" aria-label="Health 100 / 100"><div id="health-track" class="health-track"><div id="health-trail"/><div id="health-fill"/></div></div><div id="reticle"><div class="cross-horizontal"/><div class="cross-vertical"/></div>
+  <div id="health" aria-label="Health 100 / 100"><div id="health-track" class="health-track"><div id="health-trail"/><div id="health-fill"/></div></div><div id="reticle"><img src="loblox-lock"/></div>
   <div id="pause"><div id="pause-panel" class="pause-panel">
    <div class="pause-tabs"><button id="page-game" data-page="game"><img src="icon-player-person"/><span>Game</span></button><button id="page-settings" data-page="settings"><img src="icon-player-settings"/><span>Settings</span></button><button id="page-controls" data-page="controls"><img src="icon-player-controls"/><span>Controls</span></button><button id="page-about" data-page="about"><img src="icon-info"/><span>About</span></button></div>
    <div id="pause-content">

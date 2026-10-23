@@ -275,12 +275,12 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     // Shift Lock is indicated only by its reticle, never a text banner.
     if (shiftLocked) {
         const float cx=image.x+viewportWidth_*.5f,cy=image.y+viewportHeight_*.5f;
-        const ImU32 cross=IM_COL32(235,240,248,210);
-        dl->AddLine({cx-9,cy},{cx-3,cy},cross,1.5f);
-        dl->AddLine({cx+3,cy},{cx+9,cy},cross,1.5f);
-        dl->AddLine({cx,cy-9},{cx,cy-3},cross,1.5f);
-        dl->AddLine({cx,cy+3},{cx,cy+9},cross,1.5f);
-        dl->AddCircleFilled({cx,cy},1.6f,cross,10);
+        const auto texture=game::AssetTexture(game::BuiltinAssetPath("lock.png"));
+        if(texture.id) {
+            const float scale=28.f/std::max(texture.width,texture.height);
+            const float halfW=texture.width*scale*.5f,halfH=texture.height*scale*.5f;
+            dl->AddImage(static_cast<ImTextureID>(texture.id),{cx-halfW,cy-halfH},{cx+halfW,cy+halfH});
+        }
     }
     const float health=runtime_.health(),maximum=runtime_.settings().maxHealth;
     displayedHealth_=Lerp(displayedHealth_,health,1-std::exp(-10*std::min(GetFrameTime(),.1f)));

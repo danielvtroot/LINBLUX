@@ -511,6 +511,31 @@ int main(int argc, char** argv) {
         return 0;
     }
     RigTests(); InputTests(); AnimationTests(); PersistenceTests(); RuntimeTests(); PhysicsPlayTests();
+    {
+        Scene scene;scene.buildDefaultScene();scene.gameAssets().createR6();
+        scene.gameAssets().player.enableShiftLock=true;
+        scene.gameAssets().player.cameraMode=game::CameraMode::Follow;
+        RuntimeSession runtime;std::string error;CHECK(runtime.start(scene,error));
+        Advance(runtime,.5f);runtime.setShiftLockRequested(true);
+        PlayerInput look;look.look={30,-12};runtime.update(1.f/60,look);
+        const float yaw=runtime.playerCamera().yaw();
+        CHECK(std::fabs(yaw+30*runtime.settings().sensitivity)<.0001f);
+        PlayerInput strafe;strafe.movement={1,0};Advance(runtime,2,strafe);
+        CHECK(std::fabs(runtime.playerCamera().yaw()-yaw)<.0001f); // Follow must not fight lock.
+        // An arbitrary animated head offset must never change locked framing.
+        auto& pose=const_cast<Pose&>(runtime.pose());const auto saved=pose;
+        PlayerCamera a,b;a.reset(runtime.position(),runtime.settings());b.reset(runtime.position(),runtime.settings());
+        a.update(.016f,runtime.position(),{}, {},runtime.settings(),runtime);
+        pose[Neck].position={0,8,0};
+        b.update(.016f,runtime.position(),{}, {},runtime.settings(),runtime);
+        CHECK(NearlyEqual(a.camera().position,b.camera().position,.0001f));pose=saved;
+        for(int jump=0;jump<3;++jump) {
+            Advance(runtime,1);PlayerInput input;input.jump=true;
+            auto before=runtime.playerCamera().camera().position;runtime.update(1.f/60,input);
+            CHECK(Vector3Distance(before,runtime.playerCamera().camera().position)<.4f);
+        }
+        runtime.stop();
+    }
     std::printf("Game: %d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

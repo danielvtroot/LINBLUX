@@ -305,7 +305,8 @@ int main() {
             key("Shift_L");frames(2);CHECK(rt.shiftLockActive());
             auto checkReticle=[&](const char* phase){
                 auto viewport=ui.frontend()->viewport();auto reticle=ui.frontend()->elementBounds("reticle");
-                CHECK(reticle.width>5&&reticle.height>5);
+                CHECK(reticle.width==28&&reticle.height==28);
+                CHECK(ui.frontend()->elementText("reticle").find("loblox-lock")!=std::string::npos);
                 CHECK(std::fabs((reticle.x+reticle.width*.5f)-(viewport.x+viewport.width*.5f))<1.5f);
                 CHECK(std::fabs((reticle.y+reticle.height*.5f)-(viewport.y+viewport.height*.5f))<1.5f);
                 if(std::string(phase)=="jump")capture("reticle-jump-"+std::to_string(int(size.x)));

@@ -99,7 +99,7 @@ const char* StateName(HumanoidState state) {
     return "Unknown";
 }
 void PlayerCamera::reset(Vector3 root, const PlayerSettings& settings) {
-    yaw_ = 0; pitch_ = .25f; followDelay_ = 0;
+    yaw_ = 0; pitch_ = .25f; followDelay_ = 0; shoulderOffset_ = 0;
     requestedDistance_ = distance_ = settings.cameraDistance;
     target_ = Vector3Add(root, {0, 1.2f, 0});
     previousMode_ = settings.cameraMode;
@@ -113,8 +113,7 @@ Vector3 PlayerCamera::moveDirection(Vector2 input) const {
     return {std::cos(yaw_) * input.x - std::sin(yaw_) * input.y, 0,
             -std::sin(yaw_) * input.x - std::cos(yaw_) * input.y};
 }
-void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const PlayerInput& input,
-                         const PlayerSettings& settings, const RuntimeSession& runtime) {
+void PlayerCamera::processInput(float dt, const PlayerInput& input,const PlayerSettings& settings) {
     if (settings.cameraMode != previousMode_) {
         Event("camera", "mode_change", "", {{"mode", static_cast<int>(settings.cameraMode)}});
         previousMode_ = settings.cameraMode;
@@ -127,33 +126,32 @@ void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const Player
     firstPerson_ = settings.cameraMode == CameraMode::FirstPerson ||
         (settings.allowFirstPerson && requestedDistance_ <= .7f);
     followDelay_ = std::max(0.f, followDelay_ - dt);
+}
+void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const PlayerInput&,
+                         const PlayerSettings& settings, const RuntimeSession& runtime) {
     const float horizontal = std::hypot(velocity.x, velocity.z);
     if (settings.cameraMode == CameraMode::Follow && !firstPerson_ && !settings.cameraLock &&
-        followDelay_ == 0 && horizontal > .5f) {
+        !runtime.shiftLockActive() && followDelay_ == 0 && horizontal > .5f) {
         const float desiredYaw = std::atan2(-velocity.x, -velocity.z);
         yaw_ += std::remainder(desiredYaw - yaw_, 2*PI) * Response(2, dt);
     }
     const auto bodies = runtime.rig().evaluate(runtime.pose(), {root,runtime.characterRoot().rotation});
-    const Vector3 desiredTarget = Compose(bodies[Head], {{0,.08f,0}}).position;
-    // Shift Lock: desloca o alvo para o lado direito do avatar (offset moderado)
-    // e mantém o alvo estável durante a rotação da câmera.
-    // No Shift Lock, o alvo salta instantaneamente para manter o personagem alinhado à mira.
-    Vector3 lockedTarget = desiredTarget;
-    if (!firstPerson_ && runtime.shiftLockActive()) {
-        const Vector3 right{std::cos(yaw_), 0.f, -std::sin(yaw_)};
-        lockedTarget = Vector3Add(lockedTarget, Vector3Scale(right, .6f));
-        // No Shift Lock, travar o alvo instantaneamente para alinhamento perfeito com a mira
-        target_ = lockedTarget;
-    } else {
-        target_ = firstPerson_ ? desiredTarget : Vector3Lerp(target_, lockedTarget, Response(14, dt));
+    Vector3 desiredTarget = Compose(bodies[Head], {{0,.08f,0}}).position;
+    if(runtime.shiftLockActive()) {
+        const auto neutral=runtime.rig().evaluate(Pose{},RigidTransform{});
+        desiredTarget=Vector3Add(root,{0,neutral[Head].position.y+.08f,0});
     }
+    // Filter the post-physics anchor, never the mouse-controlled yaw/pitch.
+    target_ = firstPerson_ ? desiredTarget : Vector3Lerp(target_,desiredTarget,Response(14,dt));
+    shoulderOffset_=Lerp(shoulderOffset_,!firstPerson_&&runtime.shiftLockActive()?.6f:0.f,Response(12,dt));
+    const Vector3 aimTarget=Vector3Add(target_,Vector3Scale(Vector3{std::cos(yaw_),0,-std::sin(yaw_)},shoulderOffset_));
     const Vector3 back{std::sin(yaw_) * std::cos(pitch_), std::sin(pitch_),
                        std::cos(yaw_) * std::cos(pitch_)};
     if (!settings.allowFirstPerson && !firstPerson_) {
         float visualMinimum = settings.minZoom;
         for (int i = 0; i < kBodyCount; ++i) {
             const auto inverse = Inverse(bodies[i]);
-            const auto local = Compose(inverse,{target_}).position;
+            const auto local = Compose(inverse,{aimTarget}).position;
             const auto half = Vector3Scale(runtime.rig().bodies[i].size,.5f);
             if (InsideBox(local,half)) visualMinimum = std::max(visualMinimum,
                 BoxExit(local,Vector3RotateByQuaternion(back,inverse.rotation),half)+.15f);
@@ -161,12 +159,12 @@ void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const Player
         requestedDistance_ = std::max(requestedDistance_,std::min(settings.maxZoom,visualMinimum));
     }
     const float wanted = firstPerson_ ? .05f : requestedDistance_;
-    const Vector3 endpoint = Vector3Add(target_, Vector3Scale(back, wanted));
-    const float clearance = runtime.cameraClearance(target_, endpoint, .25f);
+    const Vector3 endpoint = Vector3Add(aimTarget, Vector3Scale(back, wanted));
+    const float clearance = runtime.cameraClearance(aimTarget, endpoint, .25f);
     const float safe = std::max(.05f, wanted * clearance - (clearance < 1 ? .1f : 0));
     distance_ = safe < distance_ ? safe : Lerp(distance_, safe, Response(8, dt));
     if (firstPerson_) distance_ = .05f;
-    camera_.position = Vector3Add(target_, Vector3Scale(back, distance_));
+    camera_.position = Vector3Add(aimTarget, Vector3Scale(back, distance_));
     avatarOccluded_ = false;
     for (int i = 0; i < kBodyCount; ++i) {
         const auto local = Compose(Inverse(bodies[i]),{camera_.position}).position;
@@ -574,7 +572,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
         deadTime_+=dt;
         if(deadTime_>=settings_.respawnDelay) { std::string error;if(!respawn(error))pause(); }
     }
-    camera_.update(dt, characterRoot().position, velocity(), input, settings_, *this);
+    camera_.processInput(dt,input,settings_);
     const Vector3 desired = camera_.moveDirection(input.movement);
     jumpPending_ = jumpPending_ || jumpPressed;
     accumulator_ += dt;
@@ -585,6 +583,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
         accumulator_ = std::max(0.f, accumulator_ - fixed);
         if (state_ != RuntimeState::Playing) break;
     }
+    if(state_==RuntimeState::Playing)camera_.update(dt,characterRoot().position,velocity(),input,settings_,*this);
     std::vector<InstanceId> fallen;
     for(auto* part:scene_->parts()) if(!part->anchored() && part->deletable() && part->position().y<scene_->workspace()->fallenPartsDestroyHeight())fallen.push_back(part->id());
     for(auto id:fallen)scene_->removeById(id);

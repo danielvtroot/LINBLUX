@@ -22,9 +22,8 @@
 #health-fill, #health-trail { position: absolute; left: 0; top: 0; height: 100%; width: 100%; border-radius: 8px; decorator: none; }
 #health-trail { background-color: #ffffff91; }
 #health-fill { background-color: #49d78a; }
-#reticle { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; pointer-events: none; }
-.cross-horizontal { position: absolute; top: 6px; left: 0; width: 14px; height: 2px; background-color: #ffffffdb; }
-.cross-vertical { position: absolute; top: 0; left: 6px; height: 14px; width: 2px; background-color: #ffffffdb; }
+#reticle { position: absolute; display: flex; align-items: center; justify-content: center; left: 50%; top: 50%; width: 28px; height: 28px; margin: -14px 0 0 -14px; pointer-events: none; }
+#reticle img { display: block; width: auto; height: auto; max-width: 28px; max-height: 28px; margin: 0; }
 #pause { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; z-index: 2; padding: 64px 0 14px; background-color: #080d142e; }
 .pause-panel { display: flex; flex-direction: column; width: 84%; height: 96%; max-width: 1440px; max-height: 800px; min-height: 0; padding: 0 22px 18px; border: 1px #ffffff10; border-radius: 12px; background-color: #101419df; }
 .pause-tabs { display: flex; flex: 0 0 68px; height: 68px; margin-bottom: 6px; border-bottom: 1px #b4bec23a; }

@@ -26,6 +26,7 @@ class RuntimeSession;
 class PlayerCamera {
 public:
     void reset(Vector3 root, const PlayerSettings& settings);
+    void processInput(float dt, const PlayerInput& input, const PlayerSettings& settings);
     void update(float dt, Vector3 root, Vector3 velocity, const PlayerInput& input,
                 const PlayerSettings& settings, const RuntimeSession& runtime);
     Camera3D camera() const { return camera_; }
@@ -42,6 +43,7 @@ private:
     float yaw_ = 0, pitch_ = .25f;
     float requestedDistance_ = 12, distance_ = 12;
     float followDelay_ = 0;
+    float shoulderOffset_ = 0;
     CameraMode previousMode_ = CameraMode::Classic;
     bool firstPerson_ = false;
     bool avatarOccluded_ = false; // geometry-derived visibility, not a control mode
