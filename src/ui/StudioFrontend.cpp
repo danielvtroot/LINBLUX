@@ -449,6 +449,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             constexpr std::pair<ImGuiKey,Rml::Input::KeyIdentifier> activationKeys[]={{ImGuiKey_Enter,Rml::Input::KI_RETURN},{ImGuiKey_Space,Rml::Input::KI_SPACE}};
             for(const auto& key:activationKeys)if(!editing()) {
                 if(ImGui::IsKeyPressed(key.first,false)) {
+                    keyboardOwned=true; // Space used to Resume must not also queue a jump.
                     if(ui.traceInput_)std::fprintf(stderr,"Player activate: focus=%s key=%d\n",context->GetFocusElement()?context->GetFocusElement()->GetId().c_str():"none",int(key.second));
                     // Activate the focused control once through the same RML
                     // click path as the mouse. Do not also send a default

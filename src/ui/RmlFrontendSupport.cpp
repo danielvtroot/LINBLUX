@@ -81,13 +81,12 @@ Image IconImage(const std::string& name, int resolution) {
         line(left ? 16 : 32, 24, left ? 31 : 17, 40);
     } else if (name == "player-settings") {
         // Original cog silhouette, not a downloaded brand/icon asset.
-        circle(24, 24, 13);
-        circle(24, 24, 5);
-        for (int i = 0; i < 8; ++i) {
-            const float angle = i * PI / 4.f;
-            line(24 + int(14 * std::cos(angle)), 24 + int(14 * std::sin(angle)),
-                 24 + int(19 * std::cos(angle)), 24 + int(19 * std::sin(angle)));
+        for (int i = 0; i < 32; ++i) {
+            const auto point=[](int n){const float angle=n*PI/16.f,radius=n%4<2?19.f:15.f;return Vector2{24+radius*std::cos(angle),24+radius*std::sin(angle)};};
+            const auto a=point(i),b=point((i+1)%32);
+            line(int(std::lround(a.x)),int(std::lround(a.y)),int(std::lround(b.x)),int(std::lround(b.y)));
         }
+        StrokeCircle(image,px(24),px(24),px(6),px(3),ink);
     } else if (name == "player-person") {
         circle(24, 14, 8);
         line(17, 27, 31, 27); line(17, 27, 12, 33);

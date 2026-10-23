@@ -1,5 +1,12 @@
 # Continuidade RmlUi — 22/10/2026
 
+Atualização Player UI, 23/10: [PLAYER_UI_2026.md](PLAYER_UI_2026.md).
+Checkpoint `5538899`; topbar/menu/Settings/Health reconstruídos. Última suíte
+completa: **19/19**, 408,99 s; RML 984 checks; qualidade 83 checks por resolução.
+Último polimento RCSS: altura máxima 800 px / About centralizado; 331 checks
+focados posteriores, zero falhas. Capturas: `build/player-ui-2026/`.
+Os resultados/medições abaixo são históricos da migração inicial.
+
 - Branch preservado: `fix/unified-3d-gizmos`. Entrada `c461e38`.
 - `49c2383`: preserva declarações preexistentes de Surface/Lighting que faltavam
   ao código já rastreado. `b7bd503`: primeiro frontend RML funcional integrado.

@@ -20,9 +20,12 @@ As preferências de câmera no menu continuam sendo da sessão de Play (contrato
 existente); Game Config continua responsável pelos defaults persistidos do mapa.
 Não se altera o documento autoral durante Play.
 
-Checkpoint funcional: integração gráfica focada em 1366×768, 330 verificações,
-zero falhas; qualidade gráfica em 1366×768 e 1920×1080, 83 verificações por
-execução, zero falhas. Suíte completa será repetida antes da entrega.
+Checkpoint de implementação: `5538899`. Validação final: CTest **19/19**,
+408,99 s; integração RML **984 verificações / zero falhas**; qualidade gráfica
+1366×768 e 1920×1080, **83 verificações / zero falhas em cada execução**.
+Depois do ajuste puramente RCSS de altura máxima/About: integração focada
+1366×768 + fullscreen 1920×1080, **331 verificações / zero falhas**; About
+1280×720 também reaberto e inspecionado no executável principal.
 
 ## Implementação
 
@@ -33,6 +36,8 @@ execução, zero falhas. Suíte completa será repetida antes da entrega.
 - Menu: quatro abas iguais; linhas com rótulo/descrição (39%) e controle (61%);
   valores On/Off entre setas. Sensibilidade e distância têm slider + número.
   Erros aparecem no próprio menu; NaN/Inf e limites inválidos são rejeitados.
+- Altura máxima de 800 px em telas amplas evita a área vazia excessiva que
+  ainda apareceu na primeira captura fullscreen. About usa conteúdo centralizado.
 - Tipografia: 19 px nas abas amplas / 14 px na viewport estreita; rodapé
   58 px / 48 px. Scroll preserva o rodapé; trocar abas retorna ao início.
 - Health 206×47 px, sempre visível quando jogando, oculta em pausa/edição:
@@ -42,6 +47,9 @@ execução, zero falhas. Suíte completa será repetida antes da entrega.
 - O foco de imagens/rótulos internos é redirecionado ao botão, em vez de
   tornar um `span` uma folha independente de foco. Regressão testada com
   Respawn → Tab → Enter → Resume.
+- Space também ativa Resume, mas pertence à UI até terminar esse evento:
+  não é retransmitido como pulo. O teste observa a velocidade a cada frame,
+  evitando perder um impulso por medir somente depois do ápice.
 - Transições curtas de abertura/abas/hover; nenhuma biblioteca adicional.
 
 ## Fontes complementares
@@ -66,3 +74,41 @@ Superfícies translúcidas agora são calibradas com um pixel totalmente coberto
 não se pressupõe que todo painel escuro é mais claro que o fundo. Resultado:
 três níveis intermediários de cobertura na marca, cápsula e cantos da Health,
 em ambos os fundos. MSAA 4× e filtragem de imagens não foram alterados.
+
+## Capturas e diferenças verificadas
+
+Capturas reais, abertas para inspeção, em `build/player-ui-2026/validation/`:
+Play/Health 100 e 25, Game/Settings/Controls/About em 1280×720, 1366×768,
+1600×900 e 1920×1080; fullscreen; Health 70, 0 e respawn. O teste usa X11,
+RML/GL3 e os objetos/runtime reais; não são mockups. `application/` contém
+capturas do executável principal. `previous/` é histórico anterior disponível,
+**não** um comparativo A/B do mesmo commit a10f2fb.
+`polish/` contém a rodada final após limitar a altura máxima, incluindo todas
+as abas fullscreen e a integração por teclado. O limite só afeta telas amplas;
+o tamanho do menu na viewport compacta não mudou.
+
+| Área | Referência | Resultado observado / diferença restante |
+|---|---|---|
+| Topbar | Marca + cápsula, ícones claros | Grupo e alinhamento reproduzidos; dois controles locais em vez de chat/voz; escala lógica de desktop, não cópia de pixels JPEG |
+| Menu | Superfície translúcida, abas sublinhadas, rodapé em três partes | Mesma organização; quatro abas; limites medidos dentro da viewport deslocada; texto e botões sem clipping nas capturas |
+| Settings | Fileiras de rótulo/descrição + seletor com setas | Estrutura reproduzida com controles reais; sliders + número acessível; menos opções que a referência, sem inventar serviços |
+| Health | Ausente nos JPEGs prioritários | Design Loblox próprio: valor legível e três cores de estado; oculta no menu; não se alega equivalência à HUD padrão Roblox |
+| Tipografia/ícones | Fonte e ícones da referência | DejaVu Sans e line art original; diferenças de desenho e densidade permanecem |
+
+## Medições e limites
+
+Medição serial disponível: llvmpipe, 1366×768, cena padrão, dois threads Mesa,
+MSAA 4×. RSS idle 231408 KiB (~225,98 MiB), Play/pausa 231960 KiB (~226,52 MiB).
+Frame idle ~76–79 ms, Play ~83–85 ms, pausa ~87–94 ms. Apresentação CPU da UI
+~0,3–0,5 ms; passagem de renderização RML ~35–50 ms em software. Sem baseline
+A/B equivalente nesta missão e sem inferir esses números para a Vega 8.
+
+Pendentes: avaliação visual do usuário; FPS/memória na Vega 8; Sway físico,
+Alt+Tab real e DPI fracionário. Não se declara fidelidade de 100% nem aprovação
+no notebook. Studio, física, Lua, rigs, animações, céu e persistência do mundo
+não foram reimplementados.
+
+Comandos finais: `cmake --build build --target loblox -j2`;
+`ctest --test-dir build --output-on-failure -j2`; `git diff --check`.
+Executável: `build/loblox`. F5 inicia; ícone de engrenagem abre Settings;
+Esc alterna pausa; F11 fullscreen; Shift+F5 retorna ao Studio.

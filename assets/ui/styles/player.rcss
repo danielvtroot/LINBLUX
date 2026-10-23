@@ -29,7 +29,7 @@
 .cross-horizontal { position: absolute; top: 6px; left: 0; width: 14px; height: 2px; background-color: #ffffffdb; }
 .cross-vertical { position: absolute; top: 0; left: 6px; height: 14px; width: 2px; background-color: #ffffffdb; }
 #pause { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; z-index: 2; padding: 64px 0 14px; background-color: #080d142e; }
-.pause-panel { display: flex; flex-direction: column; width: 84%; height: 96%; max-width: 1440px; max-height: 1040px; min-height: 0; padding: 0 22px 18px; border: 1px #ffffff10; border-radius: 12px; background-color: #101419df; }
+.pause-panel { display: flex; flex-direction: column; width: 84%; height: 96%; max-width: 1440px; max-height: 800px; min-height: 0; padding: 0 22px 18px; border: 1px #ffffff10; border-radius: 12px; background-color: #101419df; }
 .pause-tabs { display: flex; flex: 0 0 68px; height: 68px; margin-bottom: 6px; border-bottom: 1px #b4bec23a; }
 .pause-tabs button { display: flex; flex: 1; justify-content: center; align-items: center; height: 68px; padding: 0 10px; font-size: 19px; color: #a5abb2; border: 0px; border-bottom: 3px transparent; border-radius: 0px; background-color: transparent; transition: color 0.12s, background-color 0.12s; }
 .pause-tabs button img { width: 27px; height: 27px; margin-right: 12px; image-color: #b0b6bf; }
@@ -90,7 +90,7 @@
 .control-row { display: flex; align-items: center; padding: 13px 12px; min-height: 54px; border-bottom: 1px #ffffff13; }
 #controls-page kbd { display: block; text-align: center; width: 138px; min-width: 138px; margin-right: 25px; padding: 7px; background-color: #ffffff0e; border: 1px #ffffff4a; border-radius: 5px; font-size: 13px; }
 #controls-page .control-row span { font-size: 15px; color: #e1e5eb; }
-#about-page { text-align: center; padding: 24px 15px; }
+#about-page { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100%; text-align: center; padding: 24px 15px; }
 #player-setting-error { color: #ffb1b7; font-size: 12px; margin: 0 12px; }
 #about-page .about-logo { width: 80px; height: auto; max-height: 80px; margin: 0 auto 18px; }
 #about-page h1 { font-size: 28px; }

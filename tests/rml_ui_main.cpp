@@ -380,8 +380,12 @@ int main() {
             const auto generation=rt.characterGeneration();click("respawn");CHECK(rt.characterGeneration()==generation+1);CHECK(rt.health()==100);
             if(size.x==1366) {
                 // Focus after Respawn stays on that footer action: Tab reaches
-                // Resume; Enter must activate it without leaking Space/WASD.
-                key("Tab");key("Return");CHECK(rt.state()==game::RuntimeState::Playing);
+                // Resume; Space activates it once without also jumping.
+                key("Tab");CHECK(std::system("xdotool keydown space")==0);
+                float resumePeak=-100.f;
+                for(int i=0;i<5;++i){frames(1);resumePeak=std::max(resumePeak,rt.velocity().y);}
+                event("keyup space");CHECK(rt.state()==game::RuntimeState::Playing);
+                CHECK(resumePeak<1.f); // observe every frame, not after a possible jump apex
             }else {click("resume");CHECK(rt.state()==game::RuntimeState::Playing);}
             CHECK(rt.shiftLockActive());key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);
             click("leave");CHECK(!rt.active());CHECK(!EditorUITestAccess::captured(ui));CHECK(projectio::toJson(scene)==original);
