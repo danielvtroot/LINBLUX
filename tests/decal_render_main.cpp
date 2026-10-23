@@ -18,13 +18,26 @@ int main() {
         auto* part=scene.createPart(loblox::PartShape::Block,{0,0,0},{2,2,2},"ImagePart");part->setAnchored(true);
         Camera3D camera{{0,0,-6},{0,0,0},{0,1,0},45,CAMERA_PERSPECTIVE};
         loblox::SceneRenderer renderer;auto target=LoadRenderTexture(256,256);
-        for(const char* field:{"decal_image","texture_image"}) {
-            part->setAttribute(field,file);BeginDrawing();BeginTextureMode(target);
+        auto render=[&](const char* capture)->Color {
+            BeginDrawing();BeginTextureMode(target);
             renderer.drawScene(scene,camera,256,256,loblox::kInvalidInstanceId);
             EndTextureMode();EndDrawing();
-            auto rendered=LoadImageFromTexture(target.texture);const auto pixel=GetImageColor(rendered,128,128);
-            ++checks;if(!(pixel.r>200 && pixel.g<70 && pixel.b>140)){++failures;std::fprintf(stderr,"%s: pixel=%d,%d,%d\n",field,pixel.r,pixel.g,pixel.b);}
-            ExportImage(rendered,(std::string(dir)+"/"+field+".png").c_str());UnloadImage(rendered);
+            auto image=LoadImageFromTexture(target.texture);const Color pixel=GetImageColor(image,128,128);
+            if(capture)ExportImage(image,(std::string(dir)+"/"+capture+".png").c_str());
+            UnloadImage(image);return pixel;
+        };
+        const Color blank=render(nullptr);
+        for(const char* field:{"decal_image","texture_image"}) {
+            part->setAttribute(field,file);const Color pixel=render(field);
+            // Decals are lit in the production renderer. Prove the sampled texel
+            // is opaque, keeps the magenta hue, and is clearly not the bare part.
+            const int distance=std::abs(int(pixel.r)-int(blank.r))+std::abs(int(pixel.g)-int(blank.g))+std::abs(int(pixel.b)-int(blank.b));
+            ++checks;
+            if(!(pixel.a==255 && pixel.r>150 && pixel.g<90 && pixel.b>110 &&
+                 pixel.r>pixel.g*2 && pixel.b>pixel.g*2 && distance>80)) {
+                ++failures;std::fprintf(stderr,"%s: pixel=%d,%d,%d,%d blank=%d,%d,%d,%d distance=%d\n",
+                    field,pixel.r,pixel.g,pixel.b,pixel.a,blank.r,blank.g,blank.b,blank.a,distance);
+            }
             part->setAttribute(field,std::string());
         }
         UnloadRenderTexture(target);
