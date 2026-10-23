@@ -154,6 +154,10 @@ if(XVFB_RUN_EXECUTABLE)
   target_link_libraries(loblox_decal_render_tests PRIVATE loblox_editor)
   add_test(NAME loblox_decal_render COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 256x256x24" $<TARGET_FILE:loblox_decal_render_tests>)
   set_tests_properties(loblox_decal_render PROPERTIES TIMEOUT 45 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
+  add_executable(loblox_rig_image_tests tests/rig_image_main.cpp)
+  target_link_libraries(loblox_rig_image_tests PRIVATE loblox_editor)
+  add_test(NAME loblox_rig_image COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 512x512x24" $<TARGET_FILE:loblox_rig_image_tests>)
+  set_tests_properties(loblox_rig_image PROPERTIES TIMEOUT 60 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
   add_test(NAME loblox_gizmo_visual
     COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset"
             $<TARGET_FILE:loblox_gizmo_visual_tests>)

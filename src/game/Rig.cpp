@@ -69,8 +69,9 @@ bool Rig::validate(std::string& error) const {
         if (body.name.empty() || !names.insert(body.name).second || !Finite(body.size) ||
             !Range(body.size.x, 0.2f, 10) || !Range(body.size.y, 0.2f, 10) ||
             !Range(body.size.z, 0.2f, 10) || static_cast<int>(body.material) < 0 ||
-            static_cast<int>(body.material) >= PartMaterialCount()) {
-            error = "rig: invalid body dimensions, material or name"; return false;
+            static_cast<int>(body.material) >= PartMaterialCount() || body.image.size() > 1024 ||
+            body.image.find('\0') != std::string::npos) {
+            error = "rig: invalid body dimensions, material, name or image"; return false;
         }
     }
     error.clear(); return true;

@@ -29,6 +29,9 @@ struct Body {
     Vector3 size{1, 2, 1};
     Color color{240, 190, 80, 255};
     PartMaterial material = PartMaterial::SmoothPlastic;
+    // Optional image decal applied to every face of this R6 body. Stored as an
+    // asset-relative filename so saved projects stay portable across machines.
+    std::string image;
 };
 struct Joint {
     std::string name;

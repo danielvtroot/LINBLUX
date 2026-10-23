@@ -6,6 +6,7 @@
 #include "imgui_internal.h"
 #include "rlImGui.h"
 #include "editor/EditorUI.h"
+#include "game/ImageAssets.h"
 #include "editor/GizmoLayout.h"
 #include "editor/StudioTheme.h"
 #include "rendering/EditorCamera.h"
@@ -32,6 +33,9 @@ struct EditorUITestAccess {
     static void duplicate(EditorUI& ui) {ui.duplicateSelection();}
     static void remove(EditorUI& ui) {ui.deleteSelection();}
     static Rectangle snapControl(EditorUI& ui) {return ui.snapControl_;}
+    static Vector2 bodyRow(EditorUI& ui,int body) {const auto r=ui.rigBodyRows_[body];return {r.x+40,r.y+r.height*.5f};}
+    static Rectangle imageControl(EditorUI& ui) {return ui.rigImageControl_;}
+    static Rectangle imageRemoveControl(EditorUI& ui) {return ui.rigImageRemoveControl_;}
     static bool snapped(EditorUI& ui) {return ui.snapEnabled_;}
     static bool freeGizmos(EditorUI& ui) {return ui.gizmo_.moveSnap()==0 && ui.rigGizmo_.moveSnap()==0;}
     static void normal(EditorUI& ui,Part* part,ToolMode mode) {ui.scene_.select(part);ui.setTool(mode,"part_snap_regression");ui.showRigEditor_=false;ui.snapEnabled_=false;}
@@ -44,6 +48,7 @@ int checks=0,failures=0;
 int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temp[]="/tmp/loblox-rig-input-XXXXXX";const char* dir=mkdtemp(temp);if(!dir)return 1;
+    std::filesystem::current_path(dir);
     diag::configure(std::string(dir)+"/events.jsonl");
     SetTraceLogLevel(LOG_WARNING);InitWindow(1366,768,"Loblox rig regression");SetWindowPosition(0,0);
     SetExitKey(KEY_NULL);SetTargetFPS(60);rlImGuiSetup(true);
@@ -197,6 +202,35 @@ int main() {
             else CHECK(std::fabs(steps)>.001f && std::fabs(steps-std::round(steps))>.001f);
             key("Escape");event("mouseup 1");CHECK(projectio::toJson(scene)==saved);
         }
+        // R6 body images reuse assets/ and are selectable/removable from the
+        // real Rig Editor widgets, not only through the data model.
+        std::filesystem::create_directories(game::AssetsDir());
+        const std::string imageFile = std::string(game::AssetsDir())+"/rig-ui-image.png";
+        Image image=GenImageColor(32,32,{235,40,180,255});
+        CHECK(ExportImage(image,imageFile.c_str()));UnloadImage(image);
+        EditorUITestAccess::setup(ui,id,ToolMode::Rotate);
+        EditorUITestAccess::showPanel(ui);frames();
+        ImGui::SetWindowPos("Rig Editor",{3,145});ImGui::SetWindowSize("Rig Editor",{360,700});frames();
+        click(EditorUITestAccess::bodyRow(ui,game::Torso));frames();
+        const auto imageCombo=EditorUITestAccess::imageControl(ui);
+        CHECK(imageCombo.width>0 && imageCombo.height>0);
+        click({imageCombo.x+imageCombo.width*.5f,imageCombo.y+imageCombo.height*.5f});frames();
+        CHECK(!GImGui->OpenPopupStack.empty());
+        if(!GImGui->OpenPopupStack.empty()) {
+            auto* popup=GImGui->OpenPopupStack.back().Window;
+            const auto images=game::ListImages(game::AssetsDir());
+            int index=-1;for(size_t i=0;i<images.size();++i)if(images[i].filename=="rig-ui-image.png")index=static_cast<int>(i)+1;
+            CHECK(index>0);
+            if(popup && index>0) click({popup->DC.CursorStartPos.x+70,
+                popup->DC.CursorStartPos.y+index*ImGui::GetTextLineHeightWithSpacing()+ImGui::GetTextLineHeight()*.5f});
+        }
+        auto& imageRig=*scene.gameAssets().findRig(id);
+        CHECK(imageRig.bodies[game::Torso].image=="rig-ui-image.png");
+        const auto remove=EditorUITestAccess::imageRemoveControl(ui);
+        CHECK(remove.width>0 && remove.height>0);
+        screenshot("rig-image-ui");
+        click({remove.x+remove.width*.5f,remove.y+remove.height*.5f});frames();
+        CHECK(imageRig.bodies[game::Torso].image.empty());
     }
     rlImGuiShutdown();CloseWindow();std::printf("Rig input: %d checks, %d failures; captures %s\n",checks,failures,dir);return failures?1:0;
 }

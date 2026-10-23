@@ -10,6 +10,7 @@
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
 #include "core/Diagnostics.h"
+#include "game/ImageAssets.h"
 #include "rendering/EditorCamera.h"
 #include "rendering/SceneRenderer.h"
 #include "serialization/ProjectIO.h"
@@ -543,6 +544,25 @@ void EditorUI::drawRigEditor() {
                     if (ImGui::Selectable(PartMaterialName(PartMaterialFromIndex(m)), material == m)) body.material = PartMaterialFromIndex(m);
                 ImGui::EndCombo();
             }
+            const auto images = game::ListImages(game::AssetsDir());
+            const std::string imageLabel = body.image.empty() ? "None" :
+                std::filesystem::path(body.image).filename().string();
+            if (ImGui::BeginCombo("Body image", imageLabel.c_str())) {
+                if (ImGui::Selectable("None", body.image.empty())) body.image.clear();
+                for (const auto& image : images) {
+                    const bool selected = std::filesystem::path(body.image).filename().string() == image.filename;
+                    if (ImGui::Selectable(image.filename.c_str(), selected)) body.image = image.filename;
+                }
+                ImGui::EndCombo();
+            }
+            {const auto lo=ImGui::GetItemRectMin(),hi=ImGui::GetItemRectMax();rigImageControl_={lo.x,lo.y,hi.x-lo.x,hi.y-lo.y};}
+            rigImageRemoveControl_ = {};
+            if (!body.image.empty()) {
+                if (ImGui::Button("Remove body image")) body.image.clear();
+                const auto lo=ImGui::GetItemRectMin(),hi=ImGui::GetItemRectMax();
+                rigImageRemoveControl_={lo.x,lo.y,hi.x-lo.x,hi.y-lo.y};
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Images imported into assets/ can decorate any R6 body face.");
             auto size = body.size;
             ImGui::BeginDisabled(rigContext_ != RigContext::Edit);
             if (ImGui::DragFloat3("Dimensions", &size.x, .05f, .2f, 10, "%.2f", ImGuiSliderFlags_AlwaysClamp)) rig->resizeBody(selectedRigBody_, size);

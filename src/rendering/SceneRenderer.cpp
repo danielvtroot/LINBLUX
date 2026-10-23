@@ -703,11 +703,11 @@ Color Tint(const std::string* hex) {
     };
     return Color{channel(0), channel(2), channel(4), 255};
 }
-void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
-              Color tint, Vector2 repeatUv, Vector2 offsetUv, int rotation, float sizeScale,
-              Vector3 lightDirection, float sunIntensity, float brightness) {
-    const Quaternion rotationQuat = part.rotation();
-    const Vector3 half = Vector3Scale(part.size(), 0.5f);
+void DrawFaceQuad(Vector3 position, Quaternion rotationQuat, Vector3 size, int face,
+                  const Texture2D& tex, float alpha, Color tint, Vector2 repeatUv,
+                  Vector2 offsetUv, int uvRotation, Vector3 lightDirection, float sunIntensity,
+                  float brightness, float outward = 0.02f) {
+    const Vector3 half = Vector3Scale(size, 0.5f);
     const FaceDef& def = kFaces[face];
     // Extensões reais no plano da face.
     const float w = std::fabs(def.uAxis.x) > 0.5f ? half.x :
@@ -718,14 +718,13 @@ void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
     const float faceHalf = std::fabs(def.normal.x) > 0.5f ? half.x :
                            std::fabs(def.normal.y) > 0.5f ? half.y : half.z;
     const Vector3 centerLocal =
-        Vector3Add(Vector3Scale(def.normal, faceHalf + 0.02f),
+        Vector3Add(Vector3Scale(def.normal, faceHalf + outward),
                    Vector3{0, 0, 0});
-    (void)sizeScale;
     const auto rotateUv = [&](float u, float v) {
         // Rotaciona base uv (0..1) por quarter-turns em torno do centro.
         u = (u - 0.5f) * repeatUv.x + offsetUv.x;
         v = (v - 0.5f) * repeatUv.y + offsetUv.y;
-        for (int turns = (rotation % 360 + 360) % 360 / 90; turns > 0; --turns) {
+        for (int turns = (uvRotation % 360 + 360) % 360 / 90; turns > 0; --turns) {
             const float next = v;
             v = -u;
             u = next;
@@ -742,7 +741,7 @@ void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
     const float cornerUv[4][2] = {{0, 1}, {1, 1}, {1, 0}, {0, 0}};
     Vector3 world[4];
     for (int i = 0; i < 4; ++i) {
-        world[i] = Vector3Add(part.position(),
+        world[i] = Vector3Add(position,
                               Vector3RotateByQuaternion(local[i], rotationQuat));
     }
     // The texture is uploaded premultiplied (see game::AssetTexture) and the
@@ -752,7 +751,7 @@ void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
     // Decals are lit by the face they sit on, so a texture on a shadow side
     // no longer glows brighter than the Part itself.
     const Vector3 worldNormal = Vector3Normalize(Vector3RotateByQuaternion(def.normal, rotationQuat));
-    const Vector3 worldCenter = Vector3Add(part.position(),
+    const Vector3 worldCenter = Vector3Add(position,
                                           Vector3RotateByQuaternion(centerLocal, rotationQuat));
     const Color litTint = ApplyFog(
         LitSurface(tint, worldNormal, worldCenter, lightDirection, sunIntensity, brightness, 0.0f, false),
@@ -773,6 +772,31 @@ void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
     rlEnd();
     EndBlendMode();
     rlSetTexture(0);
+}
+void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
+              Color tint, Vector2 repeatUv, Vector2 offsetUv, int rotation,
+              Vector3 lightDirection, float sunIntensity, float brightness,
+              float outward = 0.02f) {
+    DrawFaceQuad(part.position(), part.rotation(), part.size(), face, tex, alpha, tint,
+                 repeatUv, offsetUv, rotation, lightDirection, sunIntensity, brightness,
+                 outward);
+}
+// R6 body images reuse the Part decal path: every face gets the same image,
+// offset just enough to avoid z-fighting while staying glued to the animated
+// body transform. The default head face is drawn afterwards, in front.
+void DrawBodyImage(const game::RigidTransform& body, Vector3 size,
+                   const std::string& image, Vector3 lightDirection,
+                   float sunIntensity, float brightness) {
+    if (image.empty()) return;
+    const std::string resolved = game::ResolveImagePath(game::AssetsDir(), image);
+    if (resolved.empty()) return;
+    const Texture2D tex = game::AssetTexture(resolved);
+    if (tex.id == 0) return;
+    for (int face = 0; face < 6; ++face) {
+        DrawFaceQuad(body.position, body.rotation, size, face, tex, 1.0f,
+                     Color{255, 255, 255, 255}, {1, 1}, {0, 0}, 0,
+                     lightDirection, sunIntensity, brightness, 0.02f);
+    }
 }
 void DrawLayer(const Part& part, const char* imageKey, const char* faceKey,
                const char* alphaKey, const char* tintKey, const char* rotationKey,
@@ -804,7 +828,7 @@ void DrawLayer(const Part& part, const char* imageKey, const char* faceKey,
     const Texture2D tex = game::AssetTexture(relative);
     if (tex.id == 0) return;
     DrawQuad(part, face, tex, static_cast<float>(1.0f - std::clamp(alpha, 0.0, 1.0)),
-             Tint(FindText(part, tintKey)), repeat, offset, (int)std::lround(rotation), 1.0f,
+             Tint(FindText(part, tintKey)), repeat, offset, (int)std::lround(rotation),
              lightDirection, sunIntensity, brightness);
 }
 }  // namespace skins
@@ -838,7 +862,7 @@ void DrawHeadFace(const game::RigidTransform& headWorld, Vector3 headSize) {
     float quadW = faceW, quadH = faceW / imageAspect;
     if (quadH > faceH) { quadH = faceH; quadW = faceH * imageAspect; }
     quadW *= 0.92f; quadH *= 0.92f;
-    const float offset = half.z + 0.02f;
+    const float offset = half.z + 0.034f;
     const Vector3 local[4] = {
         {-quadW * .5f,  quadH * .5f, -offset},  // topo-esquerda
         { quadW * .5f,  quadH * .5f, -offset},  // topo-direita
@@ -959,16 +983,27 @@ void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float in
         else
             DrawShadedBox(world[i].position, body.size, world[i].rotation, bodyColor, light,
                           intensity, brightness, gloss, unlit);
+    }
+    // Body decals are drawn after every body so depth testing keeps limbs in
+    // front of the torso. They share the evaluated pose, so animation and pose
+    // previews move the image with the body automatically.
+    for (int i = 0; i < game::kBodyCount; ++i) {
+        skins::DrawBodyImage(world[i], rig.bodies[i].size, rig.bodies[i].image,
+                             light, intensity, brightness);
+    }
+    for (int i = 0; i < game::kBodyCount; ++i) {
         if (i == state.selectedBody) DrawRotatedBoxWires(world[i].position,
-            Vector3Scale(body.size, 1.02f), world[i].rotation, GOLD);
+            Vector3Scale(rig.bodies[i].size, 1.02f), world[i].rotation, GOLD);
     }
     // Rosto do usuário quando existir; sem arquivo, mantém os olhos mínimos.
+    // The face and fallback eyes sit farther out than the body image decal so
+    // applying an image to the head never hides the default face.
     if (FaceTexture().id != 0) {
         DrawHeadFace(world[game::Head], rig.bodies[game::Head].size);
     } else {
         // Original minimal face marks the -Z front without external textures.
         for (float side : {-1.f, 1.f}) {
-            const auto eye = game::Compose(world[game::Head], {{side*.35f, .08f, -rig.bodies[game::Head].size.z*.5f-.015f}});
+            const auto eye = game::Compose(world[game::Head], {{side*.35f, .08f, -rig.bodies[game::Head].size.z*.5f-.04f}});
             DrawShadedBox(eye.position, {.13f, .15f, .035f}, eye.rotation, DARKGRAY, light, 0, 1);
         }
     }

@@ -184,7 +184,8 @@ private:
         game::RigidTransform base;
     };
     std::optional<RigDrag> rigDrag_;
-    Rectangle rigBodyRows_[game::kBodyCount]{},rigColorControl_{},rigToolControl_{};
+    Rectangle rigBodyRows_[game::kBodyCount]{},rigColorControl_{},rigToolControl_{},
+        rigImageControl_{},rigImageRemoveControl_{};
     bool gizmoLocalSpace_ = false;
     bool snapEnabled_ = true;
     Rectangle snapControl_{};

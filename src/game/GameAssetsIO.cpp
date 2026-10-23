@@ -33,8 +33,13 @@ nlohmann::json EncodeAssets(const GameAssets& a) {
     for (const auto& r : a.rigs) {
         json rig{{"id", r.id}, {"name", r.name}, {"root", Transform(r.root)},
                  {"bodies", json::array()}, {"joints", json::array()}};
-        for (const auto& b : r.bodies) rig["bodies"].push_back({{"name", b.name}, {"size", Vec(b.size)},
-            {"color", {b.color.r, b.color.g, b.color.b, b.color.a}}, {"material", PartMaterialName(b.material)}});
+        for (const auto& b : r.bodies) {
+            json body{{"name", b.name}, {"size", Vec(b.size)},
+                      {"color", {b.color.r, b.color.g, b.color.b, b.color.a}},
+                      {"material", PartMaterialName(b.material)}};
+            if (!b.image.empty()) body["image"] = b.image;
+            rig["bodies"].push_back(std::move(body));
+        }
         for (int i = 0; i < kJointCount; ++i) {
             const auto& joint = r.joints[i];
             rig["joints"].push_back({{"name", joint.name}, {"parent", joint.parent}, {"child", joint.child},
@@ -95,6 +100,7 @@ bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& erro
                 for (int ch = 0; ch < 4; ++ch) rgba[ch] = static_cast<unsigned char>(ReadInt(c.at(ch), 0, 255));
                 body.color = {rgba[0], rgba[1], rgba[2], rgba[3]};
                 Require(PartMaterialFromName(b.at("material").get<std::string>(), body.material), "unknown body material");
+                body.image = b.value("image", std::string());
             }
             for (int i = 0; i < kJointCount; ++i) {
                 const auto& v = joints.at(i); auto& joint = r.joints[i];
