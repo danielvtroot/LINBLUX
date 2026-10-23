@@ -97,9 +97,11 @@ add_library(loblox_core STATIC
   src/physics/PhysicsWorld.cpp
   src/serialization/ProjectIO.cpp
   src/serialization/SceneLua.cpp
+  src/editor/EditHistory.cpp
   src/editor/GizmoMath.cpp
   src/editor/GizmoLayout.cpp
   src/editor/Gizmo.cpp
+  src/editor/TransformMetrics.cpp
   src/editor/TransformSession.cpp
   src/rendering/EditorCamera.cpp
 )

@@ -17,6 +17,7 @@ struct GizmoInput {
     bool leftDown = false;
     bool windowFocused = true;
     bool shiftDown = false;
+    bool altDown = false;   // escala centrada (as duas faces)
 };
 
 // Resultado de um unico update. `partId` identifica a sessao encerrada mesmo
@@ -40,9 +41,17 @@ public:
     bool dragging() const { return dragging_; }
     InstanceId sessionPartId() const { return draggedPartId_; }
     bool consumedLastInput() const { return consumedLastInput_; }
+    // Transformacao no instante em que o arraste comecou. O readout numerico e
+    // a edicao por texto sao sempre calculados a partir dela, nunca do frame
+    // anterior.
+    const Transform& startTransform() const { return startTransform_; }
+    ToolMode dragTool() const { return dragTool_; }
+    int activeHandleSide() const { return gizmomath::HandleSide(activeHandle_); }
     bool hoveringHandle() const { return hoveredHandle_ != gizmomath::HandleId::None; }
     gizmomath::HandleId hoveredHandle() const { return hoveredHandle_; }
+    gizmomath::HandleId activeHandle() const { return activeHandle_; }
     int activeAxis() const { return activeAxis_; }
+    int activePlane() const { return activePlane_; }
     // Signed, unwrapped (and snapped) sweep of the active rotate drag. The
     // animation editor uses it to keep a deliberate >180 degree turn that a
     // pair of key quaternions cannot express on its own.
@@ -59,6 +68,9 @@ public:
     float moveSnap() const { return moveSnap_; }
     float scaleSnap() const { return scaleSnap_; }
     float rotateSnapDegrees() const { return rotateSnapDegrees_; }
+    // Modo de escala fixado no inicio do arraste: mudar Alt no meio nao troca
+    // a matematica debaixo do usuario.
+    bool centeredScale() const { return centeredScale_; }
 
 private:
     enum class Handle { None, Axis, Plane, ScaleFace, RotateRing };
@@ -71,6 +83,7 @@ private:
     bool dragging_ = false;
     bool consumedLastInput_ = false;
     bool localSpace_ = false;
+    bool centeredScale_ = false;
     float moveSnap_ = 1.0f;
     float scaleSnap_ = 0.5f;
     float rotateSnapDegrees_ = 15.0f;

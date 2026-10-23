@@ -10,6 +10,7 @@
 #include "game/ImageAssets.h"
 #include "game/Spawn.h"
 #include "core/Diagnostics.h"
+#include "core/NumberFormat.h"
 #include "RmlUi_Renderer_GL3.h"
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/Elements/ElementFormControl.h>
@@ -28,7 +29,10 @@
 namespace loblox {
 namespace {
 std::string Escape(const std::string& s) {std::string out;for(char c:s)out+=c=='&'?"&amp;":c=='<'?"&lt;":c=='>'?"&gt;":c=='\"'?"&quot;":std::string(1,c);return out;}
-std::string Num(float v) {std::ostringstream s;s<<std::setprecision(6)<<v;return s.str();}
+// Exibicao numerica do Properties: sem notacao cientifica e sem residuos de
+// ponto flutuante (-9.7e-12 vira "0"). O valor interno nunca e alterado; a
+// edicao por texto continua enviando o numero exato digitado.
+std::string Num(float v) {return numfmt::Text(v, 4);}
 std::string Hex(Color c) {char s[8];std::snprintf(s,sizeof(s),"#%02x%02x%02x",c.r,c.g,c.b);return s;}
 std::string Button(const std::string& action,const std::string& label,const std::string& icon="",const std::string& value="",const std::string& scope="cmd") {
     return "<button id=\""+scope+"-"+action+"-"+Escape(value)+"\" data-action=\""+action+"\" data-value=\""+Escape(value)+"\">"+(icon.empty()?"":"<img src=\"icon-"+icon+"\"/>")+Escape(label)+"</button>";

@@ -4,6 +4,8 @@
 #include "game/ImageAssets.h"
 
 #include "core/Diagnostics.h"
+#include "core/NumberFormat.h"
+#include "editor/GizmoLayout.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -131,6 +133,7 @@ EditorInput ReadEditorInput() {
     input.middleDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
     input.escape = ImGui::IsKeyPressed(ImGuiKey_Escape, false);
     input.shift = io.KeyShift;
+    input.alt = io.KeyAlt;
     input.modified = io.KeyCtrl || io.KeyAlt || io.KeySuper;
     input.play = !input.modified && !input.shift && ImGui::IsKeyPressed(ImGuiKey_F5, false);
     input.stop = !input.modified && input.shift && ImGui::IsKeyPressed(ImGuiKey_F5, false);
@@ -147,6 +150,11 @@ EditorInput ReadEditorInput() {
     input.rename = ImGui::IsKeyPressed(ImGuiKey_F2, false);
     input.copy = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C, false);
     input.paste = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V, false);
+    input.undo = io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z, false);
+    input.redo = io.KeyCtrl && (ImGui::IsKeyPressed(ImGuiKey_Y, false) ||
+                                (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z, false)));
+    input.toggleLocalSpace = io.KeyCtrl && !io.KeyShift &&
+        ImGui::IsKeyPressed(ImGuiKey_L, false);
     if (!input.modified) {
         const ImGuiKey tools[] = {ImGuiKey_1, ImGuiKey_2, ImGuiKey_3, ImGuiKey_4};
         for (int i = 0; i < 4; ++i)
@@ -657,6 +665,8 @@ void EditorUI::setTool(ToolMode tool, const char* source) {
     event.result = "ok";
     diag::log(event);
     gizmo_.cancel();
+    editStartValid_ = false;
+    clearTransformReadout();
     tool_ = tool;
     camera_.releaseCapture();
 }
@@ -674,6 +684,276 @@ void EditorUI::checkInvariants(const char* operation) {
         diag::log(event);
         setStatus(std::string("Invariante violada em ") + operation + ": " + error, true);
     }
+}
+
+void EditorUI::clearTransformReadout() {
+    readout_ = TransformReadout{};
+}
+
+void EditorUI::beginTransformReadout(Part* part, ToolMode mode) {
+    if (part == nullptr || !gizmo_.dragging()) {
+        clearTransformReadout();
+        return;
+    }
+    transformmetrics::Context context;
+    context.space = gizmo_.localSpace() ? transformmetrics::Space::Local
+                                        : transformmetrics::Space::World;
+    // Snapshot da Part, nao do Transform cru: Sphere mede o diametro que o
+    // proprio gizmo desenha e redimensiona.
+    context.start = gizmolayout::MakeSnapshot(*part);
+    const gizmomath::HandleId handle = gizmo_.activeHandle();
+    const bool planeHandle = handle == gizmomath::HandleId::XYPlane ||
+                             handle == gizmomath::HandleId::XZPlane ||
+                             handle == gizmomath::HandleId::YZPlane;
+    if (mode == ToolMode::Move) {
+        context.kind = planeHandle ? transformmetrics::Kind::MovePlane
+                                   : transformmetrics::Kind::Move;
+        if (planeHandle) {
+            context.axis = handle == gizmomath::HandleId::XYPlane ? 0
+                         : handle == gizmomath::HandleId::XZPlane ? 1 : 2;
+        } else {
+            context.axis = gizmo_.activeAxis();
+        }
+    } else if (mode == ToolMode::Scale) {
+        context.kind = transformmetrics::Kind::Size;
+        context.axis = gizmo_.activeAxis();
+        context.side = gizmo_.activeHandleSide() < 0 ? -1 : 1;
+        context.centered = gizmo_.centeredScale();
+    } else if (mode == ToolMode::Rotate) {
+        context.kind = transformmetrics::Kind::Angle;
+        context.axis = gizmo_.activeAxis();
+    } else {
+        clearTransformReadout();
+        return;
+    }
+    if (!context.valid()) {
+        clearTransformReadout();
+        return;
+    }
+    readout_.partId = part->id();
+    readout_.context = context;
+    readout_.visible = true;
+    readout_.editing = false;
+    readout_.focusPending = false;
+    readout_.expiresAt = 0.0;
+    updateTransformReadout(part);
+}
+
+void EditorUI::updateTransformReadout(Part* part) {
+    if (!readout_.visible || part == nullptr || part->id() != readout_.partId) return;
+    readout_.measurement = transformmetrics::Measure(readout_.context,
+                                                     gizmolayout::MakeSnapshot(*part));
+    if (!readout_.measurement.valid) readout_.visible = false;
+}
+
+void EditorUI::applyReadoutValue(float value) {
+    Part* part = scene_.findPart(readout_.partId);
+    if (part == nullptr || !readout_.context.valid()) {
+        setStatus("A peca desta medida nao existe mais.", true);
+        clearTransformReadout();
+        return;
+    }
+    const Transform before = part->transform();
+    gizmomath::TransformSnapshot applied;
+    if (part->shape() == PartShape::Sphere &&
+        readout_.context.kind == transformmetrics::Kind::Size) {
+        // Sphere escala de forma uniforme; a medida digitada e o diametro.
+        const float startSize = transformmetrics::Measure(readout_.context,
+                                                          readout_.context.start).value;
+        applied = gizmomath::ScaleUniformFace(
+            readout_.context.start, transformmetrics::AxisVector(readout_.context),
+            readout_.context.side, value - startSize, 0.0f);
+    } else {
+        applied = transformmetrics::Apply(readout_.context, value);
+    }
+    part->setTransform(Transform{applied.position, applied.rotation, applied.size});
+    transform_.commit(part, "numeric_edit");
+    recordTransformEdit(part->id(), before, part->transform());
+    readout_.editing = false;
+    readout_.expiresAt = ImGui::GetTime() + 2.5;
+    updateTransformReadout(part);
+    char label[64];
+    if (transformmetrics::Format(readout_.measurement, label, sizeof(label))) {
+        char message[96];
+        std::snprintf(message, sizeof(message), "%.60s", label);
+        setStatus(message);
+    }
+    checkInvariants("numeric_edit");
+}
+
+void EditorUI::recordTransformEdit(InstanceId id, const Transform& before,
+                                   const Transform& after) {
+    history_.record(id, before, after);
+}
+
+void EditorUI::undoTransform() {
+    if (transform_.active()) endGizmoSession(true, "undo");
+    cancelRigGizmo();
+    clearTransformReadout();
+    TransformEdit edit;
+    if (!history_.undo(edit)) {
+        setStatus("Nada para desfazer.", true);
+        return;
+    }
+    Part* part = scene_.findPart(edit.id);
+    if (part == nullptr) {
+        setStatus("A peca desta operacao nao existe mais.", true);
+        history_.clear();
+        return;
+    }
+    part->setTransform(edit.before);
+    physics_.applyChanges(part);
+    scene_.select(part);
+    checkInvariants("undo");
+    setStatus("Transformacao desfeita (Ctrl+Z).");
+}
+
+void EditorUI::redoTransform() {
+    if (transform_.active()) endGizmoSession(true, "redo");
+    cancelRigGizmo();
+    clearTransformReadout();
+    TransformEdit edit;
+    if (!history_.redo(edit)) {
+        setStatus("Nada para refazer.", true);
+        return;
+    }
+    Part* part = scene_.findPart(edit.id);
+    if (part == nullptr) {
+        setStatus("A peca desta operacao nao existe mais.", true);
+        history_.clear();
+        return;
+    }
+    part->setTransform(edit.after);
+    physics_.applyChanges(part);
+    scene_.select(part);
+    checkInvariants("redo");
+    setStatus("Transformacao refeita (Ctrl+Y).");
+}
+
+void EditorUI::drawTransformReadout(const EditorInput& input, Vector2 imagePosition) {
+    if (!readout_.visible) return;
+    Part* part = scene_.findPart(readout_.partId);
+    if (part == nullptr) {
+        clearTransformReadout();
+        return;
+    }
+    if (!readout_.editing && readout_.expiresAt > 0.0 && ImGui::GetTime() > readout_.expiresAt) {
+        clearTransformReadout();
+        return;
+    }
+    char label[64];
+    if (!transformmetrics::Format(readout_.measurement, label, sizeof(label))) {
+        clearTransformReadout();
+        return;
+    }
+
+    const Rectangle viewportRect{imagePosition.x, imagePosition.y,
+                                 static_cast<float>(viewportWidth_),
+                                 static_cast<float>(viewportHeight_)};
+    const gizmolayout::Layout layout = gizmolayout::Build(
+        *part, tool_, camera_, viewportRect,
+        readout_.context.space == transformmetrics::Space::Local);
+    Vector2 anchor{imagePosition.x + viewportRect.width * 0.5f,
+                   imagePosition.y + viewportRect.height * 0.5f};
+    if (layout.valid) {
+        const int axis = std::clamp(readout_.context.axis, 0, 2);
+        switch (readout_.context.kind) {
+            case transformmetrics::Kind::Move:
+                anchor = layout.axisButton[static_cast<std::size_t>(axis)];
+                break;
+            case transformmetrics::Kind::MovePlane:
+                anchor = layout.planeCenter[static_cast<std::size_t>(axis)];
+                break;
+            case transformmetrics::Kind::Size:
+                anchor = layout.scaleHandle[static_cast<std::size_t>(
+                    axis * 2 + (readout_.context.side > 0 ? 1 : 0))];
+                break;
+            case transformmetrics::Kind::Angle:
+                anchor = layout.rotateMarker[static_cast<std::size_t>(axis)];
+                break;
+            case transformmetrics::Kind::None:
+                break;
+        }
+        anchor = Vector2{anchor.x + imagePosition.x + 18.0f,
+                         anchor.y + imagePosition.y - 30.0f};
+    }
+    // Viewports menores que o chip nao podem gerar limites invertidos.
+    const float minX = imagePosition.x + 6.0f;
+    const float maxX = std::max(minX, imagePosition.x + viewportRect.width - 190.0f);
+    const float minY = imagePosition.y + 6.0f;
+    const float maxY = std::max(minY, imagePosition.y + viewportRect.height - 34.0f);
+    anchor.x = std::clamp(anchor.x, minX, maxX);
+    anchor.y = std::clamp(anchor.y, minY, maxY);
+
+    ImGui::PushID("##transform_readout");
+    ImGui::SetCursorScreenPos(ImVec2(anchor.x, anchor.y));
+    ImGui::BeginGroup();
+    if (readout_.editing) {
+        if (readout_.focusPending) {
+            ImGui::SetKeyboardFocusHere();
+            readout_.focusPending = false;
+        }
+        ImGui::SetNextItemWidth(126.0f);
+        const bool submitted = ImGui::InputText(
+            "##value", readout_.text, sizeof(readout_.text),
+            ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsDecimal |
+                ImGuiInputTextFlags_AutoSelectAll);
+        const bool deactivated = ImGui::IsItemDeactivated();
+        const bool escaped = ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+        const bool clickedOutside = input.leftPressed &&
+            !CheckCollisionPointRec(input.mouse, readoutRect_);
+        if (submitted) {
+            float value = 0.0f;
+            if (numfmt::Parse(readout_.text, value)) {
+                applyReadoutValue(value);
+            } else {
+                setStatus("Valor invalido; nada foi alterado.", true);
+                readout_.editing = false;
+            }
+        } else if (escaped || clickedOutside) {
+            readout_.editing = false;
+            if (escaped) setStatus("Edicao numerica cancelada.");
+        } else if (deactivated) {
+            float value = 0.0f;
+            if (numfmt::Parse(readout_.text, value)) applyReadoutValue(value);
+            else readout_.editing = false;
+        }
+        readoutRect_ = Rectangle{anchor.x, anchor.y, 126.0f, 26.0f};
+    } else {
+        // O botao invisivel que cobre toda a viewport e dono do hover do ImGui,
+        // entao o chip e desenhado e testado aqui por retangulo. Assim o
+        // clique no valor nunca vira selecao de objeto nem movimento de camera.
+        const ImVec2 textSize = ImGui::CalcTextSize(label);
+        const ImVec2 min(anchor.x, anchor.y);
+        const ImVec2 max(min.x + textSize.x + 20.0f, min.y + textSize.y + 12.0f);
+        // Area de clique um pouco maior que o chip: alvo folgado sem mostrar
+        // um retangulo maior do que o texto.
+        readoutRect_ = Rectangle{min.x - 3.0f, min.y - 3.0f,
+                                 max.x - min.x + 6.0f, max.y - min.y + 6.0f};
+        const bool hovered = CheckCollisionPointRec(input.mouse, readoutRect_);
+        const bool editable = readout_.measurement.editable();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(min, max, IM_COL32(18, 22, 28, 236), 4.0f);
+        drawList->AddRect(min, max,
+                          hovered ? IM_COL32(255, 195, 42, 255) : IM_COL32(108, 140, 178, 225),
+                          4.0f);
+        drawList->AddText(ImVec2(min.x + 10.0f, min.y + 6.0f), IM_COL32(232, 240, 248, 255),
+                          label);
+        if (hovered) {
+            const char* hint = editable
+                ? "Click to type an exact value. Enter applies from the pose the drag started at; Esc cancels."
+                : "Two-axis move: drag only. Numeric editing applies to single-axis moves, size and angle.";
+            drawList->AddText(ImVec2(min.x, max.y + 4.0f), IM_COL32(170, 186, 204, 235), hint);
+        }
+        if (hovered && input.leftPressed && editable) {
+            readout_.editing = true;
+            readout_.focusPending = true;
+            readout_.expiresAt = 0.0;
+            numfmt::Format(readout_.text, sizeof(readout_.text), readout_.measurement.value, 4);
+        }
+    }
+    ImGui::EndGroup();
+    ImGui::PopID();
 }
 
 void EditorUI::setOnSceneLoaded(std::function<void()> callback) {
@@ -811,6 +1091,16 @@ void EditorUI::handleShortcuts(const EditorInput& input, const InputRoute& route
     if (route.editorKeys && input.tool >= 0) {
         const ToolMode tools[] = {ToolMode::Select, ToolMode::Move, ToolMode::Scale, ToolMode::Rotate};
         setTool(tools[input.tool], "shortcut");
+    }
+    if (route.globalKeys && input.undo) undoTransform();
+    if (route.globalKeys && input.redo) redoTransform();
+    if (route.editorKeys && input.toggleLocalSpace) {
+        endGizmoSession(true, "space_toggle");
+        cancelRigGizmo();
+        gizmoLocalSpace_ = !gizmoLocalSpace_;
+        gizmo_.setLocalSpace(gizmoLocalSpace_);
+        clearTransformReadout();
+        setStatus(gizmoLocalSpace_ ? "Gizmo: Local space" : "Gizmo: World space");
     }
     if (route.globalKeys && input.save) {
         saveCurrentProject();
@@ -1051,6 +1341,32 @@ void EditorUI::drawToolbar() {
         ImGui::SameLine();
         if (IconButton("rotate", Icon::Rotate, "Rotate", tool_ == ToolMode::Rotate,
                        "Girar pelo gizmo (4)")) setTool(ToolMode::Rotate);
+        ImGui::SameLine();
+        // Espaco dos eixos explicito na ribbon: World | Local (Ctrl+L).
+        for (int spaceIndex = 0; spaceIndex < 2; ++spaceIndex) {
+            const bool active = (spaceIndex == 1) == gizmoLocalSpace_;
+            if (active) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.44f, 0.72f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.19f, 0.51f, 0.82f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.13f, 0.38f, 0.64f, 1.0f));
+            }
+            if (ImGui::Button(spaceIndex == 0 ? "World" : "Local", ImVec2(52.0f, 0.0f))) {
+                if (!active) {
+                    endGizmoSession(true, "space_toggle");
+                    cancelRigGizmo();
+                    gizmoLocalSpace_ = spaceIndex == 1;
+                    gizmo_.setLocalSpace(gizmoLocalSpace_);
+                    clearTransformReadout();
+                }
+            }
+            if (active) ImGui::PopStyleColor(3);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip(gizmoLocalSpace_
+                    ? "Local: eixos da peca. Ctrl+L alterna."
+                    : "World: eixos globais. Ctrl+L alterna.");
+            }
+            if (spaceIndex == 0) ImGui::SameLine();
+        }
         ToolbarSeparator();
         if (IconButton("part", Icon::Part, "Part", false, "Criar um Block")) insertPart(PartShape::Block);
         ImGui::SameLine();
@@ -1130,7 +1446,9 @@ void EditorUI::drawToolbar() {
         ImGui::Spacing();
         if (ImGui::Checkbox("Local axes", &gizmoLocalSpace_)) {
             endGizmoSession(true);
+            cancelRigGizmo();
             gizmo_.setLocalSpace(gizmoLocalSpace_);
+            clearTransformReadout();
         }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(74.0f);
@@ -1400,7 +1718,15 @@ void EditorUI::drawViewport() {
     context.popup = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopup) ||
         requestSavePopup_ || requestOpenPopup_ || requestLuaExportPopup_ || requestLuaImportPopup_;
     context.widget = ImGui::IsAnyItemActive() && !viewportActive;
+    // O chip de medida tem prioridade sobre camera e selecao: e um campo de
+    // texto modal enquanto edita e um alvo de clique quando so mostra o valor
+    // do ultimo arraste.
+    // Nao usar context.widget aqui: o chip bloqueia ponteiro (camera, gizmo,
+    // selecao), mas os atalhos de teclado continuam valendo, como Ctrl+Z.
+    const bool readoutHovered = readout_.visible && !readout_.editing &&
+        CheckCollisionPointRec(input.mouse, readoutRect_);
     context.text = io.WantTextInput && context.widget;
+    if (readout_.editing) context.text = true;
     context.keyboardCaptured = io.WantCaptureKeyboard;
     if (explorerFocused_ && !context.text && !context.widget && !context.popup)
         context.keyboardCaptured = false;
@@ -1465,6 +1791,7 @@ void EditorUI::drawViewport() {
     gizmoInput.leftDown = input.leftDown;
     gizmoInput.windowFocused = context.windowFocused;
     gizmoInput.shiftDown = input.shift;
+    gizmoInput.altDown = input.alt;
 
     // Prioridade unica: o gizmo processa a entrada antes da camera e da
     // selecao. O estado atual (nao o do frame anterior) decide se a camera
@@ -1474,7 +1801,30 @@ void EditorUI::drawViewport() {
     const auto previousHover = gizmo_.hoveredHandle();
     const GizmoUpdateResult gizmoResult = transform_.update(
         tool_, selectedPart, camera_, viewportRect, hovered,
-        (viewportOwns || sessionOwns) && !rigConsumed, gizmoInput);
+        (viewportOwns || sessionOwns) && !rigConsumed && !readout_.editing && !readoutHovered,
+        gizmoInput);
+    if (gizmoResult.started && selectedPart != nullptr) {
+        // A transformacao real do inicio (nao o snapshot de desenho) e o que
+        // o Undo precisa restaurar.
+        editStart_ = gizmo_.startTransform();
+        editStartValid_ = true;
+        beginTransformReadout(selectedPart, tool_);
+    } else if (gizmoResult.ended) {
+        if (gizmoResult.cancelled) {
+            editStartValid_ = false;
+            clearTransformReadout();
+        } else if (selectedPart != nullptr && readout_.visible &&
+                   readout_.partId == gizmoResult.partId) {
+            updateTransformReadout(selectedPart);
+            readout_.expiresAt = ImGui::GetTime() + 3.0;
+            if (editStartValid_) {
+                recordTransformEdit(selectedPart->id(), editStart_, selectedPart->transform());
+                editStartValid_ = false;
+            }
+        }
+    } else if (transform_.active() && selectedPart != nullptr) {
+        updateTransformReadout(selectedPart);
+    }
     if (gizmoResult.ended) {
         checkInvariants(gizmoResult.cancelled ? "transform_cancel" : "transform_commit");
     }
@@ -1489,11 +1839,12 @@ void EditorUI::drawViewport() {
     }
     const bool cameraOwns = route.owner == InputOwner::Camera;
     camera_.handleInput(input, Vector2{viewportRect.width, viewportRect.height}, cameraOwns,
-        !transform_.active() && !gizmoResult.consumed && !rigConsumed &&
+        !transform_.active() && !gizmoResult.consumed && !rigConsumed && !readoutHovered &&
             (cameraOwns || (route.editorKeys && !sessionOwns)),
-        viewportOwns && !gizmoResult.consumed && !rigConsumed, GetFrameTime());
+        viewportOwns && !gizmoResult.consumed && !rigConsumed && !readoutHovered, GetFrameTime());
 
-    if (viewportOwns && !gizmoResult.consumed && !rigConsumed && input.leftPressed) {
+    if (viewportOwns && !gizmoResult.consumed && !rigConsumed && !readoutHovered &&
+        input.leftPressed) {
         const Vector2 mouse = input.mouse;
         if (mouse.x >= viewportRect.x && mouse.y >= viewportRect.y &&
             mouse.x <= viewportRect.x + viewportRect.width &&
@@ -1534,6 +1885,10 @@ void EditorUI::drawViewport() {
     // Selection may have changed in the raycast above.
     selection = scene_.selection();
     selectedPart = selection && selection->isPart() ? static_cast<Part*>(selection) : nullptr;
+    if (readout_.visible && !readout_.editing &&
+        (selectedPart == nullptr || selectedPart->id() != readout_.partId)) {
+        clearTransformReadout();
+    }
     traceDispatch(gizmoResult.consumed ? "gizmo" :
         viewportOwns && input.leftPressed ? "selection" : InputOwnerName(route.owner),
         gizmoResult.started ? "drag_begin" : gizmoResult.ended ?
@@ -1596,6 +1951,7 @@ void EditorUI::drawViewport() {
         drawList->AddText(statusPosition, color, statusText);
     }
 
+    drawTransformReadout(input, Vector2{imagePosition.x, imagePosition.y});
     ImGui::End();
     ImGui::PopStyleVar();
 }

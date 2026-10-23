@@ -9,9 +9,11 @@
 
 #include "core/Config.h"
 #include "core/Math.h"
+#include "editor/EditHistory.h"
 #include "editor/Gizmo.h"
 #include "editor/InputRouting.h"
 #include "editor/Tool.h"
+#include "editor/TransformMetrics.h"
 #include "editor/TransformSession.h"
 #include "game/Runtime.h"
 #include "raylib.h"
@@ -122,6 +124,15 @@ private:
     void openAnimation(const std::string& id);
     bool saveAnimation();
     void cancelRigGizmo(bool restore = true);
+    // Leitura numerica do arraste (studs/graus) e edicao exata por texto.
+    void beginTransformReadout(Part* part, ToolMode mode);
+    void updateTransformReadout(Part* part);
+    void drawTransformReadout(const EditorInput& input, Vector2 imagePosition);
+    void applyReadoutValue(float value);
+    void clearTransformReadout();
+    void recordTransformEdit(InstanceId id, const Transform& before, const Transform& after);
+    void undoTransform();
+    void redoTransform();
     bool updateRigGizmo(const EditorInput& input, const InputRoute& route, Rectangle viewport,
                         bool hovered, bool blocked);
 
@@ -146,6 +157,24 @@ private:
     Gizmo gizmo_;
     TransformSession transform_;
     ToolMode tool_ = ToolMode::Select;
+    EditHistory history_;
+    // Um unico readout por arraste. `context` guarda a transformacao inicial;
+    // nada e recalculado a partir do frame anterior.
+    struct TransformReadout {
+        bool visible = false;
+        bool editing = false;
+        bool focusPending = false;
+        InstanceId partId = kInvalidInstanceId;
+        transformmetrics::Context context{};
+        transformmetrics::Measurement measurement{};
+        char text[32]{};
+        double expiresAt = 0.0;  // tempo ImGui; 0 = nunca expira (arrastando)
+    } readout_;
+    // Retangulo do chip no frame anterior: mantem clique/hover fora da
+    // camera e do raycast de selecao mesmo antes do ImGui atualizar o hover.
+    Rectangle readoutRect_{};
+    Transform editStart_{};
+    bool editStartValid_ = false;
     bool viewportFocused_ = false;
     unsigned long long frame_ = 0;
     bool traceInput_ = false;

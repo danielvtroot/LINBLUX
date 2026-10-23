@@ -9,6 +9,9 @@
 #include "serialization/SceneLua.h"
 #include "game/Runtime.h"
 #include "core/Diagnostics.h"
+#include "core/NumberFormat.h"
+#include "editor/EditHistory.h"
+#include "editor/TransformMetrics.h"
 
 using namespace loblox;
 namespace {
@@ -377,11 +380,166 @@ void NativeCloneBudget() {
     CHECK(rejected);CHECK(runtime.scene().objects().size()==scene.objects().size());
     CHECK(runtime.validate(error));runtime.stop();
 }
+
+// Ferramentas de transformacao: medidas em studs/graus, aplicacao exata a
+// partir da pose inicial, formatacao e Undo/Redo de uma operacao por arraste.
+void TransformTools() {
+    using namespace transformmetrics;
+    const gizmomath::TransformSnapshot origin{{0,0,0},{0,0,0,1},{4,4,4}};
+    Context move; move.kind=Kind::Move; move.axis=0; move.space=Space::World; move.start=origin;
+    gizmomath::TransformSnapshot current=origin;
+    current.position={4,0,0};
+    Measurement measured=Measure(move,current);
+    CHECK(measured.valid);CHECK(NearlyEqual(measured.value,4.0f));
+    char text[64];
+    CHECK(Format(measured,text,sizeof(text)));
+    CHECK(std::string(text)=="X  +4.00 studs");
+    // Aplicar 4 studs a partir da pose inicial e reaplicar 2 nao acumula 6.
+    CHECK(NearlyEqual(Apply(move,4.0f).position,{4,0,0}));
+    CHECK(NearlyEqual(Apply(move,2.0f).position,{2,0,0}));
+    CHECK(NearlyEqual(Apply(move,-3.5f).position,{-3.5f,0,0}));
+    measured=Measure(move,Apply(move,-3.5f));
+    CHECK(NearlyEqual(measured.value,-3.5f));
+    CHECK(std::string(text)=="X  +4.00 studs");
+    CHECK(Format(measured,text,sizeof(text)));
+    CHECK(std::string(text)=="X  -3.50 studs");
+
+    // Local: eixo X da peca girada 90 graus em Y aponta para -Z do mundo.
+    Context local=move; local.space=Space::Local;
+    local.start.rotation=QuaternionFromAxisAngle({0,1,0},90.0f*DEG2RAD);
+    const Vector3 localAxis=AxisVector(local);
+    CHECK(NearlyEqual(localAxis,{0,0,-1},0.001f));
+    const auto localMoved=Apply(local,2.5f);
+    CHECK(NearlyEqual(localMoved.position,{0,0,-2.5f},0.001f));
+    CHECK(NearlyEqual(Measure(local,localMoved).value,2.5f,0.001f));
+    CHECK(localMoved.rotation.x==local.start.rotation.x&&
+          localMoved.rotation.w==local.start.rotation.w);
+
+    // Escala a partir de uma face de uma Part rotacionada: tamanho exato,
+    // face oposta estavel e minimo respeitado.
+    Context scale; scale.kind=Kind::Size; scale.axis=0; scale.side=1;
+    scale.space=Space::Local;
+    scale.start=origin;
+    scale.start.rotation=QuaternionFromAxisAngle({0,1,0},30.0f*DEG2RAD);
+    auto scaled=Apply(scale,8.5f);
+    CHECK(NearlyEqual(scaled.size.x,8.5f));CHECK(NearlyEqual(scaled.size.y,4.0f));
+    CHECK(NearlyEqual(scaled.rotation,scale.start.rotation));
+    CHECK(NearlyEqual(Measure(scale,scaled).value,8.5f));
+    // (centro novo - centro velho) . eixoX local == metade do crescimento
+    const Vector3 grow=Vector3Subtract(scaled.position,scale.start.position);
+    CHECK(NearlyEqual(Vector3DotProduct(grow,gizmomath::Axis(0,scale.start.rotation,true)),2.25f,0.001f));
+    // Face oposta: o ponto no lado negativo continua no mesmo lugar.
+    const Vector3 negativeFace=Vector3Add(scale.start.position,
+        Vector3Scale(gizmomath::Axis(0,scale.start.rotation,true),-2.0f));
+    const Vector3 negativeFaceAfter=Vector3Add(scaled.position,
+        Vector3Scale(gizmomath::Axis(0,scale.start.rotation,true),-4.25f));
+    CHECK(NearlyEqual(negativeFace,negativeFaceAfter,0.001f));
+    // Alt: escala centrada deixa o centro parado e move as duas faces.
+    Context centered=scale; centered.centered=true;
+    auto centeredPose=Apply(centered,10.0f);
+    CHECK(NearlyEqual(centeredPose.position,scale.start.position));
+    CHECK(NearlyEqual(centeredPose.size.x,10.0f));
+    const auto centeredGizmo=gizmomath::ScaleCenteredFace(
+        scale.start,0,1,true,3.0f,0.0f);
+    CHECK(NearlyEqual(centeredGizmo.position,scale.start.position));
+    CHECK(NearlyEqual(centeredGizmo.size.x,10.0f));
+    CHECK(NearlyEqual(centeredGizmo.size.y,scale.start.size.y));
+    const auto centeredMin=gizmomath::ScaleCenteredFace(
+        scale.start,0,1,true,-100.0f,0.0f);
+    CHECK(NearlyEqual(centeredMin.size.x,kMinPartSize));
+    auto minimum=Apply(scale,0.0f);
+    CHECK(NearlyEqual(minimum.size.x,kMinPartSize));
+    auto below=Apply(scale,-5.0f);
+    CHECK(NearlyEqual(below.size.x,kMinPartSize));CHECK(NearlyEqual(below.size.x,minimum.size.x));
+    // Em World o eixo positivo pode apontar para a face local negativa.
+    Context worldScale=scale; worldScale.space=Space::World; worldScale.side=1;
+    worldScale.start.rotation=QuaternionFromAxisAngle({0,1,0},90.0f*DEG2RAD);
+    CHECK(SizeComponent(worldScale)==2);
+    const auto worldScaled=Apply(worldScale,6.0f);
+    CHECK(NearlyEqual(worldScaled.size.z,6.0f));
+
+    // Rotacao: angulo com sinal, 90 graus, wrap de +190 para -170.
+    Context angle; angle.kind=Kind::Angle; angle.axis=1; angle.space=Space::World;
+    angle.start=origin;
+    const auto turned=Apply(angle,45.0f);
+    CHECK(NearlyEqual(Measure(angle,turned).value,45.0f,0.01f));
+    CHECK(std::string(text)=="X  -3.50 studs");
+    CHECK(Format(Measure(angle,turned),text,sizeof(text)));
+    CHECK(std::string(text)=="Y  +45.00 deg");
+    CHECK(NearlyEqual(Measure(angle,Apply(angle,-45.0f)).value,-45.0f,0.01f));
+    CHECK(NearlyEqual(Measure(angle,Apply(angle,90.0f)).value,90.0f,0.01f));
+    CHECK(NearlyEqual(Measure(angle,Apply(angle,190.0f)).value,-170.0f,0.01f));
+    // q e -q descrevem a mesma pose: medir -45 nao pode virar +315.
+    auto negated=Apply(angle,-45.0f);
+    negated.rotation={-negated.rotation.x,-negated.rotation.y,-negated.rotation.z,-negated.rotation.w};
+    CHECK(NearlyEqual(Measure(angle,negated).value,-45.0f,0.01f));
+    CHECK(NearlyEqual(Apply(angle,90.0f).position,origin.position));
+    CHECK(NearlyEqual(Apply(angle,90.0f).size,origin.size));
+
+    // Plano XY: mede os dois eixos e nao inventa valor digitado.
+    Context plane; plane.kind=Kind::MovePlane; plane.axis=0; plane.space=Space::World;
+    plane.start=origin;
+    auto planePose=origin; planePose.position={3,2,0};
+    const auto planeMeasure=Measure(plane,planePose);
+    CHECK(planeMeasure.valid);CHECK(!planeMeasure.editable());
+    CHECK(NearlyEqual(planeMeasure.value,3.0f));CHECK(NearlyEqual(planeMeasure.valueB,2.0f));
+    CHECK(planeMeasure.axis==0&&planeMeasure.axisB==1);
+    CHECK(Format(planeMeasure,text,sizeof(text)));
+    CHECK(std::string(text)=="X +3.00 | Y +2.00 studs");
+    CHECK(NearlyEqual(Apply(plane,5.0f).position,origin.position));
+
+    // Formatacao do Properties: sem notacao cientifica e sem -0.
+    CHECK(numfmt::Text(0.0f)=="0");
+    CHECK(numfmt::Text(-9.7066e-12f)=="0");
+    CHECK(numfmt::Text(-0.0f)=="0");
+    CHECK(numfmt::Text(1.5f)=="1.5");
+    CHECK(numfmt::Text(-2.25f)=="-2.25");
+    CHECK(numfmt::Text(8.5f,2)=="8.5");
+    CHECK(numfmt::Text(123456.0f)=="123456");
+    float parsed=0.0f;
+    CHECK(numfmt::Parse("4",parsed));CHECK(NearlyEqual(parsed,4.0f));
+    CHECK(numfmt::Parse(" -8.5 ",parsed));CHECK(NearlyEqual(parsed,-8.5f));
+    CHECK(!numfmt::Parse("4studs",parsed));
+    CHECK(!numfmt::Parse("",parsed));
+    CHECK(!numfmt::Parse("nan",parsed));
+    CHECK(!numfmt::Parse("1e999",parsed));
+
+    // Undo/Redo: um arraste = uma operacao.
+    EditHistory history;
+    loblox::Transform before{{0,0,0},{0,0,0,1},{4,4,4}};
+    loblox::Transform after=before; after.position={4,0,0};
+    CHECK(!history.canUndo());
+    CHECK(!history.record(7,before,before)); // clique sem arrastar
+    CHECK(history.record(7,before,after));
+    CHECK(history.undoCount()==1);CHECK(history.canUndo());CHECK(!history.canRedo());
+    TransformEdit edit;
+    CHECK(history.undo(edit));CHECK(edit.id==7);CHECK(NearlyEqual(edit.before.position,{0,0,0}));
+    CHECK(NearlyEqual(edit.after.position,{4,0,0}));CHECK(history.canRedo());
+    CHECK(history.redo(edit));CHECK(NearlyEqual(edit.after.position,{4,0,0}));
+    CHECK(history.undo(edit));
+    loblox::Transform other=before; other.position={0,5,0};
+    CHECK(history.record(7,after,other)); // ramo novo descarta o redo
+    CHECK(!history.canRedo());
+    // q e -q sao a mesma orientacao: nao geram operacao fantasma.
+    loblox::Transform flipped=before;
+    flipped.rotation={-before.rotation.x,-before.rotation.y,-before.rotation.z,-before.rotation.w};
+    CHECK(!history.record(9,before,flipped));
+    EditHistory limited;
+    for(int i=0;i<200;++i) {
+        loblox::Transform a=before,b=before;a.position.x=float(i);b.position.x=float(i+1);
+        limited.record(1,a,b);
+    }
+    CHECK(limited.undoCount()==EditHistory::kLimit);
+    int undos=0;while(limited.undo(edit))++undos;
+    CHECK(undos==static_cast<int>(EditHistory::kLimit));
+    // O mais antigo preservado e o 72 (128 entradas mais recentes).
+    CHECK(NearlyEqual(edit.before.position.x,float(200-EditHistory::kLimit)));
+}
 }
 int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Scripts();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();
+    Hierarchy();Scripts();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

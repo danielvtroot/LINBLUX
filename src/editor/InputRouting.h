@@ -12,11 +12,15 @@ struct EditorInput {
     bool leftPressed = false, leftDown = false;
     bool rightPressed = false, rightDown = false;
     bool middlePressed = false, middleDown = false;
-    bool escape = false, shift = false, modified = false;
+    bool escape = false, shift = false, alt = false, modified = false;
     bool save = false, open = false, remove = false, focus = false, duplicate = false;
     bool play = false, stop = false, jump = false;
     bool maximizeGame = false, fullscreen = false;
     bool rename = false, copy = false, paste = false;
+    bool undo = false, redo = false;
+    // Ctrl+L alterna World/Local, como no Studio; nao conflita com os atalhos
+    // existentes (1-4, F, Ctrl+S/O/D/C/V, Delete, F2, F5, F10/F11).
+    bool toggleLocalSpace = false;
     int tool = -1;
 };
 

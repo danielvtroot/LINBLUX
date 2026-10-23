@@ -164,8 +164,12 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                 const auto transformed = part->shape() == PartShape::Sphere
                     ? gizmomath::ScaleUniformFace(snapshot, axis,
                                                   gizmomath::HandleSide(activeHandle_), delta, snap)
-                    : gizmomath::ScaleFaceForHandle(snapshot, activeHandle_, localSpace_,
-                                                    delta, snap);
+                    : centeredScale_
+                        ? gizmomath::ScaleCenteredFace(snapshot, gizmomath::HandleAxis(activeHandle_),
+                                                       gizmomath::HandleSide(activeHandle_),
+                                                       localSpace_, delta, snap)
+                        : gizmomath::ScaleFaceForHandle(snapshot, activeHandle_, localSpace_,
+                                                        delta, snap);
                 part->setTransform(Transform{transformed.position, startTransform_.rotation,
                                              transformed.size});
             }
@@ -288,6 +292,7 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
     startMouse_ = localMouse;
     dragProjection_ = DragProjection::World;
     accumulatedAngle_ = 0;
+    centeredScale_ = input.altDown && mode == ToolMode::Scale;
     dragging_ = true;
 
     if (handle_ == Handle::Axis || handle_ == Handle::ScaleFace) {
@@ -381,6 +386,25 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
                                     ? kHighlight : kAxisColors[axisIndex];
             DrawLineEx(center, layout.axisButton[static_cast<std::size_t>(axisIndex)], 4.0f,
                        color);
+        }
+        // Ticks de snap no eixo ativo: mostram onde cada incremento cai sem
+        // alterar o hit test (sao apenas guias visuais).
+        if (dragging_ && handle_ == Handle::Axis && moveSnap_ > 0.0f && activeAxis_ >= 0) {
+            const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, localSpace_);
+            const Vector3 pivot = startTransform_.position;
+            const Vector2 direction = layout.axisDirection[static_cast<std::size_t>(activeAxis_)];
+            const Vector2 normal{-direction.y, direction.x};
+            for (int step = -6; step <= 6; ++step) {
+                if (step == 0) continue;
+                Vector2 tick{};
+                const Vector3 world = Vector3Add(
+                    pivot, Vector3Scale(axis, static_cast<float>(step) * moveSnap_));
+                if (!camera.projectChecked(world, Vector2{viewport.width, viewport.height}, tick)) continue;
+                const float half = (step % 5 == 0) ? 5.0f : 3.0f;
+                DrawLineEx(Vector2Subtract(tick, Vector2Scale(normal, half)),
+                           Vector2Add(tick, Vector2Scale(normal, half)), 1.5f,
+                           Color{235, 240, 248, 170});
+            }
         }
         const char* planeLabels[3] = {"XY", "XZ", "YZ"};
         for (int plane = 0; plane < 3; ++plane) {

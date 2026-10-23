@@ -168,6 +168,40 @@ TransformSnapshot ScaleUniformFace(const TransformSnapshot& start, Vector3 axis,
     return result;
 }
 
+TransformSnapshot ScaleCenteredFace(const TransformSnapshot& start, int axisIndex, int side,
+                                    bool localSpace, float delta, float snapIncrement,
+                                    float minimumSize) {
+    TransformSnapshot result = start;
+    if (axisIndex < 0 || axisIndex > 2 || !std::isfinite(delta) ||
+        !std::isfinite(minimumSize) || minimumSize <= 0.0f) return result;
+    int component = axisIndex;
+    int localSide = side < 0 ? -1 : 1;
+    if (!localSpace) {
+        // Mesma regra de ScaleFaceAlongAxis: em World o eixo escolhido pode
+        // apontar para a face local oposta.
+        const Vector3 worldAxis = Axis(axisIndex, start.rotation, false);
+        float alignment = 0.0f;
+        component = 0;
+        for (int i = 0; i < 3; ++i) {
+            const float candidate = Vector3DotProduct(worldAxis, Axis(i, start.rotation, true));
+            if (std::fabs(candidate) > std::fabs(alignment)) {
+                alignment = candidate;
+                component = i;
+            }
+        }
+        if (std::fabs(alignment) < 1e-5f) return result;
+        if (alignment < 0.0f) localSide = -localSide;
+    }
+    float& size = component == 0 ? result.size.x
+                 : component == 1 ? result.size.y : result.size.z;
+    const float previous = component == 0 ? start.size.x
+                         : component == 1 ? start.size.y : start.size.z;
+    const float signedDelta = SnapDelta(delta, snapIncrement) * static_cast<float>(localSide);
+    // Cresce (ou encolhe) pelos dois lados: o centro nao se move.
+    size = std::max(minimumSize, previous + 2.0f * signedDelta);
+    return result;
+}
+
 Vector3 ScaleHandleCenter(const TransformSnapshot& start, int axisIndex, int side,
                           bool localSpace, float handleOffset) {
     if (axisIndex < 0 || axisIndex > 2) return start.position;

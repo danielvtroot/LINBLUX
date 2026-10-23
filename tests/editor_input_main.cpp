@@ -25,6 +25,12 @@ struct EditorUITestAccess {
     static bool dragging(EditorUI& ui) { return ui.transform_.active(); }
     static void tool(EditorUI& ui, ToolMode mode) { ui.setTool(mode); }
     static void modal(EditorUI& ui) { ui.requestOpenPopup_ = true; }
+    static std::size_t undoCount(EditorUI& ui) { return ui.history_.undoCount(); }
+    static bool readoutVisible(EditorUI& ui) { return ui.readout_.visible; }
+    static bool readoutEditing(EditorUI& ui) { return ui.readout_.editing; }
+    static float readoutValue(EditorUI& ui) { return ui.readout_.measurement.value; }
+    static Rectangle readoutRect(EditorUI& ui) { return ui.readoutRect_; }
+    static bool localSpace(EditorUI& ui) { return ui.gizmoLocalSpace_; }
 };
 }
 using namespace loblox;
@@ -346,6 +352,142 @@ int main() {
         CHECK(NearlyEqual(part->position(), scaled.position));
         CHECK(NearlyEqual(part->size(), scaled.size));
         CHECK(NearlyEqual(camera.position(), eye));
+
+        // Pose conhecida para medir studs/graus sem herdar o arraste anterior.
+        part->setTransform(loblox::Transform{{0.0f, 6.0f, 0.0f}, {0, 0, 0, 1}, {4, 4, 4}});
+        physics.applyChanges(part);
+        camera.setOrbit(part->position(), 22, 0.75f, 0.4f);
+        frames(2);
+
+        // --- Readout numerico, valor exato e Undo/Redo de uma operacao ----
+        const std::size_t undoBeforeMove = EditorUITestAccess::undoCount(ui);
+        toolbar(ToolMode::Move, 1);
+        const loblox::Transform readoutStart = part->transform();
+        beginMove();
+        mouse(screen(Vector2Add(layout().axisButton[0], Vector2{36, 12})));
+        CHECK(EditorUITestAccess::readoutVisible(ui));
+        CHECK(NearlyEqual(EditorUITestAccess::readoutValue(ui),
+                          part->position().x - readoutStart.position.x, 0.02f));
+        command("mouseup 1");
+        frames(2);
+        CHECK(EditorUITestAccess::readoutVisible(ui));
+        CHECK(EditorUITestAccess::undoCount(ui) == undoBeforeMove + 1);
+        const loblox::Transform dragged = part->transform();
+
+        // Clicar no chip e digitar 4 studs aplica exatamente 4 a partir da
+        // pose em que o arraste comecou (nao do frame anterior).
+        Rectangle chip = EditorUITestAccess::readoutRect(ui);
+        mouse({chip.x + chip.width * 0.5f, chip.y + chip.height * 0.5f});
+        command("mousedown 1"); command("mouseup 1"); frames(2);
+        CHECK(EditorUITestAccess::readoutEditing(ui));
+        command("type 4"); frames(2);
+        command("keydown Return"); command("keyup Return"); frames(2);
+        CHECK(!EditorUITestAccess::readoutEditing(ui));
+        CHECK(NearlyEqual(part->position().x, readoutStart.position.x + 4.0f, 0.002f));
+        CHECK(NearlyEqual(part->position().y, readoutStart.position.y, 0.002f));
+        CHECK(NearlyEqual(part->position().z, readoutStart.position.z, 0.002f));
+        // Uma edicao numerica tambem e UMA operacao de Undo.
+        command("keydown ctrl keydown z"); frames(2); command("keyup z keyup ctrl"); frames(2);
+        CHECK(NearlyEqual(part->position(), dragged.position));
+        command("keydown ctrl keydown y"); frames(2); command("keyup y keyup ctrl"); frames(2);
+        CHECK(NearlyEqual(part->position().x, readoutStart.position.x + 4.0f, 0.002f));
+        // Dois Ctrl+Z desfazem a edicao e o arraste inteiro, em UMA operacao
+        // cada (nunca uma por frame).
+        command("keydown ctrl keydown z"); frames(2); command("keyup z keyup ctrl"); frames(2);
+        CHECK(NearlyEqual(part->position(), dragged.position));
+        command("keydown ctrl keydown z"); frames(2); command("keyup z keyup ctrl"); frames(2);
+        CHECK(NearlyEqual(part->position(), readoutStart.position));
+        CHECK(NearlyEqual(physics.bodyPosition(part->id()), readoutStart.position));
+        CHECK(EditorUITestAccess::undoCount(ui) == undoBeforeMove);
+        command("keydown ctrl keydown y"); frames(2); command("keyup y keyup ctrl"); frames(2);
+        command("keydown ctrl keydown y"); frames(2); command("keyup y keyup ctrl"); frames(2);
+        CHECK(NearlyEqual(part->position().x, readoutStart.position.x + 4.0f, 0.002f));
+        // Tira o mouse do chip: atalhos e cliques na viewport voltam a valer.
+        mouse(screen(Vector2{40.0f, 40.0f}));
+        frames(1);
+
+        // Scale com tamanho final exato e face oposta estavel.
+        toolbar(ToolMode::Scale, 2);
+        const loblox::Transform scaleStart = part->transform();
+        const auto exactScaleLayout = layout();
+        mouse(screen(exactScaleLayout.scaleHandle[1]));
+        command("mousedown 1");
+        mouse(screen(Vector2Add(exactScaleLayout.scaleHandle[1],
+                                 Vector2Scale(exactScaleLayout.axisDirection[0], 22))));
+        command("mouseup 1"); frames(2);
+        chip = EditorUITestAccess::readoutRect(ui);
+        mouse({chip.x + chip.width * 0.5f, chip.y + chip.height * 0.5f});
+        command("mousedown 1"); command("mouseup 1"); frames(2);
+        CHECK(EditorUITestAccess::readoutEditing(ui));
+        command("type 8.5"); frames(2);
+        command("keydown Return"); command("keyup Return"); frames(2);
+        CHECK(NearlyEqual(part->size().x, 8.5f, 0.002f));
+        CHECK(NearlyEqual(part->position().x - part->size().x * 0.5f,
+                          scaleStart.position.x - scaleStart.size.x * 0.5f, 0.002f));
+        CHECK(NearlyEqual(part->size().y, scaleStart.size.y));
+
+        // Alt: escala centrada — centro parado, as duas faces se afastam.
+        const loblox::Transform centeredStart = part->transform();
+        const auto centeredLayout = layout();
+        command("keydown alt");
+        mouse(screen(centeredLayout.scaleHandle[1]));
+        command("mousedown 1");
+        mouse(screen(Vector2Add(centeredLayout.scaleHandle[1],
+                                 Vector2Scale(centeredLayout.axisDirection[0], 18))));
+        command("mouseup 1"); frames(2);
+        command("keyup alt"); frames(1);
+        CHECK(NearlyEqual(part->position(), centeredStart.position, 0.001f));
+        CHECK(part->size().x > centeredStart.size.x + 0.1f);
+        CHECK(NearlyEqual(part->size().y, centeredStart.size.y));
+
+        // Rotate com angulo exato em graus.
+        toolbar(ToolMode::Rotate, 3);
+        const loblox::Transform rotateStart = part->transform();
+        const auto exactRotateLayout = layout();
+        mouse(screen(exactRotateLayout.rotateMarker[1]));
+        command("mousedown 1");
+        mouse(screen(Vector2Add(exactRotateLayout.rotateMarker[1], Vector2{26, 20})));
+        command("mouseup 1"); frames(2);
+        chip = EditorUITestAccess::readoutRect(ui);
+        mouse({chip.x + chip.width * 0.5f, chip.y + chip.height * 0.5f});
+        command("mousedown 1"); command("mouseup 1"); frames(2);
+        CHECK(EditorUITestAccess::readoutEditing(ui));
+        command("type 45"); frames(2);
+        command("keydown Return"); command("keyup Return"); frames(2);
+        CHECK(NearlyEqual(EditorUITestAccess::readoutValue(ui), 45.0f, 0.02f));
+        CHECK(NearlyEqual(part->position(), rotateStart.position));
+        CHECK(NearlyEqual(part->size(), rotateStart.size));
+
+        // World/Local alterna a matematica de verdade (Ctrl+L).
+        const bool wasLocal = EditorUITestAccess::localSpace(ui);
+        command("keydown ctrl keydown l"); frames(2); command("keyup l keyup ctrl"); frames(2);
+        CHECK(EditorUITestAccess::localSpace(ui) == !wasLocal);
+        CHECK(!EditorUITestAccess::readoutVisible(ui));
+        command("keydown ctrl keydown l"); frames(2); command("keyup l keyup ctrl"); frames(2);
+        CHECK(EditorUITestAccess::localSpace(ui) == wasLocal);
+
+        // Local space move segue o eixo da Part (girada 90 graus em Y), com
+        // Snap de 1 stud ativo: o eixo local X aponta para -Z do mundo.
+        command("keydown ctrl keydown l"); frames(2); command("keyup l keyup ctrl"); frames(2);
+        CHECK(EditorUITestAccess::localSpace(ui));
+        part->setRotation(QuaternionFromAxisAngle({0, 1, 0}, 90.0f * DEG2RAD));
+        physics.applyChanges(part);
+        frames(2);
+        toolbar(ToolMode::Move, 1);
+        const loblox::Transform localStart = part->transform();
+        const auto localLayout = gizmolayout::Build(*part, ui.tool(), camera, viewport(), true);
+        mouse(screen(localLayout.axisButton[0]));
+        command("mousedown 1");
+        mouse(screen(Vector2Add(localLayout.axisButton[0],
+                                 Vector2Scale(localLayout.axisDirection[0], 40))));
+        command("mouseup 1"); frames(2);
+        const Vector3 localDelta = Vector3Subtract(part->position(), localStart.position);
+        CHECK(std::fabs(localDelta.z) > 0.5f);
+        CHECK(std::fabs(localDelta.x) < 0.01f);
+        CHECK(std::fabs(localDelta.y) < 0.01f);
+        CHECK(std::fabs(localDelta.z / 1.0f - std::round(localDelta.z / 1.0f)) < 0.01f);
+        command("keydown ctrl keydown l"); frames(2); command("keyup l keyup ctrl"); frames(2);
+        CHECK(!EditorUITestAccess::localSpace(ui));
 
         toolbar(ToolMode::Select, 0);
         toolbar(ToolMode::Move, 1);

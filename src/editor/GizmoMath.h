@@ -48,6 +48,11 @@ TransformSnapshot ScaleFaceForHandle(const TransformSnapshot& start, HandleId ha
 TransformSnapshot ScaleUniformFace(const TransformSnapshot& start, Vector3 axis, int side,
                                    float delta, float snapIncrement,
                                    float minimumSize = kMinPartSize);
+// Escala centrada (Alt): as duas faces se afastam igualmente e o centro fica
+// parado, em vez de manter a face oposta.
+TransformSnapshot ScaleCenteredFace(const TransformSnapshot& start, int axisIndex, int side,
+                                    bool localSpace, float delta, float snapIncrement,
+                                    float minimumSize = kMinPartSize);
 // Local/world position for one scale handle, including its outward pixel-sized offset.
 Vector3 ScaleHandleCenter(const TransformSnapshot& start, int axisIndex, int side,
                           bool localSpace, float handleOffset);
