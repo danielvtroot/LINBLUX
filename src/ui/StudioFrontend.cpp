@@ -557,9 +557,12 @@ void StudioFrontend::render(){auto& p=*impl_;const double started=GetTime();p.re
 void StudioFrontend::filter(EditorInput& in,InputContext& c) {
     auto& p=*impl_;if(p.keyboardOwned||p.editing()||p.dialogOpen){c.text=true;c.widget=true;c.keyboardCaptured=true;in.play=in.save=in.open=in.remove=in.rename=in.duplicate=false;in.tool=-1;in.jump=false;in.movement={};}
     if(p.mouseOwned){in.leftPressed=in.leftDown=in.rightPressed=in.rightDown=in.middlePressed=in.middleDown=false;in.wheel=0;c.hovered=false;
-        if(!p.ui.runtime_.active()&&(p.dialogOpen||p.contextOpen||p.dragging||!p.split.empty()))c.widget=true;
-        // Hovering the visible HUD/topbar must not steal WASD, jump or Shift
-        // from a running game; only actual text/modal focus captures keys.
+        // In the editor any RML surface (panels, ribbon, tabs, advanced
+        // editors) owns the pointer; otherwise a stale ImGui viewport focus
+        // would let WASD/F move the 3D camera while the user works in RML.
+        // During Play only real modals/text/drags capture gameplay keys, so
+        // hovering the HUD still leaves WASD and jump with the character.
+        if(!p.ui.runtime_.active()||p.dialogOpen||p.contextOpen||p.dragging||!p.split.empty())c.widget=true;
     }
     if(p.ui.runtime_.active()&&!p.editing()&&!p.dialogOpen)c.focused=true;
     if(p.escapeConsumed)in.escape=false;

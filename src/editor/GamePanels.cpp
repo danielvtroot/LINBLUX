@@ -605,7 +605,7 @@ bool EditorUI::updateRigGizmo(const EditorInput& input,const InputRoute& route,R
     rigGizmo_.setSnap(snapEnabled_?moveSnap_:0,snapEnabled_?scaleSnap_:0,snapEnabled_?rotateSnapDegrees_:0);
     auto* rig=scene_.gameAssets().findRig(selectedRig_);
     const bool editing=rigContext_==RigContext::Edit;
-    const bool invalid=!rig || !showJointPivots_ || blocked || input.escape || tool_==ToolMode::Select ||
+    const bool invalid=!rig || !showJointPivots_ || input.escape || tool_==ToolMode::Select ||
         selectedJoint_<0 || selectedJoint_>=game::kJointCount ||
         (tool_==ToolMode::Scale && !editing);
     const bool changed=rigDrag_ && (rigDrag_->id!=selectedRig_ || rigDrag_->tool!=tool_ ||
@@ -623,12 +623,21 @@ bool EditorUI::updateRigGizmo(const EditorInput& input,const InputRoute& route,R
         jointProxy_.setPosition(proxy.position);jointProxy_.setRotation(proxy.rotation);
         jointProxy_.setSize(tool_==ToolMode::Rotate?Vector3{1,1,1}:rig->bodies[body].size);
     }
+    GizmoInput gi{input.mouse,input.leftPressed,input.leftDown,IsWindowFocused(),input.shift};
+    // A panel/popup owning the pointer must block the rig gizmo's input, but it
+    // must not freeze jointProxy_. The overlay is drawn from the proxy, so a
+    // stale proxy makes the handles jump when the pointer returns to the
+    // viewport (and makes RML-driven clicks miss them).
+    if(blocked) {
+        if(rigGizmo_.dragging()) { const bool consumed=true; cancelRigGizmo(); return consumed; }
+        rigGizmo_.update(tool_,&jointProxy_,camera_,viewport,false,false,gi);
+        return false;
+    }
     // Capture before Gizmo::update edits the proxy. Both drawing and hit testing
     // consume jointProxy_; pose coordinates are solved through the same bind chain.
     RigDrag initial;
     if(!rigDrag_ && input.leftPressed) initial={selectedRig_,{},tool_,rigContext_,selectedJoint_,selectedRigBody_,
                            *rig,previewPose_,base};
-    GizmoInput gi{input.mouse,input.leftPressed,input.leftDown,IsWindowFocused(),input.shift};
     const auto result=rigGizmo_.update(tool_,&jointProxy_,camera_,viewport,hovered,
         route.owner==InputOwner::Viewport || route.owner==InputOwner::Transform,gi);
     if(result.started) {

@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <string>
 #include <chrono>
+#include <limits>
 #include <vector>
 #include <unistd.h>
 #include "imgui.h"
@@ -130,6 +131,28 @@ int main() {
         command("mousemove_relative -- 12 7");
         CHECK(Vector3Distance(camera.position(), beforeCapture) > 0.01f);
         command("mouseup 3");
+        const Vector3 afterOrbit = camera.position();
+        const Vector3 afterOrbitTarget = camera.target();
+        frames(6);
+        CHECK(NearlyEqual(camera.position(), afterOrbit));
+        CHECK(NearlyEqual(camera.target(), afterOrbitTarget));
+
+        // Losing focus while orbiting releases the captured cursor and must not
+        // replay the warp delta into the camera when focus returns.
+        const Rectangle focusRect = viewport();
+        mouse(Vector2{focusRect.x + 35, focusRect.y + 90});
+        command("mousedown 3");
+        CHECK(camera.cursorCaptured());
+        const Vector3 beforeCameraFocusLoss = camera.position();
+        const unsigned long cameraRootWindow = InputTestRootWindow();
+        CHECK(cameraRootWindow != 0);
+        command("windowfocus " + std::to_string(cameraRootWindow));
+        frames(4);
+        CHECK(!camera.cursorCaptured());
+        command("mouseup 3");
+        command("search --name '^Loblox input regression$' windowfocus --sync");
+        frames(4);
+        CHECK(NearlyEqual(camera.position(), beforeCameraFocusLoss));
 
         const Vector3 beforePan = camera.target();
         const Vector3 beforePanOffset = Vector3Subtract(camera.position(), camera.target());
@@ -140,14 +163,42 @@ int main() {
         CHECK(NearlyEqual(Vector3Subtract(camera.position(), camera.target()), beforePanOffset));
         command("mouseup 2");
         CHECK(!camera.cursorCaptured());
+        const Vector3 afterPan = camera.position();
+        const Vector3 afterPanTarget = camera.target();
+        frames(6);
+        CHECK(NearlyEqual(camera.position(), afterPan));
+        CHECK(NearlyEqual(camera.target(), afterPanTarget));
         const Vector3 beforeFreeMove = camera.target();
         command("keydown w");
         command("keyup w");
         CHECK(Vector3Distance(camera.target(), beforeFreeMove) > 0.01f);
         CHECK(ui.tool() == ToolMode::Move);
+        const Vector3 beforeUp = camera.target();
+        command("keydown e");
+        frames(4);
+        command("keyup e");
+        CHECK(camera.target().y > beforeUp.y + 0.01f);
+        CHECK(std::fabs(camera.target().x - beforeUp.x) < 0.01f);
+        CHECK(std::fabs(camera.target().z - beforeUp.z) < 0.01f);
+        const Vector3 beforeDown = camera.target();
+        command("keydown q");
+        frames(4);
+        command("keyup q");
+        CHECK(camera.target().y < beforeDown.y - 0.01f);
         const float beforeZoom = camera.distance();
         command("click 4");
         CHECK(camera.distance() < beforeZoom);
+        const Vector3 finitePosition = camera.position();
+        const Vector3 finiteTarget = camera.target();
+        const float finiteDistance = camera.distance();
+        const float nan = std::numeric_limits<float>::quiet_NaN();
+        camera.rotateBy({nan, nan});
+        camera.zoomBy(nan);
+        camera.moveFree({nan, nan, nan}, 1.0f / 60.0f, false);
+        camera.setOrbit({nan, nan, nan}, nan, nan, nan);
+        CHECK(NearlyEqual(camera.position(), finitePosition));
+        CHECK(NearlyEqual(camera.target(), finiteTarget));
+        CHECK(NearlyEqual(camera.distance(), finiteDistance));
         camera.setOrbit(part->position(), 22, 0.75f, 0.4f);
         frames();
 
@@ -180,6 +231,34 @@ int main() {
         command("keydown 3");
         command("keyup 3");
         CHECK(ui.tool() == ToolMode::Move);
+        const Vector3 blockedTarget = camera.target();
+        command("keydown w");
+        frames(5);
+        command("keyup w");
+        CHECK(NearlyEqual(camera.target(), blockedTarget));
+        const float blockedDistance = camera.distance();
+        command("keydown f");
+        command("keyup f");
+        frames(3);
+        CHECK(NearlyEqual(camera.distance(), blockedDistance));
+        CHECK(NearlyEqual(camera.target(), blockedTarget));
+
+        // The same keys work only after the viewport itself owns focus.
+        ImGui::FocusWindow(ImGui::FindWindowByName("Viewport"));
+        frames();
+        const Vector3 beforeViewportW = camera.target();
+        command("keydown w");
+        frames(5);
+        command("keyup w");
+        CHECK(Vector3Distance(camera.target(), beforeViewportW) > 0.01f);
+        camera.setOrbit(part->position(), 80, 0.75f, 0.4f);
+        frames();
+        const float beforeFocusFit = camera.distance();
+        command("keydown f");
+        command("keyup f");
+        frames(3);
+        CHECK(NearlyEqual(camera.target(), part->position()));
+        CHECK(camera.distance() < beforeFocusFit);
 
         const auto key = [&](const char* name) {
             command(std::string("keydown ") + name);

@@ -13,6 +13,17 @@ constexpr float kMinPitch = -1.45f;
 constexpr float kMaxPitch = 1.45f;
 constexpr float kMinDistance = 2.0f;
 constexpr float kMaxDistance = 2000.0f;
+// A cursor warp (focus loss, capture release) can produce a single huge
+// pointer delta. Clamping it keeps one bad frame from throwing the orbit.
+constexpr float kMaxPointerDelta = 240.0f;
+constexpr float kMaxWheelDelta = 20.0f;
+
+bool Finite(Vector2 value) {
+    return std::isfinite(value.x) && std::isfinite(value.y);
+}
+bool Finite(Vector3 value) {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
 }  // namespace
 
 EditorCamera::EditorCamera() = default;
@@ -57,6 +68,8 @@ float EditorCamera::worldUnitsPerPixel(Vector3 world, float viewportHeight) cons
 }
 
 void EditorCamera::setOrbit(Vector3 target, float distance, float yaw, float pitch) {
+    if (!Finite(target) || !std::isfinite(distance) || !std::isfinite(yaw) ||
+        !std::isfinite(pitch)) return;
     target_ = target;
     distance_ = std::clamp(distance, kMinDistance, kMaxDistance);
     minimumOrbitDistance_ = kMinDistance;
@@ -65,6 +78,7 @@ void EditorCamera::setOrbit(Vector3 target, float distance, float yaw, float pit
 }
 
 void EditorCamera::focusOn(Vector3 point, float radius) {
+    if (!Finite(point) || !std::isfinite(radius)) return;
     target_ = point;
     const float safeRadius = std::max(radius, 0.1f);
     const float comfortableDistance = safeRadius / std::sin(fovDegrees_ * DEG2RAD * 0.5f) * 1.15f;
@@ -85,8 +99,11 @@ void EditorCamera::releaseCapture() {
 }
 
 void EditorCamera::rotateBy(Vector2 mouseDelta) {
-    yaw_ -= mouseDelta.x * lookSensitivity_;
-    pitch_ = std::clamp(pitch_ + mouseDelta.y * lookSensitivity_, kMinPitch, kMaxPitch);
+    if (!Finite(mouseDelta)) return;
+    const Vector2 delta{std::clamp(mouseDelta.x, -kMaxPointerDelta, kMaxPointerDelta),
+                        std::clamp(mouseDelta.y, -kMaxPointerDelta, kMaxPointerDelta)};
+    yaw_ -= delta.x * lookSensitivity_;
+    pitch_ = std::clamp(pitch_ + delta.y * lookSensitivity_, kMinPitch, kMaxPitch);
 }
 
 void EditorCamera::setNavigationSettings(float moveSpeed, float lookSensitivity) {
@@ -96,10 +113,13 @@ void EditorCamera::setNavigationSettings(float moveSpeed, float lookSensitivity)
 }
 
 void EditorCamera::zoomBy(float wheelDelta) {
+    if (!std::isfinite(wheelDelta)) return;
+    wheelDelta = std::clamp(wheelDelta, -kMaxWheelDelta, kMaxWheelDelta);
     distance_ = std::clamp(distance_ * std::pow(0.88f, wheelDelta), minimumOrbitDistance_, kMaxDistance);
 }
 
 void EditorCamera::moveFree(Vector3 localInput, float deltaSeconds, bool fast) {
+    if (!Finite(localInput) || !std::isfinite(deltaSeconds)) return;
     const Vector3 forward = Vector3Normalize(Vector3Subtract(target_, position()));
     const Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, Vector3{0, 1, 0}));
     Vector3 movement = Vector3Add(Vector3Scale(forward, localInput.z),
@@ -117,7 +137,8 @@ void EditorCamera::handleInput(const EditorInput& input, Vector2 viewportSize,
                                bool navigation, bool keyboard, bool zoom, float deltaSeconds) {
     bool capturedThisFrame = false;
     if (!navigation) releaseCapture();
-    if (navigation && !cursorCaptured() && (input.rightPressed || input.middlePressed)) {
+    if (navigation && !cursorCaptured() && Finite(input.mouse) &&
+        (input.rightPressed || input.middlePressed)) {
         cursorRestorePosition_ = input.mouse;
         DisableCursor();
         gesture_ = input.rightPressed ? Gesture::Look : Gesture::Pan;
@@ -132,16 +153,19 @@ void EditorCamera::handleInput(const EditorInput& input, Vector2 viewportSize,
         (gesture_ == Gesture::Pan && !input.middleDown)) {
         releaseCapture();
     }
+    Vector2 delta = Finite(input.delta) ? input.delta : Vector2{};
+    delta.x = std::clamp(delta.x, -kMaxPointerDelta, kMaxPointerDelta);
+    delta.y = std::clamp(delta.y, -kMaxPointerDelta, kMaxPointerDelta);
     if (gesture_ == Gesture::Look && !capturedThisFrame) {
-        rotateBy(input.delta);
+        rotateBy(delta);
     }
     if (gesture_ == Gesture::Pan && !capturedThisFrame) {
-        const Vector2 delta = input.delta;
         const Vector3 forward = Vector3Normalize(Vector3Subtract(target_, position()));
         const Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, Vector3{0, 1, 0}));
         const Vector3 up = Vector3Normalize(Vector3CrossProduct(right, forward));
+        const float viewportHeight = std::isfinite(viewportSize.y) ? viewportSize.y : 1.0f;
         const float worldPerPixel = 2.0f * distance_ * std::tan(fovDegrees_ * DEG2RAD * 0.5f) /
-                                    std::max(1.0f, viewportSize.y);
+                                    std::max(1.0f, viewportHeight);
         target_ = Vector3Subtract(target_, Vector3Scale(right, delta.x * worldPerPixel));
         target_ = Vector3Add(target_, Vector3Scale(up, delta.y * worldPerPixel));
     }

@@ -82,6 +82,28 @@ int main() {
         capture("studio-1366");
         CHECK(projectio::toJson(scene)==untouched);
         CHECK(ui.frontend()->viewport().x>0);CHECK(scene.selection()==part);
+        // RML owns the pointer in the editor: hovering a panel must not leave
+        // stale ImGui viewport focus driving WASD into the 3D camera.
+        auto* viewportWindow=ImGui::FindWindowByName("Viewport");
+        CHECK(viewportWindow!=nullptr);
+        if(viewportWindow)ImGui::FocusWindow(viewportWindow);
+        frames(3);
+        const auto savedTarget=camera.target();
+        const auto savedDistance=camera.distance();
+        const auto savedPitch=camera.pitch();
+        const auto view=ui.frontend()->viewport();
+        event("mousemove "+std::to_string(int(view.x+view.width*.5f))+" "+std::to_string(int(view.y+view.height*.5f)));
+        const auto beforeViewportW=camera.target();
+        event("keydown w");frames(5);event("keyup w");frames(2);
+        CHECK(Vector3Distance(camera.target(),beforeViewportW)>0.01f);
+        const auto title=ui.frontend()->elementBounds("property-title");
+        CHECK(title.width>0);
+        event("mousemove "+std::to_string(int(title.x+title.width*.5f))+" "+std::to_string(int(title.y+title.height*.5f)));
+        const auto blockedTarget=camera.target();
+        event("keydown w");frames(5);event("keyup w");frames(2);
+        CHECK(NearlyEqual(camera.target(),blockedTarget));
+        camera.setOrbit(savedTarget,savedDistance,0.75f,savedPitch);
+        frames(2);
         EditorActions actions(ui);
         click("cmd-tool-1");CHECK(EditorUITestAccess::tool(ui)==ToolMode::Move);
         const bool snap=EditorUITestAccess::snap(ui);click("snap");CHECK(EditorUITestAccess::snap(ui)!=snap);click("snap");CHECK(EditorUITestAccess::snap(ui)==snap);
