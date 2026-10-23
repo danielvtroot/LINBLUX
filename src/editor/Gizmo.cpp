@@ -218,6 +218,8 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                 startAngle_ = angle;
             }
             const float snap = input.shiftDown ? 0.0f : rotateSnapDegrees_;
+            appliedRotation_ = gizmomath::SnapDelta(accumulatedAngle_, snap * DEG2RAD);
+            appliedAxis_ = axis;
             part->setRotation(gizmomath::Rotate(
                 {startTransform_.position, startTransform_.rotation, startTransform_.size},
                 axis, accumulatedAngle_, snap));

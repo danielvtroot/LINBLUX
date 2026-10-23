@@ -1,5 +1,6 @@
 #include "game/GameAssetsIO.h"
 
+#include <cmath>
 #include <stdexcept>
 
 namespace loblox::game {
@@ -60,8 +61,14 @@ nlohmann::json EncodeAssets(const GameAssets& a) {
             {"priority", static_cast<int>(clip.priority)}, {"tracks", json::array()}};
         for (const auto& track : clip.tracks) {
             json t = json::array();
-            for (const auto& key : track) t.push_back({{"time", key.time}, {"pose", Transform(key.pose)},
-                                                     {"interpolation", static_cast<int>(key.interpolation)}});
+            for (const auto& key : track) {
+                json k{{"time", key.time}, {"pose", Transform(key.pose)},
+                       {"interpolation", static_cast<int>(key.interpolation)}};
+                // Only authored long-way sweeps add the field; legacy clips keep
+                // their previous JSON byte for byte.
+                if (std::fabs(key.arcDegrees) > 1e-4f) k["arc"] = key.arcDegrees;
+                t.push_back(std::move(k));
+            }
             c["tracks"].push_back(std::move(t));
         }
         j["animations"].push_back(std::move(c));
@@ -138,8 +145,12 @@ bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& erro
             for (int i = 0; i < kJointCount; ++i) {
                 Require(tracks.at(i).is_array() && tracks.at(i).size() <= 10000, "keyframe limit or invalid track");
                 totalKeys += tracks.at(i).size(); Require(totalKeys <= 100000, "project keyframe budget exceeded");
-                for (const auto& key : tracks.at(i)) c.tracks[i].push_back({key.at("time").get<float>(),
-                    ReadTransform(key.at("pose")), static_cast<Interpolation>(ReadInt(key.at("interpolation"), 0, 2))});
+                for (const auto& key : tracks.at(i)) {
+                    const float arc = key.contains("arc") ? key.at("arc").get<float>() : 0.0f;
+                    Require(std::isfinite(arc) && std::fabs(arc) <= 36000.0f, "invalid keyframe arc");
+                    c.tracks[i].push_back({key.at("time").get<float>(), ReadTransform(key.at("pose")),
+                        static_cast<Interpolation>(ReadInt(key.at("interpolation"), 0, 2)), arc});
+                }
             }
             a.animations.push_back(std::move(c));
         }

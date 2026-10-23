@@ -137,6 +137,238 @@ void AnimationTests() {
     assets.player.gravity = std::numeric_limits<float>::quiet_NaN();
     CHECK(!assets.validate(error));
 }
+// q and -q are the same pose; compare orientations, never raw components.
+// atan2 keeps full precision near zero, where acos(dot) does not.
+float RotationAngleDegrees(Quaternion a, Quaternion b) {
+    Quaternion x = UnitQuaternion(a), y = UnitQuaternion(b);
+    if (QuaternionDotProduct(x, y) < 0.f) y = NegateQuaternion(y);
+    const float dx = x.x - y.x, dy = x.y - y.y, dz = x.z - y.z, dw = x.w - y.w;
+    const float sx = x.x + y.x, sy = x.y + y.y, sz = x.z + y.z, sw = x.w + y.w;
+    return 4.f * std::atan2(std::sqrt(dx*dx + dy*dy + dz*dz + dw*dw),
+                            std::sqrt(sx*sx + sy*sy + sz*sz + sw*sw)) * RAD2DEG;
+}
+
+AnimationClip MakeFrontJumpClip() {
+    // R6 front = -Z: a positive local X rotation raises a downward arm toward
+    // the front, identically for both shoulders.
+    AnimationClip clip = MakeIdle();
+    clip.id = "r6-jump-front"; clip.name = "Jump Front"; clip.duration = .8f; clip.loop = false;
+    const float times[4] = {0.f, .2f, .4f, .8f};
+    const float angles[4] = {0.f, 85.f, 120.f, 120.f};
+    for (int i = 0; i < 4; ++i) {
+        Pose pose{};
+        pose[LeftShoulder].rotation = QuatFromEulerDegrees({angles[i], 0, 0});
+        pose[RightShoulder].rotation = QuatFromEulerDegrees({angles[i], 0, 0});
+        for (int j = 0; j < kJointCount; ++j) clip.setKey(j, {times[i], pose[j]});
+    }
+    return clip;
+}
+
+void AnimationPathTests() {
+    std::string error;
+    // The editor shows and re-edits rotations through Euler degrees. The pair
+    // must be a true inverse, including a combined rotation (raylib's
+    // QuaternionFromEuler/ToEuler use different orders and do not round-trip).
+    for (const Vector3 authored : {Vector3{23, -37, 61}, Vector3{-140, 25, 8}, Vector3{0, 0, 0}}) {
+        const auto rotation = QuatFromEulerDegreesZYX(authored);
+        const auto displayed = EulerDegreesZYXFromQuat(rotation);
+        CHECK(NearlyEqual(displayed, authored, .05f));
+        CHECK(RotationAngleDegrees(QuatFromEulerDegreesZYX(displayed), rotation) < .01f);
+    }
+    const auto gimbal = QuatFromEulerDegreesZYX({30, 90, 45});
+    CHECK(RotationAngleDegrees(QuatFromEulerDegreesZYX(EulerDegreesZYXFromQuat(gimbal)), gimbal) < .01f);
+    // A deliberate long-way sweep must survive quaternion keyframes: 250
+    // degrees in front, not the 110 degree shortcut through the back.
+    AnimationClip over = MakeIdle(); over.id = "over"; over.loop = false; over.duration = 1;
+    Pose start{}, end{};
+    end[LeftShoulder].rotation = QuatFromEulerDegrees({250, 0, 0});
+    over.setKey(LeftShoulder, {0, start[LeftShoulder], Interpolation::Linear});
+    over.setKey(LeftShoulder, {1, end[LeftShoulder], Interpolation::Linear});
+    auto& keys = over.tracks[LeftShoulder];
+    keys[0].arcDegrees = AnimationClip::authoredArcDegrees(keys[0], keys[1], {1, 0, 0}, 250);
+    CHECK(std::fabs(keys[0].arcDegrees) > 180);
+    CHECK(over.validate(error));
+    for (int i = 0; i <= 10; ++i) {
+        const float t = i / 10.f;
+        const auto expected = QuatFromEulerDegrees({250 * t, 0, 0});
+        CHECK(RotationAngleDegrees(over.sample(std::min(t, .999f))[LeftShoulder].rotation, expected) < .3f);
+    }
+    // Legacy keys without an arc keep the previous shortest-arc behaviour, so
+    // old clips are not silently reinterpreted.
+    keys[0].arcDegrees = 0;
+    CHECK(RotationAngleDegrees(over.sample(.5f)[LeftShoulder].rotation,
+                               QuatFromEulerDegrees({125, 0, 0})) > 60.f);
+    // Exactly 180 degrees is ambiguous; the tie-break must be deterministic.
+    AnimationClip half = MakeIdle(); half.id = "half"; half.loop = false; half.duration = 1;
+    Pose neg{}; neg[LeftShoulder].rotation = QuatFromEulerDegrees({-180, 0, 0});
+    half.setKey(LeftShoulder, {0, start[LeftShoulder], Interpolation::Linear});
+    half.setKey(LeftShoulder, {1, neg[LeftShoulder], Interpolation::Linear});
+    const auto middle = half.sample(.5f)[LeftShoulder].rotation;
+    CHECK(RotationAngleDegrees(middle, QuatFromEulerDegrees({90, 0, 0})) < .05f);
+    for (int i = 0; i < 8; ++i)
+        CHECK(RotationAngleDegrees(half.sample(.5f)[LeftShoulder].rotation, middle) < .001f);
+    // +/-180 keys interpolate across the wrap, not through the neutral pose.
+    AnimationClip wrap = MakeIdle(); wrap.id = "wrap"; wrap.loop = false; wrap.duration = 1;
+    Pose west{}, east{};
+    west[LeftShoulder].rotation = QuatFromEulerDegrees({0, 170, 0});
+    east[LeftShoulder].rotation = QuatFromEulerDegrees({0, -170, 0});
+    wrap.setKey(LeftShoulder, {0, west[LeftShoulder], Interpolation::Linear});
+    wrap.setKey(LeftShoulder, {1, east[LeftShoulder]});
+    CHECK(std::fabs(wrap.sample(.5f)[LeftShoulder].rotation.y) > .999f);
+    // The serialized arc round-trips and reproduces identical samples.
+    keys[0].arcDegrees = AnimationClip::authoredArcDegrees(keys[0], keys[1], {1, 0, 0}, 250);
+    GameAssets assets; assets.createR6();
+    assets.animations.push_back(over);
+    const auto json = EncodeAssets(assets);
+    GameAssets loaded;
+    CHECK(DecodeAssets(json, loaded, error));
+    const auto* restored = loaded.findAnimation("over");
+    CHECK(restored != nullptr);
+    CHECK(restored && std::fabs(restored->tracks[LeftShoulder][0].arcDegrees - keys[0].arcDegrees) < .001f);
+    CHECK(EncodeAssets(loaded) == json);
+    for (int i = 0; i <= 10; ++i) {
+        const float t = i / 10.f;
+        CHECK(restored && RotationAngleDegrees(restored->sample(t)[LeftShoulder].rotation,
+                                               over.sample(t)[LeftShoulder].rotation) < .001f);
+    }
+}
+
+void JumpRepetitionTests() {
+    std::string error;
+    Scene scene;
+    scene.createBaseplate({0, -.5f, 0}, {200, 1, 200});
+    scene.gameAssets().createR6();
+    auto& assets = scene.gameAssets();
+    assets.animations.push_back(MakeFrontJumpClip());
+    assets.player.jumpAnimation = "r6-jump-front";
+    CHECK(assets.validate(error));
+    const auto saved = projectio::toJson(scene);
+    RuntimeSession runtime;
+    CHECK(runtime.start(scene, error));
+    for (int i = 0; i < 30; ++i) runtime.update(1.f / 60, {});
+    std::vector<std::vector<Pose>> traces;
+    for (int jump = 0; jump < 30; ++jump) {
+        for (int i = 0; i < 80; ++i) runtime.update(1.f / 60, {});
+        CHECK(runtime.humanoidState() == HumanoidState::Idle);
+        PlayerInput input; input.jump = true;
+        runtime.update(1.f / 60, input);
+        std::vector<Pose> trace;
+        // Sample the ascent, the Jump -> Fall handover and the landing.
+        for (int step = 1; step <= 48; ++step) {
+            runtime.update(1.f / 60, {});
+            if (step == 4 || step == 10 || step == 16 || step == 24 || step == 36)
+                trace.push_back(runtime.pose());
+        }
+        traces.push_back(trace);
+        CHECK(traces.size() == static_cast<std::size_t>(jump + 1));
+    }
+    // Every replay follows the authored front path, never the back.
+    for (const auto& trace : traces) {
+        for (const auto& pose : trace) {
+            for (int joint : {LeftShoulder, RightShoulder}) {
+                CHECK(pose[joint].rotation.x > -1e-4f);
+                // The arm hangs along -Y; a front raise keeps it in front (-Z)
+                // and the fall pose (neutral) hangs straight down, never back.
+                CHECK(Vector3RotateByQuaternion({0, -1, 0}, pose[joint].rotation).z <= .001f);
+            }
+        }
+    }
+    // Thirty runs are identical: no angular drift and no inherited pose.
+    for (std::size_t run = 1; run < traces.size(); ++run) {
+        for (std::size_t t = 0; t < traces[run].size(); ++t)
+            for (int joint = 0; joint < kJointCount; ++joint) {
+                CHECK(RotationAngleDegrees(traces[run][t][joint].rotation,
+                                           traces[0][t][joint].rotation) < .01f);
+                CHECK(Vector3Distance(traces[run][t][joint].position,
+                                      traces[0][t][joint].position) < 1e-4f);
+            }
+    }
+    // The landing pose does not leak into the next take-off.
+    for (int i = 0; i < 80; ++i) runtime.update(1.f / 60, {});
+    for (int joint = 0; joint < kJointCount; ++joint)
+        CHECK(RotationAngleDegrees(runtime.pose()[joint].rotation, QuaternionIdentity()) < .01f);
+    // Idle -> Jump -> Fall -> Idle uses the same clip entry every time, even
+    // when the character is turned while airborne.
+    runtime.setShiftLockRequested(true);
+    PlayerInput look; look.look = {400, 0};
+    runtime.update(0, look);
+    const float turned = runtime.characterRoot().rotation.y;
+    PlayerInput jump; jump.jump = true;
+    runtime.update(1.f / 60, jump);
+    std::vector<Pose> turnedTrace;
+    for (int step = 1; step <= 48; ++step) {
+        runtime.update(1.f / 60, {});
+        if (step == 4 || step == 10 || step == 16 || step == 24 || step == 36)
+            turnedTrace.push_back(runtime.pose());
+    }
+    CHECK(std::fabs(std::remainder(runtime.characterRoot().rotation.y - turned, 2 * PI)) < .5f);
+    for (std::size_t t = 0; t < turnedTrace.size(); ++t)
+        for (int joint = 0; joint < kJointCount; ++joint)
+            CHECK(RotationAngleDegrees(turnedTrace[t][joint].rotation,
+                                       traces[0][t][joint].rotation) < .01f);
+    runtime.setShiftLockRequested(false);
+    runtime.stop();
+    // Different display rates produce the same sampled path.
+    const auto runAtRate = [&](float dt) {
+        RuntimeSession session;
+        CHECK(session.start(scene, error));
+        for (int i = 0; i < static_cast<int>(1.4f / dt); ++i) session.update(dt, {});
+        PlayerInput press; press.jump = true;
+        session.update(dt, press);
+        std::vector<Pose> poses;
+        for (int i = 0; i < static_cast<int>(.4f / dt); ++i) {
+            session.update(dt, {});
+            if (poses.empty() || RotationAngleDegrees(
+                    poses.back()[LeftShoulder].rotation, session.pose()[LeftShoulder].rotation) > 1e-6f)
+                poses.push_back(session.pose());
+        }
+        session.stop();
+        return poses;
+    };
+    const auto at30 = runAtRate(1.f / 30), at60 = runAtRate(1.f / 60), at120 = runAtRate(1.f / 120);
+    CHECK(at30.size() > 4 && at60.size() > 4 && at120.size() > 4);
+    // A different display rate may sample the same path more or less densely,
+    // but it must never leave the authored range or reverse the direction. The
+    // clip peaks at 120 degrees; every rate must observe the same front arc.
+    float peaks[3] = {0, 0, 0};
+    int rate = 0;
+    for (const auto& poses : {at30, at60, at120}) {
+        float peak = 0;
+        for (const auto& pose : poses) {
+            const auto raise = Vector3RotateByQuaternion({0, -1, 0}, pose[LeftShoulder].rotation);
+            CHECK(raise.z <= .001f);
+            const float angle = RotationAngleDegrees(pose[LeftShoulder].rotation, QuaternionIdentity());
+            CHECK(pose[LeftShoulder].rotation.x > -1e-4f);
+            CHECK(angle <= 120.5f);
+            peak = std::max(peak, angle);
+        }
+        peaks[rate++] = peak;
+        CHECK(peak > 110.f);
+    }
+    CHECK(std::fabs(peaks[0] - peaks[1]) < 2.f);
+    CHECK(std::fabs(peaks[2] - peaks[1]) < 2.f);
+    // Save/load then replay: the same authored keys reproduce the same motion.
+    Scene loaded;
+    CHECK(projectio::fromJson(loaded, saved, error));
+    RuntimeSession replay;
+    CHECK(replay.start(loaded, error));
+    for (int i = 0; i < 30; ++i) replay.update(1.f / 60, {});
+    PlayerInput again; again.jump = true;
+    replay.update(1.f / 60, again);
+    std::vector<Pose> replayTrace;
+    for (int step = 1; step <= 48; ++step) {
+        replay.update(1.f / 60, {});
+        if (step == 4 || step == 10 || step == 16 || step == 24 || step == 36)
+            replayTrace.push_back(replay.pose());
+    }
+    for (std::size_t t = 0; t < replayTrace.size(); ++t)
+        for (int joint = 0; joint < kJointCount; ++joint)
+            CHECK(RotationAngleDegrees(replayTrace[t][joint].rotation,
+                                       traces[0][t][joint].rotation) < .01f);
+    replay.stop();
+    CHECK(projectio::toJson(scene) == saved);
+}
+
 void PersistenceTests() {
     Scene scene; scene.buildDefaultScene();
     auto& rig = scene.gameAssets().createR6();
@@ -574,7 +806,8 @@ int main(int argc, char** argv) {
         if (!projectio::save(scene, argv[2], error)) { std::fprintf(stderr,"%s\n",error.c_str()); return 1; }
         return 0;
     }
-    RigTests(); InputTests(); AnimationTests(); PersistenceTests(); RuntimeTests(); PhysicsPlayTests();MouseLockTests();
+    RigTests(); InputTests(); AnimationTests(); AnimationPathTests(); JumpRepetitionTests();
+    PersistenceTests(); RuntimeTests(); PhysicsPlayTests();MouseLockTests();
     {
         Scene scene;scene.buildDefaultScene();scene.gameAssets().createR6();
         scene.gameAssets().player.enableShiftLock=true;

@@ -43,6 +43,12 @@ public:
     bool hoveringHandle() const { return hoveredHandle_ != gizmomath::HandleId::None; }
     gizmomath::HandleId hoveredHandle() const { return hoveredHandle_; }
     int activeAxis() const { return activeAxis_; }
+    // Signed, unwrapped (and snapped) sweep of the active rotate drag. The
+    // animation editor uses it to keep a deliberate >180 degree turn that a
+    // pair of key quaternions cannot express on its own.
+    float rotationArcRadians() const { return appliedRotation_; }
+    // Retained after cancel() so the caller can inspect the finished drag.
+    Vector3 rotationRingAxis() const { return appliedAxis_; }
     void cancel(Part* part = nullptr, bool restoreTransform = false);
 
     void setLocalSpace(bool local) { localSpace_ = local; }
@@ -73,6 +79,8 @@ private:
     float startParam_ = 0.0f;
     float startAngle_ = 0.0f;
     float accumulatedAngle_ = 0.0f;
+    float appliedRotation_ = 0.0f; // accumulatedAngle_ after the current snap
+    Vector3 appliedAxis_{1, 0, 0};
     enum class DragProjection { World, Screen };
     DragProjection dragProjection_ = DragProjection::World;
     ToolMode dragTool_ = ToolMode::Select;

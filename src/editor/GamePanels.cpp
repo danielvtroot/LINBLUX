@@ -21,9 +21,12 @@ bool EditTransform(const char* id, game::RigidTransform& transform, bool positio
     const auto before = transform;
     ImGui::PushID(id);
     bool changed = position && ImGui::DragFloat3("Position", &transform.position.x, .02f, -10000, 10000);
-    auto degrees = EulerDegreesFromQuat(transform.rotation);
+    // Round-trip pair (ZYX). raylib's ToEuler/FromEuler use different orders,
+    // so converting through them changes the orientation whenever more than
+    // one axis is used; an edit here must never silently rotate the joint.
+    auto degrees = EulerDegreesZYXFromQuat(transform.rotation);
     if (ImGui::DragFloat3("Rotation (degrees)", &degrees.x, .5f, -360, 360)) {
-        transform.rotation = QuaternionNormalize(QuatFromEulerDegrees(degrees)); changed = true;
+        transform.rotation = QuatFromEulerDegreesZYX(degrees); changed = true;
     }
     if (changed && !game::Valid(transform)) {
         transform = before; changed = false;
@@ -95,7 +98,7 @@ void EditorUI::openAnimation(const std::string& id) {
     }
     cancelRigGizmo();
     animationDraft_ = *clip; animationSource_ = id; animationDirty_ = false;
-    timelineDragJoint_ = -1;
+    timelineDragJoint_ = -1; authoredArc_ = {};
     rigContext_ = RigContext::Animation; previewTime_ = 0; previewPlaying_ = false;
     if(tool_==ToolMode::Scale || tool_==ToolMode::Select)setTool(ToolMode::Rotate,"animation_context");
     previewPose_ = animationDraft_.sample(0); showAnimationEditor_ = true;
@@ -629,6 +632,33 @@ void EditorUI::drawRigEditor() {
     ImGui::End();
 }
 
+void EditorUI::applyAuthoredArc(int joint, float time) {
+    const AuthoredArc arc = authoredArc_;
+    authoredArc_ = {};
+    if (arc.joint != joint || !std::isfinite(arc.radians)) return;
+    // Shorter sweeps are already the unique shortest arc; 180 degrees is
+    // ambiguous and needs the authored direction pinned down.
+    if (std::fabs(arc.radians) < PI - .001f) return;
+    auto& track = animationDraft_.tracks[joint];
+    game::Keyframe* segmentStart = nullptr;
+    for (auto& key : track) {
+        if (key.time >= time - .0001f) break;
+        const float alignment = std::fabs(QuaternionDotProduct(
+            UnitQuaternion(key.pose.rotation), UnitQuaternion(arc.from)));
+        // The arc belongs to the segment that starts where the drag started.
+        if (alignment > .99995f) segmentStart = &key;
+    }
+    if (!segmentStart) return;
+    // The ring axis is world-space; the keyframe lives in the joint's pose
+    // frame, so rotate it through the drag's base transform first.
+    const Vector3 poseAxis = Vector3Normalize(
+        Vector3RotateByQuaternion(arc.worldAxis, QuaternionInvert(arc.base)));
+    game::Keyframe target;
+    target.pose.rotation = previewPose_[joint].rotation;
+    segmentStart->arcDegrees = game::AnimationClip::authoredArcDegrees(
+        *segmentStart, target, poseAxis, arc.radians * RAD2DEG);
+}
+
 void EditorUI::cancelRigGizmo(bool restore) {
     if(rigDrag_) {
         if(restore) if(auto* rig=scene_.gameAssets().findRig(rigDrag_->id)) {
@@ -687,6 +717,7 @@ bool EditorUI::updateRigGizmo(const EditorInput& input,const InputRoute& route,R
         route.owner==InputOwner::Viewport || route.owner==InputOwner::Transform,gi);
     if(result.started) {
         initial.correlation=diag::newCorrelationId();rigDrag_=std::move(initial);
+        authoredArc_ = {};
         previewPlaying_=false;camera_.releaseCapture();
         diag::Event event;event.subsystem="rig";event.name="drag_begin";event.result="ok";
         event.correlationId=rigDrag_->correlation;
@@ -729,7 +760,16 @@ bool EditorUI::updateRigGizmo(const EditorInput& input,const InputRoute& route,R
         }
         std::string error;
         if(!rig->validate(error)) {setStatus("Rig transform rejected: "+error,true);cancelRigGizmo();return true;}
-        if(result.ended)cancelRigGizmo(false);
+        if(result.ended) {
+            // The drag total is the only place the editor still knows the
+            // authored sweep of a >180 degree turn; keep it until the next key
+            // is inserted.
+            if(tool_==ToolMode::Rotate && !editing && !result.cancelled)
+                authoredArc_ = {selectedJoint_, drag.preview[selectedJoint_].rotation,
+                                drag.base.rotation, rigGizmo_.rotationRingAxis(),
+                                rigGizmo_.rotationArcRadians()};
+            cancelRigGizmo(false);
+        }
     }
     return result.consumed;
 }
@@ -971,14 +1011,17 @@ void EditorUI::drawAnimationEditor() {
     ImGui::Combo("Interpolation", &keyInterpolation_, "Linear\0Ease in/out\0Constant\0");
     if (ImGui::Button("Insert / Update key")) {
         animationDraft_.setKey(selectedJoint_, {previewTime_, previewPose_[selectedJoint_], static_cast<game::Interpolation>(keyInterpolation_)});
+        applyAuthoredArc(selectedJoint_, previewTime_);
         animationDirty_ = true;
     }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Start from a keyed pose, drag more than 180 degrees, then insert the next key: the long way round is kept.");
     ImGui::SameLine(); if (ImGui::Button("Remove key")) animationDirty_ |= animationDraft_.eraseKey(selectedJoint_, previewTime_);
     ImGui::SameLine(); if (ImGui::Button("Copy pose/key")) { copiedKey_ = previewPose_[selectedJoint_]; hasCopiedKey_ = true; }
     ImGui::SameLine(); ImGui::BeginDisabled(!hasCopiedKey_);
     if (ImGui::Button("Paste key")) { animationDraft_.setKey(selectedJoint_, {previewTime_, copiedKey_}); animationDirty_ = true; }
     ImGui::EndDisabled();
-    if (ImGui::Button("Reset selected pose")) previewPose_[selectedJoint_] = {};
+    if (ImGui::Button("Reset selected pose")) { previewPose_[selectedJoint_] = {}; authoredArc_ = {}; }
     ImGui::SameLine(); ImGui::TextDisabled("%s / preview is separate from saved asset", animationDirty_ ? "Unsaved keys" : "Saved");
     if(integrated)ImGui::EndChild();
     ImGui::End();

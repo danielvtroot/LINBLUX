@@ -129,6 +129,15 @@ private:
     PlayerCamera camera_;
     Vector3 previousCharacterPosition_{};
     Pose pose_{};
+    // Pose evaluation is replayable: the visible pose is a short, time-based
+    // crossfade from the pose captured when the active clip changed. It is
+    // never a repeated increment over the previous frame (which would drift,
+    // depend on the display rate and inherit the last jump).
+    Pose blendFrom_{};
+    std::string poseSource_;
+    bool poseWalking_ = false;
+    bool wasAirborne_ = false;
+    float blendTime_ = 0;
     float accumulator_ = 0, walkTime_ = 0, idleTime_ = 0, airTime_ = 0, walkWeight_ = 0, yaw_ = 0;
     float rootHeightOffset_ = .1f;
     float coyoteTime_ = 0;        // tempo restante para pular após sair do chão

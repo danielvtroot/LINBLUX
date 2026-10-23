@@ -66,6 +66,23 @@ elevar a posição inicial para sua superfície. Abaixo de Y=-500 ocorre respawn
   quando atribuído, com fallback nativo para mapas antigos sem esse asset.
   Fall não tem atribuição independente. Não existe blending por camadas de
   prioridades Action; prioridade é metadado e a seleção atual é locomotora.
+  Rotação de keyframe é interpolada de forma determinística: o destino é
+  alinhado ao hemisfério da origem (`q` e `-q` são a mesma pose), o caso de
+  exatamente 180° tem desempate fixo pelo eixo relativo e um campo opcional
+  `arc` (graus, com sinal) preserva um giro intencional maior que 180° criado
+  com o gizmo. Sem `arc`, vale o arco mais curto — dados antigos não mudam.
+  O `arc` só é aplicado se terminar na orientação da próxima key; keys
+  retimadas ou editadas à mão caem no arco curto.
+- Reprodução no runtime: a pose visível é sempre reconstruída a partir de uma
+  pose de entrada fixa e do sample do próprio clip (crossfade de 0,12 s).
+  Após esse intervalo a pose é exatamente a dos keyframes, sem acumular o
+  frame anterior. Cada decolagem reinicia o tempo do clip mesmo quando um pulo
+  enfileirado sai do chão e volta no mesmo passo fixo, então pular repetidas
+  vezes reproduz o mesmo caminho, na mesma direção.
+- Animation Editor: os campos numéricos usam o par Euler ZYX (roll X, pitch Y,
+  yaw Z) que é inverso de si mesmo, então exibir e redigitar um valor não
+  altera a orientação salva. Arrastar uma junta mais de 180° a partir de uma
+  pose com key e inserir a próxima key grava o sentido do giro.
 - `RuntimeSession`: Editing → StartingPlay → Playing/Paused → StoppingPlay →
   Editing. Cópia profunda por JSON validado uma vez ao iniciar, Scene e Bullet
   próprios. O avatar usa uma cápsula dinâmica com CCD, rotação física travada,
@@ -93,7 +110,8 @@ elevar a posição inicial para sua superfície. Abaixo de Y=-500 ocorre respawn
 
 Mapas sem gameplay continuam JSON v1. JSON v2 acrescenta `game` versão 1:
 `rigs`, `animations`, `defaultRig`, `player`. Dados antigos recebem defaults em
-memória. Carregamento usa staging e só troca a cena após validar tudo; save usa
+memória. O campo opcional `arc` de um keyframe só é gravado quando existe um
+giro autoral maior que 180°; clips sem ele continuam byte a byte iguais. Carregamento usa staging e só troca a cena após validar tudo; save usa
 o mesmo arquivo temporário/fsync/rename atômico. Arquivos com referências,
 hierarquias, keys, quaternions ou valores inválidos são rejeitados sem apagar
 a cena atual. Limites: 128 rigs, 256 clips, 10.000 keys/track e 100.000/projeto.

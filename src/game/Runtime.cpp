@@ -245,6 +245,7 @@ void RuntimeSession::stop() {
     scripts_.stop();
     destroyCharacter(); physics_.reset(); scene_.reset();
     accumulator_ = 0; jumpPending_ = false; coyoteTime_=jumpBufferTime_=0; pose_ = {};
+    blendFrom_ = {}; poseSource_.clear(); poseWalking_ = false; wasAirborne_ = false; blendTime_ = 0;
     shiftLockRequested_ = false; lastShiftKey_ = 0; // Stop nunca deixa o lock preso
     state_ = RuntimeState::Editing;
     Event("runtime", "stop", correlation_);
@@ -319,6 +320,7 @@ bool RuntimeSession::respawn(std::string& error) {
     capsule_ = std::move(capsule); motion_ = std::move(motion); body_ = std::move(body);
     physics_->world_->addRigidBody(body_.get());
     pose_ = {}; walkTime_ = 0; idleTime_ = 0; airTime_=0; walkWeight_ = 0; accumulator_ = 0; yaw_ = 0; jumpPending_ = false;
+    blendFrom_ = {}; poseSource_.clear(); poseWalking_ = false; wasAirborne_ = false; blendTime_ = 0;
     previousCharacterPosition_=position();
     coyoteTime_=jumpBufferTime_=0;
     // Shift Lock is a player choice, not a property of the old character.
@@ -490,7 +492,7 @@ bool RuntimeSession::setHealth(float value,std::string& error) {
     if(value==health_){error.clear();return true;}
     const bool died=value==0 && health_>0;health_=value;
     if(died){
-        transition(HumanoidState::Dead);pose_={};deadTime_=0;jumpPending_=false;
+        transition(HumanoidState::Dead);pose_={};blendFrom_={};poseSource_.clear();poseWalking_=false;wasAirborne_=false;blendTime_=0;deadTime_=0;jumpPending_=false;
         if(!activeAnimation_.empty())Event("animation","stop",correlation_,{{"clip",activeAnimation_}});
         activeAnimation_.clear();
     }
@@ -519,6 +521,12 @@ void RuntimeSession::animate(float dt, float horizontal) {
     const bool falling = humanoidState_ == HumanoidState::Freefall;
     const bool airborne = jumping || falling;
     static const std::string airPose = "R6_AirPose";
+    // A new take-off always starts its clip at the entry pose. A landing jump
+    // can go from grounded to Jumping inside one fixed step, so waiting for a
+    // clip change is not enough: the previous take-off's time would leak into
+    // the new one and every buffered jump would replay a later slice.
+    if (airborne && !wasAirborne_) airTime_ = 0;
+    wasAirborne_ = airborne;
     std::string desiredClip;
     if (falling) {
         desiredClip = settings_.fallAnimation.empty()?"R6_NeutralFall":settings_.fallAnimation;
@@ -554,7 +562,21 @@ void RuntimeSession::animate(float dt, float horizontal) {
             }
         }
     }
-    pose_ = BlendPose(pose_, target, Response(20, dt));
+    // Deterministic playback: the pose is always rebuilt from a fixed entry
+    // pose and the clip's own sample. After the short crossfade the visible
+    // pose equals the sampled keyframes exactly, so replaying Jump uses the
+    // same path every time and never accumulates the previous jump's error.
+    constexpr float kPoseBlendSeconds = .12f;
+    if (desiredClip != poseSource_ || walking != poseWalking_) {
+        blendFrom_ = pose_;
+        poseSource_ = desiredClip;
+        poseWalking_ = walking;
+        blendTime_ = 0;
+    }
+    blendTime_ = std::isfinite(blendTime_) ? std::min(blendTime_ + std::max(dt, 0.f), kPoseBlendSeconds)
+                                           : kPoseBlendSeconds;
+    const float t = std::clamp(blendTime_ / kPoseBlendSeconds, 0.f, 1.f);
+    pose_ = BlendPose(blendFrom_, target, t * t * (3 - 2 * t));
 }
 bool RuntimeSession::setAnimation(const std::string& state,const std::string& id,std::string& error) {
     const auto* clip=scene_?scene_->gameAssets().findAnimation(id):nullptr;

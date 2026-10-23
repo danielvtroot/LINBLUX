@@ -13,7 +13,30 @@ bool Finite(Vector3 v) { return std::isfinite(v.x) && std::isfinite(v.y) && std:
 bool Range(float v, float low, float high) { return std::isfinite(v) && v >= low && v <= high; }
 RigidTransform Mix(const RigidTransform& a, const RigidTransform& b, float t) {
     return {Vector3Lerp(a.position, b.position, t),
-            QuaternionNormalize(QuaternionSlerp(a.rotation, b.rotation, t))};
+            QuaternionSlerpShortest(a.rotation, b.rotation, t)};
+}
+constexpr float kMaxArcDegrees = 36000.0f;
+
+// Deterministic shortest-rotation data between two stored orientations. The
+// target is aligned to the source hemisphere (q and -q are the same pose) and
+// the exact-180 tie is resolved from the relative axis itself, never from the
+// stored sign or float noise.
+void RelativeRotation(Quaternion from, Quaternion to, Vector3& axis, float& shortest) {
+    Quaternion a = UnitQuaternion(from);
+    Quaternion b = UnitQuaternion(to);
+    if (QuaternionDotProduct(a, b) < 0.0f) b = NegateQuaternion(b);
+    Quaternion relative = UnitQuaternion(QuaternionMultiply(QuaternionInvert(a), b));
+    axis = Vector3{relative.x, relative.y, relative.z};
+    if (relative.w < 0.0f) { relative = NegateQuaternion(relative); axis = Vector3Negate(axis); }
+    if (std::fabs(relative.w) < 1e-5f) {
+        const float ax = std::fabs(axis.x), ay = std::fabs(axis.y), az = std::fabs(axis.z);
+        const int largest = ax >= ay && ax >= az ? 0 : (ay >= az ? 1 : 2);
+        const float component = largest == 0 ? axis.x : largest == 1 ? axis.y : axis.z;
+        if (component < 0.0f) { relative = NegateQuaternion(relative); axis = Vector3Negate(axis); }
+    }
+    shortest = 2.0f * std::acos(std::clamp(relative.w, -1.0f, 1.0f));
+    const float length = Vector3Length(axis);
+    axis = length > 1e-6f ? Vector3Scale(axis, 1.0f / length) : Vector3{1, 0, 0};
 }
 }
 
@@ -143,13 +166,47 @@ bool AnimationClip::validate(std::string& error) const {
         float previous = -1;
         for (const auto& key : track) {
             if (!Range(key.time, 0, duration) || key.time <= previous || !Valid(key.pose) ||
-                static_cast<int>(key.interpolation) < 0 || static_cast<int>(key.interpolation) > 2) {
+                static_cast<int>(key.interpolation) < 0 || static_cast<int>(key.interpolation) > 2 ||
+                !std::isfinite(key.arcDegrees) || std::fabs(key.arcDegrees) > kMaxArcDegrees) {
                 error = "animation: invalid/unsorted keyframe"; return false;
             }
             previous = key.time;
         }
     }
     error.clear(); return true;
+}
+Quaternion AnimationClip::interpolate(const Keyframe& from, const Keyframe& to, float alpha) {
+    const Quaternion a = UnitQuaternion(from.pose.rotation);
+    Quaternion b = UnitQuaternion(to.pose.rotation);
+    // q and -q are the same orientation. Aligning the target to the source
+    // hemisphere is what keeps the arc independent from how the key was saved.
+    if (QuaternionDotProduct(a, b) < 0.0f) b = NegateQuaternion(b);
+    Vector3 axis;
+    float shortest = 0;
+    RelativeRotation(a, b, axis, shortest);
+    const float arc = std::isfinite(from.arcDegrees) ? from.arcDegrees : 0.0f;
+    if (std::fabs(arc) > 1e-4f && std::fabs(arc) <= kMaxArcDegrees) {
+        const Quaternion end = UnitQuaternion(
+            QuaternionMultiply(a, QuaternionFromAxisAngle(axis, arc * DEG2RAD)));
+        // The authored sweep only applies when it really ends on the next key
+        // (q and -q are the same orientation). Retimed keys and hand-edited
+        // files fall back to the shortest arc.
+        if (std::fabs(QuaternionDotProduct(end, b)) > 0.9999f) {
+            return UnitQuaternion(QuaternionMultiply(
+                a, QuaternionFromAxisAngle(axis, arc * std::clamp(alpha, 0.0f, 1.0f) * DEG2RAD)));
+        }
+    }
+    return QuaternionSlerpShortest(a, b, alpha);
+}
+float AnimationClip::authoredArcDegrees(const Keyframe& from, const Keyframe& to,
+                                      Vector3 authoredAxis, float sweepDegrees) {
+    if (!std::isfinite(sweepDegrees) || std::fabs(sweepDegrees) > kMaxArcDegrees ||
+        Vector3Length(authoredAxis) < 1e-6f) return 0.0f;
+    Vector3 axis;
+    float shortest = 0;
+    RelativeRotation(from.pose.rotation, to.pose.rotation, axis, shortest);
+    return Vector3DotProduct(Vector3Normalize(authoredAxis), axis) >= 0.0f
+        ? sweepDegrees : -sweepDegrees;
 }
 Pose AnimationClip::sample(float seconds) const {
     Pose result{};
@@ -174,12 +231,15 @@ Pose AnimationClip::sample(float seconds) const {
         float alpha = tb > ta ? std::clamp((local - ta) / (tb - ta), 0.f, 1.f) : 0;
         if (a->interpolation == Interpolation::Constant) alpha = 0;
         else if (a->interpolation == Interpolation::Smooth) alpha = alpha * alpha * (3 - 2 * alpha);
-        result[j] = Mix(a->pose, b->pose, alpha);
+        result[j] = {Vector3Lerp(a->pose.position, b->pose.position, alpha),
+                     interpolate(*a, *b, alpha)};
     }
     return result;
 }
 void AnimationClip::setKey(int joint, Keyframe key) {
     if (joint < 0 || joint >= kJointCount || !Range(key.time, 0, duration) || !Valid(key.pose)) return;
+    // Canonical hemisphere keeps the stored bytes stable across editor edits.
+    key.pose.rotation = CanonicalQuaternion(UnitQuaternion(key.pose.rotation));
     auto& track = tracks[joint];
     auto it = std::lower_bound(track.begin(), track.end(), key.time,
         [](const Keyframe& k, float time) { return k.time < time; });

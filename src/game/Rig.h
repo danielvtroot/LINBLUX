@@ -72,6 +72,13 @@ struct Keyframe {
     float time = 0;
     RigidTransform pose;
     Interpolation interpolation = Interpolation::Smooth;
+    // Signed sweep, in degrees, of the segment that starts at this key. Zero
+    // keeps the shortest arc (legacy clips). A value such as 250 preserves a
+    // rotation that deliberately goes the long way round, which a pair of
+    // quaternions cannot express on its own. The engine only honours it when
+    // it ends on the next key's stored orientation; otherwise it falls back to
+    // the shortest arc, so older or hand-edited data stays safe.
+    float arcDegrees = 0;
 };
 struct AnimationClip {
     int version = 1;
@@ -87,6 +94,14 @@ struct AnimationClip {
     bool validate(std::string& error) const;
     Pose sample(float seconds) const;
     void setKey(int joint, Keyframe key);
+    // Deterministic rotation between two keys: hemisphere-continuous and, when
+    // the starting key carries a valid authored arc, faithful to that path.
+    static Quaternion interpolate(const Keyframe& from, const Keyframe& to, float alpha);
+    // Converts an authoring rotation (axis + signed sweep of any size) into the
+    // arcDegrees convention used by interpolation, which is measured along the
+    // engine's deterministic shortest-rotation axis.
+    static float authoredArcDegrees(const Keyframe& from, const Keyframe& to,
+                                    Vector3 authoredAxis, float sweepDegrees);
     bool eraseKey(int joint, float time);
 };
 AnimationClip MakeWalk(float amplitudeDegrees = 30, float duration = 0.8f);

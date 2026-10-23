@@ -182,6 +182,19 @@ private:
     float timelineDragTime_ = 0;
     game::Keyframe timelineDragInitial_;
     Gizmo rigGizmo_;
+    // Total sweep of the last rotate drag in the Animation context. Inserting a
+    // key right after it stores that signed arc on the segment that starts at
+    // the pose the drag began from, so a deliberate >180 turn survives the
+    // quaternion keyframe format.
+    struct AuthoredArc {
+        int joint = -1;
+        Quaternion from{};      // pose rotation when the drag started
+        Quaternion base{};      // composed world base rotation of that drag
+        Vector3 worldAxis{1, 0, 0};
+        float radians = 0;
+    };
+    AuthoredArc authoredArc_;
+    void applyAuthoredArc(int joint, float time);
     Part jointProxy_{~InstanceId{0}-2, "Joint pivot", PartShape::Block};
     struct RigDrag {
         std::string id, correlation;
