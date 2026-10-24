@@ -1,4 +1,5 @@
 #include "rendering/SceneRenderer.h"
+#include "physics/PhysicsWorld.h"
 
 #include <algorithm>
 #include <cmath>
@@ -501,17 +502,7 @@ bool DrawProceduralSky(const Camera3D& camera, const Lighting* lighting, float d
 void DrawShadedBox(Vector3 center, Vector3 size, Quaternion rotation, Color color,
                    Vector3 lightDirection, float sunIntensity, float brightness,
                    float gloss = 0.0f, bool unlit = false) {
-    const Vector3 half = Vector3Scale(size, 0.5f);
-    const Vector3 localCorners[8] = {
-        {-half.x, -half.y, -half.z}, {half.x, -half.y, -half.z},
-        {half.x, -half.y, half.z},   {-half.x, -half.y, half.z},
-        {-half.x, half.y, -half.z},  {half.x, half.y, -half.z},
-        {half.x, half.y, half.z},    {-half.x, half.y, half.z},
-    };
-    Vector3 corners[8];
-    for (int i = 0; i < 8; ++i) {
-        corners[i] = Vector3Add(center, Vector3RotateByQuaternion(localCorners[i], rotation));
-    }
+    const auto corners=OrientedBox{center,rotation,Vector3Scale(size,.5f)}.corners();
 
     struct Face {
         int indices[4];
@@ -544,17 +535,7 @@ void DrawShadedBox(Vector3 center, Vector3 size, Quaternion rotation, Color colo
 }
 
 void DrawRotatedBoxWires(Vector3 center, Vector3 size, Quaternion rotation, Color color) {
-    const Vector3 half = Vector3Scale(size, 0.5f);
-    const Vector3 local[8] = {
-        {-half.x, -half.y, -half.z}, {half.x, -half.y, -half.z},
-        {half.x, -half.y, half.z},   {-half.x, -half.y, half.z},
-        {-half.x, half.y, -half.z},  {half.x, half.y, -half.z},
-        {half.x, half.y, half.z},    {-half.x, half.y, half.z},
-    };
-    Vector3 world[8];
-    for (int i = 0; i < 8; ++i) {
-        world[i] = Vector3Add(center, Vector3RotateByQuaternion(local[i], rotation));
-    }
+    const auto world=OrientedBox{center,rotation,Vector3Scale(size,.5f)}.corners();
     static const int edges[12][2] = {{0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}, {5, 6},
                                      {6, 7}, {7, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
     for (const auto& edge : edges) {
@@ -952,13 +933,17 @@ void SceneRenderer::drawBaseplate(const Part& baseplate, Vector3 lightDirection,
 }
 
 void SceneRenderer::drawSelection(const Part& part) const {
+    // Exact geometry, not a 2% inflated proxy. Overlay depth policy keeps
+    // coplanar outlines readable without changing their world-space bounds.
+    rlDrawRenderBatchActive();rlDisableDepthTest();rlDisableDepthMask();
     const Color selection{255, 205, 60, 255};
     if (part.shape() == PartShape::Sphere) {
-        DrawSphereWires(part.position(), part.sphereRadius() * 1.04f, 8, 12, selection);
+        DrawSphereWires(part.position(), part.sphereRadius(), 8, 12, selection);
     } else {
-        DrawRotatedBoxWires(part.position(), Vector3Scale(part.size(), 1.02f), part.rotation(),
+        DrawRotatedBoxWires(part.position(), part.size(), part.rotation(),
                             selection);
     }
+    rlDrawRenderBatchActive();rlEnableDepthMask();rlEnableDepthTest();
 }
 
 void SceneRenderer::drawScene(const Scene& scene, const EditorCamera& camera, int width,
@@ -1110,4 +1095,17 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
     EndMode3D();
 }
 
+void SceneRenderer::drawCollisionShapes(const Scene& scene,const PhysicsWorld& physics,
+                                        const EditorCamera& camera,InstanceId selection) const {
+    BeginMode3D(camera.camera());rlDrawRenderBatchActive();rlDisableDepthTest();rlDisableDepthMask();
+    for(auto* part:scene.parts()) {
+        CollisionGeometry geometry;if(!physics.collisionGeometry(part->id(),geometry))continue;
+        float error=0;const auto visual=part->bounds().corners(),actual=geometry.box.corners();
+        for(int i=0;i<8;++i)error=std::max(error,Vector3Distance(visual[i],actual[i]));
+        const Color color=error>.001f?Color{245,65,210,255}:part->id()==selection?Color{60,255,240,255}:Color{45,205,230,175};
+        if(geometry.shape==PartShape::Sphere)DrawSphereWires(geometry.box.center,geometry.box.half.x,12,16,color);
+        else DrawRotatedBoxWires(geometry.box.center,Vector3Scale(geometry.box.half,2),geometry.box.rotation,color);
+    }
+    rlDrawRenderBatchActive();rlEnableDepthMask();rlEnableDepthTest();EndMode3D();
+}
 }  // namespace loblox

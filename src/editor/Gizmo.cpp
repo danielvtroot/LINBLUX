@@ -34,7 +34,7 @@ Vector3 PlaneAxisB(int plane, const Part& part, bool local) {
 
 bool RayPlane(const Ray& ray, Vector3 point, Vector3 normal, Vector3& hit) {
     const float denominator = Vector3DotProduct(ray.direction, normal);
-    if (std::fabs(denominator) < 1e-5f) return false;
+    if (std::fabs(denominator) < .05f) return false;
     const float t = Vector3DotProduct(Vector3Subtract(point, ray.position), normal) / denominator;
     if (t < 0.0f) return false;
     hit = Vector3Add(ray.position, Vector3Scale(ray.direction, t));
@@ -117,7 +117,8 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
         return result;
     };
 
-    if (dragging_ && (!input.windowFocused || mode != dragTool_)) {
+    if (dragging_ && (!input.windowFocused || mode != dragTool_ ||
+        viewport.x!=dragViewport_.x||viewport.y!=dragViewport_.y||viewport.width!=dragViewport_.width||viewport.height!=dragViewport_.height)) {
         return finish(endSession(part, true, true));
     }
     if (mode == ToolMode::Select || viewport.width < 8 || viewport.height < 8) {
@@ -140,12 +141,11 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
         }
 
         const Vector3 center = startTransform_.position;
-        const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, localSpace_);
+        const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, dragLocalSpace_);
         if (handle_ == Handle::Axis || handle_ == Handle::ScaleFace) {
-            const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
             float parameter = 0.0f;
             if (dragProjection_ == DragProjection::World &&
-                !AxisParameter(ray, center, axis, viewForward, parameter)) {
+                !AxisParameter(ray, dragOrigin_, axis, axisViewForward_, parameter)) {
                 result.error = "axis_intersection_unavailable";
                 return finish(result);
             }
@@ -167,17 +167,17 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                     : centeredScale_
                         ? gizmomath::ScaleCenteredFace(snapshot, gizmomath::HandleAxis(activeHandle_),
                                                        gizmomath::HandleSide(activeHandle_),
-                                                       localSpace_, delta, snap)
-                        : gizmomath::ScaleFaceForHandle(snapshot, activeHandle_, localSpace_,
+                                                       dragLocalSpace_, delta, snap)
+                        : gizmomath::ScaleFaceForHandle(snapshot, activeHandle_, dragLocalSpace_,
                                                         delta, snap);
-                part->setTransform(Transform{transformed.position, startTransform_.rotation,
+                part->setTransform(Transform{centeredScale_&&part->shape()==PartShape::Sphere?startTransform_.position:transformed.position, startTransform_.rotation,
                                              transformed.size});
             }
             return finish(result);
         }
         if (handle_ == Handle::Plane) {
-            const Vector3 a = PlaneAxisA(activePlane_, *part, localSpace_);
-            const Vector3 b = PlaneAxisB(activePlane_, *part, localSpace_);
+            const Vector3 a = PlaneAxisA(activePlane_, *part, dragLocalSpace_);
+            const Vector3 b = PlaneAxisB(activePlane_, *part, dragLocalSpace_);
             const Vector3 normal = Vector3Normalize(Vector3CrossProduct(a, b));
             Vector3 delta;
             if (dragProjection_ == DragProjection::Screen) {
@@ -288,6 +288,7 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
     activePlane_ = pickedPlane;
     draggedPartId_ = part->id();
     startTransform_ = part->transform();
+    dragLocalSpace_=localSpace_||mode==ToolMode::Scale;dragViewport_=viewport;
     dragTool_ = mode;
     startMouse_ = localMouse;
     dragProjection_ = DragProjection::World;
@@ -296,15 +297,22 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
     dragging_ = true;
 
     if (handle_ == Handle::Axis || handle_ == Handle::ScaleFace) {
-        const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, localSpace_);
-        const Vector3 viewForward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
+        const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, dragLocalSpace_);
+        dragOrigin_=handle_==Handle::ScaleFace?gizmomath::ScaleHandleCenter(
+            gizmolayout::MakeSnapshot(*part),activeAxis_,pickedSide,true,0):startTransform_.position;
+        const Vector3 viewForward = Vector3Normalize(Vector3Subtract(dragOrigin_,camera.position()));
+        axisViewForward_=viewForward;
         // Looking down an axis makes ray/axis intersection singular. The
         // visible screen-space handle remains usable through its shared layout.
-        if (std::fabs(Vector3DotProduct(axis, viewForward)) > 0.98f ||
-            !AxisParameter(ray, startTransform_.position, axis, viewForward, startParam_)) {
+        if (std::fabs(Vector3DotProduct(axis, viewForward)) > 0.94f ||
+            !AxisParameter(ray, dragOrigin_, axis, viewForward, startParam_)) {
             dragProjection_ = DragProjection::Screen;
             screenDirection_ = layout.axisDirection[activeAxis_];
-            screenUnits_ = camera.worldUnitsPerPixel(startTransform_.position, viewport.height);
+            if(handle_==Handle::ScaleFace) {
+                const int index=activeAxis_*2+(pickedSide>0?1:0);
+                screenDirection_=Vector2Scale(Vector2Normalize(Vector2Subtract(layout.scaleHandle[index],layout.center)),float(pickedSide));
+            }
+            screenUnits_ = camera.worldUnitsPerPixel(dragOrigin_, viewport.height);
         }
     } else if (handle_ == Handle::Plane) {
         const Vector3 a = PlaneAxisA(activePlane_, *part, localSpace_);

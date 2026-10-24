@@ -292,11 +292,22 @@ void PhysicsWorld::applyChanges(Part* part) {
 }
 
 void PhysicsWorld::updateShape(const Part& part, BodyEntry& entry) {
+    // A resize invalidates cached contacts as well as the broadphase bounds.
+    world_->getBroadphase()->getOverlappingPairCache()->cleanProxyFromPairs(
+        entry.body->getBroadphaseHandle(),dispatcher_.get());
+    const int wanted=part.shape()==PartShape::Sphere?SPHERE_SHAPE_PROXYTYPE:BOX_SHAPE_PROXYTYPE;
+    if(entry.shape->getShapeType()!=wanted) {
+        auto* previous=entry.shape;entry.shape=createShape(part);
+        entry.body->setCollisionShape(entry.shape);delete previous;
+    }
     if (part.shape() == PartShape::Sphere) {
         static_cast<btSphereShape*>(entry.shape)->setUnscaledRadius(
             std::max(0.05f, part.sphereRadius()));
     } else {
         const Vector3 half = part.halfExtents();
+        // Match btBoxShape's safe-margin policy after EVERY resize, not only
+        // construction. A thin resized box must match a fresh identical box.
+        entry.shape->setMargin(std::min(.04f,.1f*std::min({half.x,half.y,half.z})));
         const btScalar margin = entry.shape->getMargin();
         static_cast<btBoxShape*>(entry.shape)->setImplicitShapeDimensions(
             btVector3(std::max(0.05f, half.x) - margin, std::max(0.05f, half.y) - margin,
@@ -423,6 +434,19 @@ Quaternion PhysicsWorld::bodyRotation(InstanceId id) const {
         return Quaternion{0.0f, 0.0f, 0.0f, 1.0f};
     }
     return FromBullet(it->second.body->getWorldTransform().getRotation());
+}
+bool PhysicsWorld::collisionGeometry(InstanceId id,CollisionGeometry& out) const {
+    const auto found=bodies_.find(id);if(found==bodies_.end())return false;
+    const auto& entry=found->second;
+    out.box.center=FromBullet(entry.body->getWorldTransform().getOrigin());
+    out.box.rotation=FromBullet(entry.body->getWorldTransform().getRotation());
+    out.margin=entry.shape->getMargin();
+    if(entry.shape->getShapeType()==BOX_SHAPE_PROXYTYPE) {
+        out.shape=PartShape::Block;out.box.half=FromBullet(static_cast<const btBoxShape*>(entry.shape)->getHalfExtentsWithMargin());
+    }else if(entry.shape->getShapeType()==SPHERE_SHAPE_PROXYTYPE) {
+        out.shape=PartShape::Sphere;const float r=static_cast<const btSphereShape*>(entry.shape)->getRadius();out.box.half={r,r,r};
+    }else return false;
+    return true;
 }
 
 Vector3 PhysicsWorld::linearVelocity(InstanceId id) const {

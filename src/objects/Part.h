@@ -4,6 +4,7 @@
 #include <string>
 
 #include "core/Math.h"
+#include "core/Geometry.h"
 #include "objects/Instance.h"
 
 namespace loblox {
@@ -69,6 +70,10 @@ public:
     void setSize(Vector3 size);
 
     Vector3 halfExtents() const { return HalfExtents(transform_.size); }
+    OrientedBox bounds() const { const float r=sphereRadius();return {position(),rotation(),
+        shape_==PartShape::Sphere?Vector3{r,r,r}:halfExtents()}; }
+    RayCollision intersect(Ray ray) const { return shape_==PartShape::Sphere?
+        GetRayCollisionSphere(ray,position(),sphereRadius()):bounds().intersect(ray); }
     // A esfera usa o menor eixo como diametro (forma uniforme no Bullet).
     float sphereRadius() const;
 

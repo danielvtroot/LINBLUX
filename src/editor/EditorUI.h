@@ -178,6 +178,7 @@ private:
     bool viewportFocused_ = false;
     unsigned long long frame_ = 0;
     bool traceInput_ = false;
+    bool showCollisionShapes_ = false;
     std::unique_ptr<StudioFrontend> frontend_;
     game::RuntimeSession runtime_;
     bool gameplayCapture_ = false;

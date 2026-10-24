@@ -715,6 +715,7 @@ void EditorUI::beginTransformReadout(Part* part, ToolMode mode) {
             context.axis = gizmo_.activeAxis();
         }
     } else if (mode == ToolMode::Scale) {
+        context.space=transformmetrics::Space::Local;
         context.kind = transformmetrics::Kind::Size;
         context.axis = gizmo_.activeAxis();
         context.side = gizmo_.activeHandleSide() < 0 ? -1 : 1;
@@ -1854,7 +1855,7 @@ void EditorUI::drawViewport() {
                 Vector2{viewportRect.width, viewportRect.height});
             Part* hit = nullptr;
             Vector3 point{};
-            bool partHit = physics_.raycast(ray.position, ray.direction, 5000.0f, &hit, &point);
+            hit=scene_.pickPart(ray,5000.f,&point);const bool partHit=hit!=nullptr;
             float nearest = partHit ? Vector3Distance(ray.position, point) : 5000.f;
             std::string rigHit;
             int bodyHit = -1;
@@ -1902,6 +1903,10 @@ void EditorUI::drawViewport() {
     renderer_.drawScene(scene_, camera_, viewportWidth_, viewportHeight_,
                         selection != nullptr ? selection->id() : kInvalidInstanceId,
                         rigState.rig ? &rigState : nullptr);
+    if(showCollisionShapes_) {
+        physics_.syncScene(scene_);
+        renderer_.drawCollisionShapes(scene_,physics_,camera_,selection?selection->id():0);
+    }
     if (rigState.rig && showJointPivots_ && tool_!=ToolMode::Select &&
         (tool_!=ToolMode::Scale || rigContext_==RigContext::Edit))
         rigGizmo_.drawOverlay(jointProxy_, tool_, camera_, viewportRect);

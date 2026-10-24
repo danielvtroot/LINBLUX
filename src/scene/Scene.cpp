@@ -8,6 +8,17 @@
 #include <stdexcept>
 
 namespace loblox {
+Part* Scene::pickPart(Ray ray,float maxDistance,Vector3* point) const {
+    if(Vector3LengthSqr(ray.direction)<1e-8f)return nullptr;
+    ray.direction=Vector3Normalize(ray.direction);Part* best=nullptr;
+    for(auto* part:parts()) {
+        const auto hit=part->intersect(ray);
+        if(hit.hit&&hit.distance>=0&&hit.distance<maxDistance) {
+            best=part;maxDistance=hit.distance;if(point)*point=hit.point;
+        }
+    }
+    return best;
+}
 
 namespace {
 constexpr InstanceId kFirstId = 1;

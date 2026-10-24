@@ -95,6 +95,7 @@ public:
 
     // Invariantes de cena. Retorna false com uma descricao sem alterar nada.
     bool validate(std::string& error) const;
+    Part* pickPart(Ray ray, float maxDistance, Vector3* point=nullptr) const;
 
     std::string makeUniqueName(const std::string& base) const;
 

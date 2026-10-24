@@ -89,6 +89,9 @@ Layout Build(const Part& part, ToolMode mode, const EditorCamera& camera, Rectan
              bool localSpace, const Settings& settings) {
     Layout layout;
     if (mode == ToolMode::Select) return layout;
+    // Scale handles identify actual local faces. World/Local only changes
+    // the Move/Rotate frame; reassigning size components is never a resize.
+    if(mode==ToolMode::Scale)localSpace=true;
     const Vector2 viewportSize{std::max(1.0f, viewport.width), std::max(1.0f, viewport.height)};
     const Vector3 pivot = part.position();
     if (!camera.projectChecked(pivot, viewportSize, layout.center)) {

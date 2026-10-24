@@ -19,7 +19,7 @@
 </div>
 <div id="ribbon-View" class="ribbon-page">
  <div class="ribbon-group"><div class="group-tools"><button data-action="toggle-toolbox"><img src="icon-toolbox"/>Toolbox</button><button data-action="toggle-explorer"><img src="icon-explorer"/>Explorer</button><button data-action="toggle-properties"><img src="icon-properties"/>Properties</button><button data-action="show:output"><img src="icon-output"/>Output</button></div><div class="group-name">Panels</div></div>
- <div class="ribbon-group"><div class="group-tools"><button data-action="reset-layout"><img src="icon-respawn"/>Reset</button><button data-action="focus"><img src="icon-focus"/>Focus</button></div><div class="group-name">Workspace</div></div>
+ <div class="ribbon-group"><div class="group-tools"><button data-action="reset-layout"><img src="icon-respawn"/>Reset</button><button data-action="focus"><img src="icon-focus"/>Focus</button><button id="show-collision-shapes" data-action="collision-shapes" title="Cyan: Bullet bounds; magenta: divergence; yellow: selection bounds"><img src="icon-part"/>Show Collision Shapes</button></div><div class="group-name">Workspace</div></div>
 </div>
 <div id="ribbon-Game" class="ribbon-page">
  <div class="ribbon-group"><div class="group-tools"><button data-action="play"><img src="icon-play"/>Play</button><button data-action="stop"><img src="icon-stop"/>Stop</button></div><div class="group-name">Test</div></div>

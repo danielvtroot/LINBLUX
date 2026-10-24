@@ -39,6 +39,7 @@ GizmoUpdateResult TransformSession::update(ToolMode mode, Part* part,
         physics_.setPartEditing(result.partId, true);
         beginDiagnostics(mode);
     }
+    if(part&&(gizmo_.dragging()||result.ended))physics_.applyChanges(part);
     if (result.ended) {
         if (part && part->id() == result.partId) physics_.applyChanges(part);
         releasePhysics(result.partId);

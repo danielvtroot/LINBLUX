@@ -84,6 +84,9 @@ private:
     bool consumedLastInput_ = false;
     bool localSpace_ = false;
     bool centeredScale_ = false;
+    bool dragLocalSpace_ = false;
+    Vector3 dragOrigin_{},axisViewForward_{};
+    Rectangle dragViewport_{};
     float moveSnap_ = 1.0f;
     float scaleSnap_ = 0.5f;
     float rotateSnapDegrees_ = 15.0f;

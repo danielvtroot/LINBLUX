@@ -159,7 +159,7 @@ TransformSnapshot ScaleUniformFace(const TransformSnapshot& start, Vector3 axis,
         Vector3LengthSqr(axis) < 1e-8f) return result;
     axis = Vector3Normalize(axis);
     side = side < 0 ? -1 : 1;
-    const float oldDiameter = std::max(minimumSize, start.size.x);
+    const float oldDiameter = std::max(minimumSize, std::min({start.size.x,start.size.y,start.size.z}));
     const float newDiameter = std::max(minimumSize,
         oldDiameter + static_cast<float>(side) * SnapDelta(delta, snapIncrement));
     result.size = Vector3{newDiameter, newDiameter, newDiameter};

@@ -11,6 +11,7 @@ namespace loblox {
 
 class Scene;
 class EditorCamera;
+class PhysicsWorld;
 struct RigRenderState {
     const game::Rig* rig = nullptr;
     game::Pose pose{};
@@ -38,6 +39,8 @@ public:
     // Cor final da Part considerando o material escolhido.
     static Color MaterialColor(const Part& part);
     static Color MaterialColor(Color color, PartMaterial material);
+    void drawCollisionShapes(const Scene& scene,const PhysicsWorld& physics,
+                             const EditorCamera& camera,InstanceId selection) const;
 
 private:
     void drawBaseplate(const Part& baseplate, Vector3 lightDirection, float sunIntensity,

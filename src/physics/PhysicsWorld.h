@@ -23,6 +23,11 @@ namespace loblox {
 namespace game { class RuntimeSession; }
 
 class Scene;
+struct CollisionGeometry {
+    PartShape shape=PartShape::Block;
+    OrientedBox box;
+    float margin=0;
+};
 
 // Ponte entre o modelo de objetos e o Bullet. Existe exatamente um corpo por
 // Part; a criacao/destruicao e controlada por addPart/removePart.
@@ -69,6 +74,8 @@ public:
     Vector3 bodyPosition(InstanceId id) const;
     Vector3 linearVelocity(InstanceId id) const;
     Quaternion bodyRotation(InstanceId id) const;
+    // Read the ACTUAL Bullet shape, never reconstruct it from the Part.
+    bool collisionGeometry(InstanceId id, CollisionGeometry& out) const;
 
     // Raycast contra todos os corpos. Retorna a Part atingida mais proxima.
     bool raycast(Vector3 origin, Vector3 direction, float maxDistance, Part** hitPart,

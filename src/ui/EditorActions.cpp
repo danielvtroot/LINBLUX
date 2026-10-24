@@ -24,6 +24,7 @@ bool EditorActions::dispatch(const EditorCommand& c) {
     try {
         if(c.action=="play")e.startPlay();
         else if(c.action=="stop")e.stopPlay();
+        else if(c.action=="collision-shapes")e.showCollisionShapes_=!e.showCollisionShapes_;
         else if(c.action=="pause") {e.runtime_.pause();e.setGameplayCapture(false);}
         else if(c.action=="resume")e.runtime_.resume();
         else if(c.action=="respawn") {std::string error;if(!e.runtime_.respawn(error))throw std::runtime_error(error);}
