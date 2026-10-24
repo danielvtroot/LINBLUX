@@ -30,8 +30,8 @@ struct Settings {
     float maxPixelLength = 132.0f;
     float referenceViewportMin = 600.0f;
 
-    float axisButtonHalf = 10.0f;
-    float planeButtonHalf = 10.0f;
+    float axisButtonHalf = 16.0f;
+    float planeButtonHalf = 12.0f;
     float ringRadiusFactor = 0.78f;
     float planeOffsetFactor = 0.23f;
 
@@ -40,11 +40,11 @@ struct Settings {
     // > diagonal do retangulo (26x22) para que dois marcadores nunca se cubram.
     float rotateMarkerSeparation = 36.0f;
 
-    float scaleHandleHalfWidth = 12.0f;
-    float scaleHandleHalfHeight = 10.0f;
+    float scaleHandleHalfWidth = 17.0f;
+    float scaleHandleHalfHeight = 17.0f;
     // Distancia do icone ate a face, medida em pixels.
     float scaleHandleOffsetPx = 15.0f;
-    float scaleHandleSeparation = 23.0f;
+    float scaleHandleSeparation = 35.0f;
 
     float viewportMargin = 8.0f;
     // Raio maximo (fracao do menor lado da viewport) para icones que
@@ -72,7 +72,11 @@ struct Layout {
     std::array<Vector2, 3> axisDirection{};
     std::array<bool, 3> axisDirectionFallback{};
     std::array<Vector2, 3> axisButton{};
+    // axis * 2 + (side > 0). Six arrows share one layout for draw/picking.
+    std::array<Vector2, 6> moveHandle{};
     std::array<Vector2, 3> planeCenter{};
+    std::array<std::array<Vector2,4>,3> planeCorners{};
+    std::array<bool,3> planeVisible{};
 
     // Scale: seis alças (axis * 2 + lado), nunca uma repetindo a outra.
     std::array<Vector2, 6> scaleHandle{};
@@ -105,6 +109,10 @@ Rectangle ScaleHandleRect(const Layout& layout, int index, const Settings& setti
 int PickPlane(const Layout& layout, Vector2 mouse, const Settings& settings = {});
 int PickAxisButton(const Layout& layout, Vector2 mouse, const Settings& settings = {});
 int PickAxisLine(const Layout& layout, Vector2 mouse, const Settings& settings = {});
+gizmomath::HandleId PickMoveArrow(const Layout& layout, Vector2 mouse,
+                                const Settings& settings = {});
+gizmomath::HandleId PickMoveShaft(const Layout& layout, Vector2 mouse,
+                                const Settings& settings = {});
 int PickRotateMarker(const Layout& layout, Vector2 mouse, const Settings& settings = {});
 int PickRotateRing(const Layout& layout, Vector2 mouse, const Settings& settings = {});
 gizmomath::HandleId PickScaleHandle(const Layout& layout, Vector2 mouse,

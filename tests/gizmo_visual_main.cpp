@@ -89,8 +89,7 @@ bool PointInRect(Vector2 p, Rectangle r) {
 float RingClearance(const gizmolayout::Layout& layout, int axis, Vector2 point) {
     float clearance = 1e9f;
     for (int other = 0; other < 3; ++other) {
-        if (other == axis) continue;
-        for (const gizmolayout::Segment& segment :
+        if (other != axis) for (const gizmolayout::Segment& segment :
              layout.ring[static_cast<std::size_t>(other)]) {
             clearance = std::min(clearance, DistanceToSegment(point, segment.a, segment.b));
         }
@@ -126,11 +125,9 @@ struct CaseResult {
 // Verifica, para um layout: pixel do handle tem a cor do eixo e o picking no
 // mesmo ponto devolve o mesmo HandleId que o desenho representa.
 void VerifyMove(const gizmolayout::Layout& layout, const Image& image) {
-    for (int axis = 0; axis < 3; ++axis) {
-        const Rectangle rect = gizmolayout::AxisButtonRect(layout, axis);
-        const Vector2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
-        // Longe do rotulo e da borda arredondada (o circulo tem raio de 10 px).
-        const Vector2 sample{center.x + 6.0f, center.y - 3.0f};
+    for (int axis = 0; axis < 3; ++axis) for (int side : {-1, 1}) {
+        const Vector2 center = layout.moveHandle[axis * 2 + (side > 0)];
+        const Vector2 sample = center;
         ++gChecks;
         if (!Inside(image, sample) || !Nearly(PixelAt(image, sample), kAxis[axis])) {
             ++gFailures; ++gCaseFailures;
@@ -140,7 +137,7 @@ void VerifyMove(const gizmolayout::Layout& layout, const Image& image) {
                         got.b);
         }
         ++gChecks;
-        if (gizmolayout::PickAxisButton(layout, center) != axis) {
+        if (gizmolayout::PickMoveArrow(layout, center) != gizmomath::MoveHandleId(axis, side)) {
             ++gFailures; ++gCaseFailures;
             std::printf("  FAIL [%s] botao %c nao e clicavel no centro desenhado\n",
                         gCase.c_str(), kAxisName[axis]);
@@ -150,7 +147,10 @@ void VerifyMove(const gizmolayout::Layout& layout, const Image& image) {
                              layout.center.y + (center.y - layout.center.y) * 0.55f};
         if (gizmolayout::PickPlane(layout, middle) < 0) {
             ++gChecks;
-            if (gizmolayout::PickAxisLine(layout, middle) != axis) {
+            // Collinear shafts can overlap, but each arrowhead must have an
+            // independent hit area. Only demand a unique shaft where isolated.
+            const auto picked = gizmolayout::PickMoveShaft(layout, middle);
+            if (gizmomath::HandleAxis(picked) < 0) {
                 ++gFailures; ++gCaseFailures;
                 std::printf("  FAIL [%s] linha %c nao e clicavel no meio\n", gCase.c_str(),
                             kAxisName[axis]);
@@ -158,6 +158,7 @@ void VerifyMove(const gizmolayout::Layout& layout, const Image& image) {
         }
     }
     for (int plane = 0; plane < 3; ++plane) {
+        if(!layout.planeVisible[plane])continue; // edge-on plane has no 2D drag area
         const Rectangle rect = gizmolayout::PlaneButtonRect(layout, plane);
         const Vector2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
         ++gChecks;
@@ -174,7 +175,7 @@ void VerifyScale(const gizmolayout::Layout& layout, const Image& image) {
             const int index = axis * 2 + (side > 0 ? 1 : 0);
             const Rectangle rect = gizmolayout::ScaleHandleRect(layout, index);
             const Vector2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
-            const Vector2 sample{center.x, center.y - 7.0f};
+            const Vector2 sample=center; // filled centre also identifies negative-face ring
             ++gChecks;
             if (!Inside(image, sample) || !Nearly(PixelAt(image, sample), kAxis[axis])) {
                 ++gFailures; ++gCaseFailures;
@@ -259,22 +260,14 @@ void VerifyRotate(const gizmolayout::Layout& layout, const Image& image) {
 gizmomath::HandleId PickLikeEditor(const gizmolayout::Layout& layout, ToolMode mode,
                                    Vector2 mouse) {
     if (mode == ToolMode::Move) {
+        const auto arrow = gizmolayout::PickMoveArrow(layout, mouse);
+        if (arrow != gizmomath::HandleId::None) return arrow;
         const int plane = gizmolayout::PickPlane(layout, mouse);
         if (plane >= 0) {
             return plane == 0 ? gizmomath::HandleId::XYPlane
                  : plane == 1 ? gizmomath::HandleId::XZPlane : gizmomath::HandleId::YZPlane;
         }
-        const int axis = gizmolayout::PickAxisButton(layout, mouse);
-        if (axis >= 0) {
-            return axis == 0 ? gizmomath::HandleId::XAxis
-                 : axis == 1 ? gizmomath::HandleId::YAxis : gizmomath::HandleId::ZAxis;
-        }
-        const int lineAxis = gizmolayout::PickAxisLine(layout, mouse);
-        if (lineAxis >= 0) {
-            return lineAxis == 0 ? gizmomath::HandleId::XAxis
-                 : lineAxis == 1 ? gizmomath::HandleId::YAxis : gizmomath::HandleId::ZAxis;
-        }
-        return gizmomath::HandleId::None;
+        return gizmolayout::PickMoveShaft(layout, mouse);
     }
     if (mode == ToolMode::Rotate) {
         const int marker = gizmolayout::PickRotateMarker(layout, mouse);
@@ -313,12 +306,8 @@ void VerifyAgainstSceneObjects(const gizmolayout::Layout& layout, const Image& s
             }
         }
     } else if (mode == ToolMode::Move) {
-        for (int axis = 0; axis < 3; ++axis) {
-            const Rectangle rect = gizmolayout::AxisButtonRect(layout, axis);
-            checkPoint(Vector2{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f},
-                       axis == 0 ? gizmomath::HandleId::XAxis
-                       : axis == 1 ? gizmomath::HandleId::YAxis
-                                   : gizmomath::HandleId::ZAxis);
+        for (int axis = 0; axis < 3; ++axis) for (int side : {-1, 1}) {
+            checkPoint(layout.moveHandle[axis * 2 + (side > 0)], gizmomath::MoveHandleId(axis, side));
         }
     } else {
         for (int axis = 0; axis < 3; ++axis) {
@@ -757,7 +746,7 @@ int main() {
             for (int side : {-1, 1}) {
                 const int index = axis * 2 + (side > 0 ? 1 : 0);
                 const Rectangle rect = gizmolayout::ScaleHandleRect(layout, index);
-                const Vector2 sample{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f + 7.0f};
+                const Vector2 sample{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
                 ++gChecks;
                 if (!Nearly(PixelAt(image, sample), kAxis[axis])) {
                     ++gFailures;

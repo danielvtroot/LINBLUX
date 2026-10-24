@@ -2,6 +2,10 @@
 
 Migração atual do frontend: [RMLUI_HANDOFF.md](RMLUI_HANDOFF.md).
 
+Manipulação atual (Scale local, seis setas Move, OBB/Bullet e diagnóstico):
+[MANIPULATION_HANDOFF.md](MANIPULATION_HANDOFF.md). Base c8a1dfa; primeiro
+checkpoint 59ab142. Model agregado/pivôs customizados continuam pendentes.
+
 Mouse Lock atual: [MOUSE_LOCK_FIX.md](MOUSE_LOCK_FIX.md) — captura real,
 orientação por frame, câmera sobre o ombro e validação temporal.
 

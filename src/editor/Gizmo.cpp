@@ -17,6 +17,11 @@ const Color kAxisColors[3] = {{235, 72, 66, 255}, {62, 174, 92, 255}, {55, 125, 
 const Color kPlaneColors[3] = {{75, 145, 235, 125}, {68, 185, 106, 125}, {230, 90, 78, 125}};
 const Color kHighlight{255, 195, 42, 255};
 const Color kOutline{32, 38, 46, 255};
+void Triangle2D(Vector2 a,Vector2 b,Vector2 c,Color color) {
+    const auto u=Vector2Subtract(b,a),v=Vector2Subtract(c,a);
+    if(u.x*v.y-u.y*v.x>0)std::swap(b,c);
+    DrawTriangle(a,b,c,color);
+}
 
 Vector3 AxisVector(int axis, const Part& part, bool local) {
     return gizmomath::Axis(axis, part.rotation(), local);
@@ -68,9 +73,8 @@ float AngleOnPlane(Vector3 offset, Vector3 axis) {
     return std::atan2(Vector3DotProduct(offset, v), Vector3DotProduct(offset, u));
 }
 
-gizmomath::HandleId AxisHandleId(int axis) {
-    return axis == 0 ? gizmomath::HandleId::XAxis
-         : axis == 1 ? gizmomath::HandleId::YAxis : gizmomath::HandleId::ZAxis;
+gizmomath::HandleId AxisHandleId(int axis, int side = 1) {
+    return gizmomath::MoveHandleId(axis, side);
 }
 
 gizmomath::HandleId PlaneHandleId(int plane) {
@@ -101,6 +105,7 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                                 Rectangle viewport, bool hovered, bool allowInput,
                                 const GizmoInput& input) {
     GizmoUpdateResult result;
+    const auto settings=visualSettings();
     consumedLastInput_ = false;
     if (!dragging_) hoveredHandle_ = gizmomath::HandleId::None;
     const auto finish = [this](GizmoUpdateResult value) {
@@ -235,7 +240,7 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
     hoveredHandle_ = gizmomath::HandleId::None;
     if (part == nullptr || !hovered || !allowInput) return finish(result);
     const gizmolayout::Layout layout =
-        gizmolayout::Build(*part, mode, camera, viewport, localSpace_);
+        gizmolayout::Build(*part, mode, camera, viewport, localSpace_,settings);
     if (!layout.valid) return finish(result);
 
     int pickedAxis = -1;
@@ -244,32 +249,38 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
     Handle pickedHandle = Handle::None;
 
     if (mode == ToolMode::Move) {
-        // Prioridade: planos (mais proximos do centro), botoes, depois linhas.
-        pickedPlane = gizmolayout::PickPlane(layout, localMouse);
-        if (pickedPlane >= 0) {
-            pickedHandle = Handle::Plane;
+        // Arrowheads win over shafts; planar areas win over shafts too.
+        auto id = gizmolayout::PickMoveArrow(layout, localMouse, settings);
+        if (id != gizmomath::HandleId::None) {
+            pickedAxis = gizmomath::HandleAxis(id);
+            pickedSide = gizmomath::HandleSide(id) < 0 ? -1 : 1;
+            pickedHandle = Handle::Axis;
         } else {
-            pickedAxis = gizmolayout::PickAxisButton(layout, localMouse);
-            if (pickedAxis >= 0) {
-                pickedHandle = Handle::Axis;
+            pickedPlane = gizmolayout::PickPlane(layout, localMouse, settings);
+            if (pickedPlane >= 0) {
+                pickedHandle = Handle::Plane;
             } else {
-                pickedAxis = gizmolayout::PickAxisLine(layout, localMouse);
-                if (pickedAxis >= 0) pickedHandle = Handle::Axis;
+                id = gizmolayout::PickMoveShaft(layout, localMouse, settings);
+                if (id != gizmomath::HandleId::None) {
+                    pickedAxis = gizmomath::HandleAxis(id);
+                    pickedSide = gizmomath::HandleSide(id) < 0 ? -1 : 1;
+                    pickedHandle = Handle::Axis;
+                }
             }
         }
     } else if (mode == ToolMode::Scale) {
-        const gizmomath::HandleId id = gizmolayout::PickScaleHandle(layout, localMouse);
+        const gizmomath::HandleId id = gizmolayout::PickScaleHandle(layout, localMouse,settings);
         if (gizmomath::IsScaleFace(id)) {
             pickedAxis = gizmomath::HandleAxis(id);
             pickedSide = gizmomath::HandleSide(id);
             pickedHandle = Handle::ScaleFace;
         }
     } else if (mode == ToolMode::Rotate) {
-        pickedAxis = gizmolayout::PickRotateMarker(layout, localMouse);
+        pickedAxis = gizmolayout::PickRotateMarker(layout, localMouse,settings);
         if (pickedAxis >= 0) {
             pickedHandle = Handle::RotateRing;
         } else {
-            pickedAxis = gizmolayout::PickRotateRing(layout, localMouse);
+            pickedAxis = gizmolayout::PickRotateRing(layout, localMouse,settings);
             if (pickedAxis >= 0) pickedHandle = Handle::RotateRing;
         }
     }
@@ -278,7 +289,7 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
     hoveredHandle_ = pickedHandle == Handle::ScaleFace ? gizmomath::ScaleFaceHandleId(pickedAxis, pickedSide)
                     : pickedHandle == Handle::RotateRing ? RotateHandleId(pickedAxis)
                     : pickedHandle == Handle::Plane ? PlaneHandleId(pickedPlane)
-                    : pickedHandle == Handle::Axis ? AxisHandleId(pickedAxis)
+                    : pickedHandle == Handle::Axis ? AxisHandleId(pickedAxis, pickedSide)
                     : gizmomath::HandleId::None;
     if (!input.leftPressed) return finish(result);
 
@@ -363,8 +374,9 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
     if (mode == ToolMode::Select) return;
     // Layout puro: o desenho abaixo usa exatamente as mesmas posicoes que o
     // hit test de update() usa. Nenhuma coordenada invalida e gerada.
+    const auto settings=visualSettings();
     const gizmolayout::Layout layout =
-        gizmolayout::Build(part, mode, camera, viewport, localSpace_);
+        gizmolayout::Build(part, mode, camera, viewport, localSpace_,settings);
     if (!layout.valid) return;
 
     // Passe proprio do gizmo, independente da profundidade da cena:
@@ -390,10 +402,12 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
     // centro clicavel de outro handle.
     if (mode == ToolMode::Move) {
         for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
-            const Color color = highlighted(AxisHandleId(axisIndex))
-                                    ? kHighlight : kAxisColors[axisIndex];
-            DrawLineEx(center, layout.axisButton[static_cast<std::size_t>(axisIndex)], 4.0f,
-                       color);
+            for (int side : {-1, 1}) {
+                const Color color = highlighted(AxisHandleId(axisIndex, side))
+                                        ? kHighlight : kAxisColors[axisIndex];
+                DrawLineEx(center, layout.moveHandle[axisIndex * 2 + (side > 0)],
+                           4.0f * pixelScale_, color);
+            }
         }
         // Ticks de snap no eixo ativo: mostram onde cada incremento cai sem
         // alterar o hit test (sao apenas guias visuais).
@@ -414,26 +428,25 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
                            Color{235, 240, 248, 170});
             }
         }
-        const char* planeLabels[3] = {"XY", "XZ", "YZ"};
         for (int plane = 0; plane < 3; ++plane) {
-            const Rectangle box = gizmolayout::PlaneButtonRect(layout, plane);
-            const Vector2 point{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
+            if(!layout.planeVisible[plane])continue;
+            const auto& q=layout.planeCorners[plane];
             const Color color = highlighted(PlaneHandleId(plane)) ? kHighlight : kPlaneColors[plane];
-            DrawRectangleRounded(box, 0.12f, 3, color);
-            DrawRectangleLinesEx(box, 1.5f, kAxisColors[plane]);
-            DrawText(planeLabels[plane], static_cast<int>(point.x - 7.0f),
-                     static_cast<int>(point.y - 4.0f), 9, Color{255, 255, 255, 255});
+            Triangle2D(q[0],q[1],q[2],color);Triangle2D(q[0],q[2],q[3],color);
+            for(int i=0;i<4;++i)DrawLineEx(q[i],q[(i+1)%4],1.5f,highlighted(PlaneHandleId(plane))?kHighlight:kPlaneColors[plane]);
         }
         for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
-            const Color color = highlighted(AxisHandleId(axisIndex))
-                                    ? kHighlight : kAxisColors[axisIndex];
-            const Rectangle button = gizmolayout::AxisButtonRect(layout, axisIndex);
-            DrawRectangleRounded(button, 0.5f, 8, color);
-            DrawRectangleRoundedLinesEx(button, 0.5f, 8, 1.5f, kOutline);
-            const char label[2] = {static_cast<char>('X' + axisIndex), '\0'};
-            DrawText(label, static_cast<int>(button.x + button.width * 0.5f - 4.0f),
-                     static_cast<int>(button.y + button.height * 0.5f - 6.0f), 12,
-                     Color{255, 255, 255, 255});
+            for (int side : {-1, 1}) {
+                const Color color = highlighted(AxisHandleId(axisIndex, side))
+                                        ? kHighlight : kAxisColors[axisIndex];
+                const auto p = layout.moveHandle[axisIndex * 2 + (side > 0)];
+                const auto d = Vector2Scale(layout.axisDirection[axisIndex], float(side));
+                const Vector2 n{-d.y, d.x};
+                const auto tip = Vector2Add(p, Vector2Scale(d, 14 * pixelScale_));
+                const auto base = Vector2Subtract(p, Vector2Scale(d, 10 * pixelScale_));
+                Triangle2D(tip, Vector2Add(base, Vector2Scale(n, 11 * pixelScale_)),
+                           Vector2Subtract(base, Vector2Scale(n, 11 * pixelScale_)), color);
+            }
         }
     } else if (mode == ToolMode::Rotate) {
         for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
@@ -443,6 +456,10 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
                 DrawLineEx(segment.a, segment.b, 7.0f, Color{31, 38, 48, 235});
                 DrawLineEx(segment.a, segment.b, highlighted(RotateHandleId(axisIndex)) ? 4.5f : 3.0f,
                            color);
+                // Round joins also cover subpixel segments near an edge-on
+                // ring's extremum; a collection of flat line ends leaves holes.
+                DrawCircleV(segment.a, highlighted(RotateHandleId(axisIndex)) ? 2.25f : 1.5f, color);
+                DrawCircleV(segment.b, highlighted(RotateHandleId(axisIndex)) ? 2.25f : 1.5f, color);
             }
         }
         for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
@@ -456,13 +473,8 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
         for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
             const Color color = highlighted(RotateHandleId(axisIndex))
                                     ? kHighlight : kAxisColors[axisIndex];
-            const Rectangle button = gizmolayout::RotateMarkerRect(layout, axisIndex);
-            DrawRectangleRounded(button, 0.2f, 4, color);
-            DrawRectangleRoundedLinesEx(button, 0.2f, 4, 1.5f, kOutline);
-            const char label[2] = {static_cast<char>('X' + axisIndex), '\0'};
-            DrawText(label, static_cast<int>(button.x + button.width * 0.5f - 4.0f),
-                     static_cast<int>(button.y + button.height * 0.5f - 6.0f), 12,
-                     Color{255, 255, 255, 255});
+            const auto p=layout.rotateMarker[axisIndex];
+            DrawCircleV(p,10*pixelScale_,color);DrawCircleLinesV(p,10*pixelScale_,kOutline);
         }
     } else if (mode == ToolMode::Scale) {
         for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
@@ -482,15 +494,10 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
                 const bool highlight =
                     highlighted(gizmomath::ScaleFaceHandleId(axisIndex, side));
                 const Color color = highlight ? kHighlight : kAxisColors[axisIndex];
-                const Rectangle box = gizmolayout::ScaleHandleRect(layout, index);
-                DrawRectangleRounded(box, 0.18f, 3, color);
-                DrawRectangleLinesEx(box, 1.5f, Color{35, 40, 48, 255});
-                const char label[3] = {static_cast<char>('X' + axisIndex),
-                                       static_cast<char>(side > 0 ? '+' : '-'), '\0'};
-                const int textWidth = MeasureText(label, 11);
-                DrawText(label, static_cast<int>(box.x + box.width * 0.5f - textWidth * 0.5f),
-                         static_cast<int>(box.y + box.height * 0.5f - 5.0f), 11,
-                         Color{255, 255, 255, 255});
+                const auto p=layout.scaleHandle[index];
+                DrawCircleV(p,14*pixelScale_,kOutline);DrawCircleV(p,12.5f*pixelScale_,color);
+                if(side<0){DrawCircleV(p,8.5f*pixelScale_,kOutline);DrawCircleV(p,3*pixelScale_,color);}
+                if(highlight)DrawCircleLinesV(p,16*pixelScale_,kHighlight);
             }
         }
     }

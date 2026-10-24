@@ -2,6 +2,7 @@
 #include "editor/EditorUI.h"
 #include "editor/StudioTheme.h"
 #include "editor/GizmoLayout.h"
+#include "ManipulationFixture.h"
 #include "ui/StudioFrontend.h"
 #include "ui/EditorActions.h"
 #include "rendering/SceneRenderer.h"
@@ -40,11 +41,24 @@ struct EditorUITestAccess {
     static void rigArm(EditorUI& ui,const std::string& id){ui.selectRig(id,game::RightArm);ui.rigContext_=EditorUI::RigContext::Edit;ui.selectedJoint_=game::RightShoulder;ui.showJointPivots_=true;}
     static const Part& proxy(EditorUI& ui){return ui.jointProxy_;}
     static bool dragging(EditorUI& ui){return ui.rigGizmo_.dragging();}
+    static Gizmo& partGizmo(EditorUI& ui){return ui.gizmo_;}
+    static size_t undoCount(EditorUI& ui){return ui.history_.undoCount();}
+    static bool partDragging(EditorUI& ui){return ui.transform_.active();}
 };
 }
 using namespace loblox;
 int checks=0,failures=0;
 #define CHECK(x) do {++checks;if(!(x)){++failures;std::fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);}}while(0)
+// Projects store Euler angles; quaternion -> Euler roundtrip can change the
+// last few float bits. IDs/strings/hierarchy stay exact, floats allow 1e-4.
+bool SameProjectValue(const nlohmann::json& a,const nlohmann::json& b) {
+    if(a.is_number_integer()&&b.is_number_integer())return a==b;
+    if(a.is_number()&&b.is_number())return std::fabs(a.get<double>()-b.get<double>())<.0001;
+    if(a.type()!=b.type()||a.size()!=b.size())return false;
+    if(a.is_object()) {for(auto it=a.begin();it!=a.end();++it)if(!b.contains(it.key())||!SameProjectValue(it.value(),b[it.key()]))return false;return true;}
+    if(a.is_array()) {for(size_t i=0;i<a.size();++i)if(!SameProjectValue(a[i],b[i]))return false;return true;}
+    return a==b;
+}
 int main() {
     char pattern[]="/tmp/loblox-rml-ui-XXXXXX";const char* directory=mkdtemp(pattern);if(!directory)return 1;
     setenv("XDG_CONFIG_HOME",directory,1);diag::configure(std::string(directory)+"/events.jsonl");
@@ -94,7 +108,78 @@ int main() {
         capture("studio-1366");
         // A separate short path exercises real Explorer/Properties controls
         // with X11 events, including dropdowns and independent child deletion.
-        if(std::getenv("LOBLOX_MOUSE_LOCK_ONLY")) {
+        if(std::getenv("LOBLOX_MANIPULATION_ONLY")) {
+            BuildManipulationFixture(scene);physics.syncScene(scene);scene.select(part);
+            for(auto* node:scene.parts())if(node->instanceClass()==InstanceClass::SpawnLocation) {
+                node->setPosition({-20,.5f,20});physics.applyChanges(node);
+            }
+            part->setTransform({{0,5,0},QuatFromEulerDegrees({0,37,0}),{4,2,6}});physics.applyChanges(part);
+            EditorActions actions(ui);CHECK(actions.dispatch({"snap","false"}));
+            camera.setOrbit(part->position(),19,.75f,.48f);frames(5);
+            const auto baseline=part->transform();
+            click("tab-View");click("gizmo-size");key("Down");key("Return");
+            CHECK(NearlyEqual(EditorUITestAccess::partGizmo(ui).pixelScale(),1.25f));
+            click("tab-Home");click("cmd-tool-1");
+            click("transform-space");key("Down");key("Return");
+            CHECK(EditorUITestAccess::partGizmo(ui).localSpace());
+            for(int axis=0;axis<3;++axis)for(int side:{-1,1}) {
+                auto& gizmo=EditorUITestAccess::partGizmo(ui);const auto viewport=ui.frontend()->viewport();
+                const auto layout=gizmolayout::Build(*part,ToolMode::Move,camera,viewport,true,gizmo.visualSettings());
+                const auto point=layout.moveHandle[axis*2+(side>0)];const auto direction=Vector2Scale(layout.axisDirection[axis],float(side));
+                const auto eye=camera.position();const auto count=EditorUITestAccess::undoCount(ui);
+                event("mousemove "+std::to_string(int(point.x+viewport.x))+" "+std::to_string(int(point.y+viewport.y)));
+                event("mousedown 1");CHECK(gizmo.activeHandle()==gizmomath::MoveHandleId(axis,side));
+                event("mousemove "+std::to_string(int(point.x+viewport.x+direction.x*23))+" "+std::to_string(int(point.y+viewport.y+direction.y*23)));
+                CHECK(NearlyEqual(camera.position(),eye));CHECK(Vector3Distance(part->position(),baseline.position)>.01f);
+                const auto delta=Vector3Subtract(part->position(),baseline.position),basis=gizmomath::Axis(axis,baseline.rotation,true);
+                CHECK(Vector3Length(Vector3CrossProduct(delta,basis))<.001f);
+                CHECK(gizmo.activeHandle()==gizmomath::MoveHandleId(axis,side));event("mouseup 1");
+                CHECK(EditorUITestAccess::undoCount(ui)==count+1);key("ctrl+z");
+                CHECK(NearlyEqual(part->position(),baseline.position,.001f));
+            }
+            CHECK(actions.dispatch({"transform-space","world"}));frames();
+            for(int mode=1;mode<=3;++mode) {
+                click("tab-Home");click("cmd-tool-"+std::to_string(mode));frames();
+                auto& gizmo=EditorUITestAccess::partGizmo(ui);
+                const auto viewport=ui.frontend()->viewport();
+                const auto layout=gizmolayout::Build(*part,static_cast<ToolMode>(mode),camera,viewport,gizmo.localSpace(),gizmo.visualSettings());
+                const Vector2 point=mode==1?layout.moveHandle[1]:mode==2?layout.scaleHandle[1]:layout.rotateMarker[1];
+                const auto eye=camera.position();const auto count=EditorUITestAccess::undoCount(ui);
+                event("mousemove "+std::to_string(int(point.x+viewport.x))+" "+std::to_string(int(point.y+viewport.y)));
+                capture(mode==1?"move-six-arrows":mode==2?"scale-local-face":"rotate-rings");
+                event("mousedown 1");CHECK(EditorUITestAccess::partDragging(ui));
+                const auto direction=layout.axisDirection[0];
+                for(int step=1;step<=4;++step)event("mousemove "+std::to_string(int(point.x+viewport.x+direction.x*step*9))+" "+std::to_string(int(point.y+viewport.y+direction.y*step*9)));
+                CHECK(NearlyEqual(camera.position(),eye));CHECK(scene.selection()==part);
+                if(mode==2) {
+                    const auto axis=gizmomath::Axis(0,baseline.rotation,true);
+                    const auto before=Vector3Subtract(baseline.position,Vector3Scale(axis,baseline.size.x*.5f));
+                    const auto after=Vector3Subtract(part->position(),Vector3Scale(axis,part->size().x*.5f));
+                    CHECK(Vector3Distance(before,after)<.001f);
+                }
+                capture("drag-"+std::to_string(mode));event("mouseup 1");
+                CHECK(!EditorUITestAccess::partDragging(ui));CHECK(EditorUITestAccess::undoCount(ui)==count+1);
+                key("ctrl+z");CHECK(NearlyEqual(part->position(),baseline.position,.001f));CHECK(NearlyEqual(part->size(),baseline.size,.001f));
+                CHECK(NearlyEqual(part->rotation(),baseline.rotation,.001f));
+            }
+            click("tab-View");click("show-collision-shapes");event("mousemove 235 650");capture("collision-shapes");
+            click("tab-Home");click("cmd-tool-1");
+            for(const Vector2 size:{Vector2{1280,720},Vector2{1366,768},Vector2{1600,900}}) {
+                resizeWindow(int(size.x),int(size.y));capture("move-"+std::to_string(int(size.x)));
+            }
+            CHECK(projectio::save(scene,config.defaultProjectPath,error));Scene loaded;CHECK(projectio::load(loaded,config.defaultProjectPath,error));
+            const auto expectedJson=nlohmann::json::parse(projectio::toJson(scene)),loadedJson=nlohmann::json::parse(projectio::toJson(loaded));
+            CHECK(SameProjectValue(expectedJson,loadedJson));
+            CHECK(loaded.parts().size()==scene.parts().size());CHECK(loaded.objects().size()==scene.objects().size());
+            for(const auto* node:scene.parts()) {
+                const auto* restored=loaded.findPart(node->id());CHECK(restored!=nullptr);if(!restored)continue;
+                CHECK(NearlyEqual(restored->position(),node->position(),.0001f));CHECK(NearlyEqual(restored->size(),node->size(),.0001f));
+                CHECK(NearlyEqual(restored->rotation(),node->rotation(),.0001f));CHECK(restored->parent()->id()==node->parent()->id());
+            }
+            const auto original=projectio::toJson(scene);click("play");frames(12);CHECK(EditorUITestAccess::runtime(ui).active());
+            key("shift+F5");CHECK(!EditorUITestAccess::runtime(ui).active());CHECK(projectio::toJson(scene)==original);
+            CHECK(NearlyEqual(part->position(),baseline.position,.001f));
+        } else if(std::getenv("LOBLOX_MOUSE_LOCK_ONLY")) {
             const auto editorEye=camera.position();const auto original=projectio::toJson(scene);
             const bool originalCursorFlag=(ImGui::GetIO().ConfigFlags&ImGuiConfigFlags_NoMouseCursorChange)!=0;
             click("play");auto& rt=EditorUITestAccess::runtime(ui);frames(12);

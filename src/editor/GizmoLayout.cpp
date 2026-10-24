@@ -18,12 +18,16 @@ float Distance(Vector2 a, Vector2 b) {
     return std::sqrt(dx * dx + dy * dy);
 }
 
-Vector2 Direction(Vector2 from, Vector2 to) {
-    const float dx = to.x - from.x;
-    const float dy = to.y - from.y;
-    const float length = std::sqrt(dx * dx + dy * dy);
-    if (!std::isfinite(length) || length < 1e-4f) return Vector2{0.0f, 0.0f};
-    return Vector2{dx / length, dy / length};
+bool PointInQuad(Vector2 point, const std::array<Vector2, 4>& corners) {
+    bool positive = false, negative = false;
+    for (int i = 0; i < 4; ++i) {
+        const auto edge = Vector2Subtract(corners[(i + 1) % 4], corners[i]);
+        const auto offset = Vector2Subtract(point, corners[i]);
+        const float cross = edge.x * offset.y - edge.y * offset.x;
+        positive |= cross > 1e-3f;
+        negative |= cross < -1e-3f;
+    }
+    return !(positive && negative);
 }
 
 bool InsideViewport(Vector2 point, Vector2 viewport, float margin) {
@@ -54,8 +58,9 @@ Vector2 AxisDirectionOnScreen(const EditorCamera& camera, Vector2 viewport, Vect
     if (!camera.projectChecked(a, viewport, projected)) return fallback;
     Vector2 start{};
     if (!camera.projectChecked(pivot, viewport, start)) return fallback;
-    const Vector2 delta = Direction(start, projected);
-    if (Vector2Length(delta) < 0.5f) return fallback;
+    const Vector2 raw=Vector2Subtract(projected,start);
+    if (Vector2Length(raw)<4.f) return fallback;
+    const Vector2 delta=Vector2Normalize(raw);
     degenerate = false;
     return delta;
 }
@@ -119,16 +124,32 @@ Layout Build(const Part& part, ToolMode mode, const EditorCamera& camera, Rectan
         layout.axisDirectionFallback[axisIndex] = degenerate;
     }
 
-    // Move: botoes nas pontas e planos entre os eixos.
+    // Move always has both signs. Separate nearly collinear projections by
+    // length, preserving the projected axes through the pivot (never rotating
+    // a handle just to make room). Picking and drawing use these same points.
+    float lengths[3] = {layout.pixelLength, layout.pixelLength, layout.pixelLength};
     for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
-        Vector2 button = Vector2Add(layout.center,
-                                    Vector2Scale(layout.axisDirection[axisIndex],
-                                                 layout.pixelLength));
-        if (layout.centerInViewport) {
-            button = ClampInside(button, viewportSize, settings.viewportMargin,
-                                 settings.axisButtonHalf, settings.axisButtonHalf);
+        for (int previous = 0; previous < axisIndex; ++previous) {
+            if (std::fabs(Vector2DotProduct(layout.axisDirection[axisIndex],
+                                           layout.axisDirection[previous])) > .94f) {
+                lengths[axisIndex] = std::max(lengths[axisIndex],
+                    lengths[previous] + settings.axisButtonHalf * 2.5f);
+            }
         }
-        layout.axisButton[axisIndex] = button;
+        for (int side : {-1, 1}) {
+            const Vector2 direction = Vector2Scale(layout.axisDirection[axisIndex], float(side));
+            float length = lengths[axisIndex];
+            if (layout.centerInViewport) {
+                const float margin = settings.viewportMargin + settings.axisButtonHalf;
+                if (direction.x > 1e-5f) length = std::min(length, (viewportSize.x - margin - layout.center.x) / direction.x);
+                if (direction.x < -1e-5f) length = std::min(length, (margin - layout.center.x) / direction.x);
+                if (direction.y > 1e-5f) length = std::min(length, (viewportSize.y - margin - layout.center.y) / direction.y);
+                if (direction.y < -1e-5f) length = std::min(length, (margin - layout.center.y) / direction.y);
+            }
+            const auto button = Vector2Add(layout.center, Vector2Scale(direction, std::max(0.f, length)));
+            layout.moveHandle[axisIndex * 2 + (side > 0)] = button;
+            if (side > 0) layout.axisButton[axisIndex] = button;
+        }
     }
     const int planeAxes[3][2] = {{0, 1}, {0, 2}, {1, 2}};
     for (int plane = 0; plane < 3; ++plane) {
@@ -141,6 +162,16 @@ Layout Build(const Part& part, ToolMode mode, const EditorCamera& camera, Rectan
                                 settings.planeButtonHalf, settings.planeButtonHalf);
         }
         layout.planeCenter[plane] = point;
+        const auto a=layout.axisDirection[planeAxes[plane][0]],b=layout.axisDirection[planeAxes[plane][1]];
+        const auto normal=Vector3CrossProduct(gizmomath::Axis(planeAxes[plane][0],part.rotation(),localSpace),
+            gizmomath::Axis(planeAxes[plane][1],part.rotation(),localSpace));
+        const auto facing=Vector3Normalize(Vector3Subtract(camera.position(),pivot));
+        layout.planeVisible[plane]=std::fabs(a.x*b.y-a.y*b.x)>.25f&&std::fabs(Vector3DotProduct(normal,facing))>.16f;
+        const float r=settings.planeButtonHalf;
+        layout.planeCorners[plane]={Vector2Subtract(point,Vector2Scale(Vector2Add(a,b),r)),
+            Vector2Add(point,Vector2Scale(Vector2Subtract(a,b),r)),
+            Vector2Add(point,Vector2Scale(Vector2Add(a,b),r)),
+            Vector2Add(point,Vector2Scale(Vector2Subtract(b,a),r))};
     }
 
     // Scale: ancora na face (mundo) e icone em tela. Faces fora da viewport
@@ -207,7 +238,8 @@ Layout Build(const Part& part, ToolMode mode, const EditorCamera& camera, Rectan
                 pivot, Vector3Add(Vector3Scale(u, std::cos(angle) * ringRadiusWorld),
                                   Vector3Scale(v, std::sin(angle) * ringRadiusWorld)));
             Vector2 point{};
-            const bool valid = camera.projectChecked(world, viewportSize, point) &&
+            const bool front=Vector3DotProduct(Vector3Subtract(world,pivot),Vector3Subtract(camera.position(),pivot))>=-1e-4f;
+            const bool valid = front&&camera.projectChecked(world, viewportSize, point) &&
                                Distance(point, layout.center) <=
                                    layout.pixelLength * 12.0f;
             if (valid) {
@@ -232,6 +264,7 @@ Layout Build(const Part& part, ToolMode mode, const EditorCamera& camera, Rectan
         Vector2 marker{};
         bool anchorValid = false;
         for (const Vector3& candidate : candidates) {
+            if(Vector3DotProduct(Vector3Subtract(candidate,pivot),Vector3Subtract(camera.position(),pivot)) < -1e-4f)continue;
             if (camera.projectChecked(candidate, viewportSize, marker)) {
                 anchorValid = true;
                 break;
@@ -298,14 +331,16 @@ Rectangle ScaleHandleRect(const Layout& layout, int index, const Settings& setti
                      settings.scaleHandleHalfHeight * 2.0f};
 }
 
-int PickPlane(const Layout& layout, Vector2 mouse, const Settings& settings) {
+int PickPlane(const Layout& layout, Vector2 mouse, const Settings&) {
     int picked = -1;
     float best = std::numeric_limits<float>::infinity();
     for (int plane = 0; plane < 3; ++plane) {
+        if(!layout.planeVisible[plane])continue;
         const Vector2 center = layout.planeCenter[static_cast<std::size_t>(plane)];
         const float dx = std::fabs(mouse.x - center.x);
         const float dy = std::fabs(mouse.y - center.y);
-        if (dx > settings.planeButtonHalf || dy > settings.planeButtonHalf) continue;
+        const auto& q=layout.planeCorners[plane];
+        if (!PointInQuad(mouse, q)) continue;
         const float distance = dx * dx + dy * dy;
         if (distance < best) {
             best = distance;
@@ -355,6 +390,39 @@ int PickAxisLine(const Layout& layout, Vector2 mouse, const Settings& settings) 
     return picked;
 }
 
+gizmomath::HandleId PickMoveArrow(const Layout& layout, Vector2 mouse, const Settings& settings) {
+    float best = settings.axisButtonHalf;
+    auto result = gizmomath::HandleId::None;
+    for (int axis = 0; axis < 3; ++axis) for (int side : {-1, 1}) {
+        const float distance = Distance(mouse, layout.moveHandle[axis * 2 + (side > 0)]);
+        if (distance < best) {
+            best = distance;
+            result = gizmomath::MoveHandleId(axis, side);
+        }
+    }
+    return result;
+}
+
+gizmomath::HandleId PickMoveShaft(const Layout& layout, Vector2 mouse, const Settings& settings) {
+    // The pivot is not an implicit free-drag handle.
+    if (Distance(mouse, layout.center) < settings.axisLineTolerance * 1.5f)
+        return gizmomath::HandleId::None;
+    float best = settings.axisLineTolerance;
+    auto result = gizmomath::HandleId::None;
+    for (int axis = 0; axis < 3; ++axis) for (int side : {-1, 1}) {
+        const auto segment = Vector2Subtract(layout.moveHandle[axis * 2 + (side > 0)], layout.center);
+        const float lengthSqr = Vector2LengthSqr(segment);
+        const float t = lengthSqr > 1e-6f
+            ? std::clamp(Vector2DotProduct(Vector2Subtract(mouse, layout.center), segment) / lengthSqr, 0.f, 1.f) : 0.f;
+        const float distance = Distance(mouse, Vector2Add(layout.center, Vector2Scale(segment, t)));
+        if (distance < best) {
+            best = distance;
+            result = gizmomath::MoveHandleId(axis, side);
+        }
+    }
+    return result;
+}
+
 int PickRotateMarker(const Layout& layout, Vector2 mouse, const Settings& settings) {
     int picked = -1;
     float best = std::numeric_limits<float>::infinity();
@@ -396,9 +464,9 @@ int PickRotateRing(const Layout& layout, Vector2 mouse, const Settings& settings
 
 gizmomath::HandleId PickScaleHandle(const Layout& layout, Vector2 mouse,
                                     const Settings& settings) {
-    return gizmomath::PickScaleFaceHandle(layout.scaleHandle, mouse,
-                                         settings.scaleHandleHalfWidth,
-                                         settings.scaleHandleHalfHeight);
+    int best=-1;float distance=settings.scaleHandleHalfWidth;
+    for(int i=0;i<6;++i){const float d=Vector2Distance(mouse,layout.scaleHandle[i]);if(d<=distance){distance=d;best=i;}}
+    return best<0?gizmomath::HandleId::None:gizmomath::ScaleFaceHandleId(best/2,best%2?1:-1);
 }
 
 }  // namespace loblox::gizmolayout

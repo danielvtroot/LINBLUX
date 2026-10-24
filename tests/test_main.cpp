@@ -1005,15 +1005,21 @@ void TestGizmoHandleDrags() {
                                 Vector2{PI / 2, 0}, Vector2{0.5f, 1.4f}}) {
         camera.setOrbit(initial.position, 18, orbit.x, orbit.y);
         for (ToolMode mode : {ToolMode::Move, ToolMode::Scale, ToolMode::Rotate}) {
-            const int handles = mode == ToolMode::Rotate ? 3 : 6;
+            const int handles = mode == ToolMode::Move ? 9 : mode == ToolMode::Rotate ? 3 : 6;
             for (int index = 0; index < handles; ++index) {
                 part->setTransform(initial);
                 physics.syncScene(scene);
                 Gizmo gizmo;
                 TransformSession session(gizmo, physics);
                 const auto layout = gizmolayout::Build(*part, mode, camera, viewport, false);
+                if (mode == ToolMode::Move && index >= 6 && !layout.planeVisible[index - 6]) {
+                    // An edge-on plane has no usable screen area. It must not
+                    // be picked as a planar drag using an invented direction.
+                    CHECK(gizmolayout::PickPlane(layout, layout.planeCenter[index - 6]) != index - 6);
+                    continue;
+                }
                 const Vector2 point = mode == ToolMode::Move ?
-                    (index < 3 ? layout.axisButton[index] : layout.planeCenter[index - 3]) :
+                    (index < 6 ? layout.moveHandle[index] : layout.planeCenter[index - 6]) :
                     mode == ToolMode::Scale ? layout.scaleHandle[index] : layout.rotateMarker[index];
                 GizmoInput input;
                 input.mousePosition = {point.x + viewport.x, point.y + viewport.y};
@@ -1024,18 +1030,21 @@ void TestGizmoHandleDrags() {
                 CHECK(result.started);
                 CHECK(result.consumed);
                 if (!result.started) continue;
-                CHECK(gizmo.activeAxis() == (mode == ToolMode::Move && index >= 3 ? -1 :
+                CHECK(gizmo.activeAxis() == (mode == ToolMode::Move && index >= 6 ? -1 :
+                    mode == ToolMode::Move ? index / 2 :
                     mode == ToolMode::Scale ? index / 2 : index));
-                if (mode == ToolMode::Move && index >= 3) {
+                if (mode == ToolMode::Move && index >= 6) {
                     const gizmomath::HandleId planes[] = {gizmomath::HandleId::XYPlane,
                         gizmomath::HandleId::XZPlane, gizmomath::HandleId::YZPlane};
-                    CHECK(gizmo.hoveredHandle() == planes[index - 3]);
+                    CHECK(gizmo.hoveredHandle() == planes[index - 6]);
+                } else if (mode == ToolMode::Move) {
+                    CHECK(gizmo.hoveredHandle() == gizmomath::MoveHandleId(index / 2, index % 2 ? 1 : -1));
                 }
                 CHECK(physics.isPartEditing(part->id()));
                 input.leftPressed = false;
                 const Vector2 delta = mode == ToolMode::Rotate ||
-                    (mode == ToolMode::Move && index >= 3) ? Vector2{27, 19} :
-                    Vector2Scale(layout.axisDirection[mode == ToolMode::Scale ? index / 2 : index], 35);
+                    (mode == ToolMode::Move && index >= 6) ? Vector2{27, 19} :
+                    Vector2Scale(layout.axisDirection[index / 2], 35);
                 input.mousePosition = Vector2Add(input.mousePosition, delta);
                 session.update(mode, part, camera, viewport, true, true, input);
                 const bool changed = mode == ToolMode::Move ?

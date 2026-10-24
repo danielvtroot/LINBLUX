@@ -706,6 +706,7 @@ void EditorUI::beginTransformReadout(Part* part, ToolMode mode) {
                              handle == gizmomath::HandleId::XZPlane ||
                              handle == gizmomath::HandleId::YZPlane;
     if (mode == ToolMode::Move) {
+        context.side = gizmo_.activeHandleSide() < 0 ? -1 : 1;
         context.kind = planeHandle ? transformmetrics::Kind::MovePlane
                                    : transformmetrics::Kind::Move;
         if (planeHandle) {
@@ -853,14 +854,14 @@ void EditorUI::drawTransformReadout(const EditorInput& input, Vector2 imagePosit
                                  static_cast<float>(viewportHeight_)};
     const gizmolayout::Layout layout = gizmolayout::Build(
         *part, tool_, camera_, viewportRect,
-        readout_.context.space == transformmetrics::Space::Local);
+        readout_.context.space == transformmetrics::Space::Local, gizmo_.visualSettings());
     Vector2 anchor{imagePosition.x + viewportRect.width * 0.5f,
                    imagePosition.y + viewportRect.height * 0.5f};
     if (layout.valid) {
         const int axis = std::clamp(readout_.context.axis, 0, 2);
         switch (readout_.context.kind) {
             case transformmetrics::Kind::Move:
-                anchor = layout.axisButton[static_cast<std::size_t>(axis)];
+                anchor = layout.moveHandle[static_cast<std::size_t>(axis * 2 + (readout_.context.side > 0))];
                 break;
             case transformmetrics::Kind::MovePlane:
                 anchor = layout.planeCenter[static_cast<std::size_t>(axis)];

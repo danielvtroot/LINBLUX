@@ -340,6 +340,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         for(int i=0;i<el("tabs")->GetNumChildren();++i){auto* e=el("tabs")->GetChild(i);if(e->HasAttribute("data-tab"))e->SetClass("active",attr(e,"data-tab")==tab);}
         for(int i=0;i<4;++i)el("cmd-tool-"+std::to_string(i))->SetClass("active",i==int(ui.tool_));
         const bool active=ui.runtime_.active();
+        el("show-collision-shapes")->SetClass("active",ui.showCollisionShapes_);
         if(active&&!el("play")->HasAttribute("disabled"))el("play")->SetAttribute("disabled","");else if(!active)el("play")->RemoveAttribute("disabled");
         if(!active&&!el("stop")->HasAttribute("disabled"))el("stop")->SetAttribute("disabled","");else if(active)el("stop")->RemoveAttribute("disabled");
         for(const char* name:{"script","animation","rig","settings","output","assets"})el(std::string("advanced-")+name)->SetClass("active",advanced==name);
@@ -758,6 +759,10 @@ void StudioFrontend::draw() {
     p.text("project",std::filesystem::path(p.ui.projectPath_).filename().string());p.text("message",p.ui.status_);
     p.text("scene-count",std::to_string(p.ui.scene_.parts().size())+" parts · "+std::to_string(p.ui.scene_.objects().size())+" instances");
     p.el("snap")->SetAttribute("type","checkbox");if(p.ui.snapEnabled_)p.el("snap")->SetAttribute("checked","");else p.el("snap")->RemoveAttribute("checked");
+    if(auto* space=dynamic_cast<Rml::ElementFormControl*>(p.el("transform-space"));space&&p.context->GetFocusElement()!=space) {
+        const std::string value=p.ui.gizmoLocalSpace_?"local":"world";
+        if(space->GetValue()!=value)space->SetValue(value);
+    }
     p.ui.gizmo_.setSnap(p.ui.snapEnabled_?p.ui.moveSnap_:0,p.ui.snapEnabled_?p.ui.scaleSnap_:0,p.ui.snapEnabled_?p.ui.rotateSnapDegrees_:0);
     p.context->Update();p.syncing=false;rlImGuiSetExternalTextInput(p.editing());
     if(p.timing){p.presentationTime+=beforeScene-started;p.sceneTime+=afterScene-beforeScene;p.updateTime+=GetTime()-afterScene;p.frameTime+=GetFrameTime();}

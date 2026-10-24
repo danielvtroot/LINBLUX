@@ -9,11 +9,11 @@ namespace loblox::gizmomath {
 int HandleAxis(HandleId id) {
     switch (id) {
         case HandleId::XAxis: case HandleId::XPositive: case HandleId::XNegative:
-        case HandleId::RotateX: return 0;
+        case HandleId::RotateX: case HandleId::XNegativeAxis: return 0;
         case HandleId::YAxis: case HandleId::YPositive: case HandleId::YNegative:
-        case HandleId::RotateY: return 1;
+        case HandleId::RotateY: case HandleId::YNegativeAxis: return 1;
         case HandleId::ZAxis: case HandleId::ZPositive: case HandleId::ZNegative:
-        case HandleId::RotateZ: return 2;
+        case HandleId::RotateZ: case HandleId::ZNegativeAxis: return 2;
         default: return -1;
     }
 }
@@ -21,12 +21,24 @@ int HandleAxis(HandleId id) {
 int HandleSide(HandleId id) {
     switch (id) {
         case HandleId::XPositive: case HandleId::YPositive: case HandleId::ZPositive: return 1;
-        case HandleId::XNegative: case HandleId::YNegative: case HandleId::ZNegative: return -1;
+        case HandleId::XNegative: case HandleId::YNegative: case HandleId::ZNegative:
+        case HandleId::XNegativeAxis: case HandleId::YNegativeAxis: case HandleId::ZNegativeAxis: return -1;
         default: return 0;
     }
 }
 
-bool IsScaleFace(HandleId id) { return HandleSide(id) != 0 && HandleAxis(id) >= 0; }
+bool IsScaleFace(HandleId id) {
+    return id >= HandleId::XPositive && id <= HandleId::ZNegative;
+}
+
+HandleId MoveHandleId(int axisIndex, int side) {
+    if (axisIndex < 0 || axisIndex > 2 || side == 0) return HandleId::None;
+    static constexpr HandleId ids[3][2] = {
+        {HandleId::XNegativeAxis, HandleId::XAxis},
+        {HandleId::YNegativeAxis, HandleId::YAxis},
+        {HandleId::ZNegativeAxis, HandleId::ZAxis}};
+    return ids[axisIndex][side > 0 ? 1 : 0];
+}
 
 HandleId ScaleFaceHandleId(int axisIndex, int side) {
     if (axisIndex < 0 || axisIndex > 2 || side == 0) return HandleId::None;

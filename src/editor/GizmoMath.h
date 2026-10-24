@@ -14,12 +14,14 @@ enum class HandleId {
     XAxis, YAxis, ZAxis,
     XYPlane, XZPlane, YZPlane,
     XPositive, XNegative, YPositive, YNegative, ZPositive, ZNegative,
-    RotateX, RotateY, RotateZ
+    RotateX, RotateY, RotateZ,
+    XNegativeAxis, YNegativeAxis, ZNegativeAxis
 };
 
 int HandleAxis(HandleId id);
 int HandleSide(HandleId id);
 bool IsScaleFace(HandleId id);
+HandleId MoveHandleId(int axisIndex, int side);
 HandleId ScaleFaceHandleId(int axisIndex, int side);
 HandleId PickScaleFaceHandle(const std::array<Vector2, 6>& centers, Vector2 mouse,
                              float halfWidth = 12.0f, float halfHeight = 10.0f);

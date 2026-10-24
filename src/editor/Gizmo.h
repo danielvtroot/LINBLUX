@@ -2,6 +2,7 @@
 
 #include "core/Math.h"
 #include "editor/GizmoMath.h"
+#include "editor/GizmoLayout.h"
 #include "editor/Tool.h"
 #include "objects/Part.h"
 
@@ -71,6 +72,16 @@ public:
     // Modo de escala fixado no inicio do arraste: mudar Alt no meio nao troca
     // a matematica debaixo do usuario.
     bool centeredScale() const { return centeredScale_; }
+    void setPixelScale(float value) { if(std::isfinite(value))pixelScale_=std::clamp(value,.75f,1.75f); }
+    float pixelScale() const { return pixelScale_; }
+    gizmolayout::Settings visualSettings() const {
+        gizmolayout::Settings s;const float v=pixelScale_;
+        s.basePixelLength*=v;s.minPixelLength*=v;s.maxPixelLength*=v;
+        s.axisButtonHalf*=v;s.planeButtonHalf*=v;s.scaleHandleHalfWidth*=v;s.scaleHandleHalfHeight*=v;
+        s.scaleHandleOffsetPx*=v;s.scaleHandleSeparation*=v;s.rotateMarkerHalfWidth*=v;s.rotateMarkerHalfHeight*=v;
+        s.rotateMarkerSeparation*=v;s.axisLineTolerance*=v;s.ringTolerance*=v;
+        return s;
+    }
 
 private:
     enum class Handle { None, Axis, Plane, ScaleFace, RotateRing };
@@ -84,6 +95,7 @@ private:
     bool consumedLastInput_ = false;
     bool localSpace_ = false;
     bool centeredScale_ = false;
+    float pixelScale_=1;
     bool dragLocalSpace_ = false;
     Vector3 dragOrigin_{},axisViewForward_{};
     Rectangle dragViewport_{};

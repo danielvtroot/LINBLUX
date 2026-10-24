@@ -25,6 +25,15 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         if(c.action=="play")e.startPlay();
         else if(c.action=="stop")e.stopPlay();
         else if(c.action=="collision-shapes")e.showCollisionShapes_=!e.showCollisionShapes_;
+        else if(c.action=="gizmo-size") {
+            const float size=Number(c.value);if(size<.75f||size>1.75f)throw std::runtime_error("Gizmo size must be 0.75..1.75");
+            e.endGizmoSession(true,"gizmo_size");e.cancelRigGizmo();e.gizmo_.setPixelScale(size);e.rigGizmo_.setPixelScale(size);
+        }
+        else if(c.action=="transform-space") {
+            if(c.value!="world"&&c.value!="local")throw std::runtime_error("Choose World or Local axes");
+            e.endGizmoSession(true,"space_toggle");e.cancelRigGizmo();e.clearTransformReadout();
+            e.gizmoLocalSpace_=c.value=="local";e.gizmo_.setLocalSpace(e.gizmoLocalSpace_);
+        }
         else if(c.action=="pause") {e.runtime_.pause();e.setGameplayCapture(false);}
         else if(c.action=="resume")e.runtime_.resume();
         else if(c.action=="respawn") {std::string error;if(!e.runtime_.respawn(error))throw std::runtime_error(error);}
