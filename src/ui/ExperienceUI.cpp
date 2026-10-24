@@ -89,6 +89,11 @@ void ExperienceUI::choose(const std::string& purpose,bool saveFile,bool director
     dialogPurpose_=purpose;editor_.camera_.releaseCapture();editor_.setGameplayCapture(false);
 }
 void ExperienceUI::chooseAsset(){choose("asset",false,false,true);}
+void ExperienceUI::releaseLoadingImages() {
+    document_.GetElementById("exp-loading-background")->RemoveAttribute("src");
+    document_.GetElementById("exp-loading-icon")->RemoveAttribute("src");
+    Rml::ReleaseTextures();
+}
 void ExperienceUI::selectedFile(const std::string& purpose,const std::string& path) {
     if(purpose=="import") {
         const fs::path file(path);experiences::Experience experience;
@@ -113,8 +118,8 @@ void ExperienceUI::selectedFile(const std::string& purpose,const std::string& pa
 void ExperienceUI::dispatch(const std::string& action,const std::string& v) {
     if(action=="cancel-load") {
         cancelLoad_=true;
-        if(load_==LoadState::Paint||load_==LoadState::Error) {load_=LoadState::None;pendingPath_.clear();error_.clear();}
-        else if(load_==LoadState::Fading){editor_.runtime_.stop();load_=LoadState::None;}
+        if(load_==LoadState::Paint||load_==LoadState::Error) {load_=LoadState::None;pendingPath_.clear();error_.clear();releaseLoadingImages();}
+        else if(load_==LoadState::Fading){editor_.runtime_.stop();load_=LoadState::None;releaseLoadingImages();}
         return;
     }
     if(loading())return;
@@ -187,8 +192,12 @@ void ExperienceUI::dispatch(const std::string& action,const std::string& v) {
         manager_.setDefaultTemplate(editor_.scene_);fileMenu_=false;editor_.setStatus("My Default snapshot saved. Original experience preserved.");}
     else if(action=="default-r6") {if(editor_.selectedRig_.empty())throw std::runtime_error("Select an authored R6 in Explorer first");
         manager_.setDefaultCharacter(editor_.scene_,editor_.selectedRig_);fileMenu_=false;editor_.setStatus("My Default Character saved with decals, joints and animation references.");}
-    else if(action=="edit-default") {for(const auto& item:manager_.templates())if(item.id=="my-default") {
-        auto source=manager_.inspect(item.place);open(manager_.duplicate(source,"Edit My Default"));editingDefault_=true;break;}}
+    else if(action=="edit-default") {
+        bool found=false;for(const auto& item:manager_.templates())if(item.id=="my-default") {
+            auto source=manager_.inspect(item.place);open(manager_.duplicate(source,"Edit My Default"));editingDefault_=true;found=true;break;
+        }
+        if(!found)throw std::runtime_error("Save a My Default snapshot from File in the Studio first.");
+    }
     else if(action=="help") {const auto path=game::BuiltinAssetPath("docs/"+v);if(path.empty())helpText_="Build with Parts, select a tool, then press F5 to play.\nScripts run only during Play.\nUse File > Export Experience to share a .lo package.";
         else {std::ifstream file(path);helpText_={std::istreambuf_iterator<char>(file),{}};if(helpText_.size()>65536)helpText_.resize(65536);}page_="help";dirty_=true;}
 }
@@ -221,8 +230,9 @@ void ExperienceUI::buildPage() {
             if(page_=="home"||page_=="library")for(const auto& lost:manager_.missing())html+="<div class=\"experience-missing\"><b>"+esc(lost.name)+"</b><small>Unavailable: "+esc(lost.previousRoot.string())+"</small>"+button("locate","Locate directory…",lost.installationId)+button("forget-missing","Forget recent entry",lost.installationId)+"</div>";
         }
         if(page_=="home"||page_=="templates") {
-            html+="<div class=\"experience-section\"><h2>Open a Template</h2>"+button("edit-default","Edit My Default")+"</div><div class=\"experience-grid\">";
-            for(const auto& item:manager_.templates())html+="<button id=\"exp-template-"+item.id+"\" class=\"experience-template\" data-experience=\"new\" data-value=\""+item.id+"\"><img src=\"icon-"+std::string(item.id=="classic"?"rig":item.id=="my-default"?"folder":"part")+"\"/><b>"+esc(item.name)+"</b><small>Local template</small></button>";
+            const auto available=manager_.templates();const bool hasDefault=std::any_of(available.begin(),available.end(),[](const auto& item){return item.id=="my-default";});
+            html+="<div class=\"experience-section\"><h2>Open a Template</h2>"+(hasDefault?button("edit-default","Edit My Default"):"")+"</div><div class=\"experience-grid\">";
+            for(const auto& item:available)html+="<button id=\"exp-template-"+item.id+"\" class=\"experience-template\" data-experience=\"new\" data-value=\""+item.id+"\"><img src=\"icon-"+std::string(item.id=="classic"?"rig":item.id=="my-default"?"folder":"part")+"\"/><b>"+esc(item.name)+"</b><small>Local template</small></button>";
             html+="</div>";
         }
         if(page_=="home")html+="<div class=\"experience-section\"><h2>Discover Loblox</h2></div><div class=\"experience-discover\"><button data-experience=\"help\" data-value=\"STUDIO2_GUIDE.md\"><b>Start building</b><small>Tools, Explorer and local projects</small></button><button data-experience=\"help\" data-value=\"LUA_API.md\"><b>Game scripting</b><small>Lua APIs implemented by Loblox</small></button><button data-experience=\"help\" data-value=\"EXPERIENCES.md\"><b>Share an experience</b><small>Portable files and your own templates</small></button></div>";
@@ -290,13 +300,13 @@ void ExperienceUI::frame() {
         }
     } else if(load_==LoadState::Starting&&loadingJob_.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
         const auto error=loadingJob_.get();
-        if(cancelLoad_){editor_.runtime_.stop();load_=LoadState::None;}
+        if(cancelLoad_){editor_.runtime_.stop();load_=LoadState::None;releaseLoadingImages();}
         else if(!error.empty()){load_=LoadState::Error;text(document_,"exp-loading-status",error);}
         else {load_=LoadState::Fading;readyTime_=GetTime();text(document_,"exp-loading-status","Ready");}
     } else if(load_==LoadState::Fading) {
         const float opacity=std::clamp(1.f-float((GetTime()-readyTime_)/.14),0.f,1.f);
         document_.GetElementById("experience-loading")->SetProperty("opacity",std::to_string(opacity));
-        if(opacity<=0){load_=LoadState::None;editor_.finishPlayStart();document_.GetElementById("exp-loading-background")->RemoveAttribute("src");}
+        if(opacity<=0){load_=LoadState::None;releaseLoadingImages();editor_.finishPlayStart();}
     }
     if(home_&&dirty_)try{buildPage();}catch(const std::exception& e){error_=e.what();}
     show(document_,"experience-home",home_);show(document_,"experience-root",true);

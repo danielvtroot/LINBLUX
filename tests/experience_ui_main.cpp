@@ -102,6 +102,19 @@ int main() {
             event("mousemove "+std::to_string(int(view.x+point.x+31))+" "+std::to_string(int(view.y+point.y+24)));event("mouseup 1");
             CHECK(!NearlyEqual(rotation,rig->root.rotation,.001f));CHECK(NearlyEqual(pivot,rig->authoringPivot().position,.001f));capture("rig-whole-rotated");
         }
+        click("cmd-tool-2");frames(3);{
+            const auto before=*scene.gameAssets().findRig(rigId);const auto view=editor.frontend()->viewport();auto& gizmo=EditorUITestAccess::rigGizmo(editor);const auto& proxy=EditorUITestAccess::proxy(editor);
+            const auto layout=gizmolayout::Build(proxy,ToolMode::Scale,camera,view,gizmo.localSpace(),gizmo.visualSettings());const auto point=layout.scaleHandle[3];
+            const auto axis=gizmomath::Axis(1,proxy.rotation(),true);const auto face=gizmomath::ScaleHandleCenter(gizmolayout::MakeSnapshot(proxy),1,1,true,0);
+            const auto forward=Vector3Normalize(Vector3Subtract(face,camera.position()));const auto normal=Vector3Normalize(Vector3Subtract(forward,Vector3Scale(axis,Vector3DotProduct(forward,axis))));
+            const auto ray=camera.rayFromScreen(point,{view.width,view.height});const auto start=Vector3Add(ray.position,Vector3Scale(ray.direction,Vector3DotProduct(Vector3Subtract(face,ray.position),normal)/Vector3DotProduct(ray.direction,normal)));Vector2 goal{};
+            CHECK(camera.projectChecked(Vector3Add(start,axis),{view.width,view.height},goal));
+            event("mousemove "+std::to_string(int(view.x+point.x))+" "+std::to_string(int(view.y+point.y)));event("mousedown 1");CHECK(gizmo.dragging());
+            event("mousemove "+std::to_string(int(view.x+goal.x))+" "+std::to_string(int(view.y+goal.y)));event("mouseup 1");CHECK(!gizmo.dragging());
+            const auto& after=*scene.gameAssets().findRig(rigId);const float factor=after.bodies[game::Torso].size.y/before.bodies[game::Torso].size.y;CHECK(factor>1.01f);
+            for(int b=0;b<game::kBodyCount;++b)CHECK(NearlyEqual(after.bodies[b].size,Vector3Scale(before.bodies[b].size,factor),.001f));
+            CHECK(NearlyEqual(camera.position(),editorEye));capture("rig-whole-scaled");
+        }
         click("experience-menu");click("exp-default-r6");click("experience-menu");click("exp-default-map");
         bool myDefault=false;for(const auto& item:manager.templates())myDefault|=item.id=="my-default";CHECK(myDefault);
         click("experience-menu");click("exp-details");capture("experience-details");fill("exp-name","Renamed Experience");click("exp-save-details");CHECK(manager.active()->manifest.name=="Renamed Experience");
@@ -122,6 +135,20 @@ int main() {
         click("experience-menu");click("exp-back-home");click("exp-details-0");capture("card-menu");click("exp-card-details");
         EditorUITestAccess::experiences(editor)->enqueue("delete");frames(3);capture("delete-confirmation");click("exp-confirm-ok");capture("archive");CHECK(manager.list(true).size()==1);
         click("exp-details-0");click("exp-card-details");EditorUITestAccess::experiences(editor)->enqueue("restore");frames(3);CHECK(manager.list(true).empty());
+        // No library entries disappear behind the thumbnail page limit.
+        const auto shelfSource=manager.list().front();
+        for(int i=0;i<25;++i)manager.duplicate(shelfSource,"Shelf "+std::to_string(i));
+        EditorUITestAccess::experiences(editor)->enqueue("page","library");frames(4);
+        event("mousemove 600 580");event("click --repeat 30 --delay 20 5");frames(3);click("exp-next");
+        CHECK(editor.frontend()->elementBounds("exp-open-24").width>0);
+        fill("exp-filter","Shelf 24");click("exp-search");CHECK(editor.frontend()->elementBounds("exp-open-0").width>0);CHECK(editor.frontend()->elementBounds("exp-open-1").width==0);capture("library-search");
+        click("exp-open-0");CHECK(manager.active());
+        const auto validRig=scene.gameAssets().defaultRig;scene.gameAssets().defaultRig="missing-rig";click("play");
+        for(int i=0;i<180&&editor.frontend()->elementText("exp-loading-status").find("Preparing")!=std::string::npos;++i)frames(1);
+        CHECK(!EditorUITestAccess::runtime(editor).active());CHECK(EditorUITestAccess::experiences(editor)->loading());capture("loading-error");click("exp-loading-cancel");CHECK(!EditorUITestAccess::experiences(editor)->loading());scene.gameAssets().defaultRig=validRig;
+        scene.createPart(PartShape::Block,{9,8,7},{1,1,1},"Unsaved");
+        click("experience-menu");click("exp-back-home");CHECK(manager.active());CHECK(editor.frontend()->elementBounds("exp-confirm-ok").width>0);capture("unsaved-confirmation");click("exp-confirm-cancel");CHECK(!editor.experienceOverlay());
+        click("experience-menu");click("exp-back-home");click("exp-confirm-discard");CHECK(!manager.active());CHECK(editor.experienceOverlay());
         std::fprintf(stderr,"Experience integration finished; native chooser active: %d\n",EditorUITestAccess::experiences(editor)->nativeDialogActive());
     } catch(const std::exception& error){++failures;std::fprintf(stderr,"Experience UI exception: %s\n",error.what());}
     rlImGuiShutdown();CloseWindow();std::printf("Experience UI: %d checks, %d failures; captures: %s\n",checks,failures,directory.c_str());return failures?1:0;

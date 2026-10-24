@@ -216,6 +216,13 @@ Texture2D AssetTexture(const std::string& relativePath) {
                 // source PNGs keep under alpha = 0 (the Loblox logo stores
                 // magenta there) into the visible artwork.
                 ImageAlphaPremultiply(&image);
+#if defined(LOBLOX_GL_HEADER)
+                GLint maximum=0;glGetIntegerv(GL_MAX_TEXTURE_SIZE,&maximum);
+                if(maximum>0&&(image.width>maximum||image.height>maximum)) {
+                    const float scale=std::min(float(maximum)/image.width,float(maximum)/image.height);
+                    ImageResize(&image,std::max(1,int(image.width*scale)),std::max(1,int(image.height*scale)));
+                }
+#endif
                 tex=LoadTextureFromImage(image);
                 UnloadImage(image);
                 if(tex.id) {

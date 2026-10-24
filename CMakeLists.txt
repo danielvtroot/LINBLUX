@@ -155,6 +155,7 @@ install(DIRECTORY assets/ui/ DESTINATION share/loblox/ui COMPONENT Loblox)
 install(DIRECTORY assets/templates/ DESTINATION share/loblox/templates COMPONENT Loblox)
 install(FILES loblox.png rosto1.png lock.png DESTINATION share/loblox/builtin COMPONENT Loblox)
 install(DIRECTORY docs/ DESTINATION share/loblox/docs COMPONENT Loblox FILES_MATCHING PATTERN "*.md")
+install(FILES third_party/stb/LICENSE DESTINATION share/loblox/licenses COMPONENT Loblox RENAME stb_image.txt)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(loblox PRIVATE -Wall -Wextra)
 endif()
@@ -274,6 +275,11 @@ if(XVFB_RUN_EXECUTABLE)
       ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1")
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
+      add_test(NAME loblox_experience_startup
+        COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset"
+                ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/experience_startup.py
+                $<TARGET_FILE:loblox> $<TARGET_FILE:loblox_experience_tests>)
+      set_tests_properties(loblox_experience_startup PROPERTIES TIMEOUT 90 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
       add_test(NAME loblox_editor_restart
         COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset"
                 ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/editor_restart.py

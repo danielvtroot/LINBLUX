@@ -108,6 +108,8 @@
 .experience-loading-icon { width: 116px; height: 116px; margin: 0 auto 20px; background: #384960; border: 1px #8299b1; border-radius: 18px; overflow: hidden; display: flex; justify-content: center; align-items: center; }
 .experience-loading-icon img { width: 108px; height: auto; }
 .experience-loading-content h1 { font-size: 29px; margin: 0 0 12px; }
+#exp-loading-title { max-height: 96px; overflow: hidden; }
+#exp-loading-description { max-height: 66px; overflow: hidden; }
 .experience-loading-content p { color: #d3deec; font-size: 13px; line-height: 22px; margin: 0 auto 15px; max-width: 560px; }
 .experience-loading-content button { height: 34px; padding: 6px 19px; margin-top: 17px; }
 .experience-spinner { width: 35px; height: 5px; background: #8fc8ff; border-radius: 3px; margin: 25px auto 15px; animation: 0.8s alternate infinite experience-pulse; }

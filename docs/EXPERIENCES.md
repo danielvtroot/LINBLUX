@@ -62,6 +62,8 @@ PNG usa o decoder raylib existente. JPEG usa somente o módulo JPEG de stb_image
 com licença vendorizada em `third_party/stb/`. Preflight limita arquivo a 32 MiB,
 dimensão máxima a 16384 e área a 16 megapixels (até 64 MiB em RGBA). Não há
 dimensão obrigatória: 512×512 e 1920×1080 são recomendações de apresentação.
+O upload 3D consulta `GL_MAX_TEXTURE_SIZE` e reduz somente a cópia GPU quando
+necessário. Miniaturas usam crop 16:9 em cache; os originais não são alterados.
 
 O chooser Linux utiliza zenity, yad ou kdialog, localizado no PATH. Ele roda
 como processo transitório, sem shell e sem novo contexto OpenGL. Pipe e waitpid
@@ -73,6 +75,14 @@ tarefa própria. O mundo de autoria fica congelado; o loop continua processando
 eventos. A thread prepara uma cópia independente e é sincronizada por future
 antes de qualquer leitura do runtime pela UI. Uma transição curta encerra a
 apresentação quando os sistemas estão prontos; não há espera falsa de carregamento.
+As imagens da apresentação são liberadas ao entrar no jogo ou cancelar.
+
+A biblioteca oferece busca e paginação de 24 cards para limitar texturas
+residentes. Entradas movidas permanecem no histórico com Locate; elas nunca
+são recriadas silenciosamente. Restore em Archive recupera a mesma instalação.
+
+Instalação relocável: `cmake --install build --prefix DESTINO --component Loblox`.
+O binário procura recursos em `share/loblox` junto ao build ou acima de `bin`.
 
 Referências conceituais oficiais:
 [ícones](https://create.roblox.com/docs/production/publishing/experience-icons),

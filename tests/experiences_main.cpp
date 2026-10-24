@@ -9,6 +9,8 @@
 #include <functional>
 #include <filesystem>
 #include <zlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 using namespace loblox;
 namespace fs=std::filesystem;
@@ -25,11 +27,28 @@ void Malicious(const fs::path& file,const std::vector<std::pair<std::string,std:
 int main(int argc,char** argv) {
     SetTraceLogLevel(LOG_WARNING);
     if(argc==3&&std::string(argv[1])=="--factory"){ex::ExperienceManager::writeFactoryResources(argv[2]);return 0;}
+    if(argc==3&&std::string(argv[1])=="--receive") {
+        try {
+            ex::ExperienceManager target(ex::ExperienceManager::defaultDataRoot(),"/factory-unavailable");
+            const auto e=target.importPackage(argv[2]);Scene world;target.open(e,world);
+            if(world.parts().empty()||world.gameAssets().rigs.empty()||game::ProjectAssetRoot().find(std::getenv("HOME"))!=0||game::ResolveImagePath(game::AssetsDir(),e.manifest.faceImage).empty())return 3;
+            game::RuntimeSession runtime;std::string error;if(!runtime.start(world,error))return 4;runtime.update(1.f/60,{});runtime.stop();return 0;
+        } catch(const std::exception& e){std::fprintf(stderr,"Receiver subprocess: %s\n",e.what());return 5;}
+    }
     const auto base=fs::temp_directory_path()/("loblox-experiences-"+ex::newId());fs::create_directories(base);
     try {
         const auto factory=base/"factory";ex::ExperienceManager::writeFactoryResources(factory);
         ex::ExperienceManager author(base/"alice/data",factory),receiver(base/"other-user/data",factory);
         CHECK(author.templates().size()==4);CHECK(author.list().empty());
+        ex::ExperienceManager factoryProbe(base/"factory-probe",factory);
+        for(const auto& item:author.templates()) {
+            ex::CreateOptions factoryOptions;factoryOptions.name=item.name;factoryOptions.templateId=item.id;factoryOptions.useDefaultCharacter=false;
+            const auto e=factoryProbe.create(factoryOptions);Scene world;factoryProbe.open(e,world);const auto before=projectio::toJson(world);
+            game::RuntimeSession play;std::string error;CHECK(play.start(world,error));play.update(.05f,{});CHECK(play.validate(error));play.stop();CHECK(projectio::toJson(world)==before);
+            if(item.id=="empty")CHECK(world.parts().empty());
+            if(item.id=="obby")for(const auto* part:world.parts())CHECK(part->instanceClass()!=InstanceClass::Baseplate);
+            factoryProbe.close();
+        }
         ex::CreateOptions invalid;invalid.name="Bad image";invalid.icon=(base/"missing.png").string();
         CHECK(Throws([&]{author.create(invalid);}));CHECK(author.list().empty());
         for(const auto& entry:fs::directory_iterator(author.libraryRoot()))CHECK(entry.path().filename().string().rfind(".staging-",0)!=0);
@@ -41,6 +60,7 @@ int main(int argc,char** argv) {
         options.icon=(base/"small.jpg").string();options.banner=(base/"wide.png").string();options.loadingBackground=options.icon;
         auto project=author.create(options);CHECK(project.manifest.id!=project.manifest.installationId);CHECK(author.list().size()==1);
         CHECK(!project.manifest.icon.empty());CHECK(project.manifest.icon!=project.manifest.banner);
+        const auto thumb=author.thumbnail(project);ImageInfo thumbInfo;CHECK(ReadSafeImageInfo(thumb.string(),thumbInfo));CHECK(thumbInfo.width==384&&thumbInfo.height==216);
         Scene scene;author.open(project,scene);CHECK(scene.parts().size()==2);CHECK(fs::current_path()==cwd);
         auto& rig=scene.gameAssets().createR6();const auto rigId=rig.id;rig.bodies[game::RightArm].color=RED;
         auto& decal=rig.addDecal(game::Torso);decal.surface.image=project.manifest.banner;decal.surface.face=1;
@@ -53,6 +73,10 @@ int main(int argc,char** argv) {
         CHECK(author.active()->root==project.root);CHECK(author.active()->manifest.id==project.manifest.id);
         Scene reopened;author.open(*author.active(),reopened);CHECK(reopened.findPart(partId));CHECK(reopened.gameAssets().findRig(rigId));
         CHECK(reopened.gameAssets().findRig(rigId)->bodies[game::Torso].decals.size()==1);
+        // A failed save cannot move the committed revision pointer.
+        const auto committed=Read(project.root/"experience.json");const auto goodImage=part->attributes().at("decal_image");
+        part->setAttribute("decal_image",std::string("assets/missing.png"));CHECK(Throws([&]{author.save(scene);}));CHECK(Read(project.root/"experience.json")==committed);
+        part->setAttribute("decal_image",goodImage);
         const auto originalWorld=projectio::toJson(reopened);
         auto copy=author.duplicate(*author.active(),"Copy");CHECK(copy.root!=project.root);CHECK(copy.manifest.id!=project.manifest.id);
         CHECK(copy.manifest.icon==author.active()->manifest.icon);CHECK(fs::exists(copy.root/copy.manifest.icon));
@@ -68,6 +92,13 @@ int main(int argc,char** argv) {
         CHECK(Throws([&]{author.create(customOptions);}));
         const auto portable=base/"Shared.lo";author.exportPackage(custom,portable);
         CHECK(fs::file_size(portable)>100);CHECK(Read(portable).substr(0,5)=="LOEXP");
+        // A fresh process with another HOME/XDG/CWD and no factory template
+        // directory must resolve the package without the author's asset root.
+        const auto executable=fs::absolute(argv[0]).string();const auto packagePath=portable.string();
+        const auto receivingHome=(base/"bob-home").string(),receivingData=(base/"bob-home/data").string();fs::create_directories(receivingHome);
+        const auto pid=fork();CHECK(pid>=0);
+        if(pid==0){setenv("HOME",receivingHome.c_str(),1);setenv("XDG_DATA_HOME",receivingData.c_str(),1);if(chdir(receivingHome.c_str())!=0)_exit(6);execl(executable.c_str(),executable.c_str(),"--receive",packagePath.c_str(),static_cast<char*>(nullptr));_exit(7);}
+        if(pid>0){int status=0;CHECK(waitpid(pid,&status,0)==pid);CHECK(WIFEXITED(status)&&WEXITSTATUS(status)==0);}
         auto received=receiver.importPackage(portable);CHECK(received.manifest.id==custom.manifest.id);CHECK(received.manifest.installationId!=custom.manifest.installationId);
         CHECK(!received.manifest.faceImage.empty());CHECK(fs::is_regular_file(received.root/received.manifest.faceImage));
         author.close();Scene receivedScene;receiver.open(received,receivedScene);

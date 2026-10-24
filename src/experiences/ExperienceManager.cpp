@@ -369,12 +369,17 @@ fs::path ExperienceManager::thumbnail(const Experience& experience) const {
     const auto& ref=experience.manifest.banner.empty()?experience.manifest.icon:experience.manifest.banner;if(ref.empty())return {};
     const auto source=containedFile(experience.root,ref);ImageInfo info;if(!ReadSafeImageInfo(source.string(),info))return {};
     const auto cache=containedFile(experience.root,".cache");fs::create_directories(cache);
-    const auto output=cache/(source.stem().string()+"-thumb.png");
+    const auto output=cache/(source.stem().string()+"-cover-v1-thumb.png");
     if(fs::is_symlink(fs::symlink_status(output)))throw std::runtime_error("Symlink thumbnail is not supported");
     if(fs::is_regular_file(output))return output;
     Image image=game::LoadProjectImage(source.string());if(!image.data)return {};
-    const float factor=std::min(1.f,384.f/std::max(image.width,image.height));
-    if(factor<1)ImageResize(&image,std::max(1,int(image.width*factor)),std::max(1,int(image.height*factor)));
+    // Crop before resize, so a 1x16000 source never becomes a huge temporary
+    // image just to cover a landscape card. The original asset stays intact.
+    int cropWidth=image.width,cropHeight=image.height;
+    if(double(cropWidth)/cropHeight>16.0/9.0)cropWidth=std::max(1,int(cropHeight*16.0/9.0));
+    else cropHeight=std::max(1,int(cropWidth*9.0/16.0));
+    ImageCrop(&image,{float((image.width-cropWidth)/2),float((image.height-cropHeight)/2),float(cropWidth),float(cropHeight)});
+    ImageResize(&image,384,216);
     const bool ok=ExportImage(image,output.c_str());UnloadImage(image);return ok?output:fs::path{};
 }
 
