@@ -64,7 +64,7 @@ struct RmlPlatform final : Rml::SystemInterface {
     void JoinPath(Rml::String& result, const Rml::String& document, const Rml::String& path) override {
         // RmlUi's default treats '/image.png' as a virtual web-root path and
         // strips '/'. Loblox resources use actual Linux filesystem paths.
-        if (path.rfind("icon-", 0) == 0 || path == "loblox-logo" || path=="loblox-lock") {
+        if (path.rfind("icon-", 0) == 0 || path.rfind("experience-full:",0)==0 || path == "loblox-logo" || path=="loblox-lock") {
             result = path;
             return;
         }

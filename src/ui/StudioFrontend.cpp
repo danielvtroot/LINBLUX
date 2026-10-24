@@ -1,5 +1,6 @@
 #include "ui/StudioFrontend.h"
 #include "ui/EditorActions.h"
+#include "ui/ExperienceUI.h"
 #include "ui/ImageSafety.h"
 #include "ui/RmlFrontendSupport.h"
 #include "editor/EditorUI.h"
@@ -60,6 +61,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     bool dragging=false,mouseOwned=false,escapeConsumed=false,dialogOpen=false,treeKeyboard=false,restoreFocus=false;
     bool initialized=false,syncing=false,keyboardOwned=false;float shownHealth=100,healthTrail=100;int w=0,h=0;
     std::vector<EditorCommand> commands;
+    std::unique_ptr<ExperienceUI> experiences;
     const bool timing=std::getenv("LOBLOX_UI_TIMINGS")!=nullptr;
     double presentationTime=0,sceneTime=0,updateTime=0,renderTime=0,frameTime=0;int timingFrames=0;
     explicit Impl(EditorUI& editor):ui(editor),actions(editor){}
@@ -95,6 +97,24 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         return nullptr;
     }
     bool editing()const {return context&&formOwner(context->GetFocusElement());}
+    void experienceInput() {
+        const auto& io=ImGui::GetIO();mouseOwned=keyboardOwned=true;escapeConsumed=false;
+        if(!IsWindowFocused()){context->ProcessMouseLeave();context->ProcessMouseButtonUp(0,0);return;}
+        const int mods=(io.KeyCtrl?Rml::Input::KM_CTRL:0)|(io.KeyShift?Rml::Input::KM_SHIFT:0)|(io.KeyAlt?Rml::Input::KM_ALT:0);
+        context->ProcessMouseMove(int(io.MousePos.x*dpi),int(io.MousePos.y*dpi),mods);
+        for(int i=0;i<3;++i){if(ImGui::IsMouseClicked(i))context->ProcessMouseButtonDown(i,mods);if(ImGui::IsMouseReleased(i))context->ProcessMouseButtonUp(i,mods);}
+        if(io.MouseWheel!=0)context->ProcessMouseWheel(-io.MouseWheel,mods);
+        for(auto c:io.InputQueueCharacters)context->ProcessTextInput(Rml::Character(c));
+        const std::pair<ImGuiKey,Rml::Input::KeyIdentifier> keys[]={
+            {ImGuiKey_Backspace,Rml::Input::KI_BACK},{ImGuiKey_Delete,Rml::Input::KI_DELETE},
+            {ImGuiKey_LeftArrow,Rml::Input::KI_LEFT},{ImGuiKey_RightArrow,Rml::Input::KI_RIGHT},
+            {ImGuiKey_UpArrow,Rml::Input::KI_UP},{ImGuiKey_DownArrow,Rml::Input::KI_DOWN},
+            {ImGuiKey_Home,Rml::Input::KI_HOME},{ImGuiKey_End,Rml::Input::KI_END},{ImGuiKey_Tab,Rml::Input::KI_TAB},
+            {ImGuiKey_Enter,Rml::Input::KI_RETURN},{ImGuiKey_A,Rml::Input::KI_A},{ImGuiKey_C,Rml::Input::KI_C},
+            {ImGuiKey_V,Rml::Input::KI_V},{ImGuiKey_X,Rml::Input::KI_X},{ImGuiKey_Z,Rml::Input::KI_Z},{ImGuiKey_Y,Rml::Input::KI_Y}};
+        for(const auto& key:keys){if(ImGui::IsKeyPressed(key.first))context->ProcessKeyDown(key.second,mods);if(ImGui::IsKeyReleased(key.first))context->ProcessKeyUp(key.second,mods);}
+        if(ImGui::IsKeyPressed(ImGuiKey_Escape,false))experiences->enqueue(experiences->loading()?"cancel-load":"cancel-confirm");
+    }
     Rectangle bounds(const std::string& id)const {auto* e=el(id);if(!e||!e->IsVisible(true))return {};auto p=e->GetAbsoluteOffset(Rml::BoxArea::Border);auto s=e->GetBox().GetSize(Rml::BoxArea::Border);return {p.x,p.y,s.x,s.y};}
     void loadLayout(){try{std::ifstream file(LayoutPath());nlohmann::json j;if(file>>j){left=j.value("left",left);right=j.value("right",right);bottom=j.value("bottom",bottom);propertySplit=j.value("properties",propertySplit);ui.showToolbox_=j.value("showToolbox",true);ui.showExplorer_=j.value("showExplorer",true);ui.showProperties_=j.value("showProperties",true);}}catch(...) {}}
     void saveLayout(){try {const auto path=LayoutPath();if(path.empty())return;std::filesystem::create_directories(path.parent_path());auto temp=path;temp+=".tmp";{std::ofstream file(temp);file<<nlohmann::json{{"left",left},{"right",right},{"bottom",bottom},{"properties",propertySplit},{"showToolbox",ui.showToolbox_},{"showExplorer",ui.showExplorer_},{"showProperties",ui.showProperties_}};if(!file)return;}std::filesystem::rename(temp,path);}catch(...) {}}
@@ -162,12 +182,15 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         text("viewport-hint",ui.activeDocument_==0?"RMB + WASD · Q / E":"Ctrl+S save · Ctrl+W close");
     }
     void prompt(const std::string& kind) {
+        if(experiences&&kind=="import-image"){experiences->chooseAsset();return;}
+        if(experiences&&kind=="open"){experiences->enqueue("import");return;}
+        if(experiences&&kind=="save-as"&&experiences->handlesSave()){experiences->enqueue("export-current");return;}
         auto* selected=ui.scene_.selection();
         if((kind=="color"||kind=="material")&&(!selected||!selected->isPart())){ui.setStatus("Select a Part first",true);return;}
         if(kind.rfind("color:",0)==0&&!selected)return;
         ui.endGizmoSession(true,"dialog");ui.cancelRigGizmo();ui.camera_.releaseCapture();dialog=kind;dialogOpen=true;
         text("dialog-title",kind=="rename"?"Rename object":kind=="open"?"Open project":kind=="import-image"?"Import image":"Save project as");
-        text("dialog-description",kind=="rename"?"Names are preserved with the object's stable ID.":kind=="import-image"?"PNG or JPEG path · maximum 4096 × 4096. The original is preserved.":"Project files use the existing transactional JSON format.");text("dialog-error","");
+        text("dialog-description",kind=="rename"?"Names are preserved with the object's stable ID.":kind=="import-image"?"PNG or JPEG · any aspect ratio within the image memory budget. Original preserved.":"Project files use the existing transactional JSON format.");text("dialog-error","");
         auto* field=dynamic_cast<Rml::ElementFormControl*>(el("dialog-value"));
         const auto* node=ui.scene_.selection();const auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);
         std::string initial=kind=="rename"?(node?node->name():rig?rig->name:""):kind=="import-image"?"":ui.projectPath_;
@@ -232,6 +255,9 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         // A presentation refresh is never an editor command.
         if(syncing)return;
         auto* target=event.GetTargetElement();const auto type=event.GetType();
+        if(type=="click"&&experiences)if(auto* command=ancestor(target,"data-experience")) {
+            experiences->enqueue(attr(command,"data-experience"),attr(command,"data-value"));event.StopPropagation();return;
+        }
         if(type=="focus") {if(auto* form=formOwner(target))focusValue=value(form);return;}
         if(type=="blur") {if(auto* form=formOwner(target);form&&!restoreFocus&&value(form)!=focusValue)commit(form);restoreFocus=false;return;}
         if(type=="change") {
@@ -242,6 +268,8 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             return;
         }
         if(type=="mousedown") {
+            if(experiences&&experiences->overlayActive()&&event.GetParameter<int>("button",-1)==1)
+                if(auto* card=ancestor(target,"data-experience-card")){experiences->enqueue("card-menu",attr(card,"data-experience-card"));event.StopPropagation();return;}
             bool form=false;for(auto* e=target;e&&e!=document;e=e->GetParentNode())if(e->GetTagName()=="input"||e->GetTagName()=="select"||e->GetTagName()=="textarea"){form=true;break;}
             if(editing()&&!form)context->GetRootElement()->Focus();
             if(auto* handle=ancestor(target,"data-split")) {split=attr(handle,"data-split");mouseOwned=true;}
@@ -476,9 +504,10 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(!IsWindowFocused()){context->ProcessMouseLeave();context->ProcessMouseButtonUp(0,0);context->ProcessMouseButtonUp(1,0);split.clear();dragNode=0;dragging=false;return;}
         const bool capture=ui.gameplayCapture_||ui.camera_.cursorCaptured();
         if(!capture)context->ProcessMouseMove(int(mouse.x*dpi),int(mouse.y*dpi),0);
-        auto* hover=context->GetHoverElement();bool controls=ancestor(hover,"data-action")||ancestor(hover,"data-page")||ancestor(hover,"data-player-page")||ancestor(hover,"data-player-step")||ancestor(hover,"data-split");
+        auto* hover=context->GetHoverElement();bool controls=ancestor(hover,"data-action")||ancestor(hover,"data-experience")||ancestor(hover,"data-page")||ancestor(hover,"data-player-page")||ancestor(hover,"data-player-step")||ancestor(hover,"data-split");
         const bool transforming=ui.transform_.active()||ui.rigGizmo_.dragging();
         mouseOwned=!capture&&(dialogOpen || (!transforming&&(!Within(mouse,view) || (ui.runtime_.state()==game::RuntimeState::Paused) || controls || dragging || !split.empty())));
+        if(experiences&&experiences->blocksStudioInput()){mouseOwned=true;keyboardOwned=true;}
         const int mods=(io.KeyCtrl?Rml::Input::KM_CTRL:0)|(io.KeyShift?Rml::Input::KM_SHIFT:0)|(io.KeyAlt?Rml::Input::KM_ALT:0);
         if(!capture) {
             if(ImGui::IsMouseClicked(0)) {
@@ -724,7 +753,9 @@ bool StudioFrontend::initialize(std::string& error) {
     }
     if(!font){error="A TrueType sans-serif font is required";return false;}
     p.context=Rml::CreateContext("loblox",{GetScreenWidth(),GetScreenHeight()});if(!p.context){error="RmlUi context creation failed";return false;}
-    auto root=std::filesystem::path(GetApplicationDirectory())/"share/loblox/ui";if(!std::filesystem::exists(root))root=LOBLOX_UI_DIR;
+    auto root=std::filesystem::path(GetApplicationDirectory())/"share/loblox/ui";
+    if(!std::filesystem::exists(root))root=std::filesystem::path(GetApplicationDirectory()).parent_path()/"share/loblox/ui";
+    if(!std::filesystem::exists(root))root=LOBLOX_UI_DIR;
     p.document=p.context->LoadDocument((root/"documents/studio.rml").string());if(!p.document){error="Failed to load studio.rml";return false;}
     std::ifstream ribbonFile(root/"documents/ribbon.rml");
     if(!ribbonFile){error="Failed to load ribbon.rml";return false;}
@@ -739,7 +770,19 @@ bool StudioFrontend::initialize(std::string& error) {
     rlImGuiDeferPopupRendering(true);error.clear();return true;
 }
 void StudioFrontend::draw() {
-    auto& p=*impl_;const double started=GetTime();p.layout();p.input();p.syncing=true;p.ribbon();p.tree();p.properties();p.commonAdvanced();p.documents();
+    auto& p=*impl_;const double started=GetTime();
+    if(p.experiences) {
+        p.experiences->frame();
+        const bool exclusive=p.experiences->overlayActive();p.document->SetClass("experience-exclusive",exclusive);
+        if(exclusive) {
+            p.w=GetScreenWidth();p.h=GetScreenHeight();p.dpi=float(GetRenderWidth())/std::max(1,p.w);
+            p.context->SetDimensions({GetRenderWidth(),GetRenderHeight()});
+            p.style("studio","width",std::to_string(p.w)+"px");p.style("studio","height",std::to_string(p.h)+"px");
+            p.style("studio","transform-origin","0px 0px");p.style("studio","transform",p.dpi==1?"none":"scale("+Num(p.dpi)+")");
+            p.experienceInput();p.context->Update();rlImGuiSetExternalTextInput(p.editing());return;
+        }
+    }
+    p.layout();p.input();p.syncing=true;p.ribbon();p.tree();p.properties();p.commonAdvanced();p.documents();
     p.ui.explorerFocused_=p.treeKeyboard&&!p.editing();
     if(!p.advanced.empty()&&!p.ui.runtime_.active()&&!p.dialogOpen) {
         p.ui.showScriptEditor_=p.advanced=="script";p.ui.showAnimationEditor_=p.advanced=="animation";p.ui.showRigEditor_=p.advanced=="rig";p.ui.showGameSettings_=false;p.ui.showOutput_=p.advanced=="output";
@@ -756,7 +799,7 @@ void StudioFrontend::draw() {
     if(!p.dialogOpen)p.ui.drawDialogs();
     const double beforeScene=GetTime();p.ui.drawViewport();p.documents();const double afterScene=GetTime();p.syncGame();p.updateTooltip();
     p.display("dialog-overlay",p.dialogOpen,"flex");
-    p.text("project",std::filesystem::path(p.ui.projectPath_).filename().string());p.text("message",p.ui.status_);
+    p.text("project",p.experiences?p.experiences->documentTitle():std::filesystem::path(p.ui.projectPath_).filename().string());p.text("message",p.ui.status_);
     p.text("scene-count",std::to_string(p.ui.scene_.parts().size())+" parts · "+std::to_string(p.ui.scene_.objects().size())+" instances");
     p.el("snap")->SetAttribute("type","checkbox");if(p.ui.snapEnabled_)p.el("snap")->SetAttribute("checked","");else p.el("snap")->RemoveAttribute("checked");
     if(auto* space=dynamic_cast<Rml::ElementFormControl*>(p.el("transform-space"));space&&p.context->GetFocusElement()!=space) {
@@ -790,5 +833,21 @@ Rectangle StudioFrontend::viewport()const{return impl_->view;}
 Rectangle StudioFrontend::elementBounds(const std::string& id)const{return impl_->bounds(id);}
 std::string StudioFrontend::elementText(const std::string& id)const{auto* e=impl_->el(id);return e?e->GetInnerRML():std::string();}
 bool StudioFrontend::textFocused()const{return impl_->editing();}
+void StudioFrontend::enableExperiences(experiences::ExperienceManager& manager,bool home) {
+    auto& p=*impl_;
+    auto root=std::filesystem::path(GetApplicationDirectory())/"share/loblox/ui";
+    if(!std::filesystem::exists(root))root=std::filesystem::path(GetApplicationDirectory()).parent_path()/"share/loblox/ui";
+    if(!std::filesystem::exists(root))root=LOBLOX_UI_DIR;
+    std::ifstream file(root/"documents/home.rml");if(!file)throw std::runtime_error("Missing home.rml");
+    const std::string html((std::istreambuf_iterator<char>(file)),{});p.el("experience-host")->SetInnerRML(html);
+    p.experiences=std::make_unique<ExperienceUI>(p.ui,manager,*p.context,*p.document);p.experiences->initialize(home);
+}
+void StudioFrontend::resetDocumentView() {
+    auto& p=*impl_;p.advanced.clear();p.search.clear();p.propertySearch.clear();p.collapsed.clear();p.treeHash=0;
+    p.treeMarkup.clear();p.propertyMarkup.clear();p.documentMarkup.clear();p.selectedRigDecal.clear();p.selectedDecalRig.clear();
+    p.dragNode=p.dragTarget=0;p.dragging=false;p.contextOpen=false;p.split.clear();p.context->GetRootElement()->Focus();p.commands.clear();p.treeKeyboard=false;
+    invalidateImageLibrary();Rml::ReleaseTextures(p.renderer.get());
+}
+void StudioFrontend::invalidateImageLibrary(){impl_->images.clear();impl_->imageScan=-10;impl_->advancedMarkup.clear();}
 void StudioFrontend::prepareAdvanced(){auto r=impl_->advancedRect;ImGui::SetNextWindowDockID(0,ImGuiCond_Always);ImGui::SetNextWindowPos({r.x,r.y},ImGuiCond_Always);ImGui::SetNextWindowSize({r.width,r.height},ImGuiCond_Always);}
 }

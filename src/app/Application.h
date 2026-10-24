@@ -11,6 +11,7 @@ namespace loblox {
 
 class SceneRenderer;
 class EditorUI;
+namespace experiences {class ExperienceManager;}
 
 class Application {
 public:
@@ -32,6 +33,7 @@ private:
     EditorCamera camera_;
     std::unique_ptr<SceneRenderer> renderer_;
     std::unique_ptr<EditorUI> ui_;
+    std::unique_ptr<experiences::ExperienceManager> experiences_;
     bool windowReady_ = false;
     bool imguiReady_ = false;
 };

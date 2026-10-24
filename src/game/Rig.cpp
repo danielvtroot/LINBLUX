@@ -1,4 +1,5 @@
 #include "game/Rig.h"
+#include "core/Geometry.h"
 
 #include <algorithm>
 #include <cmath>
@@ -141,7 +142,37 @@ std::array<RigidTransform, kBodyCount> Rig::evaluate(const Pose& pose,
 RigidTransform Rig::pivot(int index, const Pose& pose) const {
     const auto world = evaluate(pose, root);
     const auto& j = joints[index];
-    return Compose(Compose(j.parent < 0 ? root : world[j.parent], j.parentAnchor), restPose[index]);
+    return Compose(world[j.child],j.childAnchor);
+}
+RigidTransform Rig::authoringPivot() const {return {evaluate({},root)[Torso].position,root.rotation};}
+Vector3 Rig::authoringSize() const {
+    const auto pivot=authoringPivot();const auto world=evaluate({},root);Vector3 half{};
+    for(int b=0;b<kBodyCount;++b)for(const auto& corner:OrientedBox{world[b].position,world[b].rotation,Vector3Scale(bodies[b].size,.5f)}.corners()) {
+        const auto local=Vector3RotateByQuaternion(Vector3Subtract(corner,pivot.position),QuaternionInvert(pivot.rotation));
+        half.x=std::max(half.x,std::fabs(local.x));half.y=std::max(half.y,std::fabs(local.y));half.z=std::max(half.z,std::fabs(local.z));
+    }
+    return Vector3Scale(half,2);
+}
+bool Rig::transformAuthoring(RigidTransform targetPivot,float scale,std::string& error) {
+    if(!Valid(targetPivot)||!std::isfinite(scale)||scale<=0){error="Invalid rig transform";return false;}
+    const auto before=authoringPivot();auto transformed=*this;
+    const auto rotation=QuaternionNormalize(QuaternionMultiply(targetPivot.rotation,QuaternionInvert(before.rotation)));
+    transformed.root.rotation=QuaternionNormalize(QuaternionMultiply(rotation,root.rotation));
+    transformed.root.position=Vector3Add(targetPivot.position,Vector3RotateByQuaternion(Vector3Scale(Vector3Subtract(root.position,before.position),scale),rotation));
+    for(auto& body:transformed.bodies)body.size=Vector3Scale(body.size,scale);
+    for(auto& joint:transformed.joints){joint.parentAnchor.position=Vector3Scale(joint.parentAnchor.position,scale);joint.childAnchor.position=Vector3Scale(joint.childAnchor.position,scale);}
+    for(auto& pose:transformed.restPose)pose.position=Vector3Scale(pose.position,scale);
+    if(!transformed.validate(error))return false;
+    *this=std::move(transformed);return true;
+}
+bool Rig::recenterAuthoringRoot(std::string& error) {
+    if(joints[RootJoint].parent!=-1){error="RootJoint must be attached to the internal root";return false;}
+    auto result=*this;const auto pivot=authoringPivot();const auto delta=Vector3Subtract(pivot.position,root.position);
+    const auto frame=Compose(root,joints[RootJoint].parentAnchor);
+    result.root.position=pivot.position;
+    result.restPose[RootJoint].position=Vector3Subtract(restPose[RootJoint].position,Vector3RotateByQuaternion(delta,QuaternionInvert(frame.rotation)));
+    if(!result.validate(error))return false;
+    *this=std::move(result);return true;
 }
 void Rig::resizeBody(int index, Vector3 size) {
     if (index < 0 || index >= kBodyCount || !Finite(size)) return;

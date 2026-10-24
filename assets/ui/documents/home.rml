@@ -1,0 +1,29 @@
+<div id="experience-root">
+ <div id="experience-home">
+  <div class="experience-sidebar"><div class="experience-brand"><img src="loblox-logo"/><b>LOBLOX</b><small>STUDIO</small></div>
+   <button id="exp-nav-home" data-experience="page" data-value="home"><img src="icon-home"/><span>Home</span></button>
+   <button id="exp-nav-library" data-experience="page" data-value="library"><img src="icon-folder"/><span>My Experiences</span></button>
+   <button id="exp-nav-templates" data-experience="page" data-value="templates"><img src="icon-part"/><span>Templates</span></button>
+   <button id="exp-nav-archive" data-experience="page" data-value="archive"><img src="icon-folder"/><span>Archive</span></button>
+   <div class="experience-sidebar-rule"/>
+   <button id="exp-new" class="experience-primary" data-experience="new"><img src="icon-part"/><span>New Experience</span></button>
+   <button id="exp-import" data-experience="import"><img src="icon-folder"/><span>Open / Import…</span></button>
+   <button data-experience="library-location"><img src="icon-settings"/><span>Library location…</span></button>
+   <div class="experience-local">LOCAL WORKSPACE<br/><small>Your files. Your games.<br/>No account or cloud required.</small></div>
+  </div>
+  <div class="experience-main"><div id="experience-content"/></div>
+ </div>
+ <div id="experience-error" data-experience="dismiss-error" title="Click to dismiss"/>
+ <div id="experience-file-shade" data-experience="close-file"><div id="experience-file-menu">
+  <button id="exp-back-home" data-experience="back-home">Back to Home</button>
+  <button id="exp-details" data-experience="current-details">Experience Details…</button>
+  <button data-experience="save">Save Experience</button>
+  <button id="exp-export" data-experience="export-current">Export Experience (.lo)…</button>
+  <div class="experience-sidebar-rule"/>
+  <button id="exp-default-map" data-experience="default-map">Set current as My Default</button>
+  <button id="exp-default-r6" data-experience="default-r6">Set selected R6 as My Default Character</button>
+  <button data-experience="restore-factory">Restore Factory Defaults…</button>
+ </div></div>
+ <div id="experience-confirm"><div class="experience-confirm-card"><h2 id="exp-confirm-title"/><p id="exp-confirm-description"/><div class="experience-confirm-actions"><button id="exp-confirm-cancel" data-experience="cancel-confirm">Cancel</button><button id="exp-confirm-discard" data-experience="discard-home">Discard &amp; Home</button><button id="exp-confirm-ok" class="experience-primary" data-experience="confirm">Continue</button></div></div></div>
+ <div id="experience-loading"><img id="exp-loading-background"/><div class="experience-loading-shade"/><div class="experience-loading-content"><div class="experience-loading-icon"><img id="exp-loading-icon"/></div><h1 id="exp-loading-title"/><p id="exp-loading-description"/><div class="experience-spinner"/><p id="exp-loading-status">Preparing your local experience…</p><button id="exp-loading-cancel" data-experience="cancel-load">Back to Studio</button></div></div>
+</div>

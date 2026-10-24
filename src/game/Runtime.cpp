@@ -209,6 +209,9 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error) {
         const Rig* selected = assets.findRig(assets.defaultRig);
         if (!selected) { error = "Choose a valid default character in Rig Editor"; stop(); return false; }
         rig_ = *selected; settings_ = assets.player;
+        // Older whole-rig editing stored translation on RootJoint. Canonicalize
+        // only the runtime copy so the visible torso follows the capsule/spawn.
+        if(!rig_.recenterAuthoringRoot(error)){stop();return false;}
         Event("animation", "clip_load", correlation_, {{"walk", settings_.walkAnimation}, {"idle", settings_.idleAnimation}});
         physics_ = std::make_unique<PhysicsWorld>(); physics_->attach(*scene_);
         physics_->setGravity({0, -settings_.gravity, 0});

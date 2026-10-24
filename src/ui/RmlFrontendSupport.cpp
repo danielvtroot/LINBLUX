@@ -71,7 +71,9 @@ Image IconImage(const std::string& name, int resolution) {
                            std::max(1, ix(static_cast<float>(h))), ink);
     };
 
-    if (name == "player-close") {
+    if(name=="home") {
+        line(6,23,24,7);line(24,7,42,23);line(11,20,11,41);line(11,41,37,41);line(37,41,37,20);box(20,28,8,13);
+    } else if (name == "player-close") {
         line(10, 10, 38, 38); line(38, 10, 10, 38);
     } else if (name == "player-menu") {
         for (int y : {13, 24, 35}) line(7, y, 41, y);
@@ -296,20 +298,18 @@ void StudioRenderer::RenderGeometry(Rml::CompiledGeometryHandle geometry, Rml::V
 }
 
 Rml::TextureHandle StudioRenderer::LoadTexture(Rml::Vector2i& dimensions, const Rml::String& source) {
+    const bool full=source.rfind("experience-full:",0)==0;
+    const int maxEdge=full?1920:kUiTextureMaxEdge;
     const auto name = std::filesystem::path(source).filename().string();
     Image image{};
     if (name.rfind("icon-", 0) == 0) {
         image = IconImage(name.substr(5));
     } else {
-        const std::string path = name == "loblox-logo" ? game::BuiltinAssetPath("loblox.png") : name=="loblox-lock"?game::BuiltinAssetPath("lock.png"):source;
+        const std::string path = full?source.substr(16):name == "loblox-logo" ? game::BuiltinAssetPath("loblox.png") : name=="loblox-lock"?game::BuiltinAssetPath("lock.png"):source;
         if (path.empty() || !SafeImageFile(path)) return 0;
-        image = LoadImage(path.c_str());
+        image = game::LoadProjectImage(path);
     }
     if (!image.data) return 0;
-    if (image.width > 4096 || image.height > 4096) {
-        UnloadImage(image);
-        return 0;
-    }
 
     ImageFormat(&image, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
     if (image.format != PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) {
@@ -321,11 +321,11 @@ Rml::TextureHandle StudioRenderer::LoadTexture(Rml::Vector2i& dimensions, const 
     // visual weight as the Roblox reference instead of shrinking it twice.
     if (name == "loblox-logo" || name=="loblox-lock") ImageAlphaCrop(&image, 0.02f);
     const int longest = std::max(image.width, image.height);
-    if (longest > kUiTextureMaxEdge) {
+    if (longest > maxEdge) {
         // Area-average instead of raylib's bicubic ImageResize: a 1600 px
         // logo reduced to 256 px with a 4x4 kernel drops most of the source
         // and leaves jagged edges before the GPU even minifies it again.
-        const float factor = static_cast<float>(kUiTextureMaxEdge) / static_cast<float>(longest);
+        const float factor = static_cast<float>(maxEdge) / static_cast<float>(longest);
         const int width = std::max(1, static_cast<int>(std::lround(image.width * factor)));
         const int height = std::max(1, static_cast<int>(std::lround(image.height * factor)));
         Image scaled = DownscalePremultiplied(image, width, height);

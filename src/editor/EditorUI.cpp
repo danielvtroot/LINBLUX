@@ -1,4 +1,5 @@
 #include "editor/EditorUI.h"
+#include "ui/ExperienceUI.h"
 #include "editor/StudioTheme.h"
 #include "ui/StudioFrontend.h"
 #include "game/ImageAssets.h"
@@ -1124,12 +1125,15 @@ bool EditorUI::saveProjectAt(const std::string& path, std::string& error) {
         if (!animationDraft_.validate(error)) { error = "Animacao nao salva: " + error; return false; }
         *clip = animationDraft_;
     }
-    if (!projectio::save(scene_, path, error)) return false;
+    if(experienceUi_&&experienceUi_->handlesSave()) {
+        if(!experienceUi_->save(error))return false;
+    } else if (!projectio::save(scene_, path, error)) return false;
     animationDirty_ = false;
     for (auto& pair:scriptDrafts_) {
         pair.second.dirty=false;
         pair.second.baseline=pair.second.text;
     }
+    if(experienceUi_)experienceUi_->documentOpened();
     return true;
 }
 
@@ -1145,6 +1149,9 @@ bool EditorUI::saveCurrentProject() {
 }
 
 void EditorUI::draw() {
+    // Runtime preparation owns its fields on a worker until the future is
+    // joined. Home/loading has exclusive input and never reads that runtime.
+    if(frontend_&&experienceUi_&&experienceUi_->overlayActive()){frontend_->draw();return;}
     healthHud_={};
     diag::setFrame(++frame_);
     explorerFocused_=false;
@@ -1189,6 +1196,9 @@ void EditorUI::draw() {
     drawViewport(); // UI actions and popup requests are known before routing.
     drawPauseMenu(); // current-frame gameplay rect; Paused already owns input
 }
+
+bool EditorUI::playing() const {return (experienceUi_&&experienceUi_->loading())||runtime_.active();}
+bool EditorUI::experienceOverlay() const {return experienceUi_&&experienceUi_->overlayActive();}
 
 void EditorUI::drawMainMenuBar() {
     if (!ImGui::BeginMainMenuBar()) return;
@@ -1899,7 +1909,7 @@ void EditorUI::drawViewport() {
     BeginTextureMode(viewport_);
     RigRenderState rigState;
     if (auto* rig = scene_.gameAssets().findRig(selectedRig_)) {
-        rigState = {rig, previewPose_, rig->root, selectedRigBody_, showJointPivots_};
+        rigState = {rig, previewPose_, rig->root, selectedRigBody_<0?-2:selectedRigBody_, showJointPivots_&&selectedRigBody_>=0};
     }
     renderer_.drawScene(scene_, camera_, viewportWidth_, viewportHeight_,
                         selection != nullptr ? selection->id() : kInvalidInstanceId,
@@ -1908,7 +1918,7 @@ void EditorUI::drawViewport() {
         physics_.syncScene(scene_);
         renderer_.drawCollisionShapes(scene_,physics_,camera_,selection?selection->id():0);
     }
-    if (rigState.rig && showJointPivots_ && tool_!=ToolMode::Select &&
+    if (rigState.rig && (showJointPivots_||selectedRigBody_<0) && tool_!=ToolMode::Select &&
         (tool_!=ToolMode::Scale || rigContext_==RigContext::Edit))
         rigGizmo_.drawOverlay(jointProxy_, tool_, camera_, viewportRect);
     if (selectedPart != nullptr && tool_ != ToolMode::Select) {
@@ -2734,7 +2744,7 @@ void EditorUI::focusSelection() {
     // Enquadrar move a camera; nunca durante um arraste do gizmo.
     if (transform_.active() || rigGizmo_.dragging()) return;
     if (auto* rig = scene_.gameAssets().findRig(selectedRig_)) {
-        camera_.focusOn(rig->root.position, 5); return;
+        camera_.focusOn(rig->authoringPivot().position, 5); return;
     }
     Instance* selection = scene_.selection();
     if (selection == nullptr) {

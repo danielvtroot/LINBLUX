@@ -1,4 +1,5 @@
 #include "editor/EditorUI.h"
+#include "ui/ExperienceUI.h"
 #include "editor/StudioTheme.h"
 #include "ui/StudioFrontend.h"
 #include <filesystem>
@@ -86,7 +87,8 @@ void EditorUI::selectRig(const std::string& id, int body) {
     endGizmoSession(true, "rig_selection"); cancelRigGizmo(); scene_.select(nullptr);
     if (selectedRig_ != id) previewPose_ = {};
     selectedRig_ = id; selectedRigBody_ = body; showRigEditor_ = true;
-    if(tool_==ToolMode::Select)setTool(ToolMode::Rotate,"rig_selection");
+    if(body<0){rigContext_=RigContext::Edit;selectedJoint_=game::RootJoint;}
+    if(tool_==ToolMode::Select)setTool(body<0?ToolMode::Move:ToolMode::Rotate,"rig_selection");
     for (int j = 0; j < game::kJointCount; ++j) if (rig->joints[j].child == body) selectedJoint_ = j;
 }
 void EditorUI::openAnimation(const std::string& id) {
@@ -139,6 +141,7 @@ void EditorUI::drawGameToolbar() {
     }
 }
 void EditorUI::startPlay() {
+    if(experienceUi_){experienceUi_->requestPlay();return;}
     if (runtime_.active()) return;
     endGizmoSession(true, "play"); cancelRigGizmo(); camera_.releaseCapture();
     exitGameDisplayModes();
@@ -146,6 +149,9 @@ void EditorUI::startPlay() {
     std::string error;
     if (!commitScriptDrafts(error)) { setStatus(error,true); return; }
     if (!runtime_.start(scene_, error)) { setStatus(error, true); return; }
+    finishPlayStart();
+}
+void EditorUI::finishPlayStart() {
     for (const auto& message:runtime_.scripts().messages()) if (message.error) showOutput_=true;
     pausePage_ = 0; gameplaySkipDelta_ = true; gameMaximized_=false; gameFullscreen_=false;
     ImGui::SetWindowFocus("Viewport");
@@ -517,8 +523,13 @@ void EditorUI::drawRigEditor() {
     ImGui::InputText("Name", &rig->name);
     if (rig->name.empty()) rig->name = "R6Character";
     if (ImGui::Button("Use as Player")) scene_.gameAssets().defaultRig = rig->id;
+    if(selectedRigBody_<0) {
+        ImGui::TextUnformatted("Whole rig · torso pivot · uniform scale");
+        if(ImGui::Button("Center internal root")){cancelRigGizmo();std::string error;if(!rig->recenterAuthoringRoot(error))setStatus(error,true);}
+        if(ImGui::IsItemHovered())ImGui::SetTooltip("Bakes a stale root translation without moving any visible body or rewriting animation keys.");
+    }
     ImGui::SameLine();
-    if (ImGui::Button("Focus rig")) camera_.focusOn(rig->root.position, 5);
+    if (ImGui::Button("Focus rig")) camera_.focusOn(rig->authoringPivot().position, 5);
     int mode = rigContext_ == RigContext::Edit ? 0 : 1;
     if (ImGui::RadioButton("Edit Rig", mode == 0)) { cancelRigGizmo(); rigContext_ = RigContext::Edit; previewPlaying_ = false; previewPose_ = {}; }
     ImGui::SameLine();
@@ -662,6 +673,11 @@ void EditorUI::applyAuthoredArc(int joint, float time) {
 void EditorUI::cancelRigGizmo(bool restore) {
     if(rigDrag_) {
         if(restore) if(auto* rig=scene_.gameAssets().findRig(rigDrag_->id)) {
+            rig->root=rigDrag_->initial.root;
+            if(rigDrag_->body<0&&rigDrag_->context==RigContext::Edit&&rigDrag_->tool==ToolMode::Scale&&scene_.gameAssets().defaultRig==rigDrag_->id) {
+                scene_.gameAssets().player.collisionHeight=rigDrag_->player.collisionHeight;
+                scene_.gameAssets().player.collisionRadius=rigDrag_->player.collisionRadius;
+            }
             rig->bodies=rigDrag_->initial.bodies;
             rig->joints=rigDrag_->initial.joints;
             rig->restPose=rigDrag_->initial.restPose;
@@ -680,7 +696,8 @@ bool EditorUI::updateRigGizmo(const EditorInput& input,const InputRoute& route,R
     rigGizmo_.setSnap(snapEnabled_?moveSnap_:0,snapEnabled_?scaleSnap_:0,snapEnabled_?rotateSnapDegrees_:0);
     auto* rig=scene_.gameAssets().findRig(selectedRig_);
     const bool editing=rigContext_==RigContext::Edit;
-    const bool invalid=!rig || !showJointPivots_ || input.escape || tool_==ToolMode::Select ||
+    const bool whole=editing&&selectedRigBody_<0;
+    const bool invalid=!rig || (!showJointPivots_&&!whole) || input.escape || tool_==ToolMode::Select ||
         selectedJoint_<0 || selectedJoint_>=game::kJointCount ||
         (tool_==ToolMode::Scale && !editing);
     const bool changed=rigDrag_ && (rigDrag_->id!=selectedRig_ || rigDrag_->tool!=tool_ ||
@@ -694,11 +711,12 @@ bool EditorUI::updateRigGizmo(const EditorInput& input,const InputRoute& route,R
     if(!editing)base=game::Compose(base,rig->restPose[selectedJoint_]);
     auto& pose=editing?rig->restPose[selectedJoint_]:previewPose_[selectedJoint_];
     if(!rigGizmo_.dragging()) {
-        const auto proxy=tool_==ToolMode::Rotate?game::Compose(base,pose):world[body];
+        const auto proxy=whole?rig->authoringPivot():tool_==ToolMode::Rotate?game::Compose(base,pose):world[body];
         jointProxy_.setPosition(proxy.position);jointProxy_.setRotation(proxy.rotation);
-        jointProxy_.setSize(tool_==ToolMode::Rotate?Vector3{1,1,1}:rig->bodies[body].size);
+        jointProxy_.setSize(whole?rig->authoringSize():tool_==ToolMode::Rotate?Vector3{1,1,1}:rig->bodies[body].size);
     }
     GizmoInput gi{input.mouse,input.leftPressed,input.leftDown,IsWindowFocused(),input.shift};
+    gi.altDown=input.alt;
     // A panel/popup owning the pointer must block the rig gizmo's input, but it
     // must not freeze jointProxy_. The overlay is drawn from the proxy, so a
     // stale proxy makes the handles jump when the pointer returns to the
@@ -712,7 +730,7 @@ bool EditorUI::updateRigGizmo(const EditorInput& input,const InputRoute& route,R
     // consume jointProxy_; pose coordinates are solved through the same bind chain.
     RigDrag initial;
     if(!rigDrag_ && input.leftPressed) initial={selectedRig_,{},tool_,rigContext_,selectedJoint_,selectedRigBody_,
-                           *rig,previewPose_,base};
+                           *rig,previewPose_,whole?rig->authoringPivot():base,scene_.gameAssets().player};
     const auto result=rigGizmo_.update(tool_,&jointProxy_,camera_,viewport,hovered,
         route.owner==InputOwner::Viewport || route.owner==InputOwner::Transform,gi);
     if(result.started) {
@@ -721,12 +739,30 @@ bool EditorUI::updateRigGizmo(const EditorInput& input,const InputRoute& route,R
         previewPlaying_=false;camera_.releaseCapture();
         diag::Event event;event.subsystem="rig";event.name="drag_begin";event.result="ok";
         event.correlationId=rigDrag_->correlation;
-        event.context={{"rig",selectedRig_},{"tool",ToolModeName(tool_)},{"body",body}};
+        event.context={{"rig",selectedRig_},{"tool",ToolModeName(tool_)},{"body",body},{"scope",whole?"rig":"joint"}};
         diag::log(event);
     }
     if(result.cancelled) {cancelRigGizmo();return result.consumed;}
     if(rigDrag_ && (rigGizmo_.dragging() || result.ended)) {
         const auto& drag=*rigDrag_;
+        if(whole) {
+            *rig=drag.initial;
+            float factor=1;game::RigidTransform target{jointProxy_.position(),jointProxy_.rotation()};
+            if(tool_==ToolMode::Scale) {
+                const auto startSize=rigGizmo_.startTransform().size;const auto size=jointProxy_.size();const int axis=rigGizmo_.activeAxis();
+                const int component=std::clamp(axis,0,2);const float raw=(&size.x)[component]/(&startSize.x)[component];
+                float lower=0,upper=10000;
+                for(const auto& b:rig->bodies)for(const float dim:{b.size.x,b.size.y,b.size.z}){lower=std::max(lower,.2f/dim);upper=std::min(upper,10.f/dim);}
+                if(scene_.gameAssets().defaultRig==selectedRig_){lower=std::max(lower,.2f/drag.player.collisionRadius);upper=std::min({upper,3.f/drag.player.collisionRadius,15.f/drag.player.collisionHeight});}
+                factor=std::clamp(raw,lower,upper);
+                if(std::fabs(raw-1)>.00001f)target.position=Vector3Add(drag.base.position,Vector3Scale(Vector3Subtract(target.position,drag.base.position),(factor-1)/(raw-1)));
+                jointProxy_.setSize(Vector3Scale(startSize,factor));jointProxy_.setPosition(target.position);
+                if(scene_.gameAssets().defaultRig==selectedRig_){scene_.gameAssets().player.collisionHeight=drag.player.collisionHeight*factor;scene_.gameAssets().player.collisionRadius=drag.player.collisionRadius*factor;}
+            }
+            std::string error;if(!rig->transformAuthoring(target,factor,error)){setStatus(error,true);cancelRigGizmo();return true;}
+            if(result.ended)cancelRigGizmo(false);
+            return result.consumed;
+        }
         // Scale from the transaction snapshot, never from last frame's anchors.
         if(tool_==ToolMode::Scale) {
             rig->bodies=drag.initial.bodies;rig->joints=drag.initial.joints;

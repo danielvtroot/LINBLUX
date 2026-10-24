@@ -1,6 +1,8 @@
 #include "app/Application.h"
 #include "editor/StudioTheme.h"
 #include "game/ImageAssets.h"
+#include "experiences/ExperienceManager.h"
+#include "ui/StudioFrontend.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -77,13 +79,18 @@ bool Application::initialize() {
     studio::Apply();
 
     scene_.buildDefaultScene();
+    const bool home=config_.modernUI&&config_.startupProjectPath.empty();
+    if(config_.modernUI) {
+        try{experiences_=std::make_unique<experiences::ExperienceManager>();}
+        catch(const std::exception& error){std::fprintf(stderr,"Experience library unavailable: %s\n",error.what());}
+    }
 
     // Politica de inicializacao:
     //   1. `--project PATH` e sempre tentado e nunca e sobrescrito;
-    //   2. sem flag, o caminho padrao (ultimo projeto salvo por Ctrl+S) e
-    //      carregado somente se existir;
+    //   2. sem flag, RmlUi abre Home; o modo de diagnostico legado ainda
+    //      pode carregar o caminho padrao se existir;
     //   3. qualquer falha mantem a cena padrao intacta e aparece na UI/stderr.
-    const std::string startupPath = config_.startupProjectPath.empty()
+    std::string startupPath = config_.startupProjectPath.empty()
                                         ? config_.defaultProjectPath
                                         : config_.startupProjectPath;
     std::error_code startupPathError;
@@ -91,11 +98,17 @@ bool Application::initialize() {
     const bool inaccessible = startupPathError &&
         startupPathError != std::errc::no_such_file_or_directory &&
         startupPathError != std::errc::not_a_directory;
-    const bool shouldLoad = !config_.startupProjectPath.empty() || defaultExists || inaccessible;
+    const bool shouldLoad = !home&&(!config_.startupProjectPath.empty() || defaultExists || inaccessible);
     bool projectLoaded = false;
     std::string projectLoadError;
     if (shouldLoad) {
-        projectLoaded = projectio::load(scene_, startupPath, projectLoadError);
+        try {
+            const std::filesystem::path path(startupPath);
+            if(experiences_&&(path.extension()==".lo"||path.filename()=="experience.json"||std::filesystem::is_directory(path))) {
+                const auto experience=path.extension()==".lo"?experiences_->importPackage(path):experiences_->inspect(path.filename()=="experience.json"?path.parent_path():path);
+                experiences_->open(experience,scene_);startupPath=experiences_->activePlace().string();projectLoaded=true;
+            } else projectLoaded = projectio::load(scene_, startupPath, projectLoadError);
+        }catch(const std::exception& error){projectLoaded=false;projectLoadError=error.what();}
         diag::Event event;
         event.level = projectLoaded ? diag::Level::Info : diag::Level::Error;
         event.subsystem = "app";
@@ -110,7 +123,8 @@ bool Application::initialize() {
         }
     }
 
-    if (!projectLoaded) scene_.installDefaultScripts();
+    if(home&&experiences_)scene_.clearObjects();
+    else if (!projectLoaded) scene_.installDefaultScripts();
     physics_.attach(scene_);
     physics_.setGravity(Vector3{0.0f, config_.gravity, 0.0f});
     physics_.setFixedStep(config_.physicsFixedStep, config_.physicsMaxSubSteps);
@@ -125,6 +139,7 @@ bool Application::initialize() {
             std::fprintf(stderr,"RmlUi unavailable; using diagnostic legacy UI: %s\n",error.c_str());
             ui_->setStatus("RmlUi initialization failed: "+error,true);
         }
+        if(ui_->frontend()&&experiences_)ui_->frontend()->enableExperiences(*experiences_,home);
     }
     if (projectLoaded) {
         std::error_code pathError;
@@ -154,6 +169,7 @@ void Application::shutdown() {
     // Recursos graficos precisam ser liberados antes de fechar a janela.
     ui_.reset();
     renderer_.reset();
+    if(experiences_)experiences_->close();
     if (imguiReady_) {
         rlImGuiShutdown();
         imguiReady_ = false;
@@ -176,7 +192,7 @@ int Application::run() {
         const float deltaSeconds = GetFrameTime();
 
         // Play owns a different Scene and Bullet world. Authoring freezes exactly.
-        if (!ui_ || !ui_->playing()) physics_.simulate(scene_, deltaSeconds);
+        if (!ui_ || (!ui_->playing()&&!ui_->experienceOverlay())) physics_.simulate(scene_, deltaSeconds);
 
         BeginDrawing();
         ClearBackground(Color{18, 18, 20, 255});

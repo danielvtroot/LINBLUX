@@ -77,17 +77,14 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="move-snap"||c.action=="scale-snap"||c.action=="rotate-snap") {float v=Number(c.value);if(v<=0||v>180)throw std::runtime_error("Snap increment must be 0..180");e.endGizmoSession(true,"snap");e.cancelRigGizmo();(c.action=="move-snap"?e.moveSnap_:c.action=="scale-snap"?e.scaleSnap_:e.rotateSnapDegrees_)=v;}
         else if(c.action=="anchor") {if(auto* node=e.scene_.selection();node&&node->isPart())static_cast<Part*>(node)->setAnchored(!static_cast<Part*>(node)->anchored());}
         else if(c.action=="import-image") {
-            if(!ui::SafeImageFile(c.value))throw std::runtime_error("Use a PNG/JPEG up to 4096 × 4096 pixels and 32 MiB");
-            Image image=LoadImage(c.value.c_str());
-            const bool valid=image.data&&image.width<=4096&&image.height<=4096;UnloadImage(image);
-            if(!valid)throw std::runtime_error("Use a valid PNG/JPEG up to 4096 × 4096 pixels");
+            if(!ui::SafeImageFile(c.value))throw std::runtime_error("Use a PNG/JPEG within the 32 MiB file / 64 MiB decoded budget");
             std::string asset,error;if(!game::ImportImageTo(game::AssetsDir(),c.value,asset,error))throw std::runtime_error(error);
             e.setStatus("Image imported: "+asset);
         }
         else if(c.action=="apply-image"||c.action=="apply-texture") {
             auto* part=e.scene_.selection();if(!part||!part->isPart())throw std::runtime_error("Select a Part before applying an image");
             const auto path=game::ResolveImagePath(game::AssetsDir(),c.value);if(path.empty())throw std::runtime_error("Image asset missing");
-            part->setAttribute(c.action=="apply-image"?"decal_image":"texture_image",path);
+            part->setAttribute(c.action=="apply-image"?"decal_image":"texture_image",game::ImageReference(path));
             e.setStatus("Image applied to "+part->name());
         }
         else if(c.action.rfind("game:",0)==0) {

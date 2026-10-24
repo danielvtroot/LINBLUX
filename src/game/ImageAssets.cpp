@@ -1,4 +1,6 @@
 #include "game/ImageAssets.h"
+#include "core/ImageInfo.h"
+#include "serialization/ProjectIO.h"
 
 #include <algorithm>
 #include <cctype>
@@ -22,6 +24,8 @@
 namespace loblox::game {
 namespace {
 std::unordered_map<std::string, Texture2D> textureCache;
+std::filesystem::path projectRoot;
+std::string projectFace;
 std::string Fnv1aHex(const std::string& data) {
     std::uint64_t hash = 1469598103934665603ULL;
     for (unsigned char byte : data) {
@@ -56,12 +60,33 @@ bool AnisotropicFilteringSupported() {
 }
 }  // namespace
 
-std::string AssetsDir() { return "assets"; }
+std::string AssetsDir() { return projectRoot.empty()?"assets":(projectRoot/"assets").string(); }
+void SetProjectAssetRoot(const std::string& root) {
+    const auto next=root.empty()?std::filesystem::path{}:std::filesystem::absolute(root).lexically_normal();
+    if(next==projectRoot)return;
+    ClearImageTextures();projectRoot=next;projectFace.clear();
+}
+std::string ProjectAssetRoot(){return projectRoot.string();}
+void SetProjectFaceImage(const std::string& ref){projectFace=ref;}
+std::string ProjectFaceImage(){return projectFace;}
+std::string ImageReference(const std::string& path) {
+    if(projectRoot.empty())return path;
+    const auto relative=std::filesystem::path(path).lexically_relative(projectRoot);
+    if(relative.empty()||relative.is_absolute())return path;
+    for(const auto& piece:relative)if(piece=="..")return path;
+    return relative.generic_string();
+}
 
 std::string BuiltinAssetPath(const std::string& relativePath) {
     std::vector<std::filesystem::path> roots{std::filesystem::current_path()};
     char buffer[4096]{};const auto count=readlink("/proc/self/exe",buffer,sizeof(buffer)-1);
-    if(count>0) { buffer[count]=0;roots.push_back(std::filesystem::path(buffer).parent_path()); }
+    if(count>0) { buffer[count]=0;const auto executable=std::filesystem::path(buffer).parent_path();
+        for(const auto& base:{executable/"share/loblox/builtin",executable.parent_path()/"share/loblox/builtin",executable/"share/loblox",executable.parent_path()/"share/loblox"}) {
+            const auto installed=base/relativePath;
+            if(std::filesystem::is_regular_file(installed))return installed.string();
+        }
+        roots.push_back(executable);
+    }
     for(auto root:roots) for(int i=0;i<4 && !root.empty();++i,root=root.parent_path()) {
         std::error_code ec;const auto candidate=root/relativePath;
         if(std::filesystem::is_regular_file(candidate,ec)) return candidate.string();
@@ -78,6 +103,12 @@ bool ImportImageTo(const std::string& assetsDir, const std::string& sourcePath,
                    std::string& outAssetPath, std::string& error) {
     std::error_code fsError;
     const std::filesystem::path source(sourcePath);
+    ImageInfo info;
+    if(!ReadSafeImageInfo(sourcePath,info)){error="Invalid PNG/JPEG or image exceeds the 32 MiB file / 64 MiB decoded budget";return false;}
+    Image decoded=LoadProjectImage(sourcePath);
+    const bool valid=decoded.data&&decoded.width==int(info.width)&&decoded.height==int(info.height);
+    if(decoded.data)UnloadImage(decoded);
+    if(!valid){error="Image decoding failed: "+sourcePath;return false;}
     if (!std::filesystem::exists(source, fsError) || !std::filesystem::is_regular_file(source, fsError)) {
         error = "arquivo de imagem não encontrado: " + sourcePath;
         return false;
@@ -109,15 +140,14 @@ bool ImportImageTo(const std::string& assetsDir, const std::string& sourcePath,
         std::filesystem::path(assetsDir) / (id + ext);
     // Mesmo arquivo => mesmo destino; reuso sem reescrever.
     if (std::filesystem::exists(target, fsError)) {
+        if(std::filesystem::is_symlink(std::filesystem::symlink_status(target))){error="Asset destination is a symlink";return false;}
+        std::ifstream existing(target,std::ios::binary);
+        const std::string saved((std::istreambuf_iterator<char>(existing)),{});
+        if(saved!=content){error="Image asset ID collision; existing image was preserved";return false;}
         outAssetPath = target.string();
         return true;
     }
-    std::ofstream out(target, std::ios::binary);
-    if (out) out.write(content.data(), (std::streamsize)content.size());
-    if (!out || fsError) {
-        error = "não foi possível gravar: " + target.string();
-        return false;
-    }
+    if(!projectio::writeFileAtomically(target.string(),content,error))return false;
     outAssetPath = target.string();
     return true;
 }
@@ -139,6 +169,19 @@ std::vector<ImageAsset> ListImages(const std::string& assetsDir) {
 std::string ResolveImagePath(const std::string& assetsDir, const std::string& assetPath) {
     if (assetPath.empty()) return {};
     const std::filesystem::path direct(assetPath);
+    if(!projectRoot.empty()) {
+        const auto relative=direct.is_absolute()?direct.lexically_relative(projectRoot):direct;
+        for(const auto& part:relative)if(part=="..") {
+            return direct.string()==BuiltinAssetPath("rosto1.png")?direct.string():std::string{};
+        }
+        if(relative.empty()||relative.is_absolute())return {};
+        auto component=projectRoot;
+        for(const auto& part:relative){component/=part;if(std::filesystem::is_symlink(std::filesystem::symlink_status(component)))return {};}
+        const auto candidate=projectRoot/relative;
+        if(std::filesystem::is_regular_file(candidate))return candidate.string();
+        const auto bare=projectRoot/"assets"/relative;
+        return std::filesystem::is_regular_file(bare)?bare.string():std::string{};
+    }
     if (std::filesystem::exists(direct)) return direct.string();
     const std::filesystem::path inside =
         std::filesystem::path(assetsDir) / assetPath;
@@ -153,11 +196,17 @@ std::string ResolveImagePath(const std::string& assetsDir, const std::string& as
 
 Texture2D AssetTexture(const std::string& relativePath) {
     if(relativePath.empty())return {};
-    const auto it = textureCache.find(relativePath);
+    const std::filesystem::path input(relativePath);
+    const auto key=(input.is_absolute()?input:projectRoot.empty()?std::filesystem::absolute(input):projectRoot/input).lexically_normal().string();
+    if(const auto cached=textureCache.find(key);cached!=textureCache.end())return cached->second;
+    const auto resolved=ResolveImagePath(AssetsDir(),relativePath);
+    if(resolved.empty())return {};
+    const auto it = textureCache.find(resolved);
     if (it != textureCache.end()) return it->second;
     Texture2D tex{};
-    if (std::filesystem::exists(relativePath)) {
-        Image image=LoadImage(relativePath.c_str());
+    ImageInfo safe;
+    if (ReadSafeImageInfo(resolved,safe)) {
+        Image image=LoadProjectImage(resolved);
         if(image.data) {
             ImageFormat(&image,PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
             if(image.format==PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) {
@@ -181,7 +230,7 @@ Texture2D AssetTexture(const std::string& relativePath) {
             } else UnloadImage(image);
         }
     }
-    textureCache.emplace(relativePath, tex);
+    textureCache.emplace(key, tex);
     return tex;
 }
 

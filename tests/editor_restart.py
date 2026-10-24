@@ -142,9 +142,19 @@ def main():
     # the failed startup file when saving normally.
     missing = root / "missing.json"
     default = root / "data/loblox/projects/default.loblox.json"
-    document = run(None, default)
+    # Normal startup is now Home; it must not silently open/rewrite an old
+    # default project. Explicit legacy projects retain their original contract.
+    with (root / "home.log").open("w") as output:
+        process = subprocess.Popen([binary], cwd=root, env=environment, stdout=output, stderr=output)
+        try:
+            window = wait_for(lambda: subprocess.run(["xdotool", "search", "--pid", str(process.pid), "--name", "^Loblox Studio$"], capture_output=True,text=True).stdout.strip(), process)
+            wait_for(lambda: any(e["event"] == "startup_ready" for e in events()), process)
+            assert not default.exists(), "Home must not create a legacy default file"
+            close_window(window.splitlines()[-1]);assert process.wait(timeout=10) == 0
+        finally:
+            if process.poll() is None: process.terminate();process.wait(timeout=5)
     assert not any(e["event"] == "startup_project_failed" for e in events()), "fresh startup must not report a missing default as an error"
-    document = run(missing, default, document, benchmark=True)
+    document = run(missing, default, benchmark=True)
     assert not missing.exists()
     assert {o["class"] for o in document["objects"]} >= {"Baseplate", "SpawnLocation"}
     # Keep the fixture in the writer's preorder: Workspace descendants before
@@ -167,8 +177,8 @@ def main():
     run(project, project, document)
     assert any(e["event"] == "startup_project_failed" for e in events())
     assert sum(e["event"] == "startup_project_loaded" for e in events()) == 2
-    assert sum(e["event"] == "save_end" and e.get("result") == "ok" for e in events()) == 4
-    print(f"Actual app: 4 launches, fresh startup/save/exit/restart, IDs/transforms/properties/deletion OK; artifacts: {root}")
+    assert sum(e["event"] == "save_end" and e.get("result") == "ok" for e in events()) == 3
+    print(f"Actual app: Home plus 3 editor launches, save/exit/restart, IDs/transforms/properties/deletion OK; artifacts: {root}")
     if len(sys.argv) > 2:
         game_project = root / "animated-r6.json"
         subprocess.run([str(Path(sys.argv[2]).resolve()), "--write-fixture", str(game_project)],

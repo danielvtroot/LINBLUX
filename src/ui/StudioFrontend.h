@@ -5,6 +5,7 @@
 #include "editor/InputRouting.h"
 namespace loblox {
 class EditorUI;
+namespace experiences {class ExperienceManager;}
 class StudioFrontend {
 public:
     explicit StudioFrontend(EditorUI& editor);
@@ -19,6 +20,9 @@ public:
     Rectangle elementBounds(const std::string& id) const;
     std::string elementText(const std::string& id) const;
     bool textFocused() const;
+    void enableExperiences(experiences::ExperienceManager& manager,bool home);
+    void resetDocumentView();
+    void invalidateImageLibrary();
 private:
     struct Impl;std::unique_ptr<Impl> impl_;
 };

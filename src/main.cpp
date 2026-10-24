@@ -24,7 +24,8 @@ int main(int argc, char** argv) {
         }
         if (std::strcmp(argument, "-h") == 0 || std::strcmp(argument, "--help") == 0) {
             std::printf("Uso: loblox [--project CAMINHO] [--ui rml|legacy]\n"
-                        "  --project CAMINHO  abre o projeto JSON indicado;\n"
+                        "  sem argumentos    abre Home e a biblioteca local.\n"
+                        "  --project CAMINHO  abre JSON legado, pasta de experiencia ou .lo;\n"
                         "                     se invalido, mantem a cena padrao.\n");
             return 0;
         }

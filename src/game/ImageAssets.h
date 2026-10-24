@@ -15,6 +15,12 @@ struct ImageAsset {
 
 // assets/ padrão na raiz do executável (caminho relativo, portátil).
 std::string AssetsDir();
+void SetProjectAssetRoot(const std::string& root);
+std::string ProjectAssetRoot();
+std::string ImageReference(const std::string& path);
+Image LoadProjectImage(const std::string& path);
+void SetProjectFaceImage(const std::string& reference);
+std::string ProjectFaceImage();
 // Bundled user assets can be found when launching from a different CWD.
 std::string BuiltinAssetPath(const std::string& relativePath);
 void ClearImageTextures(); // call before closing the graphics context

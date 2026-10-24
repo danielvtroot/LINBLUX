@@ -62,6 +62,10 @@ struct Rig {
     std::array<RigidTransform, kBodyCount> evaluate(const Pose& pose,
                                                    const RigidTransform& rootWorld) const;
     RigidTransform pivot(int joint, const Pose& pose) const;
+    RigidTransform authoringPivot() const; // visible torso centre, root orientation
+    Vector3 authoringSize() const;
+    bool transformAuthoring(RigidTransform targetPivot,float uniformScale,std::string& error);
+    bool recenterAuthoringRoot(std::string& error); // equivalent bind translation; world/keys unchanged
     void resizeBody(int body, Vector3 size); // preserves connections at face anchors
 };
 Rig MakeR6();

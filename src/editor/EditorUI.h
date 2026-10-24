@@ -28,6 +28,7 @@ class Instance;
 class Part;
 class StudioFrontend;
 class EditorActions;
+class ExperienceUI;
 
 // Marca Loblox: textura carregada lazy na raiz do projeto (nunca caminho
 // absoluto da máquina). ok=false = usar o fallback vetorial da toolbar.
@@ -64,13 +65,17 @@ public:
     void setProjectPath(std::string path);
 
     ToolMode tool() const { return tool_; }
-    bool playing() const { return runtime_.active(); }
+    bool playing() const;
+    bool experienceOverlay() const;
     GameplayCursorState gameplayCursor() const;
 
 private:
     friend struct EditorUITestAccess;
     friend class StudioFrontend;
     friend class EditorActions;
+    friend class ExperienceUI;
+    ExperienceUI* experienceUi_ = nullptr; // owned by StudioFrontend
+    void finishPlayStart();
     struct ScriptDraft;
     void buildDockLayout();
     void handleShortcuts(const EditorInput& input, const InputRoute& route);
@@ -234,6 +239,7 @@ private:
         game::Rig initial;
         game::Pose preview;
         game::RigidTransform base;
+        game::PlayerSettings player;
     };
     std::optional<RigDrag> rigDrag_;
     Rectangle rigBodyRows_[game::kBodyCount]{},rigColorControl_{},rigToolControl_{},

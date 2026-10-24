@@ -15,6 +15,7 @@ pkg_check_modules(RAYLIB REQUIRED raylib)
 pkg_check_modules(LUA REQUIRED IMPORTED_TARGET lua5.4)
 find_package(OpenGL REQUIRED)
 find_package(Threads REQUIRED)
+find_package(ZLIB REQUIRED)
 
 # RmlUi 6.3, immutable source + digest; no samples, browser, GLFW backend or Lua VM.
 include(FetchContent)
@@ -80,10 +81,12 @@ target_link_libraries(loblox_imgui PUBLIC ${RAYLIB_LIBRARIES} OpenGL::GL)
 
 # Camada sem interface: modelo de objetos, cena, fisica e persistencia.
 add_library(loblox_core STATIC
+  src/experiences/ExperienceManager.cpp
   src/scripting/LuaRuntime.cpp
   src/game/Rig.cpp
   src/game/GameAssetsIO.cpp
   src/game/ImageAssets.cpp
+  src/game/JpegImage.cpp
   src/game/Runtime.cpp
   src/game/Spawn.cpp
   src/core/Diagnostics.cpp
@@ -111,12 +114,17 @@ target_include_directories(loblox_core PUBLIC
   ${BULLET_INCLUDE_DIR}
   ${RAYLIB_INCLUDE_DIRS}
 )
+target_include_directories(loblox_core SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
 target_link_libraries(loblox_core PUBLIC ${BULLET_LIBRARIES} ${RAYLIB_LIBRARIES} OpenGL::GL Threads::Threads PkgConfig::LUA)
+target_link_libraries(loblox_core PUBLIC ZLIB::ZLIB)
+target_compile_definitions(loblox_core PRIVATE LOBLOX_FACTORY_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/templates")
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(loblox_core PRIVATE -Wall -Wextra)
 endif()
 
 add_library(loblox_editor STATIC
+  src/ui/ExperienceUI.cpp
+  src/ui/NativeFileDialog.cpp
   src/ui/StudioFrontend.cpp
   src/ui/EditorActions.cpp
   src/ui/RmlFrontendSupport.cpp
@@ -135,11 +143,26 @@ target_link_libraries(loblox PRIVATE loblox_editor)
 add_custom_target(loblox_ui_assets ALL COMMAND ${CMAKE_COMMAND} -E copy_directory
   ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui ${CMAKE_CURRENT_BINARY_DIR}/share/loblox/ui)
 add_dependencies(loblox loblox_ui_assets)
+add_custom_target(loblox_template_assets ALL COMMAND ${CMAKE_COMMAND} -E copy_directory
+  ${CMAKE_CURRENT_SOURCE_DIR}/assets/templates ${CMAKE_CURRENT_BINARY_DIR}/share/loblox/templates)
+add_dependencies(loblox loblox_template_assets)
+add_custom_target(loblox_builtin_assets ALL
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/loblox/builtin
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/loblox.png ${CMAKE_CURRENT_SOURCE_DIR}/rosto1.png ${CMAKE_CURRENT_SOURCE_DIR}/lock.png ${CMAKE_CURRENT_BINARY_DIR}/share/loblox/builtin)
+add_dependencies(loblox loblox_builtin_assets)
+install(TARGETS loblox RUNTIME DESTINATION bin COMPONENT Loblox)
+install(DIRECTORY assets/ui/ DESTINATION share/loblox/ui COMPONENT Loblox)
+install(DIRECTORY assets/templates/ DESTINATION share/loblox/templates COMPONENT Loblox)
+install(FILES loblox.png rosto1.png lock.png DESTINATION share/loblox/builtin COMPONENT Loblox)
+install(DIRECTORY docs/ DESTINATION share/loblox/docs COMPONENT Loblox FILES_MATCHING PATTERN "*.md")
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(loblox PRIVATE -Wall -Wextra)
 endif()
 
 enable_testing()
+add_executable(loblox_experience_tests tests/experiences_main.cpp)
+target_link_libraries(loblox_experience_tests PRIVATE loblox_core)
+add_test(NAME loblox_experiences COMMAND loblox_experience_tests)
 add_executable(loblox_studio_tests tests/studio_main.cpp)
 target_link_libraries(loblox_studio_tests PRIVATE loblox_core)
 add_test(NAME loblox_studio COMMAND loblox_studio_tests)
@@ -184,6 +207,11 @@ if(XVFB_RUN_EXECUTABLE)
   find_program(XDOTOOL_EXECUTABLE xdotool)
   find_package(X11 QUIET)
   if(XDOTOOL_EXECUTABLE AND X11_FOUND)
+    add_executable(loblox_experience_ui_tests tests/experience_ui_main.cpp)
+    target_link_libraries(loblox_experience_ui_tests PRIVATE loblox_editor)
+    add_dependencies(loblox_experience_ui_tests loblox_ui_assets loblox_template_assets)
+    add_test(NAME loblox_experience_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:loblox_experience_ui_tests>)
+    set_tests_properties(loblox_experience_ui PROPERTIES TIMEOUT 300 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
     add_executable(loblox_rml_ui_tests tests/rml_ui_main.cpp tests/x11_focus.cpp)
     target_link_libraries(loblox_rml_ui_tests PRIVATE loblox_editor X11::X11)
     add_dependencies(loblox_rml_ui_tests loblox_ui_assets)

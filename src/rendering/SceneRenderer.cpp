@@ -826,7 +826,7 @@ void DrawPartSkins(const Part& part, const std::string& assetsDir,
 Texture2D& FaceTexture() {
     static Texture2D tex{};
     static const auto path=game::BuiltinAssetPath("rosto1.png");
-    tex=game::AssetTexture(path);
+    tex=game::AssetTexture(game::ProjectFaceImage().empty()?path:game::ProjectFaceImage());
     return tex;
 }
 
@@ -987,8 +987,8 @@ void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float in
     }
     rlDrawRenderBatchActive();rlEnableDepthMask();
     for (int i = 0; i < game::kBodyCount; ++i) {
-        if (i == state.selectedBody) DrawRotatedBoxWires(world[i].position,
-            Vector3Scale(rig.bodies[i].size, 1.02f), world[i].rotation, GOLD);
+        if (i == state.selectedBody||state.selectedBody==-2) DrawRotatedBoxWires(world[i].position,
+            rig.bodies[i].size, world[i].rotation, GOLD);
     }
     // Rosto do usuário quando existir; sem arquivo, mantém os olhos mínimos.
     // The face and fallback eyes sit farther out than the body image decal so
@@ -1004,7 +1004,7 @@ void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float in
     }
     if (state.pivots) {
         for (const auto& joint : rig.joints) {
-            const auto pivot = game::Compose(joint.parent < 0 ? state.root : world[joint.parent], joint.parentAnchor);
+            const auto pivot = game::Compose(world[joint.child],joint.childAnchor);
             DrawSphere(pivot.position, .10f, ORANGE);
             DrawLine3D(pivot.position, world[joint.child].position, YELLOW);
         }
