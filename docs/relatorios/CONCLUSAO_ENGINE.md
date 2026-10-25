@@ -15,7 +15,7 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 
 | Fase | Estado | Implementação/evidência atual | Próximo requisito obrigatório |
 | --- | --- | --- | --- |
-| 0 AutoBackup | EM DESENVOLVIMENTO | Código local ainda não publicado. Sem systemctl; SysV/cron disponível. Estado do usuário labubu possui checkpoint remoto 2a1fd99 de execução anterior, mas monitor parado. O estado root vazio não representa o usuário labubu. | Corrigir inicialização, segurança de snapshots, concorrência; testar envio automático e recuperação real. |
+| 0 AutoBackup | TESTADO | Monitor de labubu ativo via cron, @reboot/watchdog, checkpoints e push automático em branch isolada. Clone remoto recuperou 315 arquivos; índice/main intactos; watchdog reiniciou em 20,005 s. Testes offline 20/20 e IMPACT 17/17 com cobertura global parcial. Relatório 13. | Registrar commit publicado; destino externo privado não informado (cópia externa não configurada). Backend systemd não executável neste host. |
 | 1 Lua/scripting | EM DESENVOLVIMENTO | Commits 5139c20, 5380967, cf53b09; guia SCRIPTING_LUA e testes studio/script_input_ui existentes. | Componentes/transformações/câmera/tempo/persistência restantes; áudio e UI integrados nas fases dependentes; novos testes. |
 | 2 NPCs/navegação | PENDENTE | Não se declara sistema implementado. | Entidades, rig/animações, vida/movimento, navegação física, oito demonstrações reais. |
 | 3 Áudio | PENDENTE | Nenhuma API de áudio anunciada como pronta. | Importação MP3/WAV/OGG, streaming, Editor/Player/Lua, referências, persistência/exportação. |
@@ -28,8 +28,22 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 
 ## Regras de continuidade
 
-1. Continuar a Fase 0 antes de grandes alterações de engine.
+1. Proteção de código da Fase 0 testada; manter o monitor ativo e completar
+   separadamente o destino privado externo quando informado.
 2. Usar ATLAS para localizar e TURBO para build/testes; guardar logs em .turbo.
 3. Publicar somente arquivos revisados da unidade funcional; preservar diffs alheios.
 4. Registrar testes com execução, tempo, resultado, limitações e hashes remotos.
 5. Dados privados/ignorados não se tornam protegidos por haver push de código.
+
+## Evidências da Fase 0
+
+- [Relatório 13](13-autobackup-fase0.md): arquivos, tempos, testes e limitações.
+- Checkpoint recuperado: 36917d6c4474fb1358924785ff2b23b21881b27f (auto-backup).
+- Marcador público: docs/backup/recovery-canary.txt; SHA-256 registrado no relatório.
+- Estado operacional: usuário labubu, ~/.local/state/linblux-backup; backend cron.
+- Logs: .turbo/logs/phase0-remote-recovery.log, phase0-backup-final.log e rodadas
+  FAST 20261025T151827Z-14019 / IMPACT 20261025T152516Z-20625.
+- Cobertura global parcial: testes gráficos omitidos nesta alteração de ferramenta.
+- PENDENTE: cópia privada externa e prova de recuperação nesse destino; solicitado
+  ao proprietário, sem resposta até este checkpoint. Não há proteção física dos
+  dados privados pelo simples fato de o monitor de código estar ativo.
