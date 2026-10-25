@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include <vector>
 #include "raylib.h"
@@ -23,7 +24,7 @@ struct ImageAsset {
 struct ImageUsage {
     std::string where;   // descrição legível (Peça/Personagem/Adesivo)
     std::string kind;    // decal, texture, body, face, sky
-    InstanceId object = 0;
+    std::uint64_t object = 0;  // InstanceId da Part, quando aplicável
 };
 
 // assets/ padrão na raiz do executável (caminho relativo, portátil).
