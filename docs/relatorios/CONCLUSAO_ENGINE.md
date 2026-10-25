@@ -105,8 +105,8 @@ publicado antes desta entrega: 431efefd30b1cb03d0d288da75a62608e9fe35dd.
 Câmera a4398ee, transformações/componentes 2f9632a, persistência privada e44b4e8
 e consultas/movimento 431efef estão publicados e confirmados no remoto.
 
-Propriedades físicas persistentes IMPLEMENTADAS, TESTADAS e VALIDADAS NO PLAYER,
-com publicação deste checkpoint em andamento. Relatório 19 descreve arquivos,
+Propriedades físicas persistentes PUBLICADAS: 4ce62e2b980bbb92ee7d9174ff56ec57a7bcf5f5;
+push normal e hash remoto confirmados. IMPLEMENTADAS, TESTADAS e VALIDADAS NO PLAYER. Relatório 19 descreve arquivos,
 FAST 13/13, IMPACT 18/18 e integração final gráfica/pacote 2/2. Nenhum FULL.
 O erro inicial do teste gráfico foi corrigido; resultado final aprovado.
 
@@ -124,3 +124,8 @@ vermelha; menu lateral animado preservando controles; integração abrangente,
 projetos antigos, Mundo Padrão, exportação/reabertura e documentação final.
 Backup externo de dados privados ainda sem destino. Preservar todos os diffs
 preexistentes, especialmente tools/turbo/turbo_lib/runner.py e selection.py.
+
+Checkpoint final de código: 4ce62e2b980bbb92ee7d9174ff56ec57a7bcf5f5. AutoBackup ativo,
+push/checkpoint de backup 7d6d02774dd9 confirmado, sem alterações cobertas
+pendentes. Nenhuma compilação ou bateria de testes ativa ao encerrar.
+Parada por solicitação explícita do usuário, para economizar créditos.
