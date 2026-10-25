@@ -1,4 +1,5 @@
 #include "game/GameAssetsIO.h"
+#include "game/ImageAssets.h"
 
 #include <cmath>
 #include <filesystem>
@@ -45,11 +46,14 @@ nlohmann::json EncodeAssets(const GameAssets& a) {
             json body{{"name", b.name}, {"size", Vec(b.size)},
                       {"color", {b.color.r, b.color.g, b.color.b, b.color.a}},
                       {"material", PartMaterialName(b.material)}};
-            if (!b.image.empty()) body["image"] = b.image;
+            // Normalização única na persistência: qualquer referência solta
+            // vira assets/<arquivo>, então a UI não consegue gravar caminho
+            // quebrado nem depender do diretório de trabalho.
+            if (!b.image.empty()) body["image"] = game::NormalizeImageReference(b.image);
             if(!b.decals.empty()) {
                 body["decals"]=json::array();
                 for(const auto& d:b.decals)body["decals"].push_back({{"id",d.id},{"name",d.name},
-                    {"image",d.surface.image},{"face",d.surface.face},{"transparency",d.surface.transparency}});
+                    {"image",game::NormalizeImageReference(d.surface.image)},{"face",d.surface.face},{"transparency",d.surface.transparency}});
             }
             rig["bodies"].push_back(std::move(body));
         }
@@ -120,12 +124,12 @@ bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& erro
                 for (int ch = 0; ch < 4; ++ch) rgba[ch] = static_cast<unsigned char>(ReadInt(c.at(ch), 0, 255));
                 body.color = {rgba[0], rgba[1], rgba[2], rgba[3]};
                 Require(PartMaterialFromName(b.at("material").get<std::string>(), body.material), "unknown body material");
-                body.image = b.value("image", std::string());
+                body.image = game::NormalizeImageReference(b.value("image", std::string()));
                 if(b.contains("decals")) {
                     Require(b["decals"].is_array()&&b["decals"].size()<=64,"invalid rig decals array");
                     for(const auto& d:b["decals"]) {
                         RigDecal decal;decal.id=d.at("id").get<std::string>();decal.name=d.at("name").get<std::string>();
-                        decal.surface.image=d.at("image").get<std::string>();decal.surface.face=ReadInt(d.at("face"),0,5);
+                        decal.surface.image=game::NormalizeImageReference(d.at("image").get<std::string>());decal.surface.face=ReadInt(d.at("face"),0,5);
                         decal.surface.transparency=d.value("transparency",0.f);body.decals.push_back(std::move(decal));
                     }
                 }
