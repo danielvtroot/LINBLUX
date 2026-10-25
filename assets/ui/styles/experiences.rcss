@@ -37,9 +37,6 @@
 .experience-card { width: 216px; margin: 0 16px 16px 0; border: 1px #424750; border-radius: 7px; background: #292c32; overflow: hidden; }
 .experience-card:hover { border-color: #7b9cc6; }
 .experience-card { position: relative; }
-.experience-card-menu { position: absolute; right: 5px; bottom: 40px; width: 194px; padding: 4px; background: #333b48; border: 1px #70839d; border-radius: 5px; z-index: 4; }
-.experience-card-menu button { display: block; text-align: left; width: 100%; height: 28px; padding: 5px 8px; font-size: 10px; border: 0px; background: transparent; }
-.experience-card-menu button:hover { background: #45648b; }
 .experience-cover { height: 121px; width: 100%; background: #353c49; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .experience-cover img { width: 100%; height: auto; }
 .experience-cover img.experience-placeholder { width: 43px; height: 43px; }
@@ -117,30 +114,97 @@
 .experience-compact .experience-media { width: 240px; }
 .experience-compact .experience-main { padding: 23px; }
 
-/* LINBLUX: full-window video is drawn behind RmlUi, never inside a card. */
+/* ==========================================================================
+   Home: launcher surface over the full-window video.
+   Spacing scale 4 / 8 / 12 / 16 / 24 keeps the page compact at 1280x720.
+   ========================================================================== */
 #experience-home { background: transparent; }
-.home-header { position: absolute; left: 5%; right: 5%; top: 28px; height: 64px; display: flex; align-items: center; justify-content: space-between; }
-.home-header .experience-brand { margin: 0; padding: 0; }
-.home-header .experience-brand img { width: 64px; height: auto; margin-right: 14px; }
-.home-header .experience-brand b { font-size: 22px; letter-spacing: 3px; }
-.home-header .experience-brand small { margin-left: 12px; font-size: 11px; }
-.home-navigation { display: flex; }
-.home-navigation button { height: 36px; padding: 7px 12px; background: #14141895; border: 0px; border-radius: 6px; margin-left: 8px; }
-.home-navigation button:hover { background: #393237c9; }
-.experience-main { left: 0; right: 0; top: 112px; padding: 16px 5% 24px; }
-.experience-compact .experience-main { padding: 16px 5% 24px; }
-#experience-content { max-width: 1680px; }
-.home-intro { padding: 26px 0 30px; }
-.home-intro small { font-size: 12px; letter-spacing: 3px; color: #ebabb0; }
-.home-intro h1 { font-size: 42px; margin: 14px 0 12px; }
-.home-intro p { color: #d3cdd0; font-size: 16px; margin: 0 0 28px; }
+
+.home-header { position: absolute; left: 32px; right: 32px; top: 14px; height: 56px; display: flex; align-items: center; justify-content: space-between; }
+.home-header .experience-brand { height: auto; margin: 0; padding: 0; }
+.home-header .experience-brand img { width: 40px; height: 40px; margin-right: 12px; }
+.home-header .experience-brand b { font-size: 18px; letter-spacing: 2.5px; }
+.home-header .experience-brand small { margin-left: 9px; font-size: 10px; letter-spacing: 1.6px; color: #a6a9b2; }
+
+.home-navigation { display: flex; align-items: center; }
+.home-navigation button { height: 32px; margin-left: 4px; padding: 0 14px; background: #1212167d; border: 1px #ffffff12; border-radius: 16px; color: #c3c6ce; font-size: 12px; }
+.home-navigation button:hover { background: #2a2229e0; border-color: #ffffff26; color: #ffffff; }
+.home-navigation button.active { background: #5a2530d9; border-color: #e34255; color: #ffffff; }
+
+.experience-main { left: 0; right: 0; top: 88px; padding: 0 32px 28px; }
+.experience-compact .experience-main { padding: 0 32px 28px; }
+#experience-content { max-width: 1180px; }
+
+/* Hero */
+.home-intro { padding: 16px 0 22px; }
+.home-intro small { font-size: 11px; letter-spacing: 3px; color: #e2a2a9; }
+.home-intro h1 { font-size: 34px; line-height: 1.12; margin: 10px 0 8px; }
+.home-intro p { font-size: 14px; line-height: 1.5; color: #cac4c8; margin: 0 0 18px; }
 .home-actions { display: flex; }
-.home-actions button { height: 46px; padding: 12px 24px; margin-right: 12px; font-size: 15px; border-radius: 7px; background: #17171bd9; border: 1px #ffffff20; }
-.home-actions .experience-primary, .experience-primary { background: #ba2838; border-color: #ed4554; color: white; }
-.home-actions .experience-primary:hover, .experience-primary:hover { background: #d63749; }
-.experience-section { margin-top: 16px; }
-.experience-section h2 { font-size: 19px; }
-.experience-section button { color: #e9c1c7; font-size: 13px; }
+.home-actions button { height: 40px; margin: 0 10px 0 0; padding: 0 20px; font-size: 13px; border-radius: 8px; background: #17161ad9; border: 1px #ffffff1f; color: #eceef2; }
+.home-actions button:hover { background: #2a252bd9; border-color: #ffffff33; color: #ffffff; }
+.home-actions .experience-primary { background: #ba2838; border-color: #e8505f; color: #ffffff; }
+.home-actions .experience-primary:hover { background: #d63749; border-color: #f26371; }
+.home-actions .experience-primary:active { background: #a01f2e; border-color: #cf3f4e; }
+
+/* Engine default world */
+.home-default-card { display: flex; align-items: center; margin: 0 0 18px; padding: 13px 16px; background: #141318b3; border: 1px #ffffff14; border-radius: 10px; }
+.home-default-icon { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: 0 0 44px; margin-right: 14px; background: #1e1b21; border: 1px #ffffff10; border-radius: 10px; }
+.home-default-icon img { width: 26px; height: 26px; margin: 0; }
+.home-default-copy { flex: 1; min-width: 0; }
+.home-default-copy h2 { font-size: 15px; margin: 0 0 3px; }
+.home-default-copy p { font-size: 12px; line-height: 16px; color: #c9c3c8; margin: 0 0 4px; }
+.home-default-copy small { font-size: 9px; letter-spacing: 1.1px; color: #d98b96; }
+.home-default-actions { flex: 0 0 auto; margin-left: 16px; }
+.home-default-actions button { height: 34px; padding: 0 16px; border-radius: 7px; background: #2a1a21d9; border: 1px #df68794a; color: #f3e2e5; }
+.home-default-actions button:hover { background: #3d222b; border-color: #e34255; color: #ffffff; }
+
+/* Section headings */
+.experience-section { display: flex; align-items: center; justify-content: space-between; margin: 0 0 10px; }
+.experience-section-title { display: flex; align-items: center; }
+.experience-section h2 { font-size: 15px; margin: 0; }
+.experience-section-count { height: 18px; margin-left: 8px; padding: 1px 6px; background: #ffffff0f; border: 1px #ffffff14; border-radius: 9px; color: #b7b1b9; font-size: 10px; line-height: 14px; }
+.experience-section > button { height: 26px; padding: 0 10px; background: transparent; border: 0px; border-radius: 6px; color: #e3a8b0; font-size: 12px; }
+.experience-section > button:hover { background: #ffffff12; color: #ffffff; }
+
+/* Recent experiences: compact dashboard rows */
+.home-recent { display: flex; flex-wrap: wrap; margin: 0 -10px 0 0; }
+.home-recent .experience-card { display: flex; align-items: center; flex-grow: 1; flex-basis: 520px; width: auto; margin: 0 10px 10px 0; padding: 12px; background: #141318c9; border: 1px #ffffff12; border-radius: 10px; overflow: visible; }
+.home-recent .experience-card:hover { background: #1e1b21e0; border-color: #dc667473; }
+.home-recent .experience-cover { width: 132px; height: 78px; flex: 0 0 132px; margin-right: 14px; border-radius: 8px; background: #262329; }
+.home-recent .experience-cover img { width: 100%; height: auto; }
+.home-recent .experience-cover img.experience-placeholder { width: 34px; height: 34px; }
+.home-recent .experience-card-body { flex: 1 1 auto; min-width: 0; padding: 0; }
+.home-recent .experience-card h3 { font-size: 15px; margin: 0 0 5px; }
+.home-recent .experience-card p { height: auto; max-height: 32px; font-size: 12px; line-height: 16px; color: #b6b0b8; margin: 0 0 6px; overflow: hidden; }
+.experience-card-meta { display: flex; align-items: center; }
+.home-recent .experience-card small { font-size: 10px; color: #928d97; }
+.experience-card-dot { width: 3px; height: 3px; margin: 0 6px; border-radius: 2px; background: #6d6873; }
+.home-recent .experience-card-actions { display: flex; align-items: center; flex: 0 0 auto; margin: 0 0 0 14px; }
+.home-recent .experience-card-actions button { height: 34px; margin: 0; padding: 0 16px; border-radius: 7px; font-size: 12px; }
+.home-recent .experience-card-actions .experience-primary { min-width: 80px; background: #ba2838; border: 1px #e8505f; color: #ffffff; font-weight: bold; }
+.home-recent .experience-card-actions .experience-primary:hover { background: #d63749; border-color: #f26371; }
+.home-recent .experience-card-actions .experience-primary:active { background: #a01f2e; border-color: #cf3f4e; }
+.home-recent .experience-card-actions .experience-primary:focus { border-color: #ffb3bb; }
+
+/* The "..." button matches the profile of the primary action. */
+.experience-card-actions .experience-more { width: 34px; min-width: 34px; padding: 0; background: #232128; border: 1px #ffffff14; border-radius: 7px; color: #d5d0d6; font-size: 16px; line-height: 30px; text-align: center; }
+.home-recent .experience-more { height: 34px; margin-left: 8px; }
+.experience-card-actions .experience-more:hover { background: #322c33; border-color: #ffffff2b; color: #ffffff; }
+.experience-card-actions .experience-more.active, .experience-card-actions .experience-more:active { background: #3b2029; border-color: #e34255; color: #ffffff; }
+
+/* Card menu: one anchored popover shared by Home and the library. */
+.experience-card-menu { position: absolute; right: 8px; bottom: 46px; width: 214px; padding: 5px; background: #1a181df7; border: 1px #ffffff1f; border-radius: 9px; box-shadow: 0 14px 34px #000000b3; z-index: 8; }
+.home-recent .experience-card-menu { top: 76px; bottom: auto; right: 12px; }
+.experience-card-menu button { display: block; width: 100%; height: 30px; padding: 0 10px; background: transparent; border: 1px transparent; border-radius: 5px; color: #e8e3e8; font-size: 12px; text-align: left; }
+.experience-card-menu button:hover { background: #2b272e; }
+.experience-card-menu button:active { background: #3a1e26; }
+.experience-card-menu button:focus { border-color: #e34255; }
+.experience-card-menu button.experience-menu-danger { color: #ef8b95; }
+.experience-card-menu button.experience-menu-danger:hover { background: #3a1d24; color: #ffb3ba; }
+.experience-menu-rule { height: 1px; margin: 4px 6px; background: #ffffff14; }
+
+/* Shared cards, forms and dialogs (library, archive, settings). */
 .experience-card { width: 240px; background: #131316c9; border: 1px #ffffff14; border-radius: 9px; }
 .experience-card:hover { border-color: #dc667480; background: #242126df; }
 .experience-card h3 { font-size: 15px; }
@@ -151,18 +215,8 @@
 .experience-confirm-card { background: #19191df5; border-color: #ffffff20; }
 .experience-loading-shade { background: #09090bbd; }
 .experience-spinner { background: #e34255; }
-
 .experience-settings { padding: 24px; background: #151519e0; border-radius: 8px; }
 .experience-settings button { display: block; width: 420px; max-width: 100%; height: 40px; margin-bottom: 12px; text-align: left; }
-
-.home-default-card { display: flex; align-items: center; padding: 16px 22px; margin: 0 0 22px; border: 1px #ffffff16; border-radius: 8px; background: #151318b8; }
-.home-default-card img { width: 48px; height: auto; margin-right: 18px; }
-.home-default-card div { flex: 1; }
-.home-default-card h2 { font-size: 18px; margin: 0 0 5px; }
-.home-default-card p { font-size: 13px; color: #d3c8ce; margin: 0 0 6px; }
-.home-default-card small { font-size: 9px; color: #dd8c98; letter-spacing: 1px; }
-.home-default-card button { height: 38px; padding: 9px 17px; margin-left: 16px; border-color: #df68794a; background: #35202bd9; }
 #exp-header-default-save { height: 26px; padding: 3px 10px; font-size: 11px; margin: 0 8px; }
-
 #experience-form-actions { display: none; position: absolute; left: 0; right: 0; bottom: 0; height: 76px; padding: 16px 5%; margin: 0; background: #141318f2; border-top: 1px #ffffff16; }
 #experience-form-actions button { height: 42px; padding: 10px 22px; font-size: 14px; }
