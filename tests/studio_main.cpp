@@ -504,7 +504,10 @@ end)
     CHECK(restored!=nullptr&&restored->hasNpc());
     if(restored!=nullptr&&restored->hasNpc())CHECK(restored->npcProperties()->speed==6&&restored->npcProperties()->maxHealth==50);
     const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;
-    CHECK(runtime.start(author,error));CHECK(runtime.npcs().attached(sentinelId));CHECK(runtime.npcs().count()==1);
+    CHECK(runtime.start(author,error));
+    CHECK(runtime.npcs().attached(sentinelId));
+    if(runtime.npcs().count()!=1)std::printf("DEBUG npc count=%zu\n",runtime.npcs().count());
+    CHECK(runtime.npcs().count()==1);
     for(int i=0;i<300;++i){
         runtime.update(1.f/60,{});
         for(auto it=runtime.scene().parts().begin();it!=runtime.scene().parts().end();++it){
@@ -1230,6 +1233,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }
