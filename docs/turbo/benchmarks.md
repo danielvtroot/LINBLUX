@@ -15,8 +15,10 @@ python3 tools/turbo/turbo.py inventory --json
 
 - 35 testes CTest registrados após o TURBO;
 - soma dos custos medidos em `build-linblux/Testing/Temporary/CTestCostData.txt`:
-  **≈869 s** (≈14,5 min);
-- 20 testes classificados como gráficos, 18 como lentos;
+  **≈865–868 s** (≈14,4–14,5 min);
+- 20 testes classificados como gráficos, 17 como lentos;
+- `test --mode full --changed --plan` seleciona os 35 testes registrados e o
+  target `all`, com estimativa de 865,2 s;
 - a suíte FULL **não foi executada** nesta validação. O valor acima é uma
   estimativa histórica do CTest, não um tempo de parede comprovado.
 
@@ -67,6 +69,34 @@ Tempo de parede medido: **5,928 s**. O TURBO adiciona inventário, seleção,
 fingerprint, logs e proteção de concorrência; a diferença não é apresentada como
 melhoria percentual.
 
+### Estado final após o commit
+
+Depois de commitado o próprio TURBO, restaram apenas quatro alterações locais do
+editor e do harness. Nesse estado:
+
+```bash
+python3 tools/turbo/turbo.py test --mode fast --changed --no-cache
+python3 tools/turbo/turbo.py benchmark --run-fast --json
+```
+
+| Medida | Valor |
+| --- | --- |
+| alterações | 4 arquivos do worktree |
+| testes executados | 2 (`linblux_manipulation`, `linblux_studio`) |
+| cobertura | `known` |
+| build | 0,9 s |
+| FAST real | 1,345 s |
+| benchmark: inventário | 0,602 s |
+| benchmark: build | 0,715 s |
+| benchmark: testes | 0,164 s |
+| benchmark: total | **1,508 s** |
+| saída compacta | 353 caracteres |
+| estimativa CTest do plano | 0,302 s |
+
+Uma segunda chamada sem `--no-cache`, com o mesmo fingerprint, retornou
+`REUSED` em vez de executar os testes. O relatório imprime que a compilação foi
+reutilizada e que os números de testes são histórico, não uma execução atual.
+
 ## IMPACT real
 
 ```bash
@@ -85,6 +115,33 @@ python3 tools/turbo/turbo.py test --mode impact --changed --no-cache
 O plano sem limite indicava aproximadamente 563 s para 13 testes, com 11
 gráficos, naquele estado do editor. O limite de quatro é um controle de custo e
 aparece explicitamente no relatório; não é uma aprovação FULL.
+
+### IMPACT final após o commit
+
+Com as quatro alterações locais do editor/harness e a documentação de benchmark
+modificada:
+
+```bash
+python3 tools/turbo/turbo.py test --mode impact --changed --no-cache
+```
+
+| Medida | Valor |
+| --- | --- |
+| alterações | 5 arquivos |
+| testes executados | 6 |
+| testes gráficos | 4 (limite padrão) |
+| demais gráficos filtrados | 8 |
+| build | 1,666 s |
+| duração total | 45,320 s |
+| resultado | 6 aprovados; `PASSED_PARTIAL` por cobertura limitada |
+| cobertura | `partial` |
+
+Os testes executados foram `linblux_engine_default_restart`,
+`linblux_editor_restart`, `linblux_gizmo_visual`, `linblux_manipulation`,
+`linblux_rig_image` e `linblux_studio`. O harness
+`tests/engine_default_restart.py` não tem associação semântica segura, então o
+plano também o marca como sem mapeamento; isso mantém o estado parcial em vez de
+declarar cobertura plena.
 
 ## Build incremental
 

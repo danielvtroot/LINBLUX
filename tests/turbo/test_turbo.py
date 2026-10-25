@@ -240,6 +240,20 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(full["test_count"], 2)
         self.assertIn("all", full["build_targets"])
 
+    def test_full_selects_every_registered_test_even_unrelated(self):
+        unit = fake_test("unit", "unit_tests", ("core",))
+        unrelated_graphics = fake_test("graphics", "graphics_tests", ("editor",), graphics=True)
+        inventory_data = fake_inventory([unit, unrelated_graphics])
+        change = fake_changes("src/core/value.cpp", "core")
+        fast = selection.build_plan(inventory_data, change, "fast")
+        full = selection.build_plan(inventory_data, change, "full")
+        self.assertEqual(fast["selected_names"], ["unit"])
+        self.assertEqual(full["test_count"], 2)
+        self.assertEqual(full["selected_names"], ["graphics", "unit"])
+        self.assertEqual(full["graphics_count"], 1)
+        self.assertEqual(full["coverage"], "known")
+        self.assertEqual(full["build_targets"], ["all"])
+
     def test_plan_is_json_serializable(self):
         unit = fake_test("unit", "unit_tests", ("core",))
         inventory_data = fake_inventory([unit])
@@ -299,6 +313,21 @@ class CacheTests(unittest.TestCase):
         self.assertIn("REUTILIZADO", text)
         self.assertIn("REUTILIZADA", text)
         self.assertNotIn("PASSOU AGORA", text)
+
+    def test_partial_coverage_label_is_not_always_unknown(self):
+        limited = {
+            "status": "PASSED_PARTIAL",
+            "plan": {"coverage": "partial"},
+            "test": {"counts": {"executed": 6, "passed": 6}},
+        }
+        unknown = {
+            "status": "PASSED_PARTIAL",
+            "plan": {"coverage": "unknown"},
+            "test": {"counts": {"executed": 6, "passed": 6}},
+        }
+        self.assertIn("COBERTURA LIMITADA", report.format_result(limited))
+        self.assertNotIn("COBERTURA DESCONHECIDA", report.format_result(limited))
+        self.assertIn("COBERTURA DESCONHECIDA", report.format_result(unknown))
 
     def test_fingerprint_changes_with_worktree_content(self):
         with tempfile.TemporaryDirectory() as temp:

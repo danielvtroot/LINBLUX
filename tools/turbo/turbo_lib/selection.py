@@ -118,6 +118,12 @@ def build_plan(
     }
     reverse_includes = _reverse_includes(inventory)
     reasons: dict[str, set[str]] = defaultdict(set)
+    if mode == "full":
+        # FULL is an explicit whole-suite request.  Do not reduce it to the
+        # files that happened to match the change; the reason remains visible
+        # in the plan and the build uses the all target.
+        for name in tests:
+            reasons[name].add("modo FULL: todos os testes registrados")
     changed_modules: set[str] = set()
     affected_paths: set[str] = set()
     direct_targets: set[str] = set()
@@ -300,6 +306,8 @@ def build_plan(
     build_targets.update(affected_targets)
     if cmake_changed and mode in {"impact", "full"}:
         build_targets.add("all")
+    if mode == "full":
+        build_targets.add("all")
     if "all" in build_targets and len(build_targets) > 1:
         build_targets = {"all"}
     if not build_targets and affected_targets and mode == "full":
@@ -317,7 +325,7 @@ def build_plan(
         coverage = "unknown"
     if graphics_limited and coverage == "known":
         coverage = "partial"
-    if not changes.get("files"):
+    if not changes.get("files") and mode != "full":
         coverage = "none"
     estimated = sum(test["duration_seconds"] for test in selected_tests)
     graphics_count = sum(1 for test in selected_tests if test["graphics"])

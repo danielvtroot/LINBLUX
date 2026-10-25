@@ -29,6 +29,17 @@ def status_label(status: str) -> str:
     return STATUS_PT.get(status, status)
 
 
+def result_status_label(result: dict) -> str:
+    """Render partial coverage without claiming it is always unknown."""
+    status = result.get("status", "?")
+    if status == "PASSED_PARTIAL":
+        coverage = (result.get("plan") or {}).get("coverage")
+        if coverage == "partial":
+            return "PASSOU PARCIALMENTE — COBERTURA LIMITADA"
+        return "PASSOU PARCIALMENTE — COBERTURA DESCONHECIDA"
+    return status_label(status)
+
+
 def _short(value: str, limit: int = 1200) -> str:
     value = (value or "").strip()
     if len(value) <= limit:
@@ -45,7 +56,7 @@ def format_plan(plan: dict) -> str:
 def format_result(result: dict, *, detail: bool = False) -> str:
     lines = ["LINBLUX ATLAS TURBO", ""]
     lines.append(f"Modo: {str(result.get('mode', '?')).upper()}")
-    lines.append(f"Status: {status_label(result.get('status', '?'))}")
+    lines.append(f"Status: {result_status_label(result)}")
     if result.get("run_id"):
         lines.append(f"Execução: {result['run_id']}")
     if result.get("changed_count") is not None:

@@ -16,7 +16,7 @@ a suíte gráfica da engine.
 | Área | O que é verificado |
 | --- | --- |
 | inventário | classificação por comando/ambiente/custo; smoke, vídeo, gráfico, timeout; build ausente não inventa testes |
-| seleção | FAST exclui gráficos; IMPACT inclui integração associada; sem testes não vira aprovação; header amplia consumidores; CMake é estrutural |
+| seleção | FAST exclui gráficos; IMPACT inclui integração associada; FULL inclui todos os testes registrados e o target `all`; sem testes não vira aprovação; header amplia consumidores; CMake é estrutural |
 | explicabilidade | `reasons` por teste, `filtered`, avisos, serialização JSON do plano |
 | cache | rejeita falha, cobertura parcial, fingerprint diferente e teste volátil; `REUSED` não é `PASSED` |
 | alterações | fingerprint muda com conteúdo do worktree em repositório Git temporário |
@@ -36,7 +36,7 @@ Comandos reais usados na integração:
 
 ```bash
 python3 -m unittest discover -s tests/turbo -p 'test_*.py'
-# Ran 22 tests ... OK
+# Ran 24 tests ... OK
 
 ctest --test-dir build-linblux -R '^linblux_turbo$' --output-on-failure
 # 100% tests passed, 0 tests failed out of 1
@@ -46,8 +46,9 @@ python3 tools/turbo/turbo.py test --mode fast --changed --no-cache
 # testes headless selecionados passaram; cobertura registrada no relatório
 
 python3 tools/turbo/turbo.py test --mode impact --changed --no-cache
-# 19 testes executados em ~58,5 s, incluindo 4 gráficos, todos passaram;
-# estado parcial por limite de gráficos e CMake ainda não commitado
+# estado anterior ao commit: 19 testes em ~58,5 s
+# estado final pós-commit: 6 testes em 45,3 s, incluindo 4 gráficos;
+# todos passaram, estado PASSED_PARTIAL por cobertura limitada
 ```
 
 ## O que os testes não cobrem
