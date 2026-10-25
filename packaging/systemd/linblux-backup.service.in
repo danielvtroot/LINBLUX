@@ -1,0 +1,18 @@
+[Unit]
+Description=LINBLUX automatic checkpoint backup (branch auto-backup)
+Documentation=file://@PROJECT@/docs/backup/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=@PYTHON@ @PROJECT@/tools/backup/backup.py run --project @PROJECT@ --state-dir @STATE@
+Restart=always
+RestartSec=20
+Environment=PYTHONUNBUFFERED=1
+Environment=LINBLUX_BACKUP_STATE=@STATE@
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=default.target

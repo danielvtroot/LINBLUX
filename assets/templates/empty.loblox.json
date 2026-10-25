@@ -1,0 +1,1028 @@
+{
+  "format": "loblox-project",
+  "game": {
+    "animations": [
+      {
+        "duration": 0.800000011920929,
+        "fps": 30,
+        "id": "r6-walk",
+        "loop": true,
+        "name": "R6_Walk",
+        "priority": 1,
+        "rigType": "R6",
+        "tracks": [
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -0.026176949962973595,
+                  0.0,
+                  0.0,
+                  0.9996573328971863
+                ]
+              },
+              "time": 0.0
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.10000000149011612,
+                  0.0
+                ],
+                "rotation": [
+                  -0.02617294155061245,
+                  0.0174931101500988,
+                  0.0004580732202157378,
+                  0.9995042681694031
+                ]
+              },
+              "time": 0.20000000298023224
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -0.026176949962973595,
+                  -1.5293742938737864e-09,
+                  -4.004807596658111e-11,
+                  0.9996573328971863
+                ]
+              },
+              "time": 0.4000000059604645
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.10000000149011612,
+                  0.0
+                ],
+                "rotation": [
+                  -0.02617294155061245,
+                  -0.0174931101500988,
+                  -0.0004580732202157378,
+                  0.9995042681694031
+                ]
+              },
+              "time": 0.6000000238418579
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -0.026176949962973595,
+                  3.058748587747573e-09,
+                  8.009615193316222e-11,
+                  0.9996573328971863
+                ]
+              },
+              "time": 0.800000011920929
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.026176949962973595,
+                  0.0,
+                  0.0,
+                  0.9996573328971863
+                ]
+              },
+              "time": 0.0
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.026176949962973595,
+                  0.0,
+                  0.0,
+                  0.9996573328971863
+                ]
+              },
+              "time": 0.20000000298023224
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.026176949962973595,
+                  0.0,
+                  0.0,
+                  0.9996573328971863
+                ]
+              },
+              "time": 0.4000000059604645
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.026176949962973595,
+                  0.0,
+                  0.0,
+                  0.9996573328971863
+                ]
+              },
+              "time": 0.6000000238418579
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.026176949962973595,
+                  0.0,
+                  0.0,
+                  0.9996573328971863
+                ]
+              },
+              "time": 0.800000011920929
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -0.20791170001029968,
+                  0.0,
+                  0.0,
+                  0.9781476259231567
+                ]
+              },
+              "time": 0.0
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  9.154891067453264e-09,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.20000000298023224
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.20791170001029968,
+                  0.0,
+                  0.0,
+                  0.9781476259231567
+                ]
+              },
+              "time": 0.4000000059604645
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -2.4975412848959877e-09,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.6000000238418579
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -0.20791170001029968,
+                  0.0,
+                  0.0,
+                  0.9781476259231567
+                ]
+              },
+              "time": 0.800000011920929
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.20791170001029968,
+                  0.0,
+                  0.0,
+                  0.9781476259231567
+                ]
+              },
+              "time": 0.0
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -9.154891067453264e-09,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.20000000298023224
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -0.20791170001029968,
+                  0.0,
+                  0.0,
+                  0.9781476259231567
+                ]
+              },
+              "time": 0.4000000059604645
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  2.4975412848959877e-09,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.6000000238418579
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.20791170001029968,
+                  0.0,
+                  0.0,
+                  0.9781476259231567
+                ]
+              },
+              "time": 0.800000011920929
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.2588190734386444,
+                  0.0,
+                  0.0,
+                  0.965925931930542
+                ]
+              },
+              "time": 0.0
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -1.1443614056361184e-08,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.20000000298023224
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -0.2588190734386444,
+                  0.0,
+                  0.0,
+                  0.965925931930542
+                ]
+              },
+              "time": 0.4000000059604645
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  3.121926495097682e-09,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.6000000238418579
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.2588190734386444,
+                  0.0,
+                  0.0,
+                  0.965925931930542
+                ]
+              },
+              "time": 0.800000011920929
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -0.2588190734386444,
+                  0.0,
+                  0.0,
+                  0.965925931930542
+                ]
+              },
+              "time": 0.0
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  1.1443614056361184e-08,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.20000000298023224
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.2588190734386444,
+                  0.0,
+                  0.0,
+                  0.965925931930542
+                ]
+              },
+              "time": 0.4000000059604645
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -3.121926495097682e-09,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.6000000238418579
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -0.2588190734386444,
+                  0.0,
+                  0.0,
+                  0.965925931930542
+                ]
+              },
+              "time": 0.800000011920929
+            }
+          ]
+        ],
+        "version": 1
+      },
+      {
+        "duration": 0.800000011920929,
+        "fps": 30,
+        "id": "r6-idle",
+        "loop": true,
+        "name": "R6_Idle",
+        "priority": 0,
+        "rigType": "R6",
+        "tracks": [
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.0
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.0
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.0
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.0
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.0
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.0
+            }
+          ]
+        ],
+        "version": 1
+      },
+      {
+        "duration": 0.5,
+        "fps": 30,
+        "id": "r6-jump",
+        "loop": false,
+        "name": "R6_Jump",
+        "priority": 1,
+        "rigType": "R6",
+        "tracks": [
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.0
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.5
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.0
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              },
+              "time": 0.5
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  -0.1741081327199936,
+                  0.9847265481948853
+                ]
+              },
+              "time": 0.0
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  -0.1741081327199936,
+                  0.9847265481948853
+                ]
+              },
+              "time": 0.5
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.1741081327199936,
+                  0.9847265481948853
+                ]
+              },
+              "time": 0.0
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.1741081327199936,
+                  0.9847265481948853
+                ]
+              },
+              "time": 0.5
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -0.07492970675230026,
+                  0.0,
+                  0.0,
+                  0.9971888065338135
+                ]
+              },
+              "time": 0.0
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  -0.07492970675230026,
+                  0.0,
+                  0.0,
+                  0.9971888065338135
+                ]
+              },
+              "time": 0.5
+            }
+          ],
+          [
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.07492970675230026,
+                  0.0,
+                  0.0,
+                  0.9971888065338135
+                ]
+              },
+              "time": 0.0
+            },
+            {
+              "interpolation": 1,
+              "pose": {
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.07492970675230026,
+                  0.0,
+                  0.0,
+                  0.9971888065338135
+                ]
+              },
+              "time": 0.5
+            }
+          ]
+        ],
+        "version": 1
+      },
+      {
+        "duration": 0.800000011920929,
+        "fps": 30,
+        "id": "r6-fall",
+        "loop": true,
+        "name": "R6_Fall",
+        "priority": 1,
+        "rigType": "R6",
+        "tracks": [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        "version": 1
+      }
+    ],
+    "defaultRig": "",
+    "player": {
+      "acceleration": 80.0,
+      "allowFirstPerson": true,
+      "autoRotate": true,
+      "cameraDistance": 12.0,
+      "cameraLock": false,
+      "cameraMode": 0,
+      "collisionHeight": 5.800000190734863,
+      "collisionRadius": 0.8999999761581421,
+      "deceleration": 100.0,
+      "fallAnimation": "r6-fall",
+      "gravity": 98.0999984741211,
+      "health": 100.0,
+      "idleAnimation": "r6-idle",
+      "jumpAnimation": "r6-jump",
+      "jumpHeight": 7.0,
+      "maxHealth": 100.0,
+      "maxZoom": 30.0,
+      "minZoom": 0.30000001192092896,
+      "sensitivity": 0.003000000026077032,
+      "turnSpeed": 12.0,
+      "walkAnimation": "r6-walk",
+      "walkSpeed": 16.0
+    },
+    "rigs": [],
+    "version": 1
+  },
+  "nextId": 5,
+  "objects": [
+    {
+      "class": "Workspace",
+      "id": 1,
+      "name": "Workspace",
+      "parent": 0
+    },
+    {
+      "ambientColor": [
+        150,
+        150,
+        160,
+        255
+      ],
+      "atmosphereStrength": 0.5,
+      "brightness": 1.0,
+      "class": "Lighting",
+      "cloudDensity": 0.30000001192092896,
+      "cloudScale": 1.0,
+      "cloudSoftness": 0.5,
+      "cloudSpeed": 0.10000000149011612,
+      "fogColor": [
+        120,
+        180,
+        240,
+        255
+      ],
+      "fogDensity": 0.0,
+      "id": 2,
+      "name": "Lighting",
+      "parent": 0,
+      "skyColor": [
+        120,
+        180,
+        240,
+        255
+      ],
+      "skyEnabled": true,
+      "skyGroundColor": [
+        60,
+        80,
+        100,
+        255
+      ],
+      "skyHorizonColor": [
+        180,
+        200,
+        230,
+        255
+      ],
+      "skyRotation": 0.0,
+      "skyZenithColor": [
+        80,
+        140,
+        220,
+        255
+      ],
+      "sunColor": [
+        255,
+        240,
+        200,
+        255
+      ],
+      "sunDirection": [
+        -0.3668125867843628,
+        -0.81513911485672,
+        0.4483265280723572
+      ],
+      "sunIntensity": 1.0,
+      "sunSize": 0.03999999910593033
+    },
+    {
+      "class": "ServerScriptService",
+      "id": 3,
+      "name": "ServerScriptService",
+      "parent": 0
+    },
+    {
+      "class": "Script",
+      "enabled": true,
+      "id": 4,
+      "name": "Game.server.lua",
+      "parent": 3,
+      "source": "-- Native controller owns spawn, movement and respawn; no duplicate spawns here.\nlocal Players = game:GetService(\"Players\")\nPlayers.CharacterAdded:Connect(function(character)\n    print(\"Spawned\", character.Name)\n    -- Customize this map here. Project defaults are in Game Settings.\nend)\n"
+    }
+  ],
+  "version": 3
+}

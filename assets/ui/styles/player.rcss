@@ -1,0 +1,116 @@
+/* Player surfaces, independent of the Studio theme.
+   Reference geometry: circular brand + shared controls capsule; 4 equal tabs,
+   two-column settings rows; equal footer actions. No multiplayer placeholders. */
+#game-layer { position: absolute; overflow: hidden; font-size: 16px; color: #f2f3f5; }
+#game-layer button, #game-layer input { tab-index: auto; focus: auto; }
+/* RML has no browser user-agent rules. Artwork/labels must focus their button,
+   not become independent focus leaves (which breaks Tab and Enter). */
+#game-layer button * { focus: none; }
+#game-topbar { position: absolute; display: flex; top: 16px; left: 16px; align-items: center; z-index: 3; }
+#game-topbar button { width: 46px; height: 46px; flex-shrink: 0; margin: 0; padding: 10px; border: 1px transparent; border-radius: 23px; background-color: transparent; transition: background-color 0.12s; }
+#game-topbar .logo-button { padding: 8px; margin-right: 9px; background-color: #111318ed; }
+#game-topbar img, #game-topbar .menu-button img { display: block; width: 26px; height: 26px; margin: 0 auto; }
+#game-topbar .logo-button img { width: 28px; height: auto; max-height: 28px; margin: auto; }
+#game-capsule { display: flex; padding: 0 5px; border-radius: 23px; background-color: #111318ed; }
+#game-topbar button:hover { background-color: #42454cd9; border-color: transparent; }
+#game-topbar button:active { background-color: #5d6269e0; }
+#game-topbar button.selected { background-color: #ffffff19; }
+#game-topbar button:focus { border-color: #c8d9f5; }
+/* Restore the slim gameplay bar, not a labelled/debug information card. */
+#health { position: absolute; top: 14px; right: 14px; width: 180px; height: 20px; display: block; padding: 0; border: 2px #08090bee; border-radius: 10px; background-color: #3a3d42f2; pointer-events: none; }
+.health-track { height: 100%; width: 100%; border-radius: 8px; background-color: #5b5e63; position: relative; overflow: hidden; }
+#health-fill, #health-trail { position: absolute; left: 0; top: 0; height: 100%; width: 100%; border-radius: 8px; decorator: none; }
+#health-trail { background-color: #ffffff91; }
+#health-fill { background-color: #49d78a; }
+/* The software cursor follows the captured virtual pointer supplied by C++.
+   It is absent when capture is suspended, even if Shift Lock is requested. */
+#mouse-lock-cursor { position: absolute; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: -14px 0 0 -14px; pointer-events: none; focus: none; }
+#mouse-lock-cursor img { display: block; width: auto; height: auto; max-width: 28px; max-height: 28px; margin: 0; focus: none; }
+#pause { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; z-index: 2; padding: 64px 0 14px; background-color: #080d142e; }
+.pause-panel { display: flex; flex-direction: column; width: 84%; height: 96%; max-width: 1440px; max-height: 800px; min-height: 0; padding: 0 22px 18px; border: 1px #ffffff10; border-radius: 12px; background-color: #101419df; }
+.pause-tabs { display: flex; flex: 0 0 68px; height: 68px; margin-bottom: 6px; border-bottom: 1px #b4bec23a; }
+.pause-tabs button { display: flex; flex: 1; justify-content: center; align-items: center; height: 68px; padding: 0 10px; font-size: 19px; color: #a5abb2; border: 0px; border-bottom: 3px transparent; border-radius: 0px; background-color: transparent; transition: color 0.12s, background-color 0.12s; }
+.pause-tabs button img { width: 27px; height: 27px; margin-right: 12px; image-color: #b0b6bf; }
+.pause-tabs button.active { background-color: transparent; border-color: #f0f3f7; color: #fff; }
+.pause-tabs button.active img { image-color: #fff; }
+.pause-tabs button:hover { background-color: #ffffff0d; color: white; }
+.pause-tabs button:focus { background-color: #ffffff12; }
+#pause-content { flex: 1; min-height: 0; width: 100%; padding: 6px 3px 4px; overflow: auto; font-size: 17px; }
+#pause-content h2 { font-size: 22px; }
+#pause-content .muted { color: #b8bec6; }
+.setting-row { display: flex; align-items: center; min-height: 84px; padding: 12px 12px; border-radius: 9px; }
+.setting-row:hover { background-color: #ffffff0b; }
+.setting-copy { width: 39%; padding-right: 22px; flex-shrink: 0; }
+.setting-copy span { display: block; font-size: 17px; }
+.setting-copy small { display: block; font-size: 12px; color: #b0b7be; margin-top: 7px; line-height: 1.35; }
+.setting-control { display: flex; align-items: center; width: 61%; min-width: 0; }
+.cycle { justify-content: space-between; }
+.cycle button { width: 42px; height: 46px; padding: 7px; border: 1px transparent; border-radius: 7px; background-color: transparent; }
+.cycle button img { width: 28px; height: 30px; margin: 0; }
+.cycle button:hover { background-color: #ffffff15; }
+.cycle button:focus { border-color: #a5c7fa; }
+.cycle .cycle-value, #camera-mode { flex: 1; text-align: center; width: auto; font-size: 17px; white-space: nowrap; }
+.cycle .cycle-value { height: 46px; }
+.slider-control input[type=range] { flex: 1; width: auto; min-width: 50px; height: 28px; margin-right: 14px; padding: 0; border: 0px; background-color: transparent; }
+.slider-control slidertrack { height: 5px; margin-top: 11px; border-radius: 3px; background-color: #aeb5bf6b; }
+.slider-control sliderbar { width: 16px; height: 21px; margin-top: 4px; border-radius: 6px; background-color: #f4f6f8; border: 1px #c7ced8; }
+.slider-control sliderprogress { height: 5px; border-radius: 3px; background-color: #e6eaf1; }
+.slider-control sliderbar:hover, .slider-control sliderbar:active { background-color: #aacaff; }
+.slider-control sliderarrowdec, .slider-control sliderarrowinc { width: 0; }
+.slider-control input.player-number { width: 78px; height: 36px; flex-shrink: 0; text-align: center; padding: 7px 2px; font-size: 15px; border-radius: 7px; border: 1px #a8b1be47; background-color: #30323899; }
+.slider-control input.player-number:focus { background-color: #384760; border-color: #a5c7fa; }
+#settings-page .session-note { margin: 12px; }
+.player-card { display: flex; align-items: center; padding: 18px 12px; margin: 0; border-radius: 0; border-bottom: 1px #ffffff20; background-color: transparent; }
+.player-emblem { width: 62px; height: 62px; flex: 0 0 62px; padding: 11px; border-radius: 12px; background-color: #ffffff12; margin-right: 18px; }
+.player-emblem img { width: 40px; height: 40px; }
+.player-identity { flex: 1; min-width: 0; }
+.player-eyebrow { font-size: 10px; letter-spacing: 1px; color: #b7c0cd; }
+.player-card h2 { margin: 4px 0; }
+.session-indicator { font-size: 13px; color: #c0c7d0; }
+.session-logo { width: 44px; height: auto; max-height: 44px; margin-left: 12px; }
+.session-row { display: flex; justify-content: space-between; padding: 17px 12px; font-size: 17px; border-bottom: 1px #ffffff12; }
+.session-row b { display: block; width: 61%; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.session-actions { display: flex; width: 61%; margin: 0; }
+.session-actions button { flex: 1; margin-right: 7px; height: 42px; padding: 10px 4px; font-size: 13px; border: 1px #ffffff29; background-color: #ffffff0e; border-radius: 7px; }
+.session-actions button:last-child { margin-right: 0; }
+.key-hint { font-size: 10px; color: #aebdcc; margin-left: 6px; }
+.session-note { font-size: 12px; color: #adb6c1; line-height: 1.5; margin: 14px 12px; }
+.pause-footer { display: flex; height: 70px; flex: 0 0 70px; padding-top: 12px; border: 0px; }
+.pause-footer button { display: flex; flex: 1; align-items: center; justify-content: center; height: 58px; padding: 10px 7px; border: 1px #ffffff10; background-color: #ffffff19; border-radius: 9px; font-size: 18px; font-weight: bold; margin-right: 10px; transition: background-color 0.12s; }
+.pause-footer button:last-child { margin-right: 0; }
+.pause-footer button img { width: 25px; height: 25px; margin-right: 12px; }
+.pause-footer button.primary { background-color: #3155d2c9; border-color: #4266d85c; }
+.pause-footer button:hover { background-color: #ffffff32; }
+.pause-footer button.primary:hover { background-color: #4267e8e0; }
+.pause-footer button:active { background-color: #ffffff45; }
+.pause-footer button:focus { border-color: #b6cdff; }
+.footer-key { width: 29px; height: 29px; padding: 6px 0; margin-right: 12px; font-size: 10px; border: 1px #d5dce8; border-radius: 2px; }
+.control-row { display: flex; align-items: center; padding: 13px 12px; min-height: 54px; border-bottom: 1px #ffffff13; }
+#controls-page kbd { display: block; text-align: center; width: 138px; min-width: 138px; margin-right: 25px; padding: 7px; background-color: #ffffff0e; border: 1px #ffffff4a; border-radius: 5px; font-size: 13px; }
+#controls-page .control-row span { font-size: 15px; color: #e1e5eb; }
+#about-page { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100%; text-align: center; padding: 24px 15px; }
+#player-setting-error { color: #ffb1b7; font-size: 12px; margin: 0 12px; }
+#about-page .about-logo { width: 80px; height: auto; max-height: 80px; margin: 0 auto 18px; }
+#about-page h1 { font-size: 28px; }
+#about-page p { font-size: 15px; }
+#pause-content scrollbarvertical { width: 7px; }
+#pause-content scrollbarvertical slidertrack { background-color: transparent; }
+#pause-content scrollbarvertical sliderbar { width: 2px; margin-left: 3px; background-color: #b6beca80; }
+.player-compact .pause-panel { width: 94%; padding: 0 13px 12px; border-radius: 10px; }
+.player-compact .pause-tabs, .player-compact .pause-tabs button { height: 51px; flex-basis: 51px; }
+.player-compact .pause-tabs button { font-size: 14px; padding: 0 3px; }
+.player-compact .pause-tabs button img { width: 21px; height: 21px; margin-right: 7px; }
+.player-compact .setting-row { min-height: 72px; padding: 10px 8px; }
+.player-compact .setting-copy { padding-right: 14px; }
+.player-compact .setting-copy span, .player-compact .cycle-value, .player-compact #camera-mode { font-size: 14px; }
+.player-compact .setting-copy small { font-size: 11px; margin-top: 5px; }
+.player-compact .session-row { font-size: 14px; padding: 13px 8px; }
+.player-compact .pause-footer { height: 60px; flex-basis: 60px; }
+.player-compact .pause-footer button { height: 48px; font-size: 14px; margin-right: 7px; }
+.player-compact .pause-footer button:last-child { margin-right: 0; }
+.player-compact .footer-key { width: 25px; height: 25px; padding: 5px 0; margin-right: 7px; }
+.player-compact .pause-footer img { width: 22px; height: 22px; margin-right: 7px; }
+.player-compact .player-card { padding: 11px 8px; }
+.player-compact #pause-content h2 { font-size: 18px; }
+.player-compact .session-indicator { font-size: 11px; }
+.player-compact .session-actions button { font-size: 11px; }

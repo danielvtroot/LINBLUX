@@ -1,0 +1,23 @@
+<div id="experience-root">
+ <div id="experience-home">
+  <div class="home-header"><div class="experience-brand"><img src="linblux-logo"/><b>LINBLUX</b><small>STUDIO</small></div><div class="home-navigation"><button id="exp-nav-home" data-experience="page" data-value="home">Início</button><button id="exp-nav-library" data-experience="page" data-value="library">Biblioteca</button><button id="exp-nav-archive" data-experience="page" data-value="archive">Arquivo</button><button id="exp-settings" data-experience="page" data-value="settings" title="Configurações da engine">Configurações</button></div></div>
+  <div id="experience-main" class="experience-main"><div id="experience-content"/></div>
+  <div id="experience-form-actions" class="experience-form-footer"/>
+ </div>
+ <div id="experience-error" data-experience="dismiss-error" title="Clique para fechar"/>
+ <div id="experience-file-shade" data-experience="close-file"><div id="experience-file-menu">
+  <button id="exp-back-home" data-experience="back-home">Voltar ao início</button>
+  <button id="exp-details" data-experience="current-details">Detalhes da experiência…</button>
+  <button id="exp-save-experience" data-experience="save">Salvar experiência</button>
+  <button id="exp-export" data-experience="export-current">Exportar experiência (.lo)…</button>
+  <div class="experience-sidebar-rule"/>
+  <button data-experience="import-character">Importar personagem…</button>
+  <button id="exp-default-map" data-experience="default-map">Salvar como padrão da engine</button>
+  <button id="exp-default-r6" data-experience="default-r6">Salvar personagem como padrão da engine</button>
+  <button data-experience="edit-default">Editar mundo padrão</button>
+  <button data-experience="edit-character">Editar personagem padrão</button>
+  <button data-experience="restore-factory">Restaurar padrões de fábrica…</button>
+ </div></div>
+ <div id="experience-confirm"><div class="experience-confirm-card"><h2 id="exp-confirm-title"/><p id="exp-confirm-description"/><div class="experience-confirm-actions"><button id="exp-confirm-cancel" data-experience="cancel-confirm">Cancelar</button><button id="exp-confirm-discard" data-experience="discard-home">Descartar e voltar</button><button id="exp-confirm-ok" class="experience-primary" data-experience="confirm">Continuar</button></div></div></div>
+ <div id="experience-loading"><img id="exp-loading-background"/><div class="experience-loading-shade"/><div class="experience-loading-content"><div class="experience-loading-icon"><img id="exp-loading-icon"/></div><h1 id="exp-loading-title"/><p id="exp-loading-description"/><div class="experience-spinner"/><p id="exp-loading-status">Preparando sua experiência local…</p><button id="exp-loading-cancel" data-experience="cancel-load">Voltar ao Studio</button></div></div>
+</div>
