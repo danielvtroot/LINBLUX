@@ -55,6 +55,7 @@
     "projects/**",
     "referencias/**",
     "backups/**",
+    "**/linblux/progress/**",
     "cache/**",
     "Testing/**"
   ],

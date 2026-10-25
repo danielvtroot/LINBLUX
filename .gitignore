@@ -23,6 +23,7 @@ __pycache__/
 /.codex/
 /.agents/
 /backups/
+**/linblux/progress/
 /projects/*
 !/projects/.gitkeep
 # Referencias pessoais e duplicata do video oficial; midia/ e versionado.

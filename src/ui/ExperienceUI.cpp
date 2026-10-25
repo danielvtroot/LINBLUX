@@ -33,7 +33,7 @@ std::string field(const char* id,const char* name,const std::string& value,const
 }
 ExperienceUI::ExperienceUI(EditorUI& editor,experiences::ExperienceManager& manager,Rml::Context& context,Rml::ElementDocument& document)
     :editor_(editor),manager_(manager),context_(context),document_(document) {editor_.experienceUi_=this;}
-ExperienceUI::~ExperienceUI(){if(loadingJob_.valid())loadingJob_.wait();editor_.experienceUi_=nullptr;}
+ExperienceUI::~ExperienceUI(){if(loadingJob_.valid()){loadingJob_.wait();if(load_!=LoadState::None)editor_.runtime_.stop(false);}editor_.experienceUi_=nullptr;}
 bool ExperienceUI::overlayActive() const {return home_||load_!=LoadState::None;}
 bool ExperienceUI::loading() const {return load_!=LoadState::None;}
 void ExperienceUI::initialize(bool home) {home_=home;documentOpened();show(document_,"experience-menu",true);show(document_,"experience-root",true);dirty_=true;}
@@ -124,7 +124,7 @@ void ExperienceUI::dispatch(const std::string& action,const std::string& v) {
     if(action=="cancel-load") {
         cancelLoad_=true;
         if(load_==LoadState::Paint||load_==LoadState::Error) {load_=LoadState::None;pendingPath_.clear();error_.clear();releaseLoadingImages();}
-        else if(load_==LoadState::Fading){editor_.runtime_.stop();load_=LoadState::None;releaseLoadingImages();}
+        else if(load_==LoadState::Fading){editor_.runtime_.stop(false);load_=LoadState::None;releaseLoadingImages();}
         return;
     }
     if(loading())return;
