@@ -54,7 +54,7 @@ void Scene::buildDefaultScene() {
     createSpawnLocation();
 }
 void Scene::installDefaultScripts() {
-    if (gameAssets_.rigs.empty()) gameAssets_.createR6();
+    if (gameAssets_.rigs.empty()) gameAssets_.createLinbluxCharacter();
     if (!gameAssets_.findAnimation("r6-jump")) gameAssets_.animations.push_back(game::MakeJump());
     if (gameAssets_.player.jumpAnimation.empty()) gameAssets_.player.jumpAnimation="r6-jump";
     auto* service=ensureService(InstanceClass::ServerScriptService);

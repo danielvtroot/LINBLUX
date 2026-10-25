@@ -203,7 +203,7 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error) {
         scene_ = std::make_unique<Scene>();
         if (!projectio::fromJson(*scene_, projectio::toJson(authoring), error)) { stop(); return false; }
         // Old maps receive a runtime-only R6; authoring is never changed by F5.
-        if (scene_->gameAssets().rigs.empty()) scene_->gameAssets().createR6();
+        if (scene_->gameAssets().rigs.empty()) scene_->gameAssets().createLinbluxCharacter();
         if (!scene_->gameAssets().validate(error)) { stop(); return false; }
         const auto& assets = scene_->gameAssets();
         const Rig* selected = assets.findRig(assets.defaultRig);

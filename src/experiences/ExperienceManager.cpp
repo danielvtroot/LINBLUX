@@ -175,10 +175,10 @@ Manifest Manifest::parse(const std::string& text) {
 }
 fs::path ExperienceManager::defaultDataRoot() {
     if(const char* x=std::getenv("XDG_DATA_HOME");x&&x[0]=='/')return (fs::exists(fs::path(x)/"linblux")||!fs::exists(fs::path(x)/"loblox")?fs::path(x)/"linblux":fs::path(x)/"loblox");
-    if(const char* h=std::getenv("HOME");h&&h[0]=='/')return fs::path(h)/".local/share/linblux";
+    if(const char* h=std::getenv("HOME");h&&h[0]=='/')return (fs::exists(fs::path(h)/".local/share/linblux")||!fs::exists(fs::path(h)/".local/share/loblox")?fs::path(h)/".local/share/linblux":fs::path(h)/".local/share/loblox");
     throw std::runtime_error("Set HOME or XDG_DATA_HOME to an absolute directory");
 }
-ExperienceManager::ExperienceManager(fs::path dataRoot,fs::path factoryRoot)
+ExperienceManager::ExperienceManager(fs::path dataRoot,fs::path factoryRoot,fs::path engineDefaultsRoot)
     :data_(dataRoot.empty()?defaultDataRoot():fs::absolute(dataRoot)),factory_(std::move(factoryRoot)) {
     fs::create_directories(data_);auto config=settings(data_);
     library_=config.value("library",(data_/"experiences").string());fs::create_directories(library_);
@@ -186,6 +186,12 @@ ExperienceManager::ExperienceManager(fs::path dataRoot,fs::path factoryRoot)
         const auto executable=fs::path(GetApplicationDirectory());
         for(const auto& candidate:{executable/"share/linblux/templates",executable.parent_path()/"share/linblux/templates",fs::path(LINBLUX_FACTORY_DIR)})
             if(fs::is_regular_file(candidate/"baseplate.loblox.json")){factory_=candidate;break;}
+    }
+    defaults_=engineDefaultsRoot.empty()?(dataRoot.empty()?factory_.parent_path()/"defaults":data_/"engine-defaults"):fs::absolute(engineDefaultsRoot);
+    if(dataRoot.empty()&&engineDefaultsRoot.empty()) {
+        const auto development=fs::path(GetApplicationDirectory()).parent_path()/"assets/defaults";
+        if(fs::is_directory(development))defaults_=development;
+        if(const char* path=std::getenv("LINBLUX_DEFAULTS_ROOT");path&&*path)defaults_=fs::absolute(path);
     }
 }
 void ExperienceManager::setLibraryRoot(const fs::path& path) {
@@ -239,6 +245,7 @@ std::vector<Template> ExperienceManager::templates() const {
         const auto root=fs::path(config.at("defaultTemplate").get<std::string>());
         if(fs::exists(root/"experience.json"))result.push_back({"my-default","My Default","Your saved world and character",root});
     }
+    if(fs::exists(defaults_/"factory/world.loblox.json")||fs::exists(defaults_/"index.json")||fs::exists(factory_.parent_path()/"defaults/factory/world.loblox.json"))result.push_back({"engine-default","Mundo padrão LINBLUX","Cópia independente do mundo e personagem atuais",defaults_});
     const char* ids[]={"empty","baseplate","classic","obby"};
     const char* names[]={"Empty","Empty Baseplate","Classic Baseplate","Obby Starter"};
     const char* descriptions[]={"An empty world; no invisible floor","Baseplate and SpawnLocation","Baseplate, spawn and an editable R6","Five platforms and a finish platform"};
@@ -261,15 +268,21 @@ Experience ExperienceManager::snapshot(const Scene& scene,const fs::path& source
     const Scene* world=&scene;
     if(creation) {
         auto config=settings(data_);
-        if(creation->useDefaultCharacter&&config.contains("defaultCharacter")) {
-            auto character=inspect(config.at("defaultCharacter").get<std::string>());Scene rigScene;loadWorld(rigScene,character);
+        Scene rigScene;fs::path characterRoot;std::string characterFace;
+        if(creation->useDefaultCharacter) {
+            if(config.contains("defaultCharacter")) {
+                auto character=inspect(config.at("defaultCharacter").get<std::string>());
+                loadWorld(rigScene,character);characterRoot=character.root;characterFace=character.manifest.faceImage;
+            } else characterRoot=loadEngineResource("character",rigScene);
+        }
+        if(!characterRoot.empty()) {
             Scene relocated;std::string error;
-            if(!projectio::fromJson(relocated,relocateWorld(rigScene,character.root,stage.path),error)||!projectio::fromJson(merged,projectio::toJson(scene),error))throw std::runtime_error(error);
+            if(!projectio::fromJson(relocated,relocateWorld(rigScene,characterRoot,stage.path),error)||!projectio::fromJson(merged,projectio::toJson(scene),error))throw std::runtime_error(error);
             auto& a=merged.gameAssets();const auto& b=relocated.gameAssets();
             for(const auto& rig:b.rigs){auto* old=a.findRig(rig.id);if(old)*old=rig;else a.rigs.push_back(rig);}
             for(const auto& clip:b.animations){auto* old=a.findAnimation(clip.id);if(old)*old=clip;else a.animations.push_back(clip);}
             a.defaultRig=b.defaultRig;a.player=b.player;world=&merged;
-            if(!character.manifest.faceImage.empty())manifest.faceImage=imageImport(stage.path,containedFile(character.root,character.manifest.faceImage));
+            if(!characterFace.empty())manifest.faceImage=imageImport(stage.path,containedFile(characterRoot,characterFace));
         }
         if(!creation->icon.empty())manifest.icon=imageImport(stage.path,creation->icon);
         if(!creation->banner.empty())manifest.banner=imageImport(stage.path,creation->banner);
@@ -283,10 +296,15 @@ Experience ExperienceManager::snapshot(const Scene& scene,const fs::path& source
 }
 Experience ExperienceManager::create(const CreateOptions& options) {
     Scene scene;fs::path source;
-    const auto choices=templates();const auto selected=std::find_if(choices.begin(),choices.end(),[&](const Template& t){return t.id==options.templateId;});
-    if(selected==choices.end())throw std::runtime_error("Template is missing; choose an available template");
-    if(selected->id=="my-default") {auto e=inspect(selected->place);loadWorld(scene,e);source=e.root;}
-    else {std::string error;if(!projectio::load(scene,selected->place.string(),error))throw std::runtime_error(error);source=selected->place.parent_path();}
+    if(options.templateId=="engine-default") {
+        source=loadEngineResource("world",scene);
+        if(source.empty()) {std::string error;if(!projectio::load(scene,(factory_/"baseplate.loblox.json").string(),error))throw std::runtime_error(error);source=factory_;}
+    } else {
+        const auto choices=templates();const auto selected=std::find_if(choices.begin(),choices.end(),[&](const Template& t){return t.id==options.templateId;});
+        if(selected==choices.end())throw std::runtime_error("Modelo inicial indisponível");
+        if(selected->id=="my-default") {auto e=inspect(selected->place);loadWorld(scene,e);source=e.root;}
+        else {std::string error;if(!projectio::load(scene,selected->place.string(),error))throw std::runtime_error(error);source=selected->place.parent_path();}
+    }
     Manifest m;m.id=newId();m.installationId=newId();m.name=options.name;m.description=options.description;m.created=m.modified=now();m.sourceTemplate=options.templateId;
     return snapshot(scene,source,library_,m,true,&options);
 }
@@ -429,7 +447,54 @@ void ExperienceManager::setDefaultCharacter(const Scene& source,const std::strin
     const auto e=snapshot(scene,active_?active_->root:fs::path{},data_/"templates",m,false);
     auto config=settings(data_);config["defaultCharacter"]=e.root.string();saveSettings(data_,config);event("default_character",e.root);
 }
-void ExperienceManager::restoreFactoryDefaults() {auto config=settings(data_);config.erase("defaultTemplate");config.erase("defaultCharacter");saveSettings(data_,config);}
+fs::path ExperienceManager::loadEngineResource(const std::string& key,Scene& scene) const {
+    const auto indexFile=defaults_/"index.json";
+    if(fs::exists(indexFile)) {
+        const auto index=boundedJson(read(indexFile,MiB));
+        if(index.value("format","")!="linblux-engine-defaults"||index.value("version",0)!=1)throw std::runtime_error("Versão dos padrões da engine não suportada");
+        if(index.contains(key)) {const auto root=containedFile(defaults_,index.at(key).get<std::string>());auto e=inspect(root);loadWorld(scene,e);return root;}
+    }
+    auto file=defaults_/"factory"/(key+".loblox.json");
+    if(!fs::exists(file))file=factory_.parent_path()/"defaults/factory"/(key+".loblox.json");
+    if(!fs::exists(file))return {};
+    std::string error;if(!projectio::load(scene,file.string(),error))throw std::runtime_error("Padrão de fábrica inválido: "+error);
+    return file.parent_path();
+}
+void ExperienceManager::saveEngineResource(const std::string& key,const Scene& scene) {
+    auto index=json{{"format","linblux-engine-defaults"},{"version",1}};
+    if(fs::exists(defaults_/"index.json")) {
+        index=boundedJson(read(defaults_/"index.json",MiB));
+        if(index.value("format","")!="linblux-engine-defaults"||index.value("version",0)!=1)throw std::runtime_error("Versão dos padrões não suportada; arquivo preservado");
+    }
+    Manifest m;m.id=newId();m.installationId=newId();m.name=key=="world"?"Mundo padrão LINBLUX":"Personagem padrão LINBLUX";m.created=m.modified=now();m.sourceTemplate="linblux-engine-default";
+    const auto e=snapshot(scene,active_?active_->root:fs::path{},defaults_/"revisions",m,false);
+    index[key]=e.root.lexically_relative(defaults_).generic_string();
+    write(defaults_/"index.json",index.dump(2));
+    auto config=settings(data_);config.erase(key=="world"?"defaultTemplate":"defaultCharacter");saveSettings(data_,config);
+    event("engine_default_saved",defaults_);
+}
+void ExperienceManager::saveEngineWorld(const Scene& scene) {saveEngineResource("world",scene);}
+void ExperienceManager::saveEngineCharacter(const Scene& source,const std::string& rigId) {
+    const auto* rig=source.gameAssets().findRig(rigId);if(!rig)throw std::runtime_error("Selecione um personagem no Explorador");
+    Scene scene;scene.gameAssets()=source.gameAssets();scene.gameAssets().rigs={*rig};scene.gameAssets().defaultRig=rigId;
+    std::string error;if(!scene.gameAssets().rigs.front().recenterAuthoringRoot(error))throw std::runtime_error(error);
+    saveEngineResource("character",scene);
+}
+Experience ExperienceManager::editEngineDefault(bool character) {
+    Scene scene;const auto root=loadEngineResource(character?"character":"world",scene);
+    if(root.empty())throw std::runtime_error("Recurso padrão da engine não encontrado");
+    Manifest m;m.id=newId();m.installationId=newId();m.name=character?"Editar personagem padrão":"Editar mundo padrão";m.created=m.modified=now();m.sourceTemplate="engine-default-edit";
+    return snapshot(scene,root,library_,m,true);
+}
+void ExperienceManager::restoreFactoryDefaults() {
+    // Called only after the Studio confirmation. Previous immutable revisions stay recoverable.
+    if(fs::exists(defaults_/"index.json")) {
+        auto index=boundedJson(read(defaults_/"index.json",MiB));
+        if(index.value("format","")!="linblux-engine-defaults"||index.value("version",0)!=1)throw std::runtime_error("Versão dos padrões não suportada; restauração cancelada");
+        index.erase("world");index.erase("character");write(defaults_/"index.json",index.dump(2));
+    }
+    auto config=settings(data_);config.erase("defaultTemplate");config.erase("defaultCharacter");saveSettings(data_,config);
+}
 fs::path ExperienceManager::thumbnail(const Experience& experience) const {
     const auto& ref=experience.manifest.banner.empty()?experience.manifest.icon:experience.manifest.banner;if(ref.empty())return {};
     const auto source=containedFile(experience.root,ref);ImageInfo info;if(!ReadSafeImageInfo(source.string(),info))return {};

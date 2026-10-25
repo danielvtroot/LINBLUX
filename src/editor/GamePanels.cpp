@@ -78,9 +78,9 @@ void AnimationChoice(const char* label, std::string& id, const game::GameAssets&
 
 void EditorUI::insertR6() {
     endGizmoSession(true, "insert_rig"); cancelRigGizmo(); camera_.releaseCapture();
-    const std::string id = scene_.gameAssets().createR6().id;
+    const std::string id = scene_.gameAssets().createLinbluxCharacter().id;
     selectRig(id); camera_.focusOn(scene_.gameAssets().findRig(id)->root.position, 5);
-    setStatus("R6 criado; caminhada R6_Walk disponivel no Animation Editor.");
+    setStatus("Personagem LINBLUX criado; animações disponíveis no editor de animação.");
 }
 void EditorUI::selectRig(const std::string& id, int body) {
     auto* rig = scene_.gameAssets().findRig(id);

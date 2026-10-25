@@ -1,6 +1,6 @@
 <div id="experience-root">
  <div id="experience-home">
-  <div class="home-header"><div class="experience-brand"><img src="linblux-logo"/><b>LINBLUX</b><small>STUDIO</small></div><div class="home-navigation"><button id="exp-nav-home" data-experience="page" data-value="home">Início</button><button id="exp-nav-library" data-experience="page" data-value="library">Biblioteca</button><button id="exp-nav-archive" data-experience="page" data-value="archive">Arquivo</button><button id="exp-settings" data-experience="library-location" title="Local da biblioteca">Configurações</button></div></div>
+  <div class="home-header"><div class="experience-brand"><img src="linblux-logo"/><b>LINBLUX</b><small>STUDIO</small></div><div class="home-navigation"><button id="exp-nav-home" data-experience="page" data-value="home">Início</button><button id="exp-nav-library" data-experience="page" data-value="library">Biblioteca</button><button id="exp-nav-archive" data-experience="page" data-value="archive">Arquivo</button><button id="exp-settings" data-experience="page" data-value="settings" title="Configurações da engine">Configurações</button></div></div>
   <div class="experience-main"><div id="experience-content"/></div>
  </div>
  <div id="experience-error" data-experience="dismiss-error" title="Clique para fechar"/>

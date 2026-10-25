@@ -362,6 +362,16 @@ bool PlayerSettings::validate(std::string& error) const {
     }
     error.clear(); return true;
 }
+Rig& GameAssets::createLinbluxCharacter() {
+    auto& rig=createR6();const auto previous=rig.id;
+    std::string next;for(unsigned i=1;;++i){next="linblux-character-"+std::to_string(i);if(!findRig(next))break;}
+    rig.id=next;rig.name="Sentinela LINBLUX";
+    const std::array<Vector3,kBodyCount> sizes{{{1.8f,1.8f,1.1f},{1.35f,1.2f,1.15f},{.65f,1.8f,.75f},{.65f,1.8f,.75f},{.7f,1.9f,.85f},{.7f,1.9f,.85f}}};
+    const std::array<Color,kBodyCount> colors{{{158,34,48,255},{190,193,203,255},{76,79,89,255},{76,79,89,255},{52,54,64,255},{52,54,64,255}}};
+    for(int i=0;i<kBodyCount;++i){rig.resizeBody(i,sizes[i]);rig.bodies[i].color=colors[i];}
+    if(defaultRig==previous)defaultRig=rig.id;
+    return rig;
+}
 Rig& GameAssets::createR6() {
     Rig rig = MakeR6();
     for (unsigned i = 1; findRig(rig.id); ++i) rig.id = "r6-" + std::to_string(i);

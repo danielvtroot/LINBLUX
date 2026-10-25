@@ -161,6 +161,10 @@ add_dependencies(linblux linblux_ui_assets)
 add_custom_target(linblux_template_assets ALL COMMAND ${CMAKE_COMMAND} -E copy_directory
   ${CMAKE_CURRENT_SOURCE_DIR}/assets/templates ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/templates)
 add_dependencies(linblux linblux_template_assets)
+add_custom_target(linblux_default_assets ALL COMMAND ${CMAKE_COMMAND} -E copy_directory
+  ${CMAKE_CURRENT_SOURCE_DIR}/assets/defaults ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/defaults)
+add_dependencies(linblux linblux_default_assets)
+install(DIRECTORY assets/defaults/ DESTINATION share/linblux/defaults COMPONENT Linblux)
 add_custom_target(linblux_builtin_assets ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/builtin
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/logo.png ${CMAKE_CURRENT_SOURCE_DIR}/assets/builtin/character-face.png ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/builtin)
@@ -321,3 +325,6 @@ if(XVFB_RUN_EXECUTABLE AND FFMPEG_FOUND AND LINBLUX_ENABLE_VIDEO)
   add_test(NAME linblux_home_video COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24" $<TARGET_FILE:linblux_home_video_tests>)
   set_tests_properties(linblux_home_video PROPERTIES TIMEOUT 120 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
 endif()
+add_executable(linblux_defaults_tests tests/defaults_main.cpp)
+target_link_libraries(linblux_defaults_tests PRIVATE linblux_core)
+add_test(NAME linblux_defaults COMMAND linblux_defaults_tests)

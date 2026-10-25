@@ -24,7 +24,7 @@ struct Experience {
     Manifest manifest;
 };
 struct CreateOptions {
-    std::string name, description, templateId = "baseplate";
+    std::string name, description, templateId = "engine-default";
     std::string icon, banner, loadingBackground;
     bool useDefaultCharacter = true;
 };
@@ -39,7 +39,7 @@ struct MissingExperience {std::string installationId,name;std::filesystem::path 
 // previous scene/active experience until a transaction has succeeded.
 class ExperienceManager {
 public:
-    explicit ExperienceManager(std::filesystem::path dataRoot = {}, std::filesystem::path factoryRoot = {});
+    explicit ExperienceManager(std::filesystem::path dataRoot = {}, std::filesystem::path factoryRoot = {}, std::filesystem::path engineDefaultsRoot = {});
     static std::filesystem::path defaultDataRoot();
     const std::filesystem::path& libraryRoot() const { return library_; }
     void setLibraryRoot(const std::filesystem::path& path);
@@ -63,6 +63,11 @@ public:
     void setDefaultTemplate(const Scene& scene);
     void setDefaultCharacter(const Scene& scene, const std::string& rigId);
     void restoreFactoryDefaults();
+    void saveEngineWorld(const Scene& scene);
+    void saveEngineCharacter(const Scene& scene,const std::string& rigId);
+    Experience editEngineDefault(bool character);
+    const std::filesystem::path& engineDefaultsRoot() const {return defaults_;}
+
     std::string importImage(const std::filesystem::path& file);
     std::string importImage(const Experience& experience,const std::filesystem::path& file);
     std::filesystem::path thumbnail(const Experience& experience) const;
@@ -74,9 +79,11 @@ public:
     // never into an installed user's defaults or personal project.
     static void writeFactoryResources(const std::filesystem::path& destination);
 private:
-    std::filesystem::path data_, factory_, library_;
+    std::filesystem::path data_, factory_, library_, defaults_;
     std::optional<Experience> active_;
     std::vector<std::string> warnings_;
+    std::filesystem::path loadEngineResource(const std::string& key,Scene& scene) const;
+    void saveEngineResource(const std::string& key,const Scene& scene);
     void registerRoot(const std::filesystem::path& root);
     Experience snapshot(const Scene& scene, const std::filesystem::path& sourceRoot,
                         const std::filesystem::path& parent, Manifest manifest, bool registerExperience,

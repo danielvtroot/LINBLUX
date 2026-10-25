@@ -169,7 +169,8 @@ struct GameAssets {
     std::vector<AnimationClip> animations;
     std::string defaultRig;
     PlayerSettings player;
-    Rig& createR6();
+    Rig& createR6(); // compatibility constructor for authored legacy rigs
+    Rig& createLinbluxCharacter();
     bool removeAnimation(const std::string& id,std::string& error,bool clearAssignments=false);
     Rig* findRig(const std::string& id);
     const Rig* findRig(const std::string& id) const;

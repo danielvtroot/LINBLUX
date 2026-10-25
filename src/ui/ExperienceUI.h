@@ -45,7 +45,7 @@ private:
     std::vector<std::pair<std::string,std::string>> commands_;
     std::vector<experiences::Experience> entries_;
     std::optional<experiences::Experience> selected_;
-    bool home_=true,fileMenu_=false,dirty_=true,returnToStudio_=false,cancelLoad_=false,editingDefault_=false;
+    bool home_=true,fileMenu_=false,dirty_=true,returnToStudio_=false,cancelLoad_=false,editingDefault_=false,editingCharacter_=false;
     enum class LoadState {None,Paint,Starting,Fading,Error};
     LoadState load_=LoadState::None;
     std::future<std::string> loadingJob_;

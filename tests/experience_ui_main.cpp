@@ -69,7 +69,7 @@ int main() {
         const auto banner=fs::path(__FILE__).parent_path()/"fixtures/image-test.jpg";
         click("exp-new-main");CHECK(editor.frontend()->elementBounds("exp-name").width>0);capture("new-experience");
         fill("exp-name","Integration Obby");fill("exp-description","A portable local experience");
-        click("exp-template");key("Down");key("Return");
+        click("exp-template");key("Home");key("Down");key("Down");key("Return");
         click("exp-choose-icon");nativeFile("^Escolher imagem$",directory/"icon.png","native-icon");
         click("exp-choose-banner");nativeFile("^Escolher imagem$",banner,"native-banner");
         CHECK(editor.frontend()->elementBounds("exp-choose-loading").width==0);
@@ -116,7 +116,7 @@ int main() {
             CHECK(NearlyEqual(camera.position(),editorEye));capture("rig-whole-scaled");
         }
         click("experience-menu");click("exp-default-r6");click("experience-menu");click("exp-default-map");
-        bool myDefault=false;for(const auto& item:manager.templates())myDefault|=item.id=="my-default";CHECK(myDefault);
+        bool myDefault=false;for(const auto& item:manager.templates())myDefault|=item.id=="engine-default";CHECK(myDefault);
         click("experience-menu");click("exp-details");capture("experience-details");fill("exp-name","Renamed Experience");click("exp-save-details");CHECK(manager.active()->manifest.name=="Renamed Experience");
         const auto authoring=projectio::toJson(scene);bool loadingPainted=false;
         observe=[&]{if(!loadingPainted&&EditorUITestAccess::experiences(editor)->loading()&&editor.frontend()->elementBounds("exp-loading-title").width>0){TakeScreenshot((directory/"loading.png").c_str());loadingPainted=true;}};
@@ -128,7 +128,7 @@ int main() {
         Scene portable;receiver.open(received,portable);CHECK(portable.gameAssets().findRig(rigId));CHECK(projectio::toJson(portable)==authoring);CHECK(fs::exists(received.root/received.manifest.banner));receiver.close();
         game::SetProjectAssetRoot(manager.active()->root.string());game::SetProjectFaceImage(manager.active()->manifest.faceImage);
         click("experience-menu");click("exp-back-home");CHECK(editor.experienceOverlay());CHECK(!manager.active());capture("recent-experiences");
-        EditorUITestAccess::experiences(editor)->enqueue("new","my-default");frames(3);fill("exp-name","From My Default");capture("default-wizard");click("exp-create");CHECK(manager.active());
+        EditorUITestAccess::experiences(editor)->enqueue("new","engine-default");frames(3);fill("exp-name","From My Default");capture("default-wizard");click("exp-create");CHECK(manager.active());
         if(!manager.active()){capture("default-create-error");throw std::runtime_error("My Default creation failed: "+editor.frontend()->elementText("experience-error"));}
         CHECK(scene.gameAssets().findRig(rigId));
         click("experience-menu");click("exp-back-home");click("exp-import");nativeFile("^Abrir / importar experiência$",directory/"Shared.lo","native-import");CHECK(manager.active());CHECK(scene.gameAssets().findRig(rigId));capture("imported-experience");

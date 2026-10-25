@@ -44,6 +44,17 @@ int main(){
         home->enqueue("cancel-confirm");frames(3);if(!fs::exists(experience.root))throw std::runtime_error("Cancelar excluiu arquivos");
         home->enqueue("delete");frames(3);TakeScreenshot((root/"confirmar-exclusao.png").c_str());home->enqueue("confirm");frames(5);
         if(fs::exists(experience.root)||!manager.list().empty())throw std::runtime_error("Exclusão pela interface falhou");
+        home->enqueue("edit-default");frames(5);if(home->homeVisible()||!manager.active())throw std::runtime_error("Edição de mundo padrão não abriu");
+        scene.createPart(PartShape::Block,{3,5,2},{2,2,2},"Padrão pela interface");home->enqueue("default-map");frames(5);
+        home->requestHome();frames(4);home->enqueue("edit-character");frames(5);
+        const auto rigId=scene.gameAssets().defaultRig;auto* rig=scene.gameAssets().findRig(rigId);
+        if(!rig)throw std::runtime_error("Edição de personagem padrão não abriu");rig->bodies[game::Torso].color={201,31,62,255};
+        home->enqueue("save");frames(5);home->requestHome();frames(4);
+        experiences::CreateOptions inherited;inherited.name="Padrões pela interface";auto inheritedProject=manager.create(inherited);Scene inheritedScene;manager.open(inheritedProject,inheritedScene);
+        bool found=false;for(auto* part:inheritedScene.parts())found|=part->name()=="Padrão pela interface";
+        if(!found||inheritedScene.gameAssets().findRig(rigId)->bodies[game::Torso].color.r!=201)throw std::runtime_error("Padrões da UI não persistiram");manager.close();
+        home->enqueue("restore-factory");frames(3);if(editor.frontend()->elementBounds("exp-confirm-ok").width<=0)throw std::runtime_error("Restauração sem confirmação");
+        home->enqueue("cancel-confirm");frames(3);home->enqueue("restore-factory");frames(3);home->enqueue("confirm");frames(3);
         std::printf("Home: vídeo nas bordas, movimento, resize, duas imagens, criação e liberação no editor passaram. Capturas: %s\n",root.c_str());
     }catch(const std::exception& e){std::fprintf(stderr,"Home: %s\n",e.what());result=1;}
     rlImGuiShutdown();CloseWindow();return result;
