@@ -431,6 +431,174 @@ end, sensor)
         CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);
     }
 }
+void LinbluxNpc() {
+    Scene author;author.buildDefaultScene();std::string error;
+    // Muro estatico entre o NPC e o destino; pilar alto isola o topo.
+    auto* wall=author.createPart(PartShape::Block,{10,3,0},{1,6,10},"Muro");wall->setAnchored(true);
+    auto* pillar=author.createPart(PartShape::Block,{30,4,30},{6,8,6},"Pilar");pillar->setAnchored(true);
+    const auto wallId=wall->id();
+    // NPC autorado: dados persistidos, script proprio e controlador no Play.
+    auto* sentinel=author.createPart(PartShape::Block,{-40,2.5f,40},{2,5,2},"Sentinela");
+    NpcProperties authored;authored.speed=6;authored.maxHealth=50;
+    CHECK(sentinel->setNpcProperties(authored,error));
+    author.createScript(InstanceClass::Script,sentinel,"Sentinela.lua")->source=
+        "linblux.scene.root:set_attribute(\"sentinela_viva\", true)";
+    const auto sentinelId=sentinel->id();
+    author.createScript(InstanceClass::Script,nullptr,"Npc.lua")->source=R"(
+local root = linblux.scene.root
+local nav = linblux.npc.navigation()
+assert(nav.ready and nav.cells > 0 and nav.walkable > 0 and nav.cell_size > 0)
+local guarda = linblux.npc.create{name="Guarda", position=linblux.vec3(0,2.6,0), size=linblux.vec3(2,5,2), speed=14}
+local patrulha = linblux.npc.create{name="Patrulha", position=linblux.vec3(-20,2.6,20), size=linblux.vec3(1.5,4,1.5), speed=12}
+local alvo = linblux.npc.create{name="Alvo", position=linblux.vec3(-10,2.6,0), size=linblux.vec3(2,5,2), max_health=20, respawn_delay=0.5}
+assert(linblux.npc.state(guarda) == "idle")
+assert(linblux.npc.health(guarda) == 100 and linblux.npc.max_health(guarda) == 100)
+assert(linblux.npc.speed(guarda) == 14)
+linblux.npc.set_speed(guarda, 12)
+assert(linblux.npc.speed(guarda) == 12)
+linblux.npc.attach(patrulha, {speed = 12})
+assert(linblux.npc.speed(patrulha) == 12)
+root:set_attribute("guarda", guarda.id)
+root:set_attribute("patrulha", patrulha.id)
+root:set_attribute("alvo", alvo.id)
+linblux.time.after(0.05, function()
+    assert(linblux.npc.move_to(guarda, linblux.vec3(22, 2.6, 0)) == true)
+    local rota = linblux.npc.path(guarda)
+    assert(#rota >= 3)
+    root:set_attribute("rota", #rota)
+    assert(linblux.npc.target(guarda).x == 22)
+    assert(linblux.npc.state(guarda) == "moving")
+    assert(linblux.npc.move_to(patrulha, linblux.vec3(-20, 2.6, -20)) == true)
+    assert(linblux.npc.move_to(alvo, linblux.vec3(30, 8, 30)) == false)
+    assert(linblux.npc.state(alvo) == "unreachable")
+    local pontos, ok = linblux.npc.find_path(linblux.vec3(0,2.6,0), linblux.vec3(22,2.6,0))
+    assert(ok and #pontos >= 3)
+    linblux.npc.damage(alvo, 5)
+    assert(linblux.npc.health(alvo) == 15)
+    linblux.npc.heal(alvo, 2)
+    assert(linblux.npc.health(alvo) == 17)
+    linblux.npc.set_health(alvo, 0)
+    assert(linblux.npc.state(alvo) == "dead")
+end)
+linblux.time.after(1.2, function()
+    assert(linblux.npc.state(alvo) ~= "dead")
+    assert(linblux.npc.health(alvo) == 20)
+    root:set_attribute("respawn_ok", true)
+end)
+linblux.time.after(2.0, function()
+    local efemero = linblux.npc.create{name="Efemero", position=linblux.vec3(-20,2.6,34)}
+    root:set_attribute("efemero", efemero.id)
+    efemero:destroy()
+    root:set_attribute("efemero_destruido", true)
+end)
+linblux.time.after(2.2, function()
+    local desanexado = linblux.npc.create{name="Desanexa", position=linblux.vec3(-30,2.6,34)}
+    linblux.npc.detach(desanexado)
+    root:set_attribute("detach_ok", true)
+end)
+)";
+    // Serializacao: o componente viaja no projeto e volta com os mesmos valores.
+    const auto json=projectio::toJson(author);Scene reopened;
+    CHECK(projectio::fromJson(reopened,json,error));CHECK(projectio::toJson(reopened)==json);
+    const auto* restored=reopened.findPart(sentinelId);
+    CHECK(restored!=nullptr&&restored->hasNpc());
+    if(restored!=nullptr&&restored->hasNpc())CHECK(restored->npcProperties()->speed==6&&restored->npcProperties()->maxHealth==50);
+    const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;
+    CHECK(runtime.start(author,error));
+    CHECK(runtime.npcs().attached(sentinelId));
+    // O script de autoria roda no Play e cria tres NPCs independentes.
+    CHECK(runtime.npcs().count()==4);
+    for(int i=0;i<300;++i){
+        runtime.update(1.f/60,{});
+        for(auto it=runtime.scene().parts().begin();it!=runtime.scene().parts().end();++it){
+            const auto* part=*it;if(!part||part->name()!="Guarda")continue;
+            const auto p=part->position();
+            if(p.x>9.4f&&p.x<10.6f&&p.z>-5.f&&p.z<5.f)CHECK(false&&"NPC atravessou o muro");
+        }
+    }
+    const auto attribute=[&](const char* name)->bool{return runtime.scene().workspace()->attributes().count(name)>0;};
+    CHECK(attribute("sentinela_viva"));CHECK(attribute("respawn_ok"));CHECK(attribute("efemero_destruido"));CHECK(attribute("detach_ok"));
+    CHECK(attribute("rota")&&std::get<double>(runtime.scene().workspace()->attributes().at("rota"))>=3);
+    const auto id=[&](const char* name){return InstanceId(std::get<double>(runtime.scene().workspace()->attributes().at(name)));};
+    const auto* guarda=runtime.scene().findPart(id("guarda"));
+    const auto* patrulha=runtime.scene().findPart(id("patrulha"));
+    CHECK(guarda!=nullptr&&patrulha!=nullptr);
+    if(guarda){CHECK(std::fabs(guarda->position().x-22)<2.f&&std::fabs(guarda->position().z)<2.5f);CHECK(runtime.npcs().state(guarda->id())==game::NpcState::Arrived);}
+    if(patrulha){CHECK(std::fabs(patrulha->position().x+20)<2.f&&std::fabs(patrulha->position().z+20)<2.5f);CHECK(runtime.npcs().state(patrulha->id())==game::NpcState::Arrived);}
+    CHECK(!runtime.npcs().attached(id("efemero")));
+    CHECK(runtime.npcs().count()==4);
+    CHECK(runtime.validate(error));
+    for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("NPC Lua: %s\n",message.text.c_str());CHECK(!message.error);}
+    CHECK(projectio::toJson(author)==baseline);
+    runtime.stop();CHECK(runtime.npcs().count()==0);CHECK(runtime.validate(error));
+}
+void NpcExamples() {
+    const auto root=std::filesystem::path(__FILE__).parent_path().parent_path();
+    const auto source=[&](const char* name){std::ifstream file(root/"assets/examples/lua"/name);CHECK(file.good());return std::string(std::istreambuf_iterator<char>(file),{});};
+    const auto find=[&](const game::RuntimeSession& runtime,const char* name)->const Part*{
+        for(const auto* part:runtime.scene().parts())if(part->name()==name)return part;return nullptr;};
+    const auto noErrors=[&](const game::RuntimeSession& runtime,const char* label){
+        for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("NPC %s: %s\n",label,message.text.c_str());CHECK(!message.error);}};
+
+    // Patrulha: percorre o ciclo e para em cada waypoint.
+    {
+        Scene author;author.buildDefaultScene();std::string error;
+        author.createScript(InstanceClass::Script,nullptr,"npc_patrulha.lua")->source=source("npc_patrulha.lua");
+        const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+        float farthest=0;
+        for(int i=0;i<600;++i){
+            runtime.update(1.f/60,{});
+            const auto* guard=find(runtime,"GuardaPatrulha");
+            if(guard)farthest=std::max(farthest,Vector3Distance(guard->position(),{-30,2.6f,-30}));
+        }
+        const auto& attrs=runtime.scene().workspace()->attributes();
+        CHECK(attrs.count("patrulha_pronta"));
+        CHECK(attrs.count("patrulha_pontos")&&std::get<double>(attrs.at("patrulha_pontos"))>=2);
+        CHECK(!attrs.count("patrulha_inacessivel"));
+        const auto* guard=find(runtime,"GuardaPatrulha");CHECK(guard!=nullptr);
+        CHECK(farthest>10); // percorreu a rota, nao ficou parado
+        noErrors(runtime,"patrulha");CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
+    }
+
+    // Perseguidor: atualiza o destino quando o alvo se move e para ao perde-lo.
+    {
+        Scene author;author.buildDefaultScene();std::string error;
+        author.createScript(InstanceClass::Script,nullptr,"npc_perseguidor.lua")->source=source("npc_perseguidor.lua");
+        author.createScript(InstanceClass::Script,nullptr,"MovimentoJogador.lua")->source=R"(
+linblux.time.after(1.5, function() linblux.player:teleport(linblux.vec3(-24, 6, 0)) end)
+linblux.time.after(3.0, function() linblux.player:teleport(linblux.vec3(60, 6, 60)) end)
+)";
+        const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+        const auto* monster=find(runtime,"Perseguidor");CHECK(monster!=nullptr);
+        const Vector3 spawn=monster?monster->position():Vector3{};
+        for(int i=0;i<220;++i)runtime.update(1.f/60,{});
+        const auto& attrs=runtime.scene().workspace()->attributes();
+        CHECK(attrs.count("perseguindo"));
+        CHECK(attrs.count("replanejamentos")&&std::get<double>(attrs.at("replanejamentos"))>=2);
+        CHECK(attrs.count("alvo_perdido"));
+        if(monster)CHECK(Vector3Distance(monster->position(),spawn)>3&&runtime.npcs().state(monster->id())!=game::NpcState::Moving);
+        noErrors(runtime,"perseguidor");CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
+    }
+
+    // Monstro com dano: persegue, ataca pela vida real e morre ao zerar a vida.
+    {
+        Scene author;author.buildDefaultScene();std::string error;
+        author.createScript(InstanceClass::Script,nullptr,"npc_monstro.lua")->source=source("npc_monstro.lua");
+        author.createScript(InstanceClass::Script,nullptr,"Ataque.lua")->source=R"(
+linblux.time.after(6.0, function() linblux.events.emit("atacar_monstro", {dano = 100}) end)
+)";
+        const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+        const float maxHealth=runtime.settings().maxHealth;
+        for(int i=0;i<420;++i)runtime.update(1.f/60,{});
+        const auto& attrs=runtime.scene().workspace()->attributes();
+        CHECK(attrs.count("ataques")&&std::get<double>(attrs.at("ataques"))>=1);
+        CHECK(runtime.health()<maxHealth);
+        CHECK(attrs.count("monstro_morto"));
+        const auto* monster=find(runtime,"Monstro");CHECK(monster!=nullptr);
+        if(monster)CHECK(runtime.npcs().state(monster->id())==game::NpcState::Dead);
+        noErrors(runtime,"monstro");CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
+    }
+}
 void LinbluxProgress() {
     const auto root=std::filesystem::path(__FILE__).parent_path().parent_path();
     const auto directory=root/".turbo"/("progress-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -1132,6 +1300,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }
