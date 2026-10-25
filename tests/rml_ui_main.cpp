@@ -557,7 +557,12 @@ end)
         // overflow raylib's bounded char queue while no frame is being pumped.
         SetClipboardText(imagePath.c_str());key("ctrl+v");key("Return");frames(4);
         const auto imported=game::ListImages(game::AssetsDir());CHECK(imported.size()==1);
-        if(!imported.empty()) {click("cmd-apply-image-assets/"+imported.front().filename);CHECK(part->attributes().count("decal_image"));capture("image-library-decal");}
+        if(!imported.empty()) {
+            const auto assetPath=std::filesystem::absolute(std::filesystem::path(game::AssetsDir())/imported.front().filename).string();
+            click("cmd-apply-image-"+assetPath);
+            CHECK(part->attributes().count("decal_image"));
+            capture("image-library-decal");
+        }
         // Close the embedded panel through its RML close button.
         CHECK(actions.dispatch({"select","",partId}));
         // A native scene action does not implicitly change panel layout.
