@@ -10,6 +10,8 @@
 #include "objects/Lighting.h"
 #include "objects/Workspace.h"
 #include "game/ImageAssets.h"
+#include <cstdio>
+#include <cstdlib>
 #include "game/Spawn.h"
 #include "core/Diagnostics.h"
 #include "core/NumberFormat.h"
@@ -506,6 +508,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         const bool capture=ui.gameplayCapture_||ui.camera_.cursorCaptured();
         if(!capture)context->ProcessMouseMove(int(mouse.x*dpi),int(mouse.y*dpi),0);
         auto* hover=context->GetHoverElement();bool controls=ancestor(hover,"data-action")||ancestor(hover,"data-experience")||ancestor(hover,"data-page")||ancestor(hover,"data-player-page")||ancestor(hover,"data-player-step")||ancestor(hover,"data-split");
+        if(std::getenv("LOBLOX_TRACE_HOME")&&(ImGui::IsMouseClicked(0)||ImGui::IsMouseReleased(0)))std::fprintf(stderr,"TRACE input clicked=%d released=%d focus=%d mouse=%.0f,%.0f hover=%s\n",ImGui::IsMouseClicked(0),ImGui::IsMouseReleased(0),IsWindowFocused(),mouse.x,mouse.y,hover?hover->GetId().c_str():"none");
         const bool transforming=ui.transform_.active()||ui.rigGizmo_.dragging();
         mouseOwned=!capture&&(dialogOpen || (!transforming&&(!Within(mouse,view) || (ui.runtime_.state()==game::RuntimeState::Paused) || controls || dragging || !split.empty())));
         if(experiences&&experiences->blocksStudioInput()){mouseOwned=true;keyboardOwned=true;}
