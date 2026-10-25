@@ -48,7 +48,7 @@ int main(int argc,char** argv) {
             RigRenderState avatar{&runtime.rig(),runtime.pose(),runtime.renderCharacterRoot()};
             renderer.drawScene(runtime.scene(),runtime.playerCamera().camera(),GetScreenWidth(),GetScreenHeight(),0,runtime.playerCamera().avatarHidden()?nullptr:&avatar,false);
             DrawRectangleRounded({16,16,245,58},.2f,8,ui::theme::panel);
-            if(logo.id)DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{24,21,48,48},{0,0},0,WHITE);
+            if(logo.id){BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{24,21,48,48},{0,0},0,WHITE);EndBlendMode();}
             label("LINBLUX Player",84,35,18,ui::theme::text);
             label("Esc · Pausar",float(GetScreenWidth()-156),32,16,ui::theme::text);
             if(paused){DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),ui::theme::overlay);const float x=GetScreenWidth()*.5f-220,y=GetScreenHeight()*.5f-90;DrawRectangleRounded({x,y,440,190},.08f,8,ui::theme::panel);label("Experiência pausada",x+28,y+26,24,ui::theme::text);label("Esc para continuar · WASD para mover",x+28,y+76,17,ui::theme::secondary);const Rectangle quit{x+28,y+118,384,42};DrawRectangleRounded(quit,.12f,6,ui::theme::accent);label("Sair da experiência",x+124,y+130,18,ui::theme::text);if(CheckCollisionPointRec(GetMousePosition(),quit)&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT)){EndDrawing();break;}}

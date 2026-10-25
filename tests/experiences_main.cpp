@@ -62,6 +62,7 @@ int main(int argc,char** argv) {
         CHECK(!project.manifest.icon.empty());CHECK(project.manifest.icon!=project.manifest.banner);
         const auto thumb=author.thumbnail(project);ImageInfo thumbInfo;CHECK(ReadSafeImageInfo(thumb.string(),thumbInfo));CHECK(thumbInfo.width==384&&thumbInfo.height==216);
         Scene scene;author.open(project,scene);CHECK(scene.parts().size()==2);CHECK(fs::current_path()==cwd);
+        CHECK(!game::ResolveImagePath(game::AssetsDir(),game::BuiltinAssetPath("logo.png")).empty());
         auto& rig=scene.gameAssets().createR6();const auto rigId=rig.id;rig.bodies[game::RightArm].color=RED;
         auto& decal=rig.addDecal(game::Torso);decal.surface.image=project.manifest.banner;decal.surface.face=1;
         auto* part=scene.createPart(PartShape::Block,{7,4,3},{2,3,4},"PortablePart");part->setRotationEulerDegrees({0,37,0});

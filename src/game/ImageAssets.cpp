@@ -176,7 +176,7 @@ std::string ResolveImagePath(const std::string& assetsDir, const std::string& as
     if(!projectRoot.empty()) {
         const auto relative=direct.is_absolute()?direct.lexically_relative(projectRoot):direct;
         for(const auto& part:relative)if(part=="..") {
-            return direct.string()==BuiltinAssetPath("rosto1.png")?direct.string():std::string{};
+            return (direct.string()==BuiltinAssetPath("rosto1.png")||direct.string()==BuiltinAssetPath("logo.png"))?direct.string():std::string{};
         }
         if(relative.empty()||relative.is_absolute())return {};
         auto component=projectRoot;
