@@ -412,7 +412,7 @@ Experience ExperienceManager::snapshot(const Scene& scene,const fs::path& source
                 throw std::runtime_error(error);
         }
     if(fs::is_regular_file(sourceRoot/"assets/image-names.json")) {
-        const auto text=read(sourceRoot/"assets/image-names.json");
+        const auto text=read(sourceRoot/"assets/image-names.json",512*1024);
         if(text.size()<=512*1024)write(stage.path/"assets/image-names.json",text);
     }
     for(auto* reference:{&manifest.icon,&manifest.banner,&manifest.loadingBackground})if(!reference->empty())*reference=imageImport(stage.path,containedFile(sourceRoot,*reference));
