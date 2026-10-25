@@ -503,8 +503,8 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     void input() {
         escapeConsumed=false;keyboardOwned=editing()||dialogOpen;const auto& io=ImGui::GetIO();const Vector2 mouse{io.MousePos.x,io.MousePos.y};
         mouseOwned=false;
-        if(ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopup)){context->ProcessMouseLeave();mouseOwned=true;return;}
-        if(!IsWindowFocused()){context->ProcessMouseLeave();context->ProcessMouseButtonUp(0,0);context->ProcessMouseButtonUp(1,0);split.clear();dragNode=0;dragging=false;return;}
+        if(ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopup)){if(std::getenv("LOBLOX_TRACE_HOME"))std::fprintf(stderr,"TRACE input popup-open\n");context->ProcessMouseLeave();mouseOwned=true;return;}
+        if(!IsWindowFocused()){if(std::getenv("LOBLOX_TRACE_HOME"))std::fprintf(stderr,"TRACE input unfocused mouse=%.0f,%.0f\n",mouse.x,mouse.y);context->ProcessMouseLeave();context->ProcessMouseButtonUp(0,0);context->ProcessMouseButtonUp(1,0);split.clear();dragNode=0;dragging=false;return;}
         const bool capture=ui.gameplayCapture_||ui.camera_.cursorCaptured();
         if(!capture)context->ProcessMouseMove(int(mouse.x*dpi),int(mouse.y*dpi),0);
         auto* hover=context->GetHoverElement();bool controls=ancestor(hover,"data-action")||ancestor(hover,"data-experience")||ancestor(hover,"data-page")||ancestor(hover,"data-player-page")||ancestor(hover,"data-player-step")||ancestor(hover,"data-split");
