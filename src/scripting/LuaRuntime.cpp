@@ -487,6 +487,38 @@ struct LuaRuntime::Impl {
         if(!self.runtime->setGravity(float(value),error))throw std::runtime_error(error);
         return 0;
     }
+    static int PushSpatialHits(lua_State* L){
+        auto& self=Host(L);const auto& ids=*static_cast<const std::vector<InstanceId>*>(lua_touserdata(L,1));lua_createtable(L,int(ids.size()),0);int index=0;
+        for(const auto id:ids){if(id)self.pushInstance(L,self.runtime->scene().find(id),true);else self.push(L,Kind::Player,0,true);lua_rawseti(L,-2,++index);}return 1;
+    }
+    template<bool Sphere> static int QueryVolume(lua_State* L){
+        auto& self=Host(L);game::SpatialQuery query;query.center=ReadVector(L,1);
+        if constexpr(Sphere){query.radius=float(Number(L,2));Require(query.radius>0,"Raio da consulta deve ser positivo");}else query.size=ReadVector(L,2);
+        if(lua_gettop(L)>2&&!lua_isnil(L,3)){
+            Require(lua_istable(L,3),"Opções da consulta requerem tabela");lua_pushnil(L);
+            while(lua_next(L,3)){
+                const char* key=Text(L,-2);
+                if(Eq(key,"rotation")){Require(!Sphere,"Esfera não usa rotação");query.rotation=ReadVector(L,lua_gettop(L));}
+                else if(Eq(key,"ignore"))query.ignore=self.instance(L,-1).id();
+                else if(Eq(key,"include_player")||Eq(key,"solid_only")){Require(lua_isboolean(L,-1),"Filtro requer booleano");if(Eq(key,"include_player"))query.includePlayer=lua_toboolean(L,-1);else query.solidOnly=lua_toboolean(L,-1);}
+                else if(Eq(key,"max_results")){const auto value=Number(L,-1);Require(value>=1&&value<=256&&std::floor(value)==value,"max_results deve ser inteiro entre 1 e 256");query.maxResults=unsigned(value);}
+                else throw std::runtime_error("Opção de consulta espacial desconhecida");lua_pop(L,1);
+            }
+        }
+        bool truncated=false;std::string error;const auto ids=self.runtime->overlap(query,truncated,error);Require(error.empty(),error.c_str());
+        lua_pushcfunction(L,Safe<PushSpatialHits>);lua_pushlightuserdata(L,const_cast<std::vector<InstanceId>*>(&ids));
+        const int status=lua_pcall(L,1,1,0);Require(status==LUA_OK,"Memória insuficiente para resultados espaciais");lua_pushboolean(L,truncated);return 2;
+    }
+    static int MovePlayer(lua_State* L){
+        auto& self=Host(L);Require(self.handle(L,1).kind==Kind::Player,"Movimento requer jogador");const auto direction=ReadVector(L,2);
+        const char* space=lua_gettop(L)>2?Text(L,3):"world";Require(Eq(space,"world")||Eq(space,"camera"),"Referência de movimento deve ser world ou camera");
+        std::string error;if(!self.runtime->movePlayer(direction,Eq(space,"camera"),error))throw std::runtime_error(error);return 0;
+    }
+    static int JumpPlayer(lua_State* L){auto& self=Host(L);Require(self.handle(L,1).kind==Kind::Player,"Salto requer jogador");std::string error;if(!self.runtime->jumpPlayer(error))throw std::runtime_error(error);return 0;}
+    template<game::PartMotion Operation> static int PlayerMotion(lua_State* L){
+        auto& self=Host(L);Require(self.handle(L,1).kind==Kind::Player,"Movimento físico requer jogador");const auto value=ReadVector(L,2);std::string error;
+        if(!self.runtime->playerMotion(value,Operation,error))throw std::runtime_error(error);return 0;
+    }
     static int ModernVec(lua_State* L) {
         const Vector3 value{float(Number(L,1)),float(Number(L,2)),float(Number(L,3))};
         Require(std::isfinite(value.x)&&std::isfinite(value.y)&&std::isfinite(value.z)&&std::fabs(value.x)<=1000000&&std::fabs(value.y)<=1000000&&std::fabs(value.z)<=1000000,"Vetor fora do intervalo suportado");ModernVector(L,value);return 1;
@@ -735,6 +767,8 @@ struct LuaRuntime::Impl {
             }
         }
         if(h.kind==Kind::Player&&h.modern) {
+            METHOD("move",MovePlayer) METHOD("jump",JumpPlayer) METHOD("apply_force",PlayerMotion<game::PartMotion::Force>) METHOD("apply_impulse",PlayerMotion<game::PartMotion::Impulse>)
+            if(Eq(key,"id")){lua_pushinteger(L,0);return 1;}if(Eq(key,"type")){lua_pushliteral(L,"player");return 1;}
             METHOD("damage",Damage) METHOD("heal",Heal) METHOD("respawn",Respawn) METHOD("teleport",Teleport) METHOD("set_checkpoint",Checkpoint) METHOD("set_animation",PlayerAnimation)
             if(Eq(key,"position")){ModernVector(L,self.runtime->position());return 1;}
             if(Eq(key,"velocity")){ModernVector(L,self.runtime->velocity());return 1;}
@@ -805,6 +839,9 @@ struct LuaRuntime::Impl {
     }
     static int NewIndex(lua_State* L) {
         auto& self=Host(L);const auto h=self.handle(L,1);const char* key=Text(L,2);
+        if(h.modern&&h.kind==Kind::Player&&Eq(key,"velocity")){
+            const auto value=ReadVector(L,3);std::string error;if(!self.runtime->playerMotion(value,game::PartMotion::Velocity,error))throw std::runtime_error(error);return 0;
+        }
         if(h.modern&&h.kind==Kind::Instance&&Eq(key,"transform")){lua_remove(L,2);return SetPose(L);}
         if(h.modern&&h.kind==Kind::Instance&&Eq(key,"velocity")) {
             auto& object=self.instance(L,1);Require(object.isPart(),"Velocidade requer uma peça");const auto value=ReadVector(L,3);std::string error;
@@ -881,6 +918,7 @@ struct LuaRuntime::Impl {
         lua_newtable(L);lua_pushcfunction(L,Safe<ModernNew>);lua_setfield(L,-2,"create");lua_pushcfunction(L,Safe<ModernFind>);lua_setfield(L,-2,"find");self.pushInstance(L,self.runtime->scene().workspace(),true);lua_setfield(L,-2,"root");lua_setfield(L,-2,"scene");
         lua_newtable(L);lua_pushcfunction(L,Safe<On>);lua_setfield(L,-2,"on");lua_pushcfunction(L,Safe<Publish>);lua_setfield(L,-2,"emit");lua_setfield(L,-2,"events");
         lua_newtable(L);lua_pushcfunction(L,Safe<Raycast>);lua_setfield(L,-2,"raycast");lua_pushcfunction(L,Safe<Nearby>);lua_setfield(L,-2,"nearby");lua_pushcfunction(L,Safe<Gravity>);lua_setfield(L,-2,"gravity");lua_pushcfunction(L,Safe<SetGravity>);lua_setfield(L,-2,"set_gravity");lua_setfield(L,-2,"physics");
+        lua_getfield(L,-1,"physics");lua_pushcfunction(L,Safe<QueryVolume<false>>);lua_setfield(L,-2,"overlap_box");lua_pushcfunction(L,Safe<QueryVolume<true>>);lua_setfield(L,-2,"overlap_sphere");lua_pop(L,1);
         lua_newtable(L);lua_pushcfunction(L,Safe<InterpolatePose>);lua_setfield(L,-2,"interpolate");lua_setfield(L,-2,"transform");
         lua_newtable(L);lua_pushcfunction(L,Safe<StorageGet>);lua_setfield(L,-2,"get");lua_pushcfunction(L,Safe<StorageSet>);lua_setfield(L,-2,"set");lua_pushcfunction(L,Safe<StorageRemove>);lua_setfield(L,-2,"remove");lua_pushcfunction(L,Safe<StorageStatus>);lua_setfield(L,-2,"status");lua_setfield(L,-2,"storage");
         lua_newtable(L);lua_pushcfunction(L,(Safe<InputButton<0,0>>));lua_setfield(L,-2,"key_down");lua_pushcfunction(L,(Safe<InputButton<0,1>>));lua_setfield(L,-2,"key_pressed");lua_pushcfunction(L,(Safe<InputButton<0,2>>));lua_setfield(L,-2,"key_released");
@@ -1089,7 +1127,7 @@ LuaRuntime::LuaRuntime():impl_(std::make_unique<Impl>()){}
 LuaRuntime::~LuaRuntime(){stop();}
 bool LuaRuntime::configure(const Limits& limits,std::string& error) {
     if(active()){error="As cotas Lua só podem ser alteradas com a sessão parada.";return false;}
-    if(limits.memoryBytes<256*1024||limits.memoryBytes>256*1024*1024||limits.instructionsPerTask<1000||limits.instructionsPerTask>10000000||limits.instructionsPerFrame<limits.instructionsPerTask||limits.instructionsPerFrame>20000000||!limits.tasks||limits.tasks>1024||!limits.listeners||limits.listeners>1024){error="Cotas Lua fora dos intervalos suportados.";return false;}
+    if(limits.memoryBytes<256*1024||limits.memoryBytes>256*1024*1024||limits.instructionsPerTask<1000||limits.instructionsPerTask>10000000||limits.instructionsPerFrame<limits.instructionsPerTask||limits.instructionsPerFrame>20000000||!limits.tasks||limits.tasks>1024||!limits.listeners||limits.listeners>1024||!limits.spatialQueries||limits.spatialQueries>128){error="Cotas Lua fora dos intervalos suportados.";return false;}
     impl_->limits=limits;error.clear();return true;
 }
 const Limits& LuaRuntime::limits()const{return impl_->limits;}

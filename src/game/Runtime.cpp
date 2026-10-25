@@ -236,6 +236,7 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error,const Prog
     if (active()) { error = "Play already active"; return false; }
     if (!authoring.validate(error)) return false;
     state_ = RuntimeState::StartingPlay;
+    spatialQueries_=0;scriptMovement_.reset();
     correlation_ = diag::newCorrelationId();
     try {
         progress_.open(progress);
@@ -295,6 +296,7 @@ void RuntimeSession::stop(bool saveProgress) {
     blendFrom_ = {}; poseSource_.clear(); poseWalking_ = false; wasAirborne_ = false; blendTime_ = 0;
     shiftLockRequested_ = false; lastShiftKey_ = 0; // Stop nunca deixa o lock preso
     scriptCheckpoint_.reset();state_ = RuntimeState::Editing;
+    spatialQueries_=0;scriptMovement_.reset();
     Event("runtime", "stop", correlation_);
 }
 void RuntimeSession::pause() {
