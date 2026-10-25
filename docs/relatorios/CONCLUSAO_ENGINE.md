@@ -26,6 +26,27 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 | 8 Menu lateral | PENDENTE | Studio e Player têm apresentações distintas existentes. | Painel lateral compartilhado/coerente, funções preservadas, foco/teclado/controle e testes visuais. |
 | 9 Integração | PENDENTE | Resultados anteriores não cobrem recursos futuros. | Reabertura/exportação/importação, compatibilidade, Player, gráficos, IMPACT/FULL justificado. |
 
+## Fase 1 — recursos separados (a fase inteira continua em desenvolvimento)
+
+| Recurso | Estado | Código/teste/evidência | Limitações e trabalho restante |
+| --- | --- | --- | --- |
+| Cena/peças/hierarquia/IDs | PUBLICADO | Base cf53b09, LuaRuntime.cpp + Runtime; LinbluxScripts/studio. | scene.create aceita part/group/model; componentes genéricos e transformações locais/globais completas ainda faltam. Não anunciar APIs inexistentes. |
+| Scripts por objeto/globais/clones | PUBLICADO | Base cf53b09; LuaRuntime + ProjectIO; DynamicScriptLifecycle e LinbluxExamples. | Scripts de runtime não gravam automaticamente na autoria; manter essa separação. |
+| Forças/impulsos/gravid./raycast/contatos | PUBLICADO | Base cf53b09; Runtime/PhysicsWorld/LuaRuntime; LinbluxPhysics/FixedContacts. | nearby usa centros; consultas de volumes, propriedades completas e regiões contínuas não estão prontas. |
+| Jogador/vida/spawn/animações | PUBLICADO | Base cf53b09; LinbluxPlayer + game/spawn. | Um controlador nativo, rig compatível legado; NPCs e rigs arbitrários são pendências próprias. |
+| Câmera | PUBLICADO | Base cf53b09; configure/state em LuaRuntime; LinbluxPlayer. | Distância/modos/sensibilidade existentes. Posição/rotação/alvo/FOV/transições por Lua ainda precisam implementação e testes. |
+| Entrada/eventos | PUBLICADO | cf53b09; ScriptInput, Runtime, LuaRuntime; script_input_ui real. | Controle físico não testado; amostras de controle injetadas. Não expor Escape/atalhos de saída aos scripts. |
+| Tempo/cancelamento/intervalos | IMPLEMENTADO | Incremento atual: LuaRuntime; temporizadores.lua, LinbluxTaskCancellation/LinbluxExamples. | Aguardar validação final/publicação. every não recupera pulsos atrasados; um coroutine por intervalo. |
+| Diagnóstico no Player | IMPLEMENTADO | Incremento atual: Player --validate + contador LuaRuntime; lua_player_validation.py. | Validação simula 2 s e Stop, não prova todas as ações futuras. Recusa erros evictos do buffer de mensagens. Aguardar validação final/publicação. |
+| Segurança/cotas/erros | PUBLICADO | Base cf53b09; limites host-only, finalizadores restritos, VM sem APIs de SO; testes studio. | É limite de confiabilidade em processo, não isolamento de SO; trabalho nativo também exige limites. |
+| Persistência de scripts/autoria | PUBLICADO | ProjectIO + LinbluxExamples: salvar/reabrir e executar. | Persistência de estado de gameplay/configurações via API controlada ainda PENDENTE. |
+| Áudio por Lua | PENDENTE | Não há namespace documentado como implementado. | Dependência da Fase 3: backend/importação/streaming/referências reais. |
+| UI por Lua | PENDENTE | Não há namespace documentado como implementado. | Dependência da Fase 6: modelo/render/input e UI protegida. |
+
+Não avançar para NPCs como se a Fase 1 estivesse completa. Resolver dependências
+de áudio/UI explicitamente, mantendo os estados parciais visíveis. Todo método
+novo precisa de implementação nativa, teste Lua e execução no Player correspondente.
+
 ## Regras de continuidade
 
 1. Proteção de código da Fase 0 testada; manter o monitor ativo e completar
