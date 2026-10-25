@@ -13,8 +13,17 @@ namespace loblox::game {
 // `assets/<id>.<ext>` relativo ao diretorio do executável; o ID deriva do
 // conteúdo (FNV-1a 64), então reimportar o mesmo PNG reusar o arquivo.
 struct ImageAsset {
-    std::string id;
-    std::string filename;
+    std::string id;        // identificador técnico estável (hash do conteúdo)
+    std::string filename;  // arquivo físico em assets/
+    std::string name;      // nome amigável persistido em assets/image-names.json
+};
+
+// Onde uma imagem está sendo usada na cena. A UI usa isto para avisar antes de
+// excluir um arquivo, nunca para apagar referências em silêncio.
+struct ImageUsage {
+    std::string where;   // descrição legível (Peça/Personagem/Adesivo)
+    std::string kind;    // decal, texture, body, face, sky
+    InstanceId object = 0;
 };
 
 // assets/ padrão na raiz do executável (caminho relativo, portátil).
@@ -40,8 +49,30 @@ bool ImportMediaTo(const std::string& assetsDir, const std::string& sourcePath,
 bool ImportImageTo(const std::string& assetsDir, const std::string& sourcePath,
                    std::string& outAssetPath, std::string& error);
 
-// Lista .png/.jpg existentes em assets/, ordenada por nome.
+// Lista .png/.jpg existentes em assets/, ordenada por nome amigável.
 std::vector<ImageAsset> ListImages(const std::string& assetsDir);
+
+// Nome amigável do arquivo/referência. Sem nome registrado, devolve
+// "Imagem <4 últimos do ID>" em vez do hash completo; o ID técnico fica só nos
+// detalhes. Nunca devolve string vazia para uma referência não vazia.
+std::string ImageDisplayName(const std::string& assetsDir, const std::string& reference);
+
+// Renomeia só o metadado de exibição. O arquivo físico e o ID não mudam, então
+// nenhuma referência quebra. Nomes repetidos são permitidos (IDs diferentes).
+bool RenameImageAsset(const std::string& assetsDir, const std::string& reference,
+                      const std::string& name, std::string& error);
+void ForgetImageAssetName(const std::string& assetsDir, const std::string& reference);
+
+// Lista todos os usos da imagem na cena (peças, atributos, rigs e adesivos).
+std::vector<ImageUsage> DescribeImageUsage(const Scene& scene, const std::string& reference);
+
+// Troca todas as referências de uma imagem por outra em peças e rigs.
+// Devolve quantas referências foram reescritas.
+std::size_t ReplaceImageReferences(Scene& scene, const std::string& from, const std::string& to);
+
+// Nome de exibição de membro do R6 (Cabeça, Braço esquerdo...). Só apresentação:
+// o nome persistido no rig não é alterado.
+std::string BodyDisplayName(const std::string& bodyName);
 
 // Referência canônica gravada no projeto: sempre `assets/<arquivo>`.
 std::string ImageAssetReference(const std::string& filename);
