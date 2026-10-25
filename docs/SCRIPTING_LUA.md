@@ -397,7 +397,8 @@ A cota de instruções também não mede todo o trabalho interno de funções C.
 
 Copie cada exemplo para o editor de scripts. O importador de cena declarativa
 `.lua` não executa esses scripts e não deve ser usado para importá-los como cenas.
-NPCs, navegação, áudio, decals e UI na API nova continuam dependências em desenvolvimento.
+NPCs e navegação estão implementados (ver a última seção). Áudio, decals e UI na
+API nova continuam dependências em desenvolvimento.
 Entrada e dano já estão disponíveis conforme as seções acima.
 
 ## Consultas de volumes e controle do jogador

@@ -36,7 +36,7 @@ def main():
         ("NpcPatrulha.lua", (root / "assets/examples/lua/npc_patrulha.lua").read_text()+'\nlinblux.events.on("stop",function() assert(linblux.scene.root:get_attribute("patrulha_pronta")) end)', 0, "erros Lua: 0"),
         ("NpcDano.lua", "local npc=linblux.npc.create{name='Alvo',position=linblux.vec3(10,2.6,10),max_health=10}\nlinblux.npc.damage(npc,15)\nassert(linblux.npc.state(npc)=='dead' and linblux.npc.health(npc)==0)", 0, "erros Lua: 0"),
         ("NpcInvalido.lua", "linblux.npc.create{size=linblux.vec3(-1,2,3)}", 1, "Tamanho mínimo do NPC"),
-        ("NpcSemComponente.lua", "linblux.npc.move_to(linblux.scene.root, linblux.vec3(0,2,0))", 1, "não possui componente de NPC"),
+        ("NpcSemComponente.lua", "local p=linblux.scene.create('part',{name='SemNpc',position=linblux.vec3(5,5,5)})\nlinblux.npc.move_to(p, linblux.vec3(0,2,0))", 1, "não possui componente de NPC"),
         ("FalhaDeScript.lua", "error('probe validation failure')", 1, "FalhaDeScript.lua:1"),
         ("FalhaNoStop.lua", "linblux.events.on('stop', function() error('probe stop failure') end)", 1, "probe stop failure"),
         ("ErroEvicto.lua", "error('old error evicted by output')", 1, "erros Lua: 1"),
