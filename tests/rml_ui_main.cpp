@@ -109,7 +109,36 @@ int main() {
         capture("studio-1366");
         // A separate short path exercises real Explorer/Properties controls
         // with X11 events, including dropdowns and independent child deletion.
-        if(std::getenv("LOBLOX_MANIPULATION_ONLY")) {
+        if(std::getenv("LINBLUX_SCRIPT_INPUT_ONLY")) {
+            scene.createScript(InstanceClass::Script,nullptr,"EntradaReal.lua")->source=R"(
+linblux.events.on("key_pressed", function(key)
+    if key == "e" then
+        local root = linblux.scene.root
+        root:set_attribute("real_presses", (root:get_attribute("real_presses") or 0)+1)
+        assert(linblux.input.key_down("e"))
+    end
+end)
+linblux.events.on("mouse_pressed", function(button)
+    if button == "left" then
+        local root, p = linblux.scene.root, linblux.input.pointer()
+        assert(p.x >= 0 and p.y >= 0 and p.x < 1366 and p.y < 768)
+        root:set_attribute("real_clicks", (root:get_attribute("real_clicks") or 0)+1)
+    end
+end)
+)";
+            const auto original=projectio::toJson(scene);click("play");frames(6);
+            auto& rt=EditorUITestAccess::runtime(ui);CHECK(rt.state()==game::RuntimeState::Playing);
+            const auto viewport=ui.frontend()->viewport();clickAt({viewport.x+viewport.width*.5f,viewport.y+viewport.height*.5f});
+            CHECK(rt.scene().workspace()->attributes().count("real_clicks"));
+            event("keydown e");frames(3);CHECK(rt.scriptInput().keys[KEY_E]);
+            auto presses=[&]{const auto& attrs=rt.scene().workspace()->attributes();return attrs.count("real_presses")?std::get<double>(attrs.at("real_presses")):0.;};
+            CHECK(presses()==1);event("keyup e");CHECK(!rt.scriptInput().keys[KEY_E]);
+            key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);
+            key("e");CHECK(presses()==1);key("Escape");CHECK(rt.state()==game::RuntimeState::Playing);
+            key("e");CHECK(presses()==2);
+            for(const auto& message:rt.scripts().messages()){if(message.error)std::fprintf(stderr,"Input Lua: %s\n",message.text.c_str());CHECK(!message.error);}
+            key("shift+F5");CHECK(!rt.active());CHECK(projectio::toJson(scene)==original);
+        } else if(std::getenv("LOBLOX_MANIPULATION_ONLY")) {
             BuildManipulationFixture(scene);physics.syncScene(scene);scene.select(part);
             for(auto* node:scene.parts())if(node->instanceClass()==InstanceClass::SpawnLocation) {
                 node->setPosition({-20,.5f,20});physics.applyChanges(node);

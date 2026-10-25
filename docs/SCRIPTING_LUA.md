@@ -184,7 +184,44 @@ executando pode terminar ou aguardar; não há preempção nativa no meio da fun
 O evento `destroy` requer um objeto de escopo e entrega seu ID após a remoção,
 num ponto seguro do scheduler. O observador precisa continuar existindo. A
 conexão é removida após o callback e `disconnect()` cancela notificações pendentes.
-Interação e entrada roteada ainda dependem dos próximos incrementos.
+Interações específicas são compostas pelo criador usando entrada, consultas e
+eventos próprios; não existe um sistema de interação obrigatório.
+
+## Entrada roteada — incremento 2E
+
+`linblux.input` consulta uma amostra fornecida pelo frontend, nunca lê dispositivos
+diretamente. No Studio, exige a posse de gameplay pelo roteador existente; texto,
+widgets e menus preservam sua entrada. Mouse exige viewport sob o ponteiro ou
+captura de gameplay. O Player só amostra com janela focada e jogo sem pausa.
+Escape e teclas de função permanecem sob controle da engine e não são expostos.
+
+- `key_down(nome)`, `key_pressed(nome)`, `key_released(nome)`; letras `a` a `z`,
+  dígitos, `space`, `enter`, `tab`, `backspace`, `left/right/up/down`,
+  `left_shift/right_shift`, `left_ctrl/right_ctrl`, `left_alt/right_alt`,
+  `home/end`, `page_up/page_down`, `insert/delete`.
+- `mouse_down/pressed/released(nome)`; nomes `left`, `right`, `middle`, `side`,
+  `extra`. `pointer()` retorna `{x,y,dx,dy,wheel}` em pixels, com posição relativa
+  ao viewport (à janela no Player).
+- `gamepad_connected()` consulta o controle de índice 0; `gamepad_down/pressed/released`
+  aceitam `up/right/down/left`, `north/east/south/west`, `left_bumper/right_bumper`,
+  `left_trigger/right_trigger`, `select/start`, `left_stick/right_stick`.
+  `gamepad_axis(nome)` aceita `left_x/left_y/right_x/right_y/left_trigger/right_trigger`;
+  retorna o eixo bruto [-1,1], sem deadzone aplicada, ou 0 sem controle.
+
+Eventos `key_pressed/key_released`, `mouse_pressed/mouse_released` e
+`gamepad_pressed/gamepad_released` recebem o nome do botão e só são emitidos pela
+engine. As bordas se referem a mudanças na amostra de gameplay, sem repetição por
+tecla mantida; perder a posse gera liberações na atualização seguinte. Ao ganhar
+posse, botões já mantidos podem gerar uma nova ativação. A pausa suspende Lua;
+após continuar, o estado é comparado com a última amostra.
+
+Consultas pressed/released são válidas durante o quadro de apresentação; dois
+subpassos físicos podem consultar a mesma borda. Prefira eventos para ações únicas.
+Não existe texto digitado, remapeamento persistente, múltiplos controles ou
+vibração nesta API inicial. Controle físico não é simulado como teclado.
+
+[interacao.lua](../assets/examples/lua/interacao.lua) alterna o sinal próprio das
+portas com E ou o botão sul. Os testes executam o arquivo real com a API pública.
 
 ## Tempo
 

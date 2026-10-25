@@ -248,7 +248,7 @@ void RuntimeSession::stop() {
     state_ = RuntimeState::StoppingPlay;
     if (!activeAnimation_.empty()) Event("animation", "stop", correlation_, {{"clip", activeAnimation_}});
     activeAnimation_.clear();
-    scripts_.stop();activeContacts_.clear();
+    scripts_.stop();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
     destroyCharacter(); physics_.reset(); scene_.reset();
     accumulator_ = 0; jumpPending_ = false; coyoteTime_=jumpBufferTime_=0; pose_ = {};
     blendFrom_ = {}; poseSource_.clear(); poseWalking_ = false; wasAirborne_ = false; blendTime_ = 0;
@@ -640,6 +640,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     if (suppressJump_ && !input.jump) suppressJump_ = false;
     const bool jumpPressed = input.jump && !lastJumpDown_ && !suppressJump_;
     lastJumpDown_ = input.jump;
+    previousScriptInput_=scriptInput_;scriptInput_=input.script;
     scripts_.update(dt);
     physics_->syncScene(*scene_);
     damageCooldown_=std::max(0.f,damageCooldown_-dt);

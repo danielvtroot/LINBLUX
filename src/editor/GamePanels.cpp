@@ -268,6 +268,8 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     game::PlayerInput input;
     const bool owns = route.owner == InputOwner::Gameplay || route.owner == InputOwner::Resume;
     if (owns) {
+        input.script=game::CaptureScriptInput(image);
+        if(!context.hovered&&!gameplayCapture_){input.script.mouse.reset();input.script.delta={};input.script.wheel=0;}
         if (!raw.modified) {
             input.movement = {raw.movement.x, raw.movement.z};
             input.jump = raw.jump;

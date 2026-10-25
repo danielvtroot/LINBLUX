@@ -17,7 +17,8 @@
 namespace loblox::scripting {
 namespace {
 enum class Kind { Instance,Game,Players,Player,RunService,AnimationService,Character,Humanoid,Animator,Signal,Connection };
-enum Signal { Spawn=1,Heartbeat,HealthChanged,Died,EngineStart,EngineStop,EngineDestroy,PhysicsUpdate,CollisionEnter,CollisionExit };
+enum Signal { Spawn=1,Heartbeat,HealthChanged,Died,EngineStart,EngineStop,EngineDestroy,PhysicsUpdate,CollisionEnter,CollisionExit,
+    KeyPressed,KeyReleased,MousePressed,MouseReleased,GamepadPressed,GamepadReleased };
 struct Handle { Kind kind; InstanceId id; unsigned generation; unsigned avatar=0; bool modern=false; };
 constexpr std::size_t kNativeContentLimit=8*1024*1024, kNativeNodes=10000;
 bool Eq(const char* a,const char* b) { return std::strcmp(a,b)==0; }
@@ -359,6 +360,30 @@ struct LuaRuntime::Impl {
         Require(std::isfinite(value.x)&&std::isfinite(value.y)&&std::isfinite(value.z)&&std::fabs(value.x)<=1000000&&std::fabs(value.y)<=1000000&&std::fabs(value.z)<=1000000,"Vetor fora do intervalo suportado");ModernVector(L,value);return 1;
     }
     static int Now(lua_State* L){lua_pushnumber(L,Host(L).time);return 1;}
+    template<int Device,int Phase> static int InputButton(lua_State* L) {
+        const char* name=Text(L,1);int code=-1;
+        if constexpr(Device==0){for(const auto& button:game::ScriptKeys)if(Eq(name,button.name))code=button.code;}
+        if constexpr(Device==1){for(const auto& button:game::ScriptMouseButtons)if(Eq(name,button.name))code=button.code;}
+        if constexpr(Device==2){for(const auto& button:game::ScriptGamepadButtons)if(Eq(name,button.name))code=button.code;}
+        Require(code>=0,"Nome de tecla/botão não suportado; consulte a API de entrada");
+        auto& self=Host(L);const auto& current=self.runtime->scriptInput();const auto& previous=self.runtime->previousScriptInput();
+        bool now=false,before=false;
+        if constexpr(Device==0){now=current.keys[code];before=previous.keys[code];}
+        if constexpr(Device==1){now=current.mouse[code];before=previous.mouse[code];}
+        if constexpr(Device==2){now=current.gamepad&&current.gamepadButtons[code];before=previous.gamepad&&previous.gamepadButtons[code];}
+        lua_pushboolean(L,Phase==0?now:Phase==1?now&&!before:!now&&before);return 1;
+    }
+    static int InputPointer(lua_State* L) {
+        const auto& input=Host(L).runtime->scriptInput();lua_createtable(L,0,5);
+        const char* names[]{"x","y","dx","dy","wheel"};const float values[]{input.pointer.x,input.pointer.y,input.delta.x,input.delta.y,input.wheel};
+        for(int i=0;i<5;++i){lua_pushnumber(L,values[i]);lua_setfield(L,-2,names[i]);}return 1;
+    }
+    static int GamepadConnected(lua_State* L){lua_pushboolean(L,Host(L).runtime->scriptInput().gamepad);return 1;}
+    static int GamepadAxis(lua_State* L) {
+        const char* name=Text(L,1);int code=-1;for(const auto& axis:game::ScriptGamepadAxes)if(Eq(name,axis.name))code=axis.code;
+        Require(code>=0,"Eixo de controle desconhecido");const auto& input=Host(L).runtime->scriptInput();
+        lua_pushnumber(L,input.gamepad?input.gamepadAxes[code]:0);return 1;
+    }
     static int After(lua_State* L) {
         auto& self=Host(L);const double delay=Number(L,1);Require(delay>=0&&delay<=3600,"Atraso deve estar entre 0 e 3600 segundos");
         Require(lua_isfunction(L,2),"after requer uma função");lua_remove(L,1);SpawnTask(L);self.jobs.back().wake=self.time+delay;return 0;
@@ -366,7 +391,10 @@ struct LuaRuntime::Impl {
     static int NativeSignal(const char* topic) {
         return Eq(topic,"start")?EngineStart:Eq(topic,"update")?Heartbeat:Eq(topic,"stop")?EngineStop:
             Eq(topic,"spawn")?Spawn:Eq(topic,"health_changed")?HealthChanged:Eq(topic,"death")?Died:Eq(topic,"destroy")?EngineDestroy:
-            Eq(topic,"physics_update")?PhysicsUpdate:Eq(topic,"collision_enter")?CollisionEnter:Eq(topic,"collision_exit")?CollisionExit:0;
+            Eq(topic,"physics_update")?PhysicsUpdate:Eq(topic,"collision_enter")?CollisionEnter:Eq(topic,"collision_exit")?CollisionExit:
+            Eq(topic,"key_pressed")?KeyPressed:Eq(topic,"key_released")?KeyReleased:
+            Eq(topic,"mouse_pressed")?MousePressed:Eq(topic,"mouse_released")?MouseReleased:
+            Eq(topic,"gamepad_pressed")?GamepadPressed:Eq(topic,"gamepad_released")?GamepadReleased:0;
     }
     static const char* Topic(lua_State* L) {
         const char* topic=Text(L,1);const auto length=lua_rawlen(L,1);
@@ -668,6 +696,10 @@ struct LuaRuntime::Impl {
         lua_newtable(L);lua_pushcfunction(L,Safe<ModernNew>);lua_setfield(L,-2,"create");lua_pushcfunction(L,Safe<ModernFind>);lua_setfield(L,-2,"find");self.pushInstance(L,self.runtime->scene().workspace(),true);lua_setfield(L,-2,"root");lua_setfield(L,-2,"scene");
         lua_newtable(L);lua_pushcfunction(L,Safe<On>);lua_setfield(L,-2,"on");lua_pushcfunction(L,Safe<Publish>);lua_setfield(L,-2,"emit");lua_setfield(L,-2,"events");
         lua_newtable(L);lua_pushcfunction(L,Safe<Raycast>);lua_setfield(L,-2,"raycast");lua_pushcfunction(L,Safe<Nearby>);lua_setfield(L,-2,"nearby");lua_pushcfunction(L,Safe<Gravity>);lua_setfield(L,-2,"gravity");lua_pushcfunction(L,Safe<SetGravity>);lua_setfield(L,-2,"set_gravity");lua_setfield(L,-2,"physics");
+        lua_newtable(L);lua_pushcfunction(L,(Safe<InputButton<0,0>>));lua_setfield(L,-2,"key_down");lua_pushcfunction(L,(Safe<InputButton<0,1>>));lua_setfield(L,-2,"key_pressed");lua_pushcfunction(L,(Safe<InputButton<0,2>>));lua_setfield(L,-2,"key_released");
+        lua_pushcfunction(L,(Safe<InputButton<1,0>>));lua_setfield(L,-2,"mouse_down");lua_pushcfunction(L,(Safe<InputButton<1,1>>));lua_setfield(L,-2,"mouse_pressed");lua_pushcfunction(L,(Safe<InputButton<1,2>>));lua_setfield(L,-2,"mouse_released");
+        lua_pushcfunction(L,(Safe<InputButton<2,0>>));lua_setfield(L,-2,"gamepad_down");lua_pushcfunction(L,(Safe<InputButton<2,1>>));lua_setfield(L,-2,"gamepad_pressed");lua_pushcfunction(L,(Safe<InputButton<2,2>>));lua_setfield(L,-2,"gamepad_released");
+        lua_pushcfunction(L,Safe<InputPointer>);lua_setfield(L,-2,"pointer");lua_pushcfunction(L,Safe<GamepadConnected>);lua_setfield(L,-2,"gamepad_connected");lua_pushcfunction(L,Safe<GamepadAxis>);lua_setfield(L,-2,"gamepad_axis");lua_setfield(L,-2,"input");
         lua_newtable(L);lua_pushcfunction(L,Safe<Now>);lua_setfield(L,-2,"now");lua_pushcfunction(L,Safe<Wait>);lua_setfield(L,-2,"wait");lua_pushcfunction(L,Safe<After>);lua_setfield(L,-2,"after");lua_pushcfunction(L,Safe<SpawnTask>);lua_setfield(L,-2,"spawn");lua_setfield(L,-2,"time");lua_setglobal(L,"linblux");return 0;
     }
     static int Emit(lua_State* L) {
@@ -692,6 +724,12 @@ struct LuaRuntime::Impl {
             if(ids[i])self.pushInstance(L,self.runtime->scene().find(ids[i]),true);else self.push(L,Kind::Player,0,true);
             lua_setfield(L,-2,names[i]);lua_pushinteger(L,lua_Integer(ids[i]));lua_setfield(L,-2,keys[i]);
         }
+        SpawnTask(L);self.jobs.back().connection=connection;return 0;
+    }
+    static int EmitInput(lua_State* L) {
+        auto& self=Host(L);const int ref=int(lua_tointeger(L,1));const auto connection=InstanceId(lua_tointeger(L,3));
+        const auto* name=static_cast<const char*>(lua_touserdata(L,2));lua_settop(L,0);
+        lua_rawgeti(L,LUA_REGISTRYINDEX,ref);lua_pushstring(L,name);
         SpawnTask(L);self.jobs.back().connection=connection;return 0;
     }
     bool scriptAlive(InstanceId id) const {
@@ -738,6 +776,23 @@ struct LuaRuntime::Impl {
     bool hasSignal(int signal) const {
         for(const auto& entry:listeners)if(entry.second.signal==signal&&listenerAlive(entry.second))return true;
         return false;
+    }
+    void inputEvent(int signal,const char* name) {
+        for(const auto& entry:listeners){
+            const auto& listener=entry.second;if(listener.signal!=signal||!listenerAlive(listener))continue;
+            executing=listener.script;lua_pushcfunction(state,Safe<EmitInput>);lua_pushinteger(state,listener.ref);lua_pushlightuserdata(state,const_cast<char*>(name));lua_pushinteger(state,lua_Integer(entry.first));
+            if(lua_pcall(state,3,0,0)!=LUA_OK){message(true,executing,lua_tostring(state,-1));lua_pop(state,1);}
+        }
+        executing=0;
+    }
+    void inputEvents() {
+        const auto& current=runtime->scriptInput();const auto& previous=runtime->previousScriptInput();
+        for(const auto& key:game::ScriptKeys)if(current.keys[key.code]!=previous.keys[key.code])inputEvent(current.keys[key.code]?KeyPressed:KeyReleased,key.name);
+        for(const auto& button:game::ScriptMouseButtons)if(current.mouse[button.code]!=previous.mouse[button.code])inputEvent(current.mouse[button.code]?MousePressed:MouseReleased,button.name);
+        for(const auto& button:game::ScriptGamepadButtons){
+            const bool now=current.gamepad&&current.gamepadButtons[button.code],before=previous.gamepad&&previous.gamepadButtons[button.code];
+            if(now!=before)inputEvent(now?GamepadPressed:GamepadReleased,button.name);
+        }
     }
     void contact(InstanceId first,InstanceId second,bool entering) {
         if(!state)return;
@@ -864,7 +919,7 @@ bool LuaRuntime::start(game::RuntimeSession& runtime) {
 void LuaRuntime::stop(){impl_->stop();}
 void LuaRuntime::update(float dt){
     if(!impl_->state||!std::isfinite(dt)||dt<0)return;
-    const auto added=impl_->discoverScripts();impl_->event(Heartbeat,dt);impl_->tick(dt);
+    const auto added=impl_->discoverScripts();impl_->inputEvents();impl_->event(Heartbeat,dt);impl_->tick(dt);
     for(const auto id:added)impl_->event(EngineStart,0,id);
 }
 void LuaRuntime::fixedUpdate(float dt){

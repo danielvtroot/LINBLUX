@@ -379,6 +379,55 @@ end, sensor)
         CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);
     }
 }
+void LinbluxInput() {
+    Scene author;author.buildDefaultScene();std::string error;
+    author.createScript(InstanceClass::Script,nullptr,"Entrada.lua")->source=R"(
+local root = linblux.scene.root
+local function count(name) root:set_attribute(name, (root:get_attribute(name) or 0)+1) end
+linblux.events.on("key_pressed", function(key)
+    assert(key == "e" and linblux.input.key_down("e") and linblux.input.key_pressed("e"))
+    count("key_downs")
+end)
+linblux.events.on("key_released", function(key)
+    assert(key == "e" and not linblux.input.key_down("e") and linblux.input.key_released("e"))
+    count("key_ups")
+end)
+linblux.events.on("mouse_pressed", function(button)
+    assert(button == "left" and linblux.input.mouse_pressed("left"))
+    local p = linblux.input.pointer()
+    assert(p.x == 123 and p.y == 45 and p.dx == 2 and p.wheel == -1)
+    count("clicks")
+end)
+linblux.events.on("gamepad_pressed", function(button)
+    assert(button == "south" and linblux.input.gamepad_down("south") and linblux.input.gamepad_connected())
+    assert(linblux.input.gamepad_axis("left_x") == 0.5)
+    count("pad_downs")
+end)
+linblux.events.on("gamepad_released", function(button)
+    assert(button == "south" and linblux.input.gamepad_released("south"))
+    count("pad_ups")
+end)
+linblux.events.on("porta.alterar", function(open) root:set_attribute("porta_aberta", open) end)
+)";
+    const auto examplePath=std::filesystem::path(__FILE__).parent_path().parent_path()/"assets/examples/lua/interacao.lua";
+    std::ifstream example(examplePath);CHECK(example.good());
+    author.createScript(InstanceClass::Script,nullptr,"Interacao.lua")->source=std::string(std::istreambuf_iterator<char>(example),{});
+    const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+    game::PlayerInput input;input.script.keys.set(KEY_E);input.script.mouse.set(MOUSE_BUTTON_LEFT);
+    input.script.pointer={123,45};input.script.delta={2,0};input.script.wheel=-1;
+    input.script.gamepad=true;input.script.gamepadButtons.set(GAMEPAD_BUTTON_RIGHT_FACE_DOWN);input.script.gamepadAxes[GAMEPAD_AXIS_LEFT_X]=.5f;
+    runtime.update(1.f/60,input);runtime.update(1.f/60,input);
+    const auto count=[&](const char* key){const auto& attrs=runtime.scene().workspace()->attributes();CHECK(attrs.count(key));return attrs.count(key)?std::get<double>(attrs.at(key)):0.;};
+    CHECK(count("key_downs")==1);CHECK(count("clicks")==1);CHECK(count("pad_downs")==1);
+    // Both E and the south button were pressed: two toggles, initially closed.
+    runtime.update(1.f/60,input);CHECK(!std::get<bool>(runtime.scene().workspace()->attributes().at("porta_aberta")));
+    runtime.pause();runtime.update(1.f/60,{});CHECK(count("key_downs")==1);CHECK(!runtime.scene().workspace()->attributes().count("key_ups"));
+    runtime.resume();runtime.update(1.f/60,{});CHECK(count("key_ups")==1);CHECK(count("pad_ups")==1);
+    input.script.gamepad=false;input.script.gamepadButtons.reset();input.script.mouse.reset();runtime.update(1.f/60,input);runtime.update(1.f/60,input);
+    CHECK(count("key_downs")==2);CHECK(std::get<bool>(runtime.scene().workspace()->attributes().at("porta_aberta")));
+    for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Input Lua: %s\n",message.text.c_str());CHECK(!message.error);}
+    CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();CHECK(!runtime.scriptInput().keys.any());
+}
 void LinbluxPlayer() {
     Scene author;author.buildDefaultScene();std::string error;
     auto* script=author.createScript(InstanceClass::Script,nullptr,"Jogador.lua");
@@ -912,6 +961,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

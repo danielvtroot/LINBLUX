@@ -4,6 +4,7 @@
 #include <optional>
 #include <set>
 #include "game/Rig.h"
+#include "game/ScriptInput.h"
 #include "scripting/LuaRuntime.h"
 #include "scene/Scene.h"
 #include "physics/PhysicsWorld.h"
@@ -23,6 +24,7 @@ struct PlayerInput {
     Vector2 look{};     // mouse pixels; apply once per display frame
     float zoom = 0;
     bool jump = false;
+    ScriptInput script;
 };
 
 class RuntimeSession;
@@ -80,6 +82,8 @@ public:
     Scene& mutableScene() { return *scene_; } // validated native bindings, runtime only
     scripting::LuaRuntime& scripts() { return scripts_; }
     const scripting::LuaRuntime& scripts() const { return scripts_; }
+    const ScriptInput& scriptInput() const { return scriptInput_; }
+    const ScriptInput& previousScriptInput() const { return previousScriptInput_; }
     unsigned characterGeneration() const { return respawns_; }
     bool setAnimation(const std::string& state,const std::string& assetId,std::string& error);
     float health() const { return health_; }
@@ -162,6 +166,7 @@ private:
     std::string activeAnimation_;
     scripting::LuaRuntime scripts_;
     std::set<std::pair<InstanceId,InstanceId>> activeContacts_;
+    ScriptInput scriptInput_,previousScriptInput_;
     float health_=100, deadTime_=0, damageCooldown_=0;
     std::optional<Vector3> scriptCheckpoint_;
     bool shiftLockRequested_ = false;
