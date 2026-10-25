@@ -43,6 +43,8 @@ struct ParsedObject {
     bool anchored = false;
     bool canCollide = true;
     BodyProperties bodyProperties;
+    bool hasNpc = false;
+    NpcProperties npcProperties;
     std::string source;
     bool enabled = true;
 };
@@ -431,6 +433,25 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
         }
         if(!out.bodyProperties.validate(error)){error=prefix+error;return false;}
     }
+    if(value.contains("npc")) {
+        const auto& npc=value["npc"];
+        if(!npc.is_object()){error=prefix+"npc deve ser objeto";return false;}
+        for(auto entry=npc.begin();entry!=npc.end();++entry) {
+            const auto& field=entry.value();
+            if(entry.key()=="enabled") {
+                if(!field.is_boolean()){error=prefix+"npc.enabled deve ser booleano";return false;}
+                out.npcProperties.enabled=field.get<bool>();continue;
+            }
+            if(!field.is_number()){error=prefix+"npc requer números";return false;}
+            if(entry.key()=="speed")out.npcProperties.speed=field.get<float>();
+            else if(entry.key()=="maxHealth")out.npcProperties.maxHealth=field.get<float>();
+            else if(entry.key()=="respawnDelay")out.npcProperties.respawnDelay=field.get<float>();
+            else if(entry.key()=="turnSpeed")out.npcProperties.turnSpeed=field.get<float>();
+            else {error=prefix+"npc contém propriedade desconhecida: "+entry.key();return false;}
+        }
+        if(!out.npcProperties.validate(error)){error=prefix+error;return false;}
+        out.hasNpc=true;
+    }
     return true;
 }
 
@@ -527,6 +548,11 @@ std::string toJson(const Scene& scene) {
         const auto& body=part->bodyProperties();
         objects.back()["body"]={{"density",body.density},{"friction",body.friction},
             {"restitution",body.restitution},{"linearDamping",body.linearDamping},{"angularDamping",body.angularDamping}};
+        if(part->hasNpc()) {
+            const auto& npc=*part->npcProperties();
+            objects.back()["npc"]={{"enabled",npc.enabled},{"speed",npc.speed},{"maxHealth",npc.maxHealth},
+                {"respawnDelay",npc.respawnDelay},{"turnSpeed",npc.turnSpeed}};
+        }
         for (const auto* child : node->children()) append(child);
     };
     for (const auto* child : scene.workspace()->children()) append(child);
@@ -785,6 +811,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         part->setAnchored(object.anchored);
         part->setCanCollide(object.canCollide);
         if(!part->setBodyProperties(object.bodyProperties,error))return false;
+        if(object.hasNpc&&!part->setNpcProperties(object.npcProperties,error))return false;
         part->clearDirty();
     }
 

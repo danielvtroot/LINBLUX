@@ -79,8 +79,22 @@ public:
     bool collisionGeometry(InstanceId id, CollisionGeometry& out) const;
 
     // Raycast contra todos os corpos. Retorna a Part atingida mais proxima.
+    // solidOnly ignora corpos sem resposta de contato (CanCollide=false) e
+    // staticOnly restringe aos corpos estaticos, que e o que a navegacao pode
+    // tratar como chao ou parede sem envelhecer quando um corpo se move.
     bool raycast(Vector3 origin, Vector3 direction, float maxDistance, Part** hitPart,
-                 Vector3* hitPoint = nullptr, Vector3* hitNormal = nullptr) const;
+                 Vector3* hitPoint = nullptr, Vector3* hitNormal = nullptr,
+                 bool solidOnly = false, InstanceId ignore = 0,
+                 bool staticOnly = false) const;
+
+    // Gira somente a orientacao do corpo, preservando posicao e velocidade.
+    // Usado pelo controlador de NPC; a Part recebe o valor no proximo sync.
+    bool setBodyYaw(InstanceId id, float yawDegrees);
+    bool lockAngularMotion(InstanceId id, bool locked);
+
+    // Verdadeiro quando nenhuma Part solida ocupa a caixa indicada. Usado pelo
+    // degrau do NPC: a subida so e aplicada onde o corpo cabe de fato.
+    bool isSpaceClear(Vector3 center, Vector3 halfExtents, InstanceId ignore) const;
 
 private:
     friend class game::RuntimeSession; // single explicitly-owned runtime capsule

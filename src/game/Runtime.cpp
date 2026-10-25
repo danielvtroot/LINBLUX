@@ -270,7 +270,9 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error,const Prog
         if (!respawn(error)) { stop(); return false; }
         state_ = RuntimeState::Playing;
         const bool spawnedDead=health_<=0;
+        npcs_.reset(); // controladores de NPC sao sempre recriados por Play
         scripts_.start(*this); // errors are reported; safe native gameplay remains available
+        npcs_.attachAuthored(*this,error); // NPCs autorados ganham controlador
         if(spawnedDead && health_<=0)scripts_.healthChanged(health_,true);
         Event("runtime", "start", correlation_, {{"bodies", bodyCount()}, {"rig", rig_.id}});
         return true;
@@ -288,7 +290,7 @@ void RuntimeSession::stop(bool saveProgress) {
     state_ = RuntimeState::StoppingPlay;
     if (!activeAnimation_.empty()) Event("animation", "stop", correlation_, {{"clip", activeAnimation_}});
     activeAnimation_.clear();
-    scripts_.stop();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
+    scripts_.stop();npcs_.reset();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
     if(saveProgress)try{progress_.flush();}catch(const std::exception& e){scripts_.hostError(e.what());}
     progress_.close();
     destroyCharacter(); physics_.reset(); scene_.reset();
@@ -702,6 +704,9 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
         scripts_.fixedUpdate(fixed);
         const Vector3 desired=scriptMovement_?*scriptMovement_:camera_.moveDirection(input.movement);
         physics_->syncScene(*scene_);
+        // Velocidades dos NPCs sao definidas antes do passo Bullet, no mesmo
+        // passo fixo do jogador, para que colisoes continuem autoritativas.
+        npcs_.tick(*this, fixed);
         previousCharacterPosition_=position();
         step(fixed, desired, jumpPending_); jumpPending_ = false;
         updateContacts();

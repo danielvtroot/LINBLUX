@@ -86,6 +86,23 @@ bool BodyProperties::validate(std::string& error) const {
     }
     error.clear();return true;
 }
+bool NpcProperties::validate(std::string& error) const {
+    const auto in=[](float v,float low,float high){return std::isfinite(v)&&v>=low&&v<=high;};
+    if(!in(speed,0,1000)||!in(maxHealth,1,100000)||!in(respawnDelay,0,3600)||!in(turnSpeed,0,20)) {
+        error="Propriedades de NPC fora dos limites: velocidade 0–1000; vida 1–100000; respawn 0–3600 s; giro 0–20.";
+        return false;
+    }
+    error.clear();return true;
+}
+
+bool Part::setNpcProperties(const NpcProperties& value,std::string& error) {
+    if(!value.validate(error))return false;
+    npcProperties_=value;
+    // O corpo precisa aplicar/retirar o travamento de rotacao do NPC.
+    dirty_.body=true;
+    return true;
+}
+
 bool Part::setBodyProperties(const BodyProperties& value,std::string& error) {
     if(!value.validate(error))return false;
     if(bodyProperties_.density!=value.density||bodyProperties_.friction!=value.friction||

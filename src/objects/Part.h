@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include "core/Math.h"
@@ -40,6 +41,18 @@ struct BodyProperties {
     float restitution = 0.0f;
     float linearDamping = 0.02f;
     float angularDamping = 0.1f;
+    bool validate(std::string& error) const;
+};
+
+// Authoring/runtime configuration of an NPC component attached to a regular
+// Part. It contains only serializable data; live pathfinding, health and
+// references are owned by the runtime NpcSystem and never written to a file.
+struct NpcProperties {
+    bool enabled = true;
+    float speed = 8.0f;
+    float maxHealth = 100.0f;
+    float respawnDelay = 0.0f; // 0 disables automatic respawn
+    float turnSpeed = 8.0f;
     bool validate(std::string& error) const;
 };
 
@@ -101,6 +114,12 @@ public:
     const BodyProperties& bodyProperties() const { return bodyProperties_; }
     bool setBodyProperties(const BodyProperties& properties, std::string& error);
 
+    const std::optional<NpcProperties>& npcProperties() const { return npcProperties_; }
+    bool hasNpc() const { return npcProperties_.has_value(); }
+    bool setNpcProperties(const NpcProperties& properties, std::string& error);
+    // Remover o componente devolve a rotacao livre ao corpo no proximo sync.
+    void clearNpcProperties() { if(npcProperties_){npcProperties_.reset();dirty_.body=true;} }
+
     // Escrita vinda do motor fisico: nao marca dirty (evita loop de sync).
     void syncFromPhysics(Vector3 position, Quaternion rotation);
 
@@ -118,6 +137,7 @@ private:
     bool anchored_ = false;
     bool canCollide_ = true;
     BodyProperties bodyProperties_;
+    std::optional<NpcProperties> npcProperties_;
     PartDirty dirty_;
 };
 
