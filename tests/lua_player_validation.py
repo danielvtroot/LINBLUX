@@ -17,6 +17,9 @@ def main():
     example = (root / "assets/examples/lua/temporizadores.lua").read_text()
     example += '\nlinblux.events.on("stop", function() assert(linblux.scene.root:get_attribute("timer_concluido")) end)\n'
     cases = [
+        ("ConsultasControle.lua",(root / "assets/examples/lua/consultas_controle.lua").read_text()+'\nlinblux.events.on("stop",function() assert(linblux.scene.root:get_attribute("consultas_controle_concluido")) end)',0,"erros Lua: 0"),
+        ("ConsultaLimite.lua","for i=1,9 do linblux.physics.overlap_sphere(linblux.vec3(0,10,0),1) end",1,"Limite de consultas espaciais"),
+        ("MovimentoInvalido.lua","linblux.player:move(linblux.vec3(0,1,0))",1,"direção horizontal"),
         ("Persistencia.lua", (root / "assets/examples/lua/persistencia.lua").read_text()+'\nassert(not linblux.storage.status().persistent)',0,"erros Lua: 0"),
         ("PersistenciaFuncao.lua","linblux.storage.set('bad',function() end)",1,"somente dados JSON"),
         ("PersistenciaCiclo.lua","local t={};t.loop=t;linblux.storage.set('bad',t)",1,"profundidade"),
