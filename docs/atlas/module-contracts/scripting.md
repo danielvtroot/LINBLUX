@@ -57,6 +57,10 @@ seu retorno. linblux_lua_player_validation verifica cenas salvas no Player real,
 incluindo recusa de sucesso falso para erro em inicialização ou stop.
 camera.set_pose/release expõem a câmera real do runtime, com vetores validados,
 Euler em graus ou alvo/up, FOV e duração. A câmera do editor não é alterada.
+Transformações de peças usam Part::setTransform e referências rígidas explícitas;
+não mudam o parenting ou a semântica mundial da cena. Componentes de Script são
+nós reais e seguem discoverScripts/cancelScript. Testes: exemplo salvo/reaberto,
+raycast Bullet, rejeição atômica de entradas inválidas e Player standalone.
 
 **Limites:** não é um sandbox de segurança contra código nativo arbitrário;
 não há multiplayer/rede. Coleta de lixo/limites são os do estado Lua e do
