@@ -113,6 +113,9 @@ void BodyConfiguration() {
     for(int i=0;i<30;++i)runtime.update(1.f/60,{});
     CHECK(runtime.partVelocity(part->id()).x>4);CHECK(runtime.partVelocity(rough->id()).x<runtime.partVelocity(part->id()).x-1);
     CHECK(std::fabs(runtime.partVelocity(damped->id()).x)<.01f);CHECK(runtime.partMass(part->id())==48);runtime.stop();
+    scene.createScript(InstanceClass::Script,nullptr,"InvalidBody.lua")->source="linblux.scene.find('Body').body={density=7,friction=-1}";
+    CHECK(runtime.start(scene,error));CHECK(runtime.scripts().errorCount()==1);
+    CHECK(runtime.scene().findPart(part->id())->bodyProperties().density==3);CHECK(runtime.partMass(part->id())==48);runtime.stop();
 }
 void Scripts() {
     Scene author;author.buildDefaultScene();

@@ -42,3 +42,8 @@ Consultas Lua de caixa orientada/esfera usam `RuntimeSession::overlap`: probe
 transitório não registrado no mundo, `contactTest`, resultados por ID e filtros
 de sensor/jogador/peça. O callback apenas coleta IDs; Lua recebe cópia após a
 enumeração. Cota compartilhada por quadro e máximo 256 resultados.
+
+`Part::BodyProperties` valida densidade/atrito/restituição/amortecimento. Dirty
+`body` atualiza massa/inércia e parâmetros no corpo existente, preservando
+velocidades e suspensão por gizmo. `bodyMass` consulta o Bullet. JSON opcional
+`body`/cenas antigas e duplicação mantidos por ProjectIO/Scene.
