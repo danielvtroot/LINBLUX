@@ -1040,8 +1040,18 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
     BeginMode3D(camera);
     rlEnableDepthTest();
     rlDisableBackfaceCulling();
+    // NPCs com rig ocultam a caixa da Part e aparecem como personagem animado.
+    const auto& npcVisuals = scene.npcVisuals();
+    const auto hasRigVisual = [&](InstanceId id) {
+        for (const auto& visual : npcVisuals) if (visual.part == id) return true;
+        return false;
+    };
     for (Part* part : scene.parts()) {
         if (part == nullptr) {
+            continue;
+        }
+        if (hasRigVisual(part->id())) {
+            if (part->id() == selectedId) drawSelection(*part);
             continue;
         }
         if (part->instanceClass() == InstanceClass::Baseplate) {
@@ -1087,6 +1097,10 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
         drawRig({&asset, {}, asset.root}, lightDirection, sunIntensity, brightness);
     }
     if (rig) drawRig(*rig, lightDirection, sunIntensity, brightness);
+    for (const auto& visual : npcVisuals) {
+        if (const auto* asset = scene.gameAssets().findRig(visual.rigId))
+            drawRig({asset, visual.pose, visual.root}, lightDirection, sunIntensity, brightness);
+    }
     EndMode3D();
 }
 
