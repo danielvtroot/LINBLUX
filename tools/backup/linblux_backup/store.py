@@ -146,7 +146,8 @@ class Store:
             source = selection.by_relative()[relative].path
             target = self.work / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, target)
+            # copy2 preserves the executable bit so a restored tree keeps it.
+            shutil.copy2(source, target)
         for relative in changes.removed:
             target = self.work / relative
             if target.exists():
