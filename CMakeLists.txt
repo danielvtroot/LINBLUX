@@ -382,6 +382,10 @@ install(FILES midia/logo.png DESTINATION share/pixmaps COMPONENT Linblux RENAME 
 # ATLAS: testes locais da inteligência estrutural (Python stdlib, sem rede).
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
+  add_test(NAME linblux_backup
+    COMMAND ${Python3_EXECUTABLE} -m unittest discover
+            -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/backup -p "test_*.py" -v)
+  set_tests_properties(linblux_backup PROPERTIES TIMEOUT 45 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   add_test(NAME linblux_atlas
     COMMAND ${Python3_EXECUTABLE} -m unittest discover
             -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/atlas -p "test_*.py" -v)
@@ -466,3 +470,4 @@ if(Python3_Interpreter_FOUND)
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 linblux_turbo_headless(linblux_turbo "unit;headless;tooling;turbo")
+linblux_turbo_headless(linblux_backup "unit;integration;headless;tooling;backup")

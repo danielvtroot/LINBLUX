@@ -199,6 +199,8 @@ def build_plan(
 
         # Asset rules are explicit because CMake does not model asset -> test
         # coverage.  They are intentionally conservative.
+        if path.startswith(("tools/backup/", "tests/backup/", "packaging/systemd/")) and "linblux_backup" in tests:
+            reasons["linblux_backup"].add(f"sistema de backup alterado: {path}")
         if path.startswith(("assets/", "midia/")):
             for test_name in _asset_tests(path):
                 if test_name in tests:

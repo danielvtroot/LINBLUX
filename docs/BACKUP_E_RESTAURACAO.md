@@ -43,3 +43,19 @@ O comando `python3 scripts/checkpoint.py --help` documenta o checkpoint de uma
 mudança revisada: arquivos explícitos, compilação, CTest, commit e push normal.
 O script recusa pastas genéricas, links, arquivos ignorados, segredos conhecidos
 e arquivos maiores que 50 MiB. Não substitui a revisão humana do conteúdo.
+
+## AutoBackup independente do desenvolvimento
+
+O serviço do usuário mantém checkpoints em `auto-backup`, com repositório e
+índice próprios. Consulte [backup/README.md](backup/README.md) para instalação,
+systemd/cron, política de arquivos e prova de recuperação. Na sessão de labubu:
+`~/.local/bin/backup-status` ou `python3 tools/backup/backup.py status`.
+Ao consultar como outro usuário, selecione explicitamente o diretório de estado.
+
+Em 25/10/2026, o checkpoint remoto 36917d6c4474fb1358924785ff2b23b21881b27f
+foi recuperado numa clonagem temporária: 315 arquivos conferidos por SHA-256,
+incluindo o marcador público. Main e índice de desenvolvimento permaneceram
+intactos. O watchdog cron reiniciou o processo encerrado intencionalmente em
+20,005 segundos. Isso comprova o caminho de recuperação de código dessa execução,
+não uma cópia externa de experiências pessoais/arquivos ignorados. O destino
+privado externo ainda precisa ser definido e validado pelo proprietário.

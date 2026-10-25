@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# backup-status — último checkpoint, último push confirmado e pendências.
+# Instalado em ~/.local/bin/backup-status pelo install-service.sh.
+set -eu
+SELF=$(readlink -f "$0")
+PROJECT="${LINBLUX_BACKUP_PROJECT:-$(cd "$(dirname "$SELF")/../.." && pwd)}"
+exec python3 "$PROJECT/tools/backup/backup.py" status --project "$PROJECT" "$@"
