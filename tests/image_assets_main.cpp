@@ -183,11 +183,16 @@ int main() {
         const auto defaults = json::parse(read(root / "defaults/index.json"));
         require(defaults.contains("world") && defaults.contains("character"),
                 "Padrão da engine não publicou mundo e personagem");
+        const auto engineCharacter = json::parse(read(root / "defaults" /
+            defaults["character"].get<std::string>() / "experience.json"));
+        require(engineCharacter.value("faceImage", std::string()).empty(),
+                "Personagem padrão da engine foi salvo com rosto obrigatório");
         experiences::CreateOptions fresh;
         fresh.name = "Nova experiência do padrão";
         const auto derived = library.create(fresh);
         Scene derivedScene;
         library.open(derived, derivedScene);
+        require(derived.manifest.faceImage.empty(), "Experiência derivada herdou rosto de fábrica");
         auto* derivedPart = derivedScene.findPart(decalPart->id());
         require(derivedPart && attribute(*derivedPart, "decal_image") == reference,
                 "Decal não foi herdado pelo padrão da engine");
