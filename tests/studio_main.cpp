@@ -418,10 +418,11 @@ void LinbluxProgress() {
         CHECK(!runtime.start(author,error,options));
         {std::ifstream input(data);CHECK(std::string(std::istreambuf_iterator<char>(input),{})=="corrupted progress");}
         {std::ofstream out(data);out<<original;}
-        const auto external=directory/"outside.json";{std::ofstream out(external);out<<"external must survive";}
+        const auto external=directory/"outside.json";{std::ofstream out(external);out<<original;}
         std::filesystem::remove(data);std::filesystem::create_symlink(external,data);
         CHECK(!runtime.start(author,error,options));
-        {std::ifstream input(external);CHECK(std::string(std::istreambuf_iterator<char>(input),{})=="external must survive");}
+        runtime.stop(false);
+        {std::ifstream input(external);CHECK(std::string(std::istreambuf_iterator<char>(input),{})==original);}
     }
     game::ProgressStore store;store.open({});bool rejected=false;
     try{store.set("oversized",std::string(65537,'x'));}catch(const std::exception&){rejected=true;}CHECK(rejected);

@@ -18,6 +18,12 @@ def main():
     example += '\nlinblux.events.on("stop", function() assert(linblux.scene.root:get_attribute("timer_concluido")) end)\n'
     cases = [
         ("Persistencia.lua", (root / "assets/examples/lua/persistencia.lua").read_text()+'\nassert(not linblux.storage.status().persistent)',0,"erros Lua: 0"),
+        ("PersistenciaFuncao.lua","linblux.storage.set('bad',function() end)",1,"somente dados JSON"),
+        ("PersistenciaCiclo.lua","local t={};t.loop=t;linblux.storage.set('bad',t)",1,"profundidade"),
+        ("PersistenciaMista.lua","linblux.storage.set('bad',{[1]=1,a=2})",1,"Não misture"),
+        ("PersistenciaMeta.lua","linblux.storage.set('bad',setmetatable({},{__index={}}))",1,"sem metatabela"),
+        ("PersistenciaLimite.lua","for i=1,65 do linblux.storage.set('key',i) end",1,"Limite de alterações"),
+        ("PersistenciaLeituras.lua","for i=1,129 do linblux.storage.get('key') end",1,"Limite de leituras"),
         ("Transformacoes.lua", (root / "assets/examples/lua/transformacoes.lua").read_text()+'\nlinblux.events.on("stop",function() assert(linblux.scene.root:get_attribute("transformacoes_concluidas")) end)',0,"erros Lua: 0"),
         ("Camera.lua", (root / "assets/examples/lua/camera.lua").read_text()+'\nlinblux.events.on("stop",function() assert(linblux.scene.root:get_attribute("camera_concluida")) end)',0,"erros Lua: 0"),
         ("CameraInvalida.lua","linblux.camera.set_pose({position=linblux.vec3(1,2,3),target=linblux.vec3(1,2,3)})",1,"Pose de câmera inválida"),
