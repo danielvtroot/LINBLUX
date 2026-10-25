@@ -70,6 +70,7 @@ cmake --install build --prefix "$HOME/.local"
 ## Documentação
 
 - [Guia do Studio](docs/GUIA_STUDIO.md) · [experiências](docs/EXPERIENCES.md)
+- [API Lua LINBLUX v1 e exemplos executáveis](docs/SCRIPTING_LUA.md)
 - [Mundo e personagem padrão](docs/PADROES_DA_ENGINE.md) · [compatibilidade](docs/COMPATIBILIDADE.md)
 - [Arquitetura](docs/ARCHITECTURE.md) · [desenvolvimento e contribuição](CONTRIBUTING.md)
 - [Testes](docs/TESTING.md) · [vídeo e desempenho](docs/VIDEO.md)

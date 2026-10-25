@@ -1,7 +1,10 @@
 #pragma once
 
 #include <memory>
+#include <optional>
+#include <set>
 #include "game/Rig.h"
+#include "game/ScriptInput.h"
 #include "scripting/LuaRuntime.h"
 #include "scene/Scene.h"
 #include "physics/PhysicsWorld.h"
@@ -13,6 +16,7 @@ class btDefaultMotionState;
 namespace loblox::game {
 enum class RuntimeState { Editing, StartingPlay, Playing, Paused, StoppingPlay };
 enum class HumanoidState { Idle, Walking, Jumping, Freefall, Landing, Dead };
+enum class PartMotion { Velocity, Force, Impulse };
 const char* StateName(HumanoidState state);
 struct PlayerInput {
     bool shiftKey = false; // roteado ao gameplay; edge detect do Shift Lock
@@ -20,6 +24,7 @@ struct PlayerInput {
     Vector2 look{};     // mouse pixels; apply once per display frame
     float zoom = 0;
     bool jump = false;
+    ScriptInput script;
 };
 
 class RuntimeSession;
@@ -77,6 +82,8 @@ public:
     Scene& mutableScene() { return *scene_; } // validated native bindings, runtime only
     scripting::LuaRuntime& scripts() { return scripts_; }
     const scripting::LuaRuntime& scripts() const { return scripts_; }
+    const ScriptInput& scriptInput() const { return scriptInput_; }
+    const ScriptInput& previousScriptInput() const { return previousScriptInput_; }
     unsigned characterGeneration() const { return respawns_; }
     bool setAnimation(const std::string& state,const std::string& assetId,std::string& error);
     float health() const { return health_; }
@@ -96,6 +103,14 @@ public:
     bool grounded() const;
     std::size_t bodyCount() const;
     bool validate(std::string& error) const;
+    // Validated script operations; called only outside Bullet's simulation step.
+    bool partMotion(InstanceId id,Vector3 value,PartMotion operation,std::string& error);
+    Vector3 partVelocity(InstanceId id);
+    bool setGravity(float magnitude,std::string& error);
+    bool teleportPlayer(Vector3 position,std::string& error);
+    bool setCheckpoint(Vector3 position,std::string& error);
+    bool raycastParts(Vector3 origin,Vector3 direction,float distance,Part*& object,
+                      Vector3& point,Vector3& normal,InstanceId ignored=0);
     // Sphere sweep for camera, ignores avatar and non-collidable Parts.
     float cameraClearance(Vector3 from, Vector3 to, float radius) const;
     PlayerSettings& settings() { return settings_; } // session preferences, not project writes
@@ -110,6 +125,7 @@ public:
 private:
     void destroyCharacter();
     void step(float dt, Vector3 desired, bool jump);
+    void updateContacts();
     void transition(HumanoidState state);
     void animate(float dt, float horizontalSpeed);
     // Sweeps the full capsule down before a fixed step so a fast fall cannot
@@ -149,7 +165,10 @@ private:
     std::string correlation_;
     std::string activeAnimation_;
     scripting::LuaRuntime scripts_;
+    std::set<std::pair<InstanceId,InstanceId>> activeContacts_;
+    ScriptInput scriptInput_,previousScriptInput_;
     float health_=100, deadTime_=0, damageCooldown_=0;
+    std::optional<Vector3> scriptCheckpoint_;
     bool shiftLockRequested_ = false;
     unsigned char lastShiftKey_ = 0;
 };

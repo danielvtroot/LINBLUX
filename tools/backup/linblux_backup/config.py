@@ -83,7 +83,7 @@ def load_config(path: Path | None = None) -> BackupConfig:
     if not isinstance(exclude, list):
         raise SystemExit("configuração inválida: 'exclude' deve ser uma lista")
 
-    return BackupConfig(
+    config = BackupConfig(
         branch=str(value("branch")),
         remote=str(value("remote")),
         include=tuple(str(item) for item in include),
@@ -96,3 +96,8 @@ def load_config(path: Path | None = None) -> BackupConfig:
         push_timeout_seconds=float(value("push_timeout_seconds")),
         secret_scan=bool(value("secret_scan")),
     )
+    if (config.max_file_bytes <= 0 or config.max_total_bytes < config.max_file_bytes or
+            min(config.checkpoint_interval_seconds, config.poll_interval_seconds,
+                config.push_retry_seconds, config.push_timeout_seconds) <= 0):
+        raise SystemExit("configuração inválida: limites e intervalos devem ser positivos")
+    return config

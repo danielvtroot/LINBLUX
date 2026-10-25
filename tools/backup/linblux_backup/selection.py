@@ -69,11 +69,12 @@ class Matcher:
     def included(self, relative: str) -> bool:
         if not any(pattern.match(relative) for pattern in self._include):
             return False
+        included = True
         for negated, pattern in self._exclude:
             if pattern.match(relative):
                 # A normal exclude pattern drops the file; a "!" pattern puts it back.
-                return negated
-        return True
+                included = negated
+        return included
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,8 @@ class SelectedFile:
     path: Path
     size: int
     digest: str
+    data: bytes
+    mode: int
 
 
 @dataclass
@@ -96,6 +99,8 @@ class Selection:
 
 def _git(project: Path, *args: str, timeout: float = 30.0) -> subprocess.CompletedProcess:
     env = os.environ.copy()
+    for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX"):
+        env.pop(key, None)
     env["GIT_OPTIONAL_LOCKS"] = "0"  # never refresh/lock the developer index
     env["GIT_TERMINAL_PROMPT"] = "0"
     env["LC_ALL"] = "C"
@@ -140,12 +145,38 @@ def sha256_file(path: Path, chunk: int = 1 << 20) -> str:
     return digest.hexdigest()
 
 
-def _looks_secret(path: Path) -> bool:
-    try:
-        data = path.read_bytes()
-    except OSError:
-        return False
+def _looks_secret(data: bytes) -> bool:
     return any(pattern.search(data) for pattern in SECRET_PATTERNS)
+
+
+def read_snapshot(project: Path, relative: str, limit: int) -> tuple[bytes, int]:
+    """Open every path component without following symlinks; bound the read.
+
+    The exact bytes scanned are later committed, even if another editor replaces
+    the source after selection. No second, unchecked copy from the working tree.
+    """
+    parts = Path(relative).parts
+    if not parts or Path(relative).is_absolute() or any(p in ("..", ".git") for p in parts):
+        raise OSError("caminho fora da política")
+    directory = os.open(project, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in parts[:-1]:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+            os.close(directory)
+            directory = child
+        descriptor = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        with os.fdopen(descriptor, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode):
+                raise OSError("não é arquivo regular")
+            if info.st_size > limit:
+                raise ValueError("acima do limite de tamanho")
+            data = stream.read(limit + 1)
+            if len(data) > limit:
+                raise ValueError("acima do limite de tamanho")
+            return data, info.st_mode & 0o777
+    finally:
+        os.close(directory)
 
 
 def select(project: Path, config: BackupConfig) -> Selection:
@@ -157,22 +188,21 @@ def select(project: Path, config: BackupConfig) -> Selection:
             continue
         absolute = project / relative
         try:
-            info = absolute.lstat()
+            data, mode = read_snapshot(project, relative, config.max_file_bytes)
+        except ValueError as error:
+            selection.skipped.append({"path": relative, "reason": str(error)})
+            continue
         except OSError:
+            selection.skipped.append({"path": relative, "reason": "ausente, link ou leitura recusada"})
             continue
-        if not stat.S_ISREG(info.st_mode):  # directories, symlinks, submodules
-            continue
-        if info.st_size > config.max_file_bytes:
-            selection.skipped.append({"path": relative, "reason": "acima do limite de tamanho"})
-            continue
-        if selection.total_bytes + info.st_size > config.max_total_bytes:
+        if selection.total_bytes + len(data) > config.max_total_bytes:
             selection.skipped.append({"path": relative, "reason": "limite total de backup atingido"})
             continue
-        if config.secret_scan and _looks_secret(absolute):
+        if config.secret_scan and _looks_secret(data):
             selection.skipped.append({"path": relative, "reason": "credencial detectada"})
             continue
         selection.files.append(
-            SelectedFile(relative, absolute, info.st_size, sha256_file(absolute))
+            SelectedFile(relative, absolute, len(data), hashlib.sha256(data).hexdigest(), data, mode)
         )
-        selection.total_bytes += info.st_size
+        selection.total_bytes += len(data)
     return selection

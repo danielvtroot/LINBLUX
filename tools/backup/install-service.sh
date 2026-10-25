@@ -43,14 +43,7 @@ echo "unit:            $UNIT_DIR/linblux-backup.service"
 echo "comando:         $BIN_DIR/backup-status"
 echo "estado isolado:  $STATE"
 
-if [ "$ENABLE" -eq 1 ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-    systemctl --user daemon-reload
-    systemctl --user enable --now linblux-backup.service
-    systemctl --user is-active linblux-backup.service || true
-else
-    echo "systemd de usuário indisponível neste ambiente." >&2
-    echo "Na sua sessão Linux, execute:" >&2
-    echo "  systemctl --user daemon-reload" >&2
-    echo "  systemctl --user enable --now linblux-backup.service" >&2
-    exit 0
+if [ "$ENABLE" -eq 1 ]; then
+    exec "$PYTHON" "$PROJECT/tools/backup/backup.py" service install --project "$PROJECT" --state-dir "$STATE"
 fi
+echo "Instalação preparada; serviço não ativado (--no-enable)."

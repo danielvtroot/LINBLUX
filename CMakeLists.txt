@@ -267,6 +267,8 @@ if(XVFB_RUN_EXECUTABLE)
     set_tests_properties(linblux_rig_decals_ui PROPERTIES TIMEOUT 120 ENVIRONMENT "LOBLOX_RIG_DECALS_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
     add_test(NAME linblux_mouse_lock COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
     set_tests_properties(linblux_mouse_lock PROPERTIES TIMEOUT 180 ENVIRONMENT "LOBLOX_MOUSE_LOCK_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
+    add_test(NAME linblux_script_input_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
+    set_tests_properties(linblux_script_input_ui PROPERTIES TIMEOUT 45 ENVIRONMENT "LINBLUX_SCRIPT_INPUT_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
     add_test(NAME linblux_manipulation_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
     set_tests_properties(linblux_manipulation_ui PROPERTIES TIMEOUT 240 ENVIRONMENT "LOBLOX_MANIPULATION_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
     add_executable(linblux_rig_input_tests tests/rig_input_main.cpp)
@@ -380,6 +382,10 @@ install(FILES midia/logo.png DESTINATION share/pixmaps COMPONENT Linblux RENAME 
 # ATLAS: testes locais da inteligência estrutural (Python stdlib, sem rede).
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
+  add_test(NAME linblux_backup
+    COMMAND ${Python3_EXECUTABLE} -m unittest discover
+            -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/backup -p "test_*.py" -v)
+  set_tests_properties(linblux_backup PROPERTIES TIMEOUT 45 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   add_test(NAME linblux_atlas
     COMMAND ${Python3_EXECUTABLE} -m unittest discover
             -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/atlas -p "test_*.py" -v)
@@ -437,6 +443,7 @@ linblux_turbo_graphics(linblux_experience_ui "graphics;integration;experiences;u
 linblux_turbo_graphics(linblux_rml_ui "graphics;integration;ui;editor;slow")
 linblux_turbo_graphics(linblux_rig_decals_ui "graphics;integration;editor;rendering;rig;slow")
 linblux_turbo_graphics(linblux_mouse_lock "graphics;integration;editor;ui;game;slow")
+linblux_turbo_graphics(linblux_script_input_ui "graphics;integration;editor;ui;game;scripting")
 linblux_turbo_graphics(linblux_manipulation_ui "graphics;integration;editor;scene;ui;slow")
 linblux_turbo_graphics(linblux_rig_input "graphics;integration;editor;rig;ui;slow")
 linblux_turbo_graphics(linblux_visual_studio "graphics;integration;editor;rendering;ui;slow")
@@ -463,3 +470,4 @@ if(Python3_Interpreter_FOUND)
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 linblux_turbo_headless(linblux_turbo "unit;headless;tooling;turbo")
+linblux_turbo_headless(linblux_backup "unit;integration;headless;tooling;backup")

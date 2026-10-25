@@ -69,6 +69,8 @@ class BackupRunner:
         self.project = Path(project).resolve()
         self.config = config
         self.state_dir = Path(state_dir).resolve() if state_dir else default_state_dir()
+        if self.state_dir.is_relative_to(self.project) or self.project.is_relative_to(self.state_dir / "work"):
+            raise StoreError("estado do backup deve ficar fora da área de trabalho principal")
         self.state_path = self.state_dir / "state.json"
         self.lock_path = self.state_dir / "backup.lock"
         self.log = logger or Logger()
@@ -171,6 +173,8 @@ class BackupRunner:
         self.state.last_attempt = utc_now()
         result = self.store.push()
         if result.ok:
+            if self.state.last_checkpoint:
+                self.state.last_checkpoint["hash"] = result.remote_hash
             self.state.last_push = {"hash": result.remote_hash, "time": utc_now(), "branch": self.config.branch}
             self.state.last_error = None
             self.log(f"push confirmado {result.remote_hash[:12]} → {self.config.branch}")
@@ -278,5 +282,11 @@ def status_snapshot(runner: BackupRunner) -> dict:
         "protected_files": len(selection.files) - len(
             [item for item in selection.files if item.relative in set(uncommitted)]
         ),
+        "remote_protected_files": sum(
+            runner.state.manifest.get(item.relative) == item.digest
+            for item in selection.files
+        ) if last_push and (runner.state.last_checkpoint or {}).get("hash") == last_push.get("hash") else 0,
+        "policy": {"include": list(runner.config.include), "exclude": list(runner.config.exclude),
+                   "ignored_files_included": False, "private_external_backup_configured": False},
         "interval_seconds": runner.config.checkpoint_interval_seconds,
     }

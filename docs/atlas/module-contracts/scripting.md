@@ -33,6 +33,25 @@ experiências/defaults que carregam scripts e testes de UI que executam Play.
 **Como estender:** adicione bindings com validação de tipo/handle e teste Lua;
 não exponha ponteiros de autoria. Mantenha mensagens e erros observáveis.
 
+**API v1 LINBLUX:** `linblux.scene`, `linblux.events`, `linblux.time`,
+`linblux.vec3`, contexto por script (`self`/`script`) e handles próprios com
+propriedades minúsculas. Os bindings legados preservam seus nomes. Veja
+[SCRIPTING_LUA](../../SCRIPTING_LUA.md) para contrato, cotas e exemplos executados
+por `linblux_studio`. Listeners/tarefas de scripts removidos ou desabilitados e
+escopos destruídos são cancelados nos pontos seguros do scheduler. Lua roda
+antes de `PhysicsWorld::syncScene`, nunca durante o passo de Bullet.
+Scripts clonados habilitados entram no scheduler; reativação inicia um contexto
+novo, sem herdar listeners/tarefas antigos. `destroy` entrega uma única notificação
+cancelável ao observador ainda existente, após a remoção do escopo.
+`fixedUpdate` executa callbacks antes de cada passo, compartilhando a cota do
+quadro. `contact` apenas enfileira dados coletados depois do passo; nenhum script
+executa durante a enumeração de manifolds. Os pares são limitados a 1024 e a fila
+de notificações respeita a política de tarefas do host.
+`linblux.input` recebe amostras do frontend pelo RuntimeSession; consultas e eventos
+de borda não fazem polling nativo nem consomem Escape/atalhos de saída. `ScriptInput`
+é transitório, fora da cena serializada. Testes: linblux_studio (amostras injetadas)
+e linblux_script_input_ui (teclado X11 real, gameplay e pausa).
+
 **Limites:** não é um sandbox de segurança contra código nativo arbitrário;
 não há multiplayer/rede. Coleta de lixo/limites são os do estado Lua e do
 runtime, não um isolamento de processos.

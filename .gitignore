@@ -1,0 +1,33 @@
+/build*/
+/Testing/
+/cache/
+/.cache/
+/.atlas/
+/.turbo/
+/compile_commands.json
+*.o
+*.a
+*.so
+*.tmp
+*.log
+*.xwd
+*.core
+*imgui.ini
+__pycache__/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+/.aws/
+/.codex/
+/.agents/
+/backups/
+/projects/*
+!/projects/.gitkeep
+# Referencias pessoais e duplicata do video oficial; midia/ e versionado.
+/referencias/
+/careditfullhd.mp4
+
+# Imagens pessoais importadas: preservadas localmente; fora da distribuição.
+/assets/*.png

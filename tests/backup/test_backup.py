@@ -7,11 +7,14 @@ Run with:
 from __future__ import annotations
 
 import json
+import os
+import signal
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,6 +22,9 @@ sys.path.insert(0, str(ROOT / "tools" / "backup"))
 
 from linblux_backup.config import BackupConfig  # noqa: E402
 from linblux_backup.runner import BackupRunner, Logger, status_snapshot  # noqa: E402
+from linblux_backup.selection import Matcher  # noqa: E402
+from linblux_backup.service import cron_text, start  # noqa: E402
+from linblux_backup.store import StoreError  # noqa: E402
 
 # Fixtures build the PEM marker at runtime so this file never contains a
 # literal private-key block (the backup secret scan would skip it).
@@ -293,6 +299,95 @@ class StatusTests(BackupTestCase):
             self.assertFalse(second.acquire_lock())
         finally:
             first._lock_handle.close()
+
+
+class SafetyAndServiceTests(BackupTestCase):
+    def test_scanned_snapshot_is_committed_even_if_source_changes(self) -> None:
+        runner = self.runner()
+        selected = runner.collect()
+        expected = (self.project / "src/main.cpp").read_bytes()
+        (self.project / "src/main.cpp").write_text(PEM_MARKER + "\nlate-secret\n")
+        runner.store.ensure()
+        changes = runner.store.diff(selected)
+        runner.store.apply(selected, changes)
+        runner.store.commit(changes, "snapshot scanned before concurrent edit")
+        self.assertTrue(runner.store.push().ok)
+        restored = self.clone_backup(self.temporary / "snapshot")
+        self.assertEqual((restored / "src/main.cpp").read_bytes(), expected)
+
+    def test_parent_symlink_is_not_followed(self) -> None:
+        (self.project / "src/nested").mkdir()
+        (self.project / "src/nested/example.cpp").write_text("// tracked\n")
+        git("add", "src/nested/example.cpp", cwd=self.project)
+        shutil.rmtree(self.project / "src/nested")
+        external = self.temporary / "private"
+        external.mkdir()
+        (external / "example.cpp").write_text("do not publish outside the project\n")
+        (self.project / "src/nested").symlink_to(external, target_is_directory=True)
+        selected = self.runner().collect()
+        self.assertNotIn("src/nested/example.cpp", {item.relative for item in selected.files})
+
+    def test_reserved_branch_and_in_tree_store_are_rejected(self) -> None:
+        with self.assertRaises(StoreError):
+            self.runner(make_config(branch="main"))
+        with self.assertRaises(StoreError):
+            BackupRunner(self.project, make_config(), self.project / "state")
+        self.assertEqual(git("branch", "--show-current", cwd=self.project).stdout.strip(), "main")
+
+    def test_fresh_store_continues_existing_remote_history(self) -> None:
+        first = self.runner().run_once()
+        fresh = BackupRunner(self.project, make_config(), self.temporary / "new-state", logger=Logger(quiet=True))
+        (self.project / "src/main.cpp").write_text("// restored machine edit\n")
+        second = fresh.run_once()
+        self.assertIsNotNone(second.pushed)
+        git("merge-base", "--is-ancestor", first.pushed, second.pushed, cwd=self.origin)
+
+    def test_once_cannot_race_a_running_monitor(self) -> None:
+        runner = self.runner()
+        self.assertTrue(runner.acquire_lock())
+        try:
+            result = subprocess.run([sys.executable, str(ROOT / "tools/backup/backup.py"), "run", "--once",
+                                     "--project", str(self.project), "--state-dir", str(self.state)],
+                                    capture_output=True, timeout=5)
+            self.assertEqual(result.returncode, 1)
+            self.assertIsNone(runner.store.head())
+        finally:
+            runner._lock_handle.close()
+
+    def test_cron_preserves_jobs_and_is_idempotent(self) -> None:
+        previous = "MAILTO=''\n17 3 * * * /usr/bin/true # another job\n"
+        command = ["/usr/bin/python3", "/a path/10%/backup.py", "service", "start"]
+        first = cron_text(previous, command, self.state / "watchdog.log", self.project)
+        self.assertIn(previous.strip(), first)
+        self.assertIn(r"10\%", first)
+        self.assertEqual(first.count("# LINBLUX-BACKUP-"), 2)
+        self.assertEqual(first, cron_text(first, command, self.state / "watchdog.log", self.project))
+        with self.assertRaises(StoreError):
+            cron_text(previous, ["bad\ncommand"], self.state / "log", self.project)
+
+    def test_exclusion_override_uses_last_match(self) -> None:
+        matcher = Matcher(("src/**",), ("**/*.txt", "!src/allowed.txt"))
+        self.assertFalse(matcher.included("src/private.txt"))
+        self.assertTrue(matcher.included("src/allowed.txt"))
+
+    def test_service_starts_real_monitor_once_and_cleans_up(self) -> None:
+        shutil.copytree(ROOT / "tools/backup", self.project / "tools/backup", ignore=shutil.ignore_patterns("__pycache__"))
+        runner = self.runner()
+        result = start(runner)
+        try:
+            self.assertTrue(result["active"])
+            self.assertTrue(result["started"])
+            self.assertFalse(start(runner)["started"])
+            deadline = time.monotonic() + 5
+            while not runner.store.head() and time.monotonic() < deadline:
+                time.sleep(.05)
+            self.assertIsNotNone(runner.store.head())
+        finally:
+            os.kill(result["pid"], signal.SIGTERM)
+            deadline = time.monotonic() + 3
+            while runner.daemon_running() and time.monotonic() < deadline:
+                time.sleep(.05)
+            self.assertFalse(runner.daemon_running())
 
 
 if __name__ == "__main__":

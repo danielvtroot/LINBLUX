@@ -11,7 +11,7 @@ is reconciled with ``fetch`` + ``rebase``; ``--force`` is never used.
 from __future__ import annotations
 
 import os
-import shutil
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +49,8 @@ class Store:
     AUTHOR_EMAIL = "auto-backup@linblux.invalid"
 
     def __init__(self, state_dir: Path, remote_url: str, branch: str, push_timeout: float = 60.0) -> None:
+        if branch in ("main", "master") or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_/-]*", branch) or ".." in branch:
+            raise StoreError("branch de backup inválido ou reservado ao desenvolvimento")
         self.state_dir = Path(state_dir)
         self.work = self.state_dir / "work"
         self.remote_url = remote_url
@@ -92,6 +94,8 @@ class Store:
 
     def ensure(self) -> None:
         self.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if self.work.is_symlink() or (self.work / ".git").is_symlink() or (self.work / ".git").is_file():
+            raise StoreError("repositório de backup deve ser independente, sem links/worktrees")
         if not self.exists():
             subprocess.run(
                 ["git", "init", "-q", f"--initial-branch={self.branch}", str(self.work)],
@@ -100,7 +104,7 @@ class Store:
         else:
             current = self._git("symbolic-ref", "--quiet", "--short", "HEAD")
             if current.returncode == 0 and current.stdout.decode().strip() != self.branch:
-                self._git("checkout", "-q", "-B", self.branch)
+                raise StoreError("branch inesperado no repositório isolado; histórico preservado")
         remotes = self._git("remote").stdout.decode().split()
         if "origin" not in remotes:
             self._git("remote", "add", "origin", self.remote_url)
@@ -110,6 +114,13 @@ class Store:
                 self._git("remote", "set-url", "origin", self.remote_url)
         self._git("config", "push.default", "nothing")
         self._git("config", "advice.detachedHead", "false")
+        self._git("config", "core.hooksPath", "/dev/null")
+        # A fresh machine must extend the existing backup history, not create
+        # an unrelated root and then fail its first non-forced push.
+        if not self.head() and self.remote_head() and self._fetch_remote():
+            checked = self._git("checkout", "-q", "-B", self.branch, f"origin/{self.branch}")
+            if checked.returncode:
+                raise StoreError("não foi possível abrir o histórico remoto do backup")
 
     def head(self) -> str | None:
         if not self.exists():
@@ -136,6 +147,8 @@ class Store:
                 added.append(relative)
                 continue
             target = self.work / relative
+            if target.resolve().is_relative_to(self.work) is False:
+                raise StoreError(f"link externo recusado no repositório isolado: {relative}")
             if not target.is_file() or sha256_file(target) != item.digest:
                 modified.append(relative)
         removed = sorted(current - set(wanted))
@@ -143,13 +156,20 @@ class Store:
 
     def apply(self, selection: Selection, changes: SyncResult) -> None:
         for relative in [*changes.added, *changes.modified]:
-            source = selection.by_relative()[relative].path
+            item = selection.by_relative()[relative]
             target = self.work / relative
+            if target.parent.resolve() != target.parent:
+                raise StoreError(f"diretório com link recusado: {relative}")
             target.parent.mkdir(parents=True, exist_ok=True)
-            # copy2 preserves the executable bit so a restored tree keeps it.
-            shutil.copy2(source, target)
+            # Never follow a symlink inherited from an existing remote tree.
+            if target.parent.resolve() != target.parent or target.is_symlink():
+                raise StoreError(f"link recusado no repositório isolado: {relative}")
+            target.write_bytes(item.data)
+            target.chmod(0o755 if item.mode & 0o111 else 0o644)
         for relative in changes.removed:
             target = self.work / relative
+            if target.parent.resolve() != target.parent:
+                raise StoreError(f"remoção por diretório com link recusada: {relative}")
             if target.exists():
                 target.unlink()
             parent = target.parent

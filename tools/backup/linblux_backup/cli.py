@@ -45,6 +45,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     verify = subcommands.add_parser("verify", help="clona o branch remoto e valida a restauração")
     _add_common(verify)
+    service = subcommands.add_parser("service", help="instala/inicia serviço do usuário (systemd ou cron)")
+    service.add_argument("action", choices=("install", "start"))
+    service.add_argument("--backend", choices=("auto", "systemd", "cron"), default="auto")
+    _add_common(service)
     return parser
 
 
@@ -76,6 +80,9 @@ def _print_status(snapshot: dict) -> None:
     else:
         print("Último push confirmado:  nenhum")
     print(f"Pendente de envio:       {'sim' if snapshot['pending_push'] else 'não'}")
+    print(f"Arquivos locais cobertos: {snapshot['protected_files']}")
+    print(f"Arquivos remotos cobertos: {snapshot['remote_protected_files']}")
+    print("Escopo: allowlist; ignorados/dados privados não estão incluídos.")
     changes = snapshot.get("changes") or {}
     unprotected = snapshot["unprotected"]
     print(f"Alterações não protegidas: {len(unprotected)}")
@@ -106,7 +113,14 @@ def _command_status(runner: BackupRunner, as_json: bool) -> int:
 
 def _command_run(runner: BackupRunner, args) -> int:
     if args.once:
-        result = runner.run_once(force=False)
+        if not runner.acquire_lock():
+            print("outro daemon de backup já está ativo; ciclo não executado", file=sys.stderr)
+            return 1
+        try:
+            result = runner.run_once(force=False)
+        finally:
+            runner._lock_handle.close()
+            runner._lock_handle = None
         if args.json:
             print(json.dumps(result.as_dict(), indent=2, sort_keys=True))
         else:
@@ -198,4 +212,13 @@ def main(argv: list[str] | None = None) -> int:
         return _command_init(runner, args.json)
     if args.command == "verify":
         return _command_verify(runner, runner.config, args.json)
+    if args.command == "service":
+        from . import service
+        try:
+            result = service.install(runner, args.backend, args.config) if args.action == "install" else service.start(runner, args.config)
+        except (StoreError, OSError, subprocess.TimeoutExpired) as failure:
+            print(f"Serviço não confirmado: {failure}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0
     return _command_run(runner, args)

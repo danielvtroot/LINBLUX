@@ -40,3 +40,17 @@ documento; dispatch deve chamar a API do editor/engine.
 **Limites:** testes de UI são lentos e dependem de Xvfb/xdotool; acessibilidade
 e internacionalização além do catálogo atual não estão completas. Não há
 servidor/rede.
+
+**Home:** `experiences.rcss` é mantido manualmente e carrega antes do tema
+gerado (`theme.rcss`). O menu dos cartões deve ter somente uma âncora vertical;
+na Home, `top` exige `bottom: auto`. Preserve as larguras independentes de Abrir
+e `…`. Botões com texto direto usam bloco e altura de linha explícita: o layout
+flex do RmlUi não deve ocultar os nós de texto. A regressão curta de geometria,
+cliques e capturas está no modo `--layout-smoke DIRETÓRIO` de
+`linblux_home_video_tests`; execute-o pelo supervisor `run_command` do TURBO,
+com Xvfb, timeout e diretório de recursos isolado.
+`--actions-smoke DIRETÓRIO` verifica as mesmas ações sem repetir screenshots.
+Na correção de 25/10/2026, as capturas de Home/menu foram inspecionadas a
+1280×720; a regressão de ações passou em 23,76 s, supervisionada com limite de
+60 s. Exportação por diálogo nativo e exclusão confirmada não foram exercitadas
+nessa regressão curta; o cancelamento da exclusão foi verificado.

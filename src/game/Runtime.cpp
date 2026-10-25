@@ -237,6 +237,9 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error) {
     } catch (const std::exception& e) { error = std::string("Play startup: ") + e.what(); stop(); return false; }
 }
 void RuntimeSession::destroyCharacter() {
+    for(auto it=activeContacts_.begin();it!=activeContacts_.end();) {
+        if(it->first==0){scripts_.contact(it->first,it->second,false);it=activeContacts_.erase(it);}else ++it;
+    }
     if (body_ && physics_) physics_->world_->removeRigidBody(body_.get());
     body_.reset(); motion_.reset(); capsule_.reset();
 }
@@ -245,12 +248,12 @@ void RuntimeSession::stop() {
     state_ = RuntimeState::StoppingPlay;
     if (!activeAnimation_.empty()) Event("animation", "stop", correlation_, {{"clip", activeAnimation_}});
     activeAnimation_.clear();
-    scripts_.stop();
+    scripts_.stop();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
     destroyCharacter(); physics_.reset(); scene_.reset();
     accumulator_ = 0; jumpPending_ = false; coyoteTime_=jumpBufferTime_=0; pose_ = {};
     blendFrom_ = {}; poseSource_.clear(); poseWalking_ = false; wasAirborne_ = false; blendTime_ = 0;
     shiftLockRequested_ = false; lastShiftKey_ = 0; // Stop nunca deixa o lock preso
-    state_ = RuntimeState::Editing;
+    scriptCheckpoint_.reset();state_ = RuntimeState::Editing;
     Event("runtime", "stop", correlation_);
 }
 void RuntimeSession::pause() {
@@ -287,6 +290,7 @@ bool RuntimeSession::respawn(std::string& error) {
             starts.push_back({spawn.position.x,spawn.position.y+halfHeight+spawnMargin,spawn.position.z});
         }
     }
+    if(scriptCheckpoint_)starts.insert(starts.begin(),*scriptCheckpoint_);
     auto capsule = std::make_unique<btCapsuleShape>(settings_.collisionRadius,
                            settings_.collisionHeight - 2*settings_.collisionRadius);
     btTransform transform; transform.setIdentity();
@@ -402,6 +406,26 @@ void RuntimeSession::preventFallThrough(float dt) {
     clamped.setY(0);
     body_->setLinearVelocity(clamped);
     physics_->world_->updateSingleAabb(body_.get());
+}
+void RuntimeSession::updateContacts() {
+    if(!scripts_.wantsContacts()){activeContacts_.clear();return;}
+    std::set<std::pair<InstanceId,InstanceId>> current;
+    for(int i=0;i<physics_->dispatcher_->getNumManifolds();++i) {
+        const auto* manifold=physics_->dispatcher_->getManifoldByIndexInternal(i);
+        bool touching=false;for(int j=0;j<manifold->getNumContacts();++j)touching|=manifold->getContactPoint(j).getDistance()<=.02f;
+        if(!touching)continue;
+        const auto id=[&](const btCollisionObject* object)->std::optional<InstanceId>{
+            if(object==body_.get())return InstanceId(0);
+            const auto* part=static_cast<const Part*>(object->getUserPointer());
+            if(part&&scene_->findPart(part->id())==part)return part->id();return std::nullopt;
+        };
+        auto a=id(manifold->getBody0()),b=id(manifold->getBody1());if(!a||!b)continue;
+        if(*a>*b)std::swap(a,b);
+        if(current.size()<1024)current.emplace(*a,*b);
+    }
+    for(const auto& pair:current)if(!activeContacts_.count(pair))scripts_.contact(pair.first,pair.second,true);
+    for(const auto& pair:activeContacts_)if(!current.count(pair))scripts_.contact(pair.first,pair.second,false);
+    activeContacts_=std::move(current);
 }
 void RuntimeSession::step(float dt, Vector3 desired, bool jump) {
     if (health_<=0) {
@@ -616,6 +640,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     if (suppressJump_ && !input.jump) suppressJump_ = false;
     const bool jumpPressed = input.jump && !lastJumpDown_ && !suppressJump_;
     lastJumpDown_ = input.jump;
+    previousScriptInput_=scriptInput_;scriptInput_=input.script;
     scripts_.update(dt);
     physics_->syncScene(*scene_);
     damageCooldown_=std::max(0.f,damageCooldown_-dt);
@@ -630,8 +655,11 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     constexpr float fixed = 1.f / 60;
     int steps = 0;
     while (accumulator_ + .000001f >= fixed && steps++ < 6) {
+        scripts_.fixedUpdate(fixed);
+        physics_->syncScene(*scene_);
         previousCharacterPosition_=position();
         step(fixed, desired, jumpPending_); jumpPending_ = false;
+        updateContacts();
         accumulator_ = std::max(0.f, accumulator_ - fixed);
         if (state_ != RuntimeState::Playing) break;
     }
@@ -650,6 +678,78 @@ float RuntimeSession::cameraClearance(Vector3 from, Vector3 to, float radius) co
     SolidSweep hit(a.getOrigin(), b.getOrigin(), body_.get());
     physics_->world_->convexSweepTest(&sphere, a, b, hit);
     return hit.hasHit() ? hit.m_closestHitFraction : 1.f;
+}
+bool RuntimeSession::partMotion(InstanceId id,Vector3 value,PartMotion operation,std::string& error) {
+    auto* part=scene_?scene_->findPart(id):nullptr;
+    if(!physics_||!part||part->anchored()||!std::isfinite(value.x)||!std::isfinite(value.y)||!std::isfinite(value.z)||
+       std::fabs(value.x)>1000000||std::fabs(value.y)>1000000||std::fabs(value.z)>1000000) {
+        error="Movimento físico requer uma peça dinâmica e um vetor finito no intervalo suportado.";return false;
+    }
+    physics_->syncScene(*scene_);
+    const auto found=physics_->bodies_.find(id);
+    if(found==physics_->bodies_.end()||found->second.body->isStaticOrKinematicObject()){error="Corpo dinâmico indisponível.";return false;}
+    auto* body=found->second.body;
+    switch(operation) {
+        case PartMotion::Velocity:body->setLinearVelocity(Bt(value));break;
+        case PartMotion::Force:body->applyCentralForce(Bt(value));break;
+        case PartMotion::Impulse:body->applyCentralImpulse(Bt(value));break;
+        default:error="Operação física desconhecida.";return false;
+    }
+    body->activate(true);error.clear();return true;
+}
+Vector3 RuntimeSession::partVelocity(InstanceId id) {
+    if(!physics_||!scene_)return {};
+    physics_->syncScene(*scene_);return physics_->linearVelocity(id);
+}
+bool RuntimeSession::setGravity(float magnitude,std::string& error) {
+    if(!physics_){error="Física da sessão indisponível.";return false;}
+    auto candidate=settings_;candidate.gravity=magnitude;
+    if(!candidate.validate(error))return false;
+    settings_=candidate;physics_->setGravity({0,-magnitude,0});error.clear();return true;
+}
+bool RuntimeSession::setCheckpoint(Vector3 position,std::string& error) {
+    if(!scene_||!std::isfinite(position.x)||!std::isfinite(position.y)||!std::isfinite(position.z)||
+       std::fabs(position.x)>1000000||std::fabs(position.y)>1000000||std::fabs(position.z)>1000000||
+       position.y-settings_.collisionHeight*.5f<=scene_->workspace()->fallenPartsDestroyHeight()) {
+        error="Checkpoint fora do mundo ou abaixo do limite de queda.";return false;
+    }
+    scriptCheckpoint_=position;error.clear();return true;
+}
+bool RuntimeSession::teleportPlayer(Vector3 position,std::string& error) {
+    if(!physics_||!body_||health_<=0||!std::isfinite(position.x)||!std::isfinite(position.y)||!std::isfinite(position.z)||
+       std::fabs(position.x)>1000000||std::fabs(position.y)>1000000||std::fabs(position.z)>1000000||
+       position.y-settings_.collisionHeight*.5f<=scene_->workspace()->fallenPartsDestroyHeight()) {
+        error="Destino de teleporte inválido.";return false;
+    }
+    physics_->syncScene(*scene_);auto transform=body_->getWorldTransform();transform.setOrigin(Bt(position));
+    btCollisionObject candidate;candidate.setCollisionShape(capsule_.get());candidate.setCollisionFlags(body_->getCollisionFlags());candidate.setWorldTransform(transform);
+    Overlap overlap;overlap.ignored=body_.get();physics_->world_->contactTest(&candidate,overlap);
+    if(overlap.overlapping){error="Destino de teleporte obstruído.";return false;}
+    body_->setWorldTransform(transform);body_->setInterpolationWorldTransform(transform);motion_->setWorldTransform(transform);
+    body_->setLinearVelocity({0,0,0});body_->clearForces();body_->activate(true);physics_->world_->updateSingleAabb(body_.get());
+    previousCharacterPosition_=position;coyoteTime_=jumpBufferTime_=0;camera_.reset(characterRoot().position,settings_);
+    error.clear();return true;
+}
+bool RuntimeSession::raycastParts(Vector3 origin,Vector3 direction,float distance,Part*& object,
+                                 Vector3& point,Vector3& normal,InstanceId ignored) {
+    object=nullptr;
+    if(!physics_||!scene_||!std::isfinite(distance)||distance<=0||distance>1000000||
+       !std::isfinite(origin.x)||!std::isfinite(origin.y)||!std::isfinite(origin.z)||
+       !std::isfinite(direction.x)||!std::isfinite(direction.y)||!std::isfinite(direction.z)||Vector3LengthSqr(direction)<1e-12f)return false;
+    physics_->syncScene(*scene_);
+    const auto from=Bt(origin),to=Bt(Vector3Add(origin,Vector3Scale(Vector3Normalize(direction),distance)));
+    struct Ray final:btCollisionWorld::ClosestRayResultCallback {
+        InstanceId ignored;
+        Ray(btVector3 from,btVector3 to,InstanceId skip):ClosestRayResultCallback(from,to),ignored(skip){}
+        bool needsCollision(btBroadphaseProxy* proxy) const override {
+            const auto* body=static_cast<const btCollisionObject*>(proxy->m_clientObject);
+            const auto* part=static_cast<const Part*>(body->getUserPointer());
+            return part&&part->id()!=ignored&&ClosestRayResultCallback::needsCollision(proxy);
+        }
+    } result(from,to,ignored);
+    physics_->world_->rayTest(from,to,result);if(!result.hasHit())return false;
+    object=static_cast<Part*>(result.m_collisionObject->getUserPointer());
+    point=Vec(result.m_hitPointWorld);normal=Vec(result.m_hitNormalWorld);return object!=nullptr;
 }
 std::size_t RuntimeSession::bodyCount() const {
     return physics_ ? static_cast<std::size_t>(physics_->world_->getNumCollisionObjects()) : 0;

@@ -9,6 +9,12 @@
 namespace loblox::game { class RuntimeSession; }
 namespace loblox::scripting {
 struct Message { bool error=false; std::string script; std::string text; InstanceId scriptId=0; int line=0; };
+// Host policy, never loaded automatically from an imported experience.
+struct Limits {
+    std::size_t memoryBytes=8*1024*1024;
+    int instructionsPerTask=100000, instructionsPerFrame=250000;
+    std::size_t tasks=128, listeners=128;
+};
 // One quota-limited in-process Lua 5.4 VM per Play, never an editor evaluator.
 // This is a reliability boundary, not an OS security boundary for hostile code.
 class LuaRuntime {
@@ -17,8 +23,13 @@ public:
     LuaRuntime(const LuaRuntime&)=delete;
     LuaRuntime& operator=(const LuaRuntime&)=delete;
     bool start(game::RuntimeSession& runtime);
+    bool configure(const Limits& limits,std::string& error); // only while stopped
+    const Limits& limits() const;
     void stop();
     void update(float dt);
+    void fixedUpdate(float dt);
+    bool wantsContacts() const;
+    void contact(InstanceId first,InstanceId second,bool entering);
     void characterAdded();
     void healthChanged(float health,bool died);
     const std::vector<Message>& messages() const;
