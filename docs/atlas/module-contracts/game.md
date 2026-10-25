@@ -44,3 +44,8 @@ respawn reinicia o controlador, teleporte mantém uma pose roteirizada.
 Testes: LinbluxCameraControl/studio, lua_player_validation e script_input_ui
 (RmlUi real, pausa/cursor/retorno). Poses são transitórias; scripts e padrões
 persistem no formato existente.
+ProgressStore mantém dados privados em escopo fornecido pelo host, fora da cena
+e dos assets. RuntimeSession salva ao pausar/parar e descarta início cancelado.
+--validate e padrão da engine usam memória. Não confundir progress.json com mundo
+autoral. Testes: LinbluxProgress/studio, lua_player_validation, progress_player_ui
+e script_input_ui com reabertura de Play. Ver PERSISTENCIA_PRIVADA.md.
