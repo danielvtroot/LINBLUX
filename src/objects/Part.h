@@ -53,6 +53,9 @@ struct NpcProperties {
     float maxHealth = 100.0f;
     float respawnDelay = 0.0f; // 0 disables automatic respawn
     float turnSpeed = 8.0f;
+    // Rig R6 opcional usado como visual do NPC. Vazio mantém a caixa da Part.
+    // Guarda o id do rig (nunca um ponteiro) e aceita "player"/nome na API Lua.
+    std::string rig;
     bool validate(std::string& error) const;
 };
 
