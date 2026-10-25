@@ -36,8 +36,8 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 | Jogador/vida/spawn/animações | PUBLICADO | Base cf53b09; LinbluxPlayer + game/spawn. | Um controlador nativo, rig compatível legado; NPCs e rigs arbitrários são pendências próprias. |
 | Câmera | PUBLICADO | Base cf53b09; configure/state em LuaRuntime; LinbluxPlayer. | Distância/modos/sensibilidade existentes. Posição/rotação/alvo/FOV/transições por Lua ainda precisam implementação e testes. |
 | Entrada/eventos | PUBLICADO | cf53b09; ScriptInput, Runtime, LuaRuntime; script_input_ui real. | Controle físico não testado; amostras de controle injetadas. Não expor Escape/atalhos de saída aos scripts. |
-| Tempo/cancelamento/intervalos | VALIDADO NO PLAYER | Relatório 14: LuaRuntime; temporizadores.lua, LinbluxTaskCancellation/LinbluxExamples e Player standalone. FAST 13/13, IMPACT 18/18 selecionados. | Registrar commit publicado. every não recupera pulsos atrasados; um coroutine por intervalo. |
-| Diagnóstico no Player | VALIDADO NO PLAYER | Relatório 14: Player --validate + contador LuaRuntime; lua_player_validation.py, quatro cenas reais. | Validação simula 2 s e Stop, não prova todas as ações futuras. Recusa erros evictos do buffer. Registrar commit publicado. |
+| Tempo/cancelamento/intervalos | PUBLICADO | 26066dff73dc128c50987de2f5f25dfcf71ff89b, push main confirmado; validado no Player. Relatório 14: LuaRuntime; temporizadores.lua, LinbluxTaskCancellation/LinbluxExamples. FAST 13/13, IMPACT 18/18 selecionados. | every não recupera pulsos atrasados; um coroutine por intervalo. |
+| Diagnóstico no Player | PUBLICADO | 26066dff73dc128c50987de2f5f25dfcf71ff89b, push main confirmado. Relatório 14: Player --validate + contador LuaRuntime; lua_player_validation.py, quatro cenas reais. | Validação simula 2 s e Stop, não prova todas as ações futuras. Recusa erros evictos do buffer. |
 | Segurança/cotas/erros | PUBLICADO | Base cf53b09; limites host-only, finalizadores restritos, VM sem APIs de SO; testes studio. | É limite de confiabilidade em processo, não isolamento de SO; trabalho nativo também exige limites. |
 | Persistência de scripts/autoria | PUBLICADO | ProjectIO + LinbluxExamples: salvar/reabrir e executar. | Persistência de estado de gameplay/configurações via API controlada ainda PENDENTE. |
 | Áudio por Lua | PENDENTE | Não há namespace documentado como implementado. | Dependência da Fase 3: backend/importação/streaming/referências reais. |
@@ -70,6 +70,12 @@ novo precisa de implementação nativa, teste Lua e execução no Player corresp
   dados privados pelo simples fato de o monitor de código estar ativo.
 
 ## Retomada após este incremento
+
+Checkpoint de código publicado: 26066dff73dc128c50987de2f5f25dfcf71ff89b.
+Compilação Studio/Player/teste aprovada; 1655 verificações de Studio, zero falhas.
+FAST 13/13 e IMPACT 18/18 selecionados passaram; cobertura global parcial, sem
+FULL ou nova validação gráfica neste incremento de scheduler/CLI. Nenhum build
+ou teste ficou ativo; manter apenas o serviço de backup solicitado.
 
 Não há trabalho de NPC/áudio/decals/HUD/menu escondido como pronto. A próxima ação
 concreta é `atlas.py locate "PlayerCamera PlayerSettings GameAssetsIO câmera"`
