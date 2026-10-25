@@ -57,7 +57,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     std::string tooltip;double tooltipSince=0;bool contextOpen=false;
     std::string treeMarkup,propertyMarkup,ribbonMarkup,advancedMarkup,documentMarkup;size_t treeHash=0;
     std::map<std::pair<std::string,std::string>,std::string> styles;
-    std::vector<game::ImageAsset> images;double imageScan=-10;
+    std::vector<game::ImageAsset> images;double imageScan=-10;std::string imageQuery;
     std::set<InstanceId> collapsed;InstanceId dragNode=0,dragTarget=0;Vector2 dragStart{};
     bool dragging=false,mouseOwned=false,escapeConsumed=false,dialogOpen=false,treeKeyboard=false,restoreFocus=false;
     bool initialized=false,syncing=false,keyboardOwned=false;float shownHealth=100,healthTrail=100;int w=0,h=0;
@@ -166,6 +166,48 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(name=="script") {advanced.clear();advancedMarkup.clear();ui.showScriptEditor_=false;ui.openScriptEditor();return;}
         advanced=name;advancedMarkup.clear();ui.showScriptEditor_=false;ui.showAnimationEditor_=name=="animation";ui.showRigEditor_=name=="rig";ui.showGameSettings_=false;ui.showOutput_=name=="output";
         if(name=="animation") {auto& a=ui.scene_.gameAssets();if(!a.animations.empty())ui.openAnimation(a.findAnimation(a.player.walkAnimation)?a.player.walkAnimation:a.animations.front().id);}
+    }
+    void invalidateImages() {images.clear();imageScan=-10;propertyMarkup.clear();advancedMarkup.clear();}
+    static std::string Lower(std::string text) {for(auto& c:text)c=char(std::tolower(static_cast<unsigned char>(c)));return text;}
+    static std::string ImageTypeLabel(const std::string& filename) {
+        auto ext=std::filesystem::path(filename).extension().string();
+        if(ext.size()>1)ext=ext.substr(1);
+        for(auto& c:ext)c=char(std::toupper(static_cast<unsigned char>(c)));
+        return ext.empty()?"IMAGEM":ext;
+    }
+    bool ImageMatches(const game::ImageAsset& image) const {
+        if(imageQuery.empty())return true;
+        return Lower(image.name+" "+image.filename+" "+image.id).find(Lower(imageQuery))!=std::string::npos;
+    }
+    // Seletor compacto de imagem: miniatura, nome amigável, busca, importação e
+    // remoção da imagem aplicada. O ID técnico aparece só no title do item; a
+    // aplicação usa o mesmo comando do painel de recursos.
+    std::string ImagePicker(const std::string& current,const std::string& apply,const std::string& clearValue,const std::string& queryId) {
+        if(GetTime()-imageScan>2){images=game::ListImages(game::AssetsDir());imageScan=GetTime();}
+        const auto assets=game::AssetsDir();
+        const auto currentFile=std::filesystem::path(game::NormalizeImageReference(current)).filename().string();
+        std::string s="<div class=\"image-picker\"><div class=\"image-current\">";
+        if(current.empty())s+="<span class=\"image-current-name muted\">Nenhuma imagem aplicada</span>";
+        else {
+            const auto path=game::ResolveImagePath(assets,current);
+            if(!path.empty())s+="<img class=\"image-current-thumb\" src=\""+Escape(path)+"\"/>";
+            s+="<span class=\"image-current-name\">"+Escape(game::ImageDisplayName(assets,current))+"</span>";
+            if(path.empty())s+="<span class=\"image-missing\" title=\"O arquivo não está em assets/. Importe a imagem novamente ou remova a referência.\">Ausente</span>";
+            s+=Button("clear-image","Remover imagem","delete",clearValue);
+        }
+        s+="</div><input id=\""+queryId+"\" class=\"image-query\" placeholder=\"Pesquisar imagem por nome\" value=\""+Escape(imageQuery)+"\"/>";
+        s+="<div class=\"image-options\">";
+        bool any=false;
+        for(const auto& image:images) {
+            if(!ImageMatches(image))continue;
+            any=true;
+            const auto path=std::filesystem::absolute(std::filesystem::path(assets)/image.filename).string();
+            const bool selected=!currentFile.empty()&&currentFile==image.filename;
+            s+="<button class=\"image-option"+(selected?" selected":"")+"\" data-action=\""+apply+"\" data-value=\""+Escape(path)+"\" title=\""+Escape("ID: "+image.id)+"\"><img src=\""+Escape(path)+"\"/><span class=\"image-option-name\">"+Escape(image.name)+"</span><span class=\"image-option-type\">"+ImageTypeLabel(image.filename)+"</span></button>";
+        }
+        if(!any)s+="<div class=\"image-empty\">"+(images.empty()?"Nenhuma imagem importada.":"Nenhuma imagem encontrada.")+"</div>";
+        s+="</div><div class=\"image-picker-actions\">"+Button("import-dialog","Importar imagem","folder")+"</div></div>";
+        return s;
     }
     void documents() {
         display("editor-camera-modes",!ui.runtime_.active()&&ui.activeDocument_==0);
