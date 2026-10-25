@@ -326,15 +326,17 @@ end)
             const auto first=rig()->bodies[game::Torso].decals.front().id;
             click("rig-prop-Name");key("ctrl+a");event("type --clearmodifiers DecalFront");key("Return");
             CHECK(rig()->findDecal(first)->name=="DecalFront");
-            click("rig-prop-Image");capture("rig-image-open");key("Down");key("Down");key("Return");
-            CHECK(rig()->findDecal(first)->surface.image=="front.png");
+            // O seletor visual aplica pela miniatura/nome; o antigo select de
+            // IDs técnicos não existe mais.
+            click("image-query-front.png");frames(2);capture("rig-image-open");
+            CHECK(rig()->findDecal(first)->surface.image=="assets/front.png");
             click("cmd-rig-decal-add-");CHECK(rig()->bodies[game::Torso].decals.size()==2);
             const auto second=rig()->bodies[game::Torso].decals.back().id;
             click("rig-prop-Name");key("ctrl+a");event("type --clearmodifiers DecalBack");key("Return");
             click("rig-prop-Face");key("Down");key("Return");
             CHECK(rig()->findDecal(second)->surface.face==1);
-            click("rig-prop-Image");key("Down");key("Return");
-            CHECK(rig()->findDecal(second)->surface.image=="back.png");
+            click("image-query-back.png");frames(2);
+            CHECK(rig()->findDecal(second)->surface.image=="assets/back.png");
             click("rig-prop-Transparency");key("ctrl+a");event("type --clearmodifiers 0.25");key("Return");
             CHECK(NearlyEqual(rig()->findDecal(second)->surface.transparency,.25f));
             capture("rig-decals-properties");
@@ -349,14 +351,21 @@ end)
             CHECK(!importedImage.empty());
             if(importedImage.empty()) {std::fprintf(stderr,"Import dialog error: %s\n",ui.frontend()->elementText("dialog-error").c_str());capture("rig-import-error");key("Escape");}
             else {
-            click("rig-prop-Image");
-            for(int i=0;i<5;++i)key("Up"); // first option: None
-            for(const auto& item:imported){key("Down");if(item.filename==importedImage)break;}
-            key("Return");
-            if(rig()->findDecal(second)->surface.image!=importedImage)std::fprintf(stderr,"Imported image selection: expected=%s actual=%s markup=%s\n",importedImage.c_str(),rig()->findDecal(second)->surface.image.c_str(),ui.frontend()->elementText("rig-prop-Image").c_str());
-            CHECK(rig()->findDecal(second)->surface.image==importedImage);
+            click("image-query-"+importedImage);frames(2);
+            CHECK(rig()->findDecal(second)->surface.image==game::ImageAssetReference(importedImage));
+            // Nome amigável é editável e persiste em assets/image-names.json.
+            click("cmd-rename-image-"+importedImage);
+            click("dialog-value");key("ctrl+a");event("type --clearmodifiers Textura importada");
+            click("dialog-confirm");frames(2);
+            CHECK(game::ImageDisplayName(game::AssetsDir(),importedImage)=="Textura importada");
+            CHECK(ui.frontend()->elementBounds("image-query-"+importedImage).width>0);
+            // Excluir imagem em uso é recusado com relatório de dependências.
+            click("cmd-delete-image-"+importedImage);
+            CHECK(ui.frontend()->elementText("dialog-description").find("em uso")!=std::string::npos);
+            key("Escape");frames(2);
+            CHECK(std::filesystem::exists(std::filesystem::path("assets")/importedImage));
             }
-            CHECK(rig()->findDecal(first)->surface.image=="front.png");CHECK(rig()->findDecal(second)->surface.face==1);
+            CHECK(rig()->findDecal(first)->surface.image=="assets/front.png");CHECK(rig()->findDecal(second)->surface.face==1);
             CHECK(projectio::save(scene,config.defaultProjectPath,error));
             Scene roundTrip;CHECK(projectio::load(roundTrip,config.defaultProjectPath,error));
             const auto* saved=roundTrip.gameAssets().findRig(rigId);CHECK(saved&&saved->bodies[game::Torso].decals.size()==2);
@@ -369,6 +378,18 @@ end)
             CHECK(projectio::save(scene,config.defaultProjectPath,error));
             CHECK(projectio::load(roundTrip,config.defaultProjectPath,error));
             CHECK(roundTrip.gameAssets().findRig(rigId)->bodies[game::Torso].decals.size()==1);
+            // Remover a imagem aplicada mantém o adesivo; excluir o arquivo é
+            // uma operação separada e só acontece sem referências.
+            click("rig-decal-"+rigId+"-"+second);frames(2);
+            click("cmd-clear-image-rig");frames(2);
+            CHECK(rig()->findDecal(second)!=nullptr);
+            CHECK(rig()->findDecal(second)->surface.image.empty());
+            CHECK(std::filesystem::exists(std::filesystem::path("assets")/importedImage));
+            click("cmd-delete-image-"+importedImage);
+            CHECK(ui.frontend()->elementText("dialog-description").find("Nenhuma referência")!=std::string::npos);
+            click("dialog-confirm");frames(3);
+            CHECK(!std::filesystem::exists(std::filesystem::path("assets")/importedImage));
+            CHECK(rig()->findDecal(second)!=nullptr);
             CHECK(scene.validate(error));capture("rig-decals-deleted");
         } else {
         const auto cameraStart=camera.camera();
