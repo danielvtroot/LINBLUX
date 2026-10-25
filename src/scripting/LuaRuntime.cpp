@@ -66,7 +66,7 @@ struct LuaRuntime::Impl {
     int instructions=0, frameBudget=0, moduleDepth=0;
     InstanceId executing=0;
     Limits limits;
-    bool stopping=false;
+    bool stopping=false,closing=false;
     struct Job { lua_State* thread; int ref; int arguments; InstanceId script; double wake; bool done=false; InstanceId connection=0; };
     struct Listener { int signal; int ref; InstanceId script; unsigned avatar=0; InstanceId owner=0; std::string topic; };
     std::deque<Job> jobs;
@@ -86,7 +86,7 @@ struct LuaRuntime::Impl {
         return next;
     }
     template<int(*Function)(lua_State*)> static int Safe(lua_State* L) {
-        try { return Function(L); }
+        try { Require(!Host(L).closing,"A VM Lua está encerrando");return Function(L); }
         catch(const std::exception& e) { lua_pushstring(L,e.what()); }
         catch(...) { lua_pushliteral(L,"Falha na API nativa LINBLUX"); }
         return lua_error(L);
@@ -264,6 +264,19 @@ struct LuaRuntime::Impl {
     static void Field(lua_State* L,int index,const char* name) {
         index=lua_absindex(L,index);lua_pushstring(L,name);lua_rawget(L,index);
     }
+    static int SetMetatable(lua_State* L) {
+        Require(lua_istable(L,1)&&(lua_isnil(L,2)||lua_istable(L,2)),"setmetatable requer tabela e metatabela ou nil");
+        if(lua_getmetatable(L,1)) {
+            Field(L,lua_gettop(L),"__metatable");const bool locked=!lua_isnil(L,-1);lua_pop(L,2);
+            Require(!locked,"Metatabela protegida");
+        }
+        if(lua_istable(L,2)) {
+            // Lua disables instruction hooks in __gc: even a false value would
+            // mark the table for finalization and could later be replaced by Lua.
+            Field(L,2,"__gc");Require(lua_isnil(L,-1),"Finalizadores __gc não são permitidos; use o evento stop");lua_pop(L,1);
+        }
+        lua_settop(L,2);lua_setmetatable(L,1);lua_pushvalue(L,1);return 1;
+    }
     static PartMaterial Material(lua_State* L,int index) {
         const char* name=Text(L,index);
         const char* modern[]{"smooth","plastic","wood","metal","concrete","emissive"};
@@ -350,7 +363,8 @@ struct LuaRuntime::Impl {
         Require(lua_isfunction(L,2),"after requer uma função");lua_remove(L,1);SpawnTask(L);self.jobs.back().wake=self.time+delay;return 0;
     }
     static int NativeSignal(const char* topic) {
-        return Eq(topic,"start")?EngineStart:Eq(topic,"update")?Heartbeat:Eq(topic,"stop")?EngineStop:0;
+        return Eq(topic,"start")?EngineStart:Eq(topic,"update")?Heartbeat:Eq(topic,"stop")?EngineStop:
+            Eq(topic,"spawn")?Spawn:Eq(topic,"health_changed")?HealthChanged:Eq(topic,"death")?Died:0;
     }
     static const char* Topic(lua_State* L) {
         const char* topic=Text(L,1);const auto length=lua_rawlen(L,1);
@@ -407,12 +421,12 @@ struct LuaRuntime::Impl {
         return 0;
     }
     static int Damage(lua_State* L) {
-        auto& self=Host(L);Require(self.handle(L,1).kind==Kind::Humanoid,"expected Humanoid");
+        auto& self=Host(L);const auto h=self.handle(L,1);Require(h.kind==Kind::Humanoid||(h.kind==Kind::Player&&h.modern),"expected character");
         const auto amount=Number(L,2);Require(amount>=0 && amount<=100000,"damage amount must be 0..100000");
         std::string error;if(!self.runtime->takeDamage(float(amount),error))throw std::runtime_error(error);return 0;
     }
     static int Heal(lua_State* L) {
-        auto& self=Host(L);Require(self.handle(L,1).kind==Kind::Humanoid,"expected Humanoid");
+        auto& self=Host(L);const auto h=self.handle(L,1);Require(h.kind==Kind::Humanoid||(h.kind==Kind::Player&&h.modern),"expected character");
         const auto amount=Number(L,2);Require(amount>=0 && amount<=100000,"heal amount must be 0..100000");
         std::string error;if(!self.runtime->heal(float(amount),error))throw std::runtime_error(error);return 0;
     }
@@ -427,6 +441,62 @@ struct LuaRuntime::Impl {
         lua_pushlstring(L,uri.data(),uri.size());lua_setfield(L,-2,"Id");lua_pushstring(L,clip->name.c_str());lua_setfield(L,-2,"Name");
         lua_pushstring(L,clip->rigType.c_str());lua_setfield(L,-2,"RigType");lua_pushnumber(L,clip->duration);lua_setfield(L,-2,"Duration");
         lua_pushboolean(L,clip->loop);lua_setfield(L,-2,"Loop");lua_pushinteger(L,clip->version);lua_setfield(L,-2,"Version");return 1;
+    }
+    static int Teleport(lua_State* L) {
+        auto& self=Host(L);Require(self.handle(L,1).kind==Kind::Player,"Jogador inválido");const auto position=ReadVector(L,2);std::string error;
+        if(!self.runtime->teleportPlayer(position,error))throw std::runtime_error(error);
+        return 0;
+    }
+    static int Checkpoint(lua_State* L) {
+        auto& self=Host(L);Require(self.handle(L,1).kind==Kind::Player,"Jogador inválido");
+        const auto position=lua_gettop(L)>1?ReadVector(L,2):self.runtime->position();std::string error;
+        if(!self.runtime->setCheckpoint(position,error))throw std::runtime_error(error);
+        return 0;
+    }
+    static int PlayerAnimation(lua_State* L) {
+        auto& self=Host(L);Require(self.handle(L,1).kind==Kind::Player,"Jogador inválido");const char* state=Text(L,2);
+        const char* lower[]{"idle","walk","jump","fall"};const char* native[]{"Idle","Walk","Jump","Fall"};const char* selected=nullptr;
+        for(int i=0;i<4;++i)if(Eq(state,lower[i]))selected=native[i];
+        Require(selected,"Estado de animação desconhecido");const char* id=Text(L,3);std::string error;
+        if(!self.runtime->setAnimation(selected,id,error))throw std::runtime_error(error);
+        return 0;
+    }
+    static int Animations(lua_State* L) {
+        auto& self=Host(L);lua_newtable(L);int index=0;
+        for(const auto& clip:self.runtime->scene().gameAssets().animations) {
+            lua_createtable(L,0,4);lua_pushstring(L,clip.id.c_str());lua_setfield(L,-2,"id");lua_pushstring(L,clip.name.c_str());lua_setfield(L,-2,"name");
+            lua_pushnumber(L,clip.duration);lua_setfield(L,-2,"duration");lua_pushboolean(L,clip.loop);lua_setfield(L,-2,"loop");lua_rawseti(L,-2,++index);
+        }
+        return 1;
+    }
+    static int CameraState(lua_State* L) {
+        auto& self=Host(L);const auto camera=self.runtime->playerCamera().camera();lua_createtable(L,0,5);
+        ModernVector(L,camera.position);lua_setfield(L,-2,"position");ModernVector(L,camera.target);lua_setfield(L,-2,"target");
+        lua_pushnumber(L,self.runtime->playerCamera().distance());lua_setfield(L,-2,"distance");lua_pushboolean(L,self.runtime->playerCamera().firstPerson());lua_setfield(L,-2,"first_person");
+        lua_pushboolean(L,self.runtime->settings().cameraLock||self.runtime->shiftLockActive());lua_setfield(L,-2,"locked");return 1;
+    }
+    static int CameraConfigure(lua_State* L) {
+        auto& self=Host(L);Require(lua_istable(L,1),"Configuração da câmera requer tabela");auto settings=self.runtime->settings();
+        lua_pushnil(L);while(lua_next(L,1)) {
+            const char* key=Text(L,-2);
+            if(Eq(key,"distance"))settings.cameraDistance=float(Number(L,-1));
+            else if(Eq(key,"sensitivity"))settings.sensitivity=float(Number(L,-1));
+            else if(Eq(key,"min_distance"))settings.minZoom=float(Number(L,-1));
+            else if(Eq(key,"max_distance"))settings.maxZoom=float(Number(L,-1));
+            else if(Eq(key,"mode")){const char* mode=Text(L,-1);Require(Eq(mode,"orbit")||Eq(mode,"follow")||Eq(mode,"first_person"),"Modo de câmera desconhecido");settings.cameraMode=Eq(mode,"orbit")?game::CameraMode::Classic:Eq(mode,"follow")?game::CameraMode::Follow:game::CameraMode::FirstPerson;}
+            else if(Eq(key,"allow_first_person")||Eq(key,"locked")||Eq(key,"allow_shift_lock")) {
+                Require(lua_isboolean(L,-1),"Opção de câmera requer booleano");const bool value=lua_toboolean(L,-1);
+                if(Eq(key,"locked"))settings.cameraLock=value;else if(Eq(key,"allow_shift_lock"))settings.enableShiftLock=value;else settings.allowFirstPerson=value;
+            }else throw std::runtime_error("Opção de câmera desconhecida");
+            lua_pop(L,1);
+        }
+        std::string error;if(!settings.validate(error))throw std::runtime_error(error);
+        self.runtime->settings()=settings;self.runtime->playerCamera().setDistance(settings.cameraDistance);return 0;
+    }
+    static const char* PlayerKey(const char* key) {
+        const std::pair<const char*,const char*> aliases[]{{"health","Health"},{"max_health","MaxHealth"},{"walk_speed","WalkSpeed"},{"jump_height","JumpHeight"},{"auto_rotate","AutoRotate"}};
+        for(const auto& pair:aliases)if(Eq(key,pair.first))return pair.second;
+        return key;
     }
     static const char* ModernKey(const char* key) {
         const std::pair<const char*,const char*> aliases[]{
@@ -449,6 +519,16 @@ struct LuaRuntime::Impl {
             key=ModernKey(key);
         }
 #define METHOD(name,fn) if(Eq(key,name)){lua_pushcfunction(L,Safe<fn>);return 1;}
+        if(h.kind==Kind::Player&&h.modern) {
+            METHOD("damage",Damage) METHOD("heal",Heal) METHOD("respawn",Respawn) METHOD("teleport",Teleport) METHOD("set_checkpoint",Checkpoint) METHOD("set_animation",PlayerAnimation)
+            if(Eq(key,"position")){ModernVector(L,self.runtime->position());return 1;}
+            if(Eq(key,"velocity")){ModernVector(L,self.runtime->velocity());return 1;}
+            if(Eq(key,"grounded")){lua_pushboolean(L,self.runtime->grounded());return 1;}
+            if(Eq(key,"name")){lua_pushstring(L,self.runtime->rig().name.c_str());return 1;}
+            if(Eq(key,"generation")){lua_pushinteger(L,self.runtime->characterGeneration());return 1;}
+            if(Eq(key,"state")){const char* states[]{"idle","walking","jumping","falling","landing","dead"};lua_pushstring(L,states[int(self.runtime->humanoidState())]);return 1;}
+            key=PlayerKey(key);
+        }
         if(h.kind==Kind::Game){METHOD("GetService",GetService)}
         if(h.kind==Kind::Signal){METHOD("Connect",Connect)}
         if(h.kind==Kind::Connection){METHOD("Disconnect",Disconnect) METHOD("disconnect",Disconnect)
@@ -467,7 +547,7 @@ struct LuaRuntime::Impl {
             if(Eq(key,"Animator")){self.push(L,Kind::Animator);return 1;}
             if(Eq(key,"Name")){lua_pushstring(L,self.runtime->rig().name.c_str());return 1;}
         }
-        if(h.kind==Kind::Humanoid) {
+        if(h.kind==Kind::Humanoid||(h.kind==Kind::Player&&h.modern)) {
             METHOD("TakeDamage",Damage) METHOD("Heal",Heal)
             if(Eq(key,"Health")){lua_pushnumber(L,self.runtime->health());return 1;}
             if(Eq(key,"MaxHealth")){lua_pushnumber(L,self.runtime->settings().maxHealth);return 1;}
@@ -515,7 +595,8 @@ struct LuaRuntime::Impl {
             return 0;
         }
         if(h.modern&&h.kind==Kind::Instance)key=ModernKey(key);
-        if(h.kind==Kind::Humanoid) {
+        if(h.kind==Kind::Player&&h.modern)key=PlayerKey(key);
+        if(h.kind==Kind::Humanoid||(h.kind==Kind::Player&&h.modern)) {
             if(Eq(key,"Health")) {const auto value=Number(L,3);Require(std::fabs(value)<=100000,"Health outside range");std::string error;if(!self.runtime->setHealth(float(value),error))throw std::runtime_error(error);return 0;}
             auto settings=self.runtime->settings();
             if(Eq(key,"MaxHealth")){settings.maxHealth=float(Number(L,3));settings.health=std::min(settings.health,settings.maxHealth);}
@@ -564,6 +645,7 @@ struct LuaRuntime::Impl {
         lua_pushcfunction(L,Safe<NewIndex>);lua_setfield(L,-2,"__newindex");lua_pushcfunction(L,Safe<Equal>);lua_setfield(L,-2,"__eq");
         lua_pushliteral(L,"locked");lua_setfield(L,-2,"__metatable");lua_pop(L,1);
         lua_pushcfunction(L,Safe<Print>);lua_setglobal(L,"print");lua_pushcfunction(L,Safe<Print>);lua_setglobal(L,"warn");
+        lua_pushcfunction(L,Safe<SetMetatable>);lua_setglobal(L,"setmetatable");
         lua_pushcfunction(L,Safe<RequireModule>);lua_setglobal(L,"require");
         lua_newtable(L);lua_pushcfunction(L,Safe<SpawnTask>);lua_setfield(L,-2,"spawn");lua_pushcfunction(L,Safe<Wait>);lua_setfield(L,-2,"wait");lua_setglobal(L,"task");
         lua_newtable(L);lua_pushcfunction(L,Safe<NewVector>);lua_setfield(L,-2,"new");lua_setglobal(L,"Vector3");
@@ -571,6 +653,9 @@ struct LuaRuntime::Impl {
         lua_newtable(L);lua_pushcfunction(L,Safe<NewInstance>);lua_setfield(L,-2,"new");lua_setglobal(L,"Instance");
         self.push(L,Kind::Game);lua_setglobal(L,"game");self.pushInstance(L,self.runtime->scene().workspace());lua_setglobal(L,"workspace");
         lua_newtable(L);lua_pushinteger(L,1);lua_setfield(L,-2,"api_version");lua_pushcfunction(L,Safe<ModernVec>);lua_setfield(L,-2,"vec3");
+        self.push(L,Kind::Player,0,true);lua_setfield(L,-2,"player");
+        lua_newtable(L);lua_pushcfunction(L,Safe<CameraState>);lua_setfield(L,-2,"state");lua_pushcfunction(L,Safe<CameraConfigure>);lua_setfield(L,-2,"configure");lua_setfield(L,-2,"camera");
+        lua_newtable(L);lua_pushcfunction(L,Safe<Animations>);lua_setfield(L,-2,"list");lua_setfield(L,-2,"animations");
         lua_newtable(L);lua_pushcfunction(L,Safe<ModernNew>);lua_setfield(L,-2,"create");lua_pushcfunction(L,Safe<ModernFind>);lua_setfield(L,-2,"find");self.pushInstance(L,self.runtime->scene().workspace(),true);lua_setfield(L,-2,"root");lua_setfield(L,-2,"scene");
         lua_newtable(L);lua_pushcfunction(L,Safe<On>);lua_setfield(L,-2,"on");lua_pushcfunction(L,Safe<Publish>);lua_setfield(L,-2,"emit");lua_setfield(L,-2,"events");
         lua_newtable(L);lua_pushcfunction(L,Safe<Raycast>);lua_setfield(L,-2,"raycast");lua_pushcfunction(L,Safe<Nearby>);lua_setfield(L,-2,"nearby");lua_pushcfunction(L,Safe<Gravity>);lua_setfield(L,-2,"gravity");lua_pushcfunction(L,Safe<SetGravity>);lua_setfield(L,-2,"set_gravity");lua_setfield(L,-2,"physics");
@@ -579,7 +664,7 @@ struct LuaRuntime::Impl {
     static int Emit(lua_State* L) {
         auto& self=Host(L);const int signal=int(lua_tointeger(L,1)),ref=int(lua_tointeger(L,2));
         const auto value=lua_tonumber(L,3);const auto connection=InstanceId(lua_tointeger(L,4));lua_settop(L,0);lua_rawgeti(L,LUA_REGISTRYINDEX,ref);
-        if(signal==Spawn)self.push(L,Kind::Character);else lua_pushnumber(L,value);
+        if(signal==Spawn){if(connection)self.push(L,Kind::Player,0,true);else self.push(L,Kind::Character);}else lua_pushnumber(L,value);
         SpawnTask(L);self.jobs.back().connection=connection;return 0;
     }
     static int Trace(lua_State* L) {
@@ -646,8 +731,9 @@ struct LuaRuntime::Impl {
     }
     void close() {
         jobs.clear();listeners.clear();modules.clear();loading.clear();
-        if(state)lua_close(state);
-        state=nullptr;memory=0;runtime=nullptr;stopping=false;
+        if(state){closing=true;instructions=limits.instructionsPerTask;frameBudget=limits.instructionsPerFrame;lua_sethook(state,Hook,LUA_MASKCOUNT,1000);lua_close(state);}
+        jobs.clear();listeners.clear();modules.clear();loading.clear();
+        state=nullptr;memory=0;runtime=nullptr;stopping=closing=false;
     }
     void stop() {
         if(state&&runtime) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include "game/Rig.h"
 #include "scripting/LuaRuntime.h"
 #include "scene/Scene.h"
@@ -101,6 +102,8 @@ public:
     bool partMotion(InstanceId id,Vector3 value,PartMotion operation,std::string& error);
     Vector3 partVelocity(InstanceId id);
     bool setGravity(float magnitude,std::string& error);
+    bool teleportPlayer(Vector3 position,std::string& error);
+    bool setCheckpoint(Vector3 position,std::string& error);
     bool raycastParts(Vector3 origin,Vector3 direction,float distance,Part*& object,
                       Vector3& point,Vector3& normal,InstanceId ignored=0);
     // Sphere sweep for camera, ignores avatar and non-collidable Parts.
@@ -157,6 +160,7 @@ private:
     std::string activeAnimation_;
     scripting::LuaRuntime scripts_;
     float health_=100, deadTime_=0, damageCooldown_=0;
+    std::optional<Vector3> scriptCheckpoint_;
     bool shiftLockRequested_ = false;
     unsigned char lastShiftKey_ = 0;
 };

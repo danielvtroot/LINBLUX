@@ -250,7 +250,7 @@ void RuntimeSession::stop() {
     accumulator_ = 0; jumpPending_ = false; coyoteTime_=jumpBufferTime_=0; pose_ = {};
     blendFrom_ = {}; poseSource_.clear(); poseWalking_ = false; wasAirborne_ = false; blendTime_ = 0;
     shiftLockRequested_ = false; lastShiftKey_ = 0; // Stop nunca deixa o lock preso
-    state_ = RuntimeState::Editing;
+    scriptCheckpoint_.reset();state_ = RuntimeState::Editing;
     Event("runtime", "stop", correlation_);
 }
 void RuntimeSession::pause() {
@@ -287,6 +287,7 @@ bool RuntimeSession::respawn(std::string& error) {
             starts.push_back({spawn.position.x,spawn.position.y+halfHeight+spawnMargin,spawn.position.z});
         }
     }
+    if(scriptCheckpoint_)starts.insert(starts.begin(),*scriptCheckpoint_);
     auto capsule = std::make_unique<btCapsuleShape>(settings_.collisionRadius,
                            settings_.collisionHeight - 2*settings_.collisionRadius);
     btTransform transform; transform.setIdentity();
@@ -678,6 +679,29 @@ bool RuntimeSession::setGravity(float magnitude,std::string& error) {
     auto candidate=settings_;candidate.gravity=magnitude;
     if(!candidate.validate(error))return false;
     settings_=candidate;physics_->setGravity({0,-magnitude,0});error.clear();return true;
+}
+bool RuntimeSession::setCheckpoint(Vector3 position,std::string& error) {
+    if(!scene_||!std::isfinite(position.x)||!std::isfinite(position.y)||!std::isfinite(position.z)||
+       std::fabs(position.x)>1000000||std::fabs(position.y)>1000000||std::fabs(position.z)>1000000||
+       position.y-settings_.collisionHeight*.5f<=scene_->workspace()->fallenPartsDestroyHeight()) {
+        error="Checkpoint fora do mundo ou abaixo do limite de queda.";return false;
+    }
+    scriptCheckpoint_=position;error.clear();return true;
+}
+bool RuntimeSession::teleportPlayer(Vector3 position,std::string& error) {
+    if(!physics_||!body_||health_<=0||!std::isfinite(position.x)||!std::isfinite(position.y)||!std::isfinite(position.z)||
+       std::fabs(position.x)>1000000||std::fabs(position.y)>1000000||std::fabs(position.z)>1000000||
+       position.y-settings_.collisionHeight*.5f<=scene_->workspace()->fallenPartsDestroyHeight()) {
+        error="Destino de teleporte inválido.";return false;
+    }
+    physics_->syncScene(*scene_);auto transform=body_->getWorldTransform();transform.setOrigin(Bt(position));
+    btCollisionObject candidate;candidate.setCollisionShape(capsule_.get());candidate.setCollisionFlags(body_->getCollisionFlags());candidate.setWorldTransform(transform);
+    Overlap overlap;overlap.ignored=body_.get();physics_->world_->contactTest(&candidate,overlap);
+    if(overlap.overlapping){error="Destino de teleporte obstruído.";return false;}
+    body_->setWorldTransform(transform);body_->setInterpolationWorldTransform(transform);motion_->setWorldTransform(transform);
+    body_->setLinearVelocity({0,0,0});body_->clearForces();body_->activate(true);physics_->world_->updateSingleAabb(body_.get());
+    previousCharacterPosition_=position;coyoteTime_=jumpBufferTime_=0;camera_.reset(characterRoot().position,settings_);
+    error.clear();return true;
 }
 bool RuntimeSession::raycastParts(Vector3 origin,Vector3 direction,float distance,Part*& object,
                                  Vector3& point,Vector3& normal,InstanceId ignored) {

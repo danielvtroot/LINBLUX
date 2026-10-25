@@ -85,6 +85,38 @@ Essas operações são exclusivas da cópia de runtime. Contatos, ciclo de passo
 fixo, consultas de volumes e controle de personagem na API nova ainda dependem
 dos próximos incrementos da Fase 2.
 
+## Jogador e câmera — incremento 2B
+
+`linblux.player` referencia o jogador local real, sem um ponteiro de personagem
+que fique inválido ao renascer. Propriedades editáveis: `health`, `max_health`,
+`walk_speed`, `jump_height`, `auto_rotate`. Consultas: `position`, `velocity`,
+`grounded`, `name`, `generation` e `state` (`idle`, `walking`, `jumping`, `falling`,
+`landing`, `dead`). A posição corresponde ao centro da cápsula física.
+
+Métodos: `player:damage(valor)`, `heal(valor)`, `respawn()`, `teleport(posição)`,
+`set_checkpoint(posição?)` e `set_animation(estado, id)`. Animações usam estados
+`idle`, `walk`, `jump`, `fall`; `linblux.animations.list()` retorna metadados dos
+recursos presentes (id, nome em `name`, duração e loop). Nenhuma animação externa
+é carregada automaticamente por esses métodos.
+
+Teleporte exige cápsula livre e destino válido; não move o jogador para dentro
+de um obstáculo. Checkpoint sem posição usa a posição atual. Na respawn, tenta o
+checkpoint e depois os spawns normais se estiver obstruído. É estado da sessão,
+liberado no Stop; o script salvo pode reconstruí-lo. Respawn recupera a vida máxima,
+preservando o comportamento nativo anterior.
+
+Eventos nativos adicionais: `spawn` recebe o jogador, `health_changed` recebe a
+vida e `death` sinaliza morte. Para um HUD, leia a vida em start e spawn e acompanhe
+as mudanças; respawn é anunciado pelo evento spawn, não por uma mudança de vida
+obrigatória. Os eventos nativos não podem ser emitidos manualmente por Lua.
+
+`linblux.camera.state()` retorna posição, alvo, distância, primeira pessoa e trava.
+`camera.configure(tabela)` aceita `mode` (`orbit`, `follow`, `first_person`),
+`distance`, `min_distance`, `max_distance`, `sensitivity`, `allow_first_person`,
+`locked` e `allow_shift_lock`. A configuração é validada antes de ser aplicada;
+o estado renderizado reflete a atualização seguinte. Preferências são da sessão,
+sem regravar a experiência. Não se altera a câmera do editor.
+
 ## Eventos e ciclo de vida
 
 ```lua
@@ -101,9 +133,9 @@ linblux.events.emit("porta.abrir", {mensagem = "Olá"})
 recursivamente durante a emissão. O payload Lua é compartilhado entre os callbacks
 daquela emissão: não é uma cópia profunda nem uma mensagem de rede.
 
-Eventos reservados: `start`, após o primeiro passe de inicialização dos scripts;
+Eventos de ciclo de vida: `start`, após o primeiro passe de inicialização dos scripts;
 `update`, uma vez por atualização do runtime, com dt em segundos; `stop`, na saída,
-antes de liberar a cena. Somente a engine emite esses três eventos. Registre start
+antes de liberar a cena. Somente a engine emite eventos nativos. Registre start
 antes de aguardar uma tarefa; não é reproduzido para listeners registrados depois.
 Stop cancela trabalhos pendentes, faz um passe com cota e libera tudo; seus
 callbacks não podem aguardar. Start/stop recebem o valor numérico 0.
@@ -137,6 +169,11 @@ Não há callbacks Lua executados dentro do passo de Bullet nesta fase.
 Não são carregados os, io, package, debug, rede ou carregamento de binários.
 load, loadfile, dofile, string.dump e coleta manual de lixo ficam indisponíveis.
 pcall/xpcall não são oferecidos para impedir captura repetida da falha de cota.
+Metatabelas comuns continuam disponíveis, mas `setmetatable` recusa qualquer
+campo `__gc` não nil, inclusive false. O Lua desativa hooks nesses finalizadores,
+o que permitiria contornar a cota; use o evento `stop` para cleanup. Referência:
+[implementação oficial de finalização do Lua 5.4](https://www.lua.org/source/5.4/lgc.c.html#GCTM).
+A API nativa recusa chamadas durante a liberação final da VM.
 Módulos são recursos do próprio projeto, com limites de quantidade e profundidade.
 
 Padrões: 8 MiB de Lua, 100 mil instruções por retomada, 250 mil por passe,

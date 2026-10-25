@@ -321,6 +321,79 @@ linblux.scene.root:set_attribute("physics_ready", true)
     for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Physics Lua: %s\n",message.text.c_str());CHECK(!message.error);}
     CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
 }
+void LinbluxPlayer() {
+    Scene author;author.buildDefaultScene();std::string error;
+    auto* script=author.createScript(InstanceClass::Script,nullptr,"Jogador.lua");
+    script->source=R"(
+local player, root = linblux.player, linblux.scene.root
+linblux.events.on("spawn", function(current)
+    assert(current == player)
+    root:set_attribute("spawns", (root:get_attribute("spawns") or 0) + 1)
+end)
+linblux.events.on("death", function() root:set_attribute("died", true) end)
+linblux.events.on("health_changed", function(value) root:set_attribute("health", value) end)
+player.max_health = 150
+player.walk_speed = 22
+player.jump_height = 8
+player.auto_rotate = false
+player:damage(25)
+player:heal(10)
+assert(player.health == 85)
+local clips = linblux.animations.list()
+assert(#clips > 0 and clips[1].duration > 0)
+player:set_animation("walk", clips[1].id)
+linblux.time.after(0.02, function()
+    local previous = player.generation
+    player:teleport(linblux.vec3(30,12,0))
+    player:set_checkpoint()
+    player:damage(200)
+    assert(player.state == "dead")
+    player:respawn()
+    assert(player.generation == previous + 1 and player.position.x == 30)
+    linblux.camera.configure({mode="first_person", distance=0.3, sensitivity=0.004, allow_shift_lock=true})
+    linblux.time.after(0.03, function()
+        assert(linblux.camera.state().first_person)
+        root:set_attribute("player_ready", true)
+    end)
+end)
+)";
+    const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+    for(int i=0;i<12;++i)runtime.update(1.f/60,{});
+    const auto& attributes=runtime.scene().workspace()->attributes();
+    CHECK(attributes.count("player_ready"));CHECK(attributes.count("died"));
+    CHECK(std::get<double>(attributes.at("spawns"))==2);
+    CHECK(runtime.health()==150&&runtime.settings().maxHealth==150&&runtime.settings().walkSpeed==22);
+    CHECK(runtime.playerCamera().firstPerson()&&runtime.settings().enableShiftLock);
+    CHECK(runtime.position().x==30);
+    const auto previous=runtime.position();CHECK(!runtime.teleportPlayer({30,0,0},error));CHECK(NearlyEqual(runtime.position(),previous));
+    CHECK(!runtime.setCheckpoint({NAN,0,0},error));
+    for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Player Lua: %s\n",message.text.c_str());CHECK(!message.error);}
+    CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
+    CHECK(runtime.start(author,error));CHECK(std::fabs(runtime.position().x)<.01f);runtime.stop();
+}
+void LuaFinalizerSafety() {
+    Scene scene;scene.buildDefaultScene();std::string error;
+    scene.createScript(InstanceClass::Script,nullptr,"Finalizer.lua")->source=R"(setmetatable({}, {__gc=function() while true do end end}))";
+    scene.createScript(InstanceClass::Script,nullptr,"FalseFinalizer.lua")->source=R"(setmetatable({}, {__gc=false}))";
+    scene.createScript(InstanceClass::Script,nullptr,"Metatable.lua")->source=R"(
+local object = setmetatable({}, {__index={value=7}})
+assert(object.value == 7)
+local meta, retained = {}, {}
+setmetatable(retained, meta)
+meta.__gc = function() while true do end end
+_G.retained = retained
+print("metatable works")
+)";
+    game::RuntimeSession runtime;CHECK(runtime.start(scene,error));
+    int denied=0;bool valid=false;for(const auto& message:runtime.scripts().messages()) {
+        denied+=message.error&&message.text.find("__gc")!=std::string::npos;
+        valid|=message.text=="metatable works";
+    }
+    CHECK(denied==2&&valid);
+    const auto before=std::chrono::steady_clock::now();runtime.stop();
+    CHECK(std::chrono::duration<double>(std::chrono::steady_clock::now()-before).count()<2);
+    CHECK(runtime.scripts().memoryUsed()==0&&runtime.scripts().taskCount()==0);CHECK(runtime.validate(error));
+}
 void AnimationIds() {
     Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();std::string error;
     auto* service=scene.service(InstanceClass::ServerScriptService);CHECK(service && service->children().size()==1);
@@ -718,6 +791,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxPlayer();LuaFinalizerSafety();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }
