@@ -501,6 +501,8 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     void input() {
         escapeConsumed=false;keyboardOwned=editing()||dialogOpen;const auto& io=ImGui::GetIO();const Vector2 mouse{io.MousePos.x,io.MousePos.y};
         mouseOwned=false;
+        if(ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopup)){context->ProcessMouseLeave();mouseOwned=true;return;}
+        if(!IsWindowFocused()){context->ProcessMouseLeave();context->ProcessMouseButtonUp(0,0);context->ProcessMouseButtonUp(1,0);split.clear();dragNode=0;dragging=false;return;}
         const bool capture=ui.gameplayCapture_||ui.camera_.cursorCaptured();
         if(!capture)context->ProcessMouseMove(int(mouse.x*dpi),int(mouse.y*dpi),0);
         auto* hover=context->GetHoverElement();bool controls=ancestor(hover,"data-action")||ancestor(hover,"data-experience")||ancestor(hover,"data-page")||ancestor(hover,"data-player-page")||ancestor(hover,"data-player-step")||ancestor(hover,"data-split");
@@ -763,6 +765,7 @@ bool StudioFrontend::initialize(std::string& error) {
     for(const char* type:{"click","dblclick","change","focus","blur","mousedown"})p.document->AddEventListener(type,&p,true);
     p.document->Show();p.display("context-menu",false);p.display("tooltip",false);p.display("dialog-overlay",false);p.display("game-layer",false);p.display("advanced-content",false);
     p.syncing=true;p.loadLayout();p.layout();p.ribbon();p.tree();p.properties();p.context->Update();p.syncing=false;
+    if(std::getenv("LOBLOX_TRACE_UI")) {
         std::function<void(Rml::Element*,int)> trace=[&](Rml::Element* e,int depth){if(depth>3)return;const auto b=e->GetBox().GetSize(Rml::BoxArea::Border);std::fprintf(stderr,"RML box %d %s #%s .%s: %.1fx%.1f display=%s width=%s\n",depth,e->GetTagName().c_str(),e->GetId().c_str(),e->GetClassNames().c_str(),b.x,b.y,e->GetProperty("display")->ToString().c_str(),e->GetProperty("width")->ToString().c_str());for(int i=0;i<e->GetNumChildren();++i)trace(e->GetChild(i),depth+1);};trace(p.document,0);
     }
     rlImGuiDeferPopupRendering(true);error.clear();return true;

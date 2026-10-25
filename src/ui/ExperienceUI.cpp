@@ -13,8 +13,6 @@
 #include "imgui.h"
 #include <algorithm>
 #include <chrono>
-#include <cstdio>
-#include <cstdlib>
 #include <cctype>
 #include <fstream>
 #include <stdexcept>
@@ -355,6 +353,5 @@ void ExperienceUI::frame() {
     text(document_,"experience-error",error_);show(document_,"experience-error",!error_.empty());
     document_.SetClass("experience-compact",GetScreenWidth()<1400);
     for(const char* page:{"home","library","templates","archive"})if(auto* el=document_.GetElementById(std::string("exp-nav-")+page))el->SetClass("active",page_==page);
-    if(std::getenv("LOBLOX_TRACE_HOME")){auto* menu=document_.GetElementById("experience-card-menu");if(menu){const auto offset=menu->GetAbsoluteOffset(Rml::BoxArea::Border);const auto size=menu->GetBox().GetSize(Rml::BoxArea::Border);std::fprintf(stderr,"HOME card menu: at %.0f,%.0f size %.0fx%.0f display=%s cardMenu=%s\n",offset.x,offset.y,size.x,size.y,menu->GetProperty("display")->ToString().c_str(),cardMenu_.c_str());}}
 }
 } // namespace loblox
