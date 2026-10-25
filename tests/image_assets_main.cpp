@@ -52,6 +52,22 @@ int main() {
         Scene scene;
         library.open(created, scene);
 
+        // O personagem de fábrica nasce sem rosto/decal obrigatório: nem o
+        // manifesto da nova experiência nem os corpos do rig carregam imagem.
+        require(created.manifest.faceImage.empty(), "Nova experiência herdou rosto de fábrica");
+        for (const auto& rig : scene.gameAssets().rigs)
+            for (const auto& body : rig.bodies) {
+                require(body.image.empty(), "Rig de fábrica veio com imagem de membro");
+                for (const auto& decal : body.decals)
+                    require(decal.surface.image.empty(), "Rig de fábrica veio com decal de rosto");
+            }
+        const auto factoryCharacter = json::parse(read(root / "factory/character.loblox.json"));
+        for (const auto& rig : factoryCharacter["game"]["rigs"])
+            for (const auto& body : rig["bodies"]) {
+                require(!body.contains("image"), "Personagem de fábrica traz imagem embutida");
+                require(!body.contains("decals"), "Personagem de fábrica traz decal embutido");
+            }
+
         // Uma imagem real (PNG gerado pelo próprio raylib) aplicada como decal
         // numa Part e como imagem de membro do rig do jogador.
         Image image = GenImageColor(64, 64, {40, 120, 200, 255});
@@ -82,6 +98,61 @@ int main() {
                 "Imagem do rig não sobreviveu ao salvamento");
         require(!game::ResolveImagePath(game::AssetsDir(), reference).empty(),
                 "Referência salva não resolve para o arquivo da experiência");
+
+        // Nome amigável é só metadado: não altera arquivo, ID nem referências.
+        std::string nameError;
+        require(game::RenameImageAsset(game::AssetsDir(), reference, "Textura azul", nameError), nameError.c_str());
+        require(game::ImageDisplayName(game::AssetsDir(), reference) == "Textura azul",
+                "Nome amigável não foi aplicado");
+        require(fs::is_regular_file(created.root / reference),
+                "Renomear mudou o caminho físico da imagem");
+        require(!game::RenameImageAsset(game::AssetsDir(), reference, "   ", nameError),
+                "Nome vazio foi aceito");
+
+        // Duas imagens podem compartilhar o mesmo nome sem trocar de ID.
+        Image alternate = GenImageColor(48, 48, {200, 80, 40, 255});
+        const auto alternateSource = root / "alternate.png";
+        require(ExportImage(alternate, alternateSource.string().c_str()), "PNG alternativo não foi criado");
+        UnloadImage(alternate);
+        const auto alternateReference = library.importImage(alternateSource);
+        require(alternateReference != reference, "Imagens diferentes receberam o mesmo identificador");
+        require(game::RenameImageAsset(game::AssetsDir(), alternateReference, "Textura azul", nameError), nameError.c_str());
+        const auto named = game::ListImages(game::AssetsDir());
+        std::size_t sameName = 0;
+        for (const auto& asset : named) sameName += asset.name == "Textura azul";
+        require(sameName == 2, "Nomes repetidos não coexistem no gerenciador");
+        require(attribute(*savedPart, "decal_image") == reference, "Renomear quebrou a referência do decal");
+        library.removeAsset(alternateReference, false);
+        require(!fs::exists(created.root / alternateReference), "Imagem não utilizada não foi excluída");
+
+        // Dependências são relatadas com objeto e tipo antes de excluir.
+        const auto usage = game::DescribeImageUsage(reopened, reference);
+        bool partUse = false, rigUse = false;
+        for (const auto& entry : usage) {
+            partUse |= entry.where.find("DecalImagem") != std::string::npos && entry.kind == "decal";
+            rigUse |= entry.kind == "body";
+        }
+        require(partUse && rigUse, "Uso da imagem em peça e rig não foi relatado");
+        require(game::BodyDisplayName("Head") == "Cabeça", "Nome de exibição do membro não é Cabeça");
+
+        // Substituir reescreve peça, membro e adesivo de uma vez.
+        Scene swapScene;
+        auto* swapPart = swapScene.createPart(PartShape::Block, {0, 2, 0}, {1, 1, 1}, "Troca");
+        swapPart->setAttribute("decal_image", reference);
+        auto& swapRig = swapScene.gameAssets().createR6();
+        swapRig.bodies[game::Torso].image = reference;
+        game::RigDecal swapDecal;
+        swapDecal.id = "swap";
+        swapDecal.name = "Adesivo";
+        swapDecal.surface.image = reference;
+        swapRig.bodies[game::Head].decals.push_back(swapDecal);
+        const std::string substitute = "assets/substituta.png";
+        require(game::ReplaceImageReferences(swapScene, reference, substitute) == 3,
+                "Substituição não cobriu peça, membro e adesivo");
+        require(attribute(*swapPart, "decal_image") == substitute &&
+                    swapScene.gameAssets().rigs.front().bodies[game::Torso].image == substitute &&
+                    swapScene.gameAssets().rigs.front().bodies[game::Head].decals.front().surface.image == substitute,
+                "Substituição deixou referência para a imagem antiga");
 
         // Legado: a UI antiga gravava o nome solto. Abrir, salvar e reabrir
         // precisa migrar para assets/<arquivo> sem erro de asset ausente.

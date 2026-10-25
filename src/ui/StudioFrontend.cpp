@@ -205,7 +205,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             const bool selected=!currentFile.empty()&&currentFile==image.filename;
             s+=std::string("<button class=\"image-option")+(selected?" selected":"")+"\" data-action=\""+apply+"\" data-value=\""+Escape(path)+"\" title=\""+Escape("ID: "+image.id)+"\"><img src=\""+Escape(path)+"\"/><span class=\"image-option-name\">"+Escape(image.name)+"</span><span class=\"image-option-type\">"+ImageTypeLabel(image.filename)+"</span></button>";
         }
-        if(!any)s+="<div class=\"image-empty\">"+(images.empty()?"Nenhuma imagem importada.":"Nenhuma imagem encontrada.")+"</div>";
+        if(!any)s+=std::string("<div class=\"image-empty\">")+(images.empty()?"Nenhuma imagem importada.":"Nenhuma imagem encontrada.")+"</div>";
         s+="</div><div class=\"image-picker-actions\">"+Button("import-dialog","Importar imagem","folder")+"</div></div>";
         return s;
     }
