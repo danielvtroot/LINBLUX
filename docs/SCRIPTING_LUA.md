@@ -86,9 +86,41 @@ bola:apply_impulse(linblux.vec3(15, 10, 0))
   É uma consulta de proximidade, não teste exato de interseção de volumes; não
   inclui o jogador. Raio de 0 a 1 milhão.
 
-Essas operações são exclusivas da cópia de runtime. Contatos, ciclo de passo
-fixo, consultas de volumes e controle de personagem na API nova ainda dependem
-dos próximos incrementos da Fase 2.
+Essas operações são exclusivas da cópia de runtime. Consultas exatas de volumes
+e navegação ainda dependem dos próximos incrementos.
+
+### Passo fixo e contatos — incremento 2D
+
+`linblux.events.on("physics_update", função)` recebe dt de 1/60 s imediatamente
+antes de cada passo Bullet, independente dos FPS de exibição. Use esse evento
+para forças contínuas. A cota de instruções do quadro é compartilhada pelos
+subpassos; adicionar callbacks físicos não multiplica o orçamento. Temporizadores
+usam o relógio da atualização, e uma espera zero cede até o próximo passe.
+
+`collision_enter` e `collision_exit` recebem `{first, second, first_id, second_id}`.
+As peças aparecem em ordem crescente de ID; o jogador usa ID 0 e o handle
+persistente `linblux.player`. Um objeto removido pode aparecer como nil na saída,
+mas seu ID é preservado. Escopo opcional em `on` filtra contatos do objeto ou de
+seus descendentes. Contato é a presença de um par no Bullet, com tolerância de
+0,02 unidade, não um sinal por ponto da superfície ou por quadro.
+
+A engine coleta depois do passo e entrega num passe Lua seguinte, fora das
+iterações Bullet. Remover/mover objetos no callback é permitido. Sensores com
+`collidable=false` também notificam contatos quando Bullet gera o par; pares
+entre dois corpos estáticos não são produzidos. Não é um detector contínuo de
+regiões: objetos rápidos podem atravessar sensores entre passos.
+
+Até 1024 pares simultâneos são acompanhados; as notificações compartilham a cota
+de tarefas. Sob saturação, excedentes são descartados e a fila cheia gera um
+diagnóstico uma vez por sessão. Mantenha callbacks curtos, filtre por escopo e
+não dependa da entrega como protocolo de rede. A ausência de listeners dispensa
+a coleta. Respawn encerra os contatos do avatar anterior.
+
+```lua
+linblux.events.on("collision_enter", function(hit)
+    if hit.first_id == 0 then linblux.player:damage(10) end
+end, linblux.self) -- Script filho de uma peça/sensor
+```
 
 ## Jogador e câmera — incremento 2B
 
@@ -152,7 +184,7 @@ executando pode terminar ou aguardar; não há preempção nativa no meio da fun
 O evento `destroy` requer um objeto de escopo e entrega seu ID após a remoção,
 num ponto seguro do scheduler. O observador precisa continuar existindo. A
 conexão é removida após o callback e `disconnect()` cancela notificações pendentes.
-Não há ainda callbacks de colisão ou interação na API nova.
+Interação e entrada roteada ainda dependem dos próximos incrementos.
 
 ## Tempo
 

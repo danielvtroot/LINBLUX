@@ -27,6 +27,9 @@ public:
     const Limits& limits() const;
     void stop();
     void update(float dt);
+    void fixedUpdate(float dt);
+    bool wantsContacts() const;
+    void contact(InstanceId first,InstanceId second,bool entering);
     void characterAdded();
     void healthChanged(float health,bool died);
     const std::vector<Message>& messages() const;

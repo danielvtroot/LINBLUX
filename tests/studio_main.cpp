@@ -321,6 +321,64 @@ linblux.scene.root:set_attribute("physics_ready", true)
     for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Physics Lua: %s\n",message.text.c_str());CHECK(!message.error);}
     CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
 }
+void LinbluxFixedContacts() {
+    std::string error;
+    const auto driven=[&](int fps){
+        Scene author;author.buildDefaultScene();
+        auto* part=author.createPart(PartShape::Block,{80,100,0},{1,1,1},"Propulsor");part->setAnchored(false);
+        author.createScript(InstanceClass::Script,part,"PassoFixo.lua")->source=R"(
+linblux.physics.set_gravity(1)
+local ticks = 0
+linblux.events.on("physics_update", function(dt)
+    assert(math.abs(dt - 1/60) < 0.000001)
+    ticks = ticks + 1
+    linblux.self:apply_force(linblux.vec3(20,0,0))
+    linblux.self:set_attribute("steps", ticks)
+end)
+)";
+        game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+        for(int i=0;i<fps;++i)runtime.update(1.f/fps,{});
+        CHECK(std::get<double>(runtime.scene().findPart(part->id())->attributes().at("steps"))==60);
+        for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Fixed Lua: %s\n",message.text.c_str());CHECK(!message.error);}
+        const auto speed=runtime.partVelocity(part->id()).x;CHECK(speed>1);CHECK(runtime.validate(error));return speed;
+    };
+    CHECK(std::fabs(driven(30)-driven(120))<.001f);
+    for(const bool destroy:{false,true}){
+        Scene author;author.buildDefaultScene();author.workspace()->setAttribute("destroy_on_enter",destroy);
+        auto* trigger=author.createPart(PartShape::Block,{80,10,0},{4,4,4},"Sensor");trigger->setAnchored(true);trigger->setCanCollide(false);
+        auto* target=author.createPart(PartShape::Block,{80,10,0},{1,1,1},"Alvo");target->setAnchored(false);
+        author.createScript(InstanceClass::Script,trigger,"Contato.lua")->source=R"(
+local root, sensor = linblux.scene.root, linblux.self
+linblux.events.on("collision_enter", function(hit)
+    if hit.first_id == 0 or hit.second_id == 0 then root:set_attribute("avatar_contact", (root:get_attribute("avatar_contact") or 0)+1) end
+end)
+linblux.events.on("collision_enter", function(hit)
+    local other = hit.first_id == sensor.id and hit.second or hit.first
+    assert(other and other.name == "Alvo")
+    sensor:set_attribute("enters", (sensor:get_attribute("enters") or 0)+1)
+    if root:get_attribute("destroy_on_enter") then other:destroy()
+    else other.position = linblux.vec3(100,10,0) end
+end, sensor)
+linblux.events.on("collision_exit", function(hit)
+    assert(hit.first_id == sensor.id or hit.second_id == sensor.id)
+    sensor:set_attribute("exits", (sensor:get_attribute("exits") or 0)+1)
+end, sensor)
+)";
+        const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+        for(int i=0;i<90;++i)runtime.update(1.f/60,{});
+        const auto& attrs=runtime.scene().findPart(trigger->id())->attributes();
+        CHECK(attrs.count("enters")&&attrs.count("exits"));
+        if(attrs.count("enters"))CHECK(std::get<double>(attrs.at("enters"))==1);
+        if(attrs.count("exits"))CHECK(std::get<double>(attrs.at("exits"))==1);
+        CHECK(runtime.scene().workspace()->attributes().count("avatar_contact"));
+        const auto previous=std::get<double>(runtime.scene().workspace()->attributes().at("avatar_contact"));
+        CHECK(runtime.respawn(error));for(int i=0;i<90;++i)runtime.update(1.f/60,{});
+        CHECK(std::get<double>(runtime.scene().workspace()->attributes().at("avatar_contact"))>previous);
+        if(destroy)CHECK(!runtime.scene().find(target->id()));
+        for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Contact Lua: %s\n",message.text.c_str());CHECK(!message.error);}
+        CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);
+    }
+}
 void LinbluxPlayer() {
     Scene author;author.buildDefaultScene();std::string error;
     auto* script=author.createScript(InstanceClass::Script,nullptr,"Jogador.lua");
@@ -854,6 +912,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

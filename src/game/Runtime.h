@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <optional>
+#include <set>
 #include "game/Rig.h"
 #include "scripting/LuaRuntime.h"
 #include "scene/Scene.h"
@@ -120,6 +121,7 @@ public:
 private:
     void destroyCharacter();
     void step(float dt, Vector3 desired, bool jump);
+    void updateContacts();
     void transition(HumanoidState state);
     void animate(float dt, float horizontalSpeed);
     // Sweeps the full capsule down before a fixed step so a fast fall cannot
@@ -159,6 +161,7 @@ private:
     std::string correlation_;
     std::string activeAnimation_;
     scripting::LuaRuntime scripts_;
+    std::set<std::pair<InstanceId,InstanceId>> activeContacts_;
     float health_=100, deadTime_=0, damageCooldown_=0;
     std::optional<Vector3> scriptCheckpoint_;
     bool shiftLockRequested_ = false;

@@ -237,6 +237,9 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error) {
     } catch (const std::exception& e) { error = std::string("Play startup: ") + e.what(); stop(); return false; }
 }
 void RuntimeSession::destroyCharacter() {
+    for(auto it=activeContacts_.begin();it!=activeContacts_.end();) {
+        if(it->first==0){scripts_.contact(it->first,it->second,false);it=activeContacts_.erase(it);}else ++it;
+    }
     if (body_ && physics_) physics_->world_->removeRigidBody(body_.get());
     body_.reset(); motion_.reset(); capsule_.reset();
 }
@@ -245,7 +248,7 @@ void RuntimeSession::stop() {
     state_ = RuntimeState::StoppingPlay;
     if (!activeAnimation_.empty()) Event("animation", "stop", correlation_, {{"clip", activeAnimation_}});
     activeAnimation_.clear();
-    scripts_.stop();
+    scripts_.stop();activeContacts_.clear();
     destroyCharacter(); physics_.reset(); scene_.reset();
     accumulator_ = 0; jumpPending_ = false; coyoteTime_=jumpBufferTime_=0; pose_ = {};
     blendFrom_ = {}; poseSource_.clear(); poseWalking_ = false; wasAirborne_ = false; blendTime_ = 0;
@@ -403,6 +406,26 @@ void RuntimeSession::preventFallThrough(float dt) {
     clamped.setY(0);
     body_->setLinearVelocity(clamped);
     physics_->world_->updateSingleAabb(body_.get());
+}
+void RuntimeSession::updateContacts() {
+    if(!scripts_.wantsContacts()){activeContacts_.clear();return;}
+    std::set<std::pair<InstanceId,InstanceId>> current;
+    for(int i=0;i<physics_->dispatcher_->getNumManifolds();++i) {
+        const auto* manifold=physics_->dispatcher_->getManifoldByIndexInternal(i);
+        bool touching=false;for(int j=0;j<manifold->getNumContacts();++j)touching|=manifold->getContactPoint(j).getDistance()<=.02f;
+        if(!touching)continue;
+        const auto id=[&](const btCollisionObject* object)->std::optional<InstanceId>{
+            if(object==body_.get())return InstanceId(0);
+            const auto* part=static_cast<const Part*>(object->getUserPointer());
+            if(part&&scene_->findPart(part->id())==part)return part->id();return std::nullopt;
+        };
+        auto a=id(manifold->getBody0()),b=id(manifold->getBody1());if(!a||!b)continue;
+        if(*a>*b)std::swap(a,b);
+        if(current.size()<1024)current.emplace(*a,*b);
+    }
+    for(const auto& pair:current)if(!activeContacts_.count(pair))scripts_.contact(pair.first,pair.second,true);
+    for(const auto& pair:activeContacts_)if(!current.count(pair))scripts_.contact(pair.first,pair.second,false);
+    activeContacts_=std::move(current);
 }
 void RuntimeSession::step(float dt, Vector3 desired, bool jump) {
     if (health_<=0) {
@@ -631,8 +654,11 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     constexpr float fixed = 1.f / 60;
     int steps = 0;
     while (accumulator_ + .000001f >= fixed && steps++ < 6) {
+        scripts_.fixedUpdate(fixed);
+        physics_->syncScene(*scene_);
         previousCharacterPosition_=position();
         step(fixed, desired, jumpPending_); jumpPending_ = false;
+        updateContacts();
         accumulator_ = std::max(0.f, accumulator_ - fixed);
         if (state_ != RuntimeState::Playing) break;
     }

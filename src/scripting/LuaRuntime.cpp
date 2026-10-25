@@ -17,7 +17,7 @@
 namespace loblox::scripting {
 namespace {
 enum class Kind { Instance,Game,Players,Player,RunService,AnimationService,Character,Humanoid,Animator,Signal,Connection };
-enum Signal { Spawn=1,Heartbeat,HealthChanged,Died,EngineStart,EngineStop,EngineDestroy };
+enum Signal { Spawn=1,Heartbeat,HealthChanged,Died,EngineStart,EngineStop,EngineDestroy,PhysicsUpdate,CollisionEnter,CollisionExit };
 struct Handle { Kind kind; InstanceId id; unsigned generation; unsigned avatar=0; bool modern=false; };
 constexpr std::size_t kNativeContentLimit=8*1024*1024, kNativeNodes=10000;
 bool Eq(const char* a,const char* b) { return std::strcmp(a,b)==0; }
@@ -66,7 +66,7 @@ struct LuaRuntime::Impl {
     int instructions=0, frameBudget=0, moduleDepth=0;
     InstanceId executing=0;
     Limits limits;
-    bool stopping=false,closing=false;
+    bool stopping=false,closing=false,contactOverflowReported=false;
     struct Job { lua_State* thread; int ref; int arguments; InstanceId script; double wake; bool done=false; InstanceId connection=0; };
     struct Listener { int signal; int ref; InstanceId script; unsigned avatar=0; InstanceId owner=0; std::string topic; bool once=false; };
     std::deque<Job> jobs;
@@ -365,7 +365,8 @@ struct LuaRuntime::Impl {
     }
     static int NativeSignal(const char* topic) {
         return Eq(topic,"start")?EngineStart:Eq(topic,"update")?Heartbeat:Eq(topic,"stop")?EngineStop:
-            Eq(topic,"spawn")?Spawn:Eq(topic,"health_changed")?HealthChanged:Eq(topic,"death")?Died:Eq(topic,"destroy")?EngineDestroy:0;
+            Eq(topic,"spawn")?Spawn:Eq(topic,"health_changed")?HealthChanged:Eq(topic,"death")?Died:Eq(topic,"destroy")?EngineDestroy:
+            Eq(topic,"physics_update")?PhysicsUpdate:Eq(topic,"collision_enter")?CollisionEnter:Eq(topic,"collision_exit")?CollisionExit:0;
     }
     static const char* Topic(lua_State* L) {
         const char* topic=Text(L,1);const auto length=lua_rawlen(L,1);
@@ -683,6 +684,16 @@ struct LuaRuntime::Impl {
         const int ref=int(lua_tointeger(L,1));const auto id=lua_tointeger(L,2);const auto connection=InstanceId(lua_tointeger(L,3));lua_settop(L,0);
         lua_rawgeti(L,LUA_REGISTRYINDEX,ref);lua_pushinteger(L,id);SpawnTask(L);Host(L).jobs.back().connection=connection;return 0;
     }
+    static int EmitContact(lua_State* L) {
+        auto& self=Host(L);const int ref=int(lua_tointeger(L,1));const auto first=InstanceId(lua_tointeger(L,2)),second=InstanceId(lua_tointeger(L,3)),connection=InstanceId(lua_tointeger(L,4));lua_settop(L,0);
+        lua_rawgeti(L,LUA_REGISTRYINDEX,ref);lua_createtable(L,0,4);
+        const InstanceId ids[]{first,second};const char* names[]{"first","second"};const char* keys[]{"first_id","second_id"};
+        for(int i=0;i<2;++i){
+            if(ids[i])self.pushInstance(L,self.runtime->scene().find(ids[i]),true);else self.push(L,Kind::Player,0,true);
+            lua_setfield(L,-2,names[i]);lua_pushinteger(L,lua_Integer(ids[i]));lua_setfield(L,-2,keys[i]);
+        }
+        SpawnTask(L);self.jobs.back().connection=connection;return 0;
+    }
     bool scriptAlive(InstanceId id) const {
         if(!id)return true;
         const auto* object=runtime->scene().find(id);
@@ -724,10 +735,33 @@ struct LuaRuntime::Impl {
             if(lua_pcall(state,4,0,0)!=LUA_OK){message(true,executing,lua_tostring(state,-1));lua_pop(state,1);}
         }
     }
-    void tick(float dt) {
+    bool hasSignal(int signal) const {
+        for(const auto& entry:listeners)if(entry.second.signal==signal&&listenerAlive(entry.second))return true;
+        return false;
+    }
+    void contact(InstanceId first,InstanceId second,bool entering) {
+        if(!state)return;
+        pruneListeners();const int signal=entering?CollisionEnter:CollisionExit;
+        for(const auto& entry:listeners) {
+            const auto& listener=entry.second;if(listener.signal!=signal||!listenerAlive(listener))continue;
+            if(listener.owner){
+                const auto* owner=runtime->scene().find(listener.owner);const auto* a=runtime->scene().find(first);const auto* b=runtime->scene().find(second);
+                if(owner!=a&&owner!=b&&!(a&&owner->isAncestorOf(a))&&!(b&&owner->isAncestorOf(b)))continue;
+            }
+            if(jobs.size()>=limits.tasks){
+                if(!contactOverflowReported){message(true,listener.script,"Fila de contatos Lua cheia; notificações excedentes descartadas");contactOverflowReported=true;}
+                break; // bounded queue, never execute Lua during Bullet inspection
+            }
+            const auto previous=executing;executing=listener.script;
+            lua_pushcfunction(state,Safe<EmitContact>);lua_pushinteger(state,listener.ref);lua_pushinteger(state,lua_Integer(first));lua_pushinteger(state,lua_Integer(second));lua_pushinteger(state,lua_Integer(entry.first));
+            if(lua_pcall(state,4,0,0)!=LUA_OK){message(true,executing,lua_tostring(state,-1));lua_pop(state,1);}
+            executing=previous;
+        }
+    }
+    void tick(float dt,bool resetBudget=true) {
         if(!state)return;
         pruneListeners();
-        time+=dt;frameBudget=limits.instructionsPerFrame;
+        time+=dt;if(resetBudget)frameBudget=limits.instructionsPerFrame;
         const auto count=jobs.size();
         for(std::size_t i=0;i<count;++i) {
             auto& job=jobs[i];
@@ -818,7 +852,7 @@ bool LuaRuntime::configure(const Limits& limits,std::string& error) {
 }
 const Limits& LuaRuntime::limits()const{return impl_->limits;}
 bool LuaRuntime::start(game::RuntimeSession& runtime) {
-    stop();auto& self=*impl_;self.runtime=&runtime;self.output.clear();self.time=0;self.moduleDepth=0;++self.generation;
+    stop();auto& self=*impl_;self.runtime=&runtime;self.output.clear();self.time=0;self.moduleDepth=0;self.contactOverflowReported=false;++self.generation;
     self.state=lua_newstate(Impl::Allocate,&self);
     if(!self.state){self.message(true,0,"Cannot allocate Lua VM");self.close();return false;}
     *static_cast<Impl**>(lua_getextraspace(self.state))=&self;
@@ -833,6 +867,13 @@ void LuaRuntime::update(float dt){
     const auto added=impl_->discoverScripts();impl_->event(Heartbeat,dt);impl_->tick(dt);
     for(const auto id:added)impl_->event(EngineStart,0,id);
 }
+void LuaRuntime::fixedUpdate(float dt){
+    if(!impl_->state||!std::isfinite(dt)||dt<=0)return;
+    if(impl_->hasSignal(PhysicsUpdate))impl_->event(PhysicsUpdate,dt);
+    if(impl_->hasSignal(PhysicsUpdate)||wantsContacts())impl_->tick(0,false);
+}
+bool LuaRuntime::wantsContacts()const{return impl_->state&&(impl_->hasSignal(CollisionEnter)||impl_->hasSignal(CollisionExit));}
+void LuaRuntime::contact(InstanceId first,InstanceId second,bool entering){impl_->contact(first,second,entering);}
 void LuaRuntime::characterAdded(){impl_->characterAdded();}
 void LuaRuntime::healthChanged(float health,bool died){impl_->event(HealthChanged,health);if(died)impl_->event(Died);}
 const std::vector<Message>& LuaRuntime::messages()const{return impl_->output;}

@@ -43,6 +43,10 @@ antes de `PhysicsWorld::syncScene`, nunca durante o passo de Bullet.
 Scripts clonados habilitados entram no scheduler; reativação inicia um contexto
 novo, sem herdar listeners/tarefas antigos. `destroy` entrega uma única notificação
 cancelável ao observador ainda existente, após a remoção do escopo.
+`fixedUpdate` executa callbacks antes de cada passo, compartilhando a cota do
+quadro. `contact` apenas enfileira dados coletados depois do passo; nenhum script
+executa durante a enumeração de manifolds. Os pares são limitados a 1024 e a fila
+de notificações respeita a política de tarefas do host.
 
 **Limites:** não é um sandbox de segurança contra código nativo arbitrário;
 não há multiplayer/rede. Coleta de lixo/limites são os do estado Lua e do
