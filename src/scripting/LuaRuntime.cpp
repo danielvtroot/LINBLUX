@@ -295,12 +295,6 @@ struct LuaRuntime::Impl {
     static Part& PartObject(lua_State* L,int index) {
         auto& object=Host(L).instance(L,index);Require(object.isPart(),"Operação requer uma peça");return static_cast<Part&>(object);
     }
-    static game::RigidTransform ParentFrame(const Part& part) {
-        for(auto* parent=part.parent();parent;parent=parent->parent())if(parent->isPart()){
-            const auto& reference=static_cast<const Part&>(*parent);return {reference.position(),reference.rotation()};
-        }
-        return {};
-    }
     static game::RigidTransform ExplicitFrame(lua_State* L,int index) {
         if(lua_gettop(L)<index||lua_isnil(L,index))return {};
         const auto& reference=PartObject(L,index);return {reference.position(),reference.rotation()};
@@ -312,8 +306,8 @@ struct LuaRuntime::Impl {
     static int GetPose(lua_State* L) {
         const auto& part=PartObject(L,1);PushPose(L,RelativePose(part,ExplicitFrame(L,2)));return 1;
     }
-    template<bool Local> static int SetPose(lua_State* L) {
-        auto& part=PartObject(L,1);const auto frame=Local?ParentFrame(part):ExplicitFrame(L,3);
+    static int SetPose(lua_State* L) {
+        auto& part=PartObject(L,1);const auto frame=ExplicitFrame(L,3);
         auto value=ReadPose(L,2,RelativePose(part,frame));const auto world=game::Compose(frame,{value.position,value.rotation});
         value.position=world.position;value.rotation=world.rotation;Require(ValidPose(value),"Transformação mundial fora dos limites");part.setTransform(value);return 0;
     }
@@ -338,7 +332,7 @@ struct LuaRuntime::Impl {
         auto& self=Host(L);auto& owner=self.instance(L,1);const auto type=owner.instanceClass();
         Require(owner.isPart()||type==InstanceClass::Folder||type==InstanceClass::Model||type==InstanceClass::Workspace||type==InstanceClass::ServerScriptService,"Este objeto não aceita scripts");
         const char* source=Text(L,2);const auto bytes=lua_rawlen(L,2);Require(bytes<=262144,"Script excede 256 KiB");
-        const char* name=lua_gettop(L)>2?Text(L,3):"Componente.lua";const auto length=std::strlen(name);Require(length>0&&length<=128,"Nome de script inválido");
+        const char* name=lua_gettop(L)>2?Text(L,3):"Componente.lua";const auto length=std::strlen(name);Require(length>0&&length<=128&&(lua_gettop(L)<=2||lua_rawlen(L,3)==length),"Nome de script inválido");
         self.nativeBudget(1,bytes+length+128);auto* script=self.runtime->mutableScene().createScript(InstanceClass::Script,&owner,name);Require(script,"Não foi possível adicionar o script");
         script->source.assign(source,bytes);self.pushInstance(L,script,true);return 1;
     }
@@ -660,9 +654,9 @@ struct LuaRuntime::Impl {
     static int Index(lua_State* L) {
         auto& self=Host(L);const auto h=self.handle(L,1);const char* key=Text(L,2);
         if(h.modern&&h.kind==Kind::Instance) {
-            if(Eq(key,"transform")||Eq(key,"local_transform")){const auto& part=PartObject(L,1);PushPose(L,RelativePose(part,Eq(key,"local_transform")?ParentFrame(part):game::RigidTransform{}));return 1;}
+            if(Eq(key,"transform")){const auto& part=PartObject(L,1);PushPose(L,RelativePose(part,{}));return 1;}
             if(Eq(key,"get_transform")){lua_pushcfunction(L,Safe<GetPose>);return 1;}
-            if(Eq(key,"set_transform")){lua_pushcfunction(L,Safe<SetPose<false>>);return 1;}
+            if(Eq(key,"set_transform")){lua_pushcfunction(L,Safe<SetPose>);return 1;}
             if(Eq(key,"scale_by")){lua_pushcfunction(L,Safe<ScalePart>);return 1;}
             if(Eq(key,"point_to_world")){lua_pushcfunction(L,(Safe<TransformVector<false,false>>));return 1;}
             if(Eq(key,"point_to_local")){lua_pushcfunction(L,(Safe<TransformVector<true,false>>));return 1;}
@@ -758,7 +752,7 @@ struct LuaRuntime::Impl {
     }
     static int NewIndex(lua_State* L) {
         auto& self=Host(L);const auto h=self.handle(L,1);const char* key=Text(L,2);
-        if(h.modern&&h.kind==Kind::Instance&&(Eq(key,"transform")||Eq(key,"local_transform"))){const bool local=Eq(key,"local_transform");lua_remove(L,2);return local?SetPose<true>(L):SetPose<false>(L);}
+        if(h.modern&&h.kind==Kind::Instance&&Eq(key,"transform")){lua_remove(L,2);return SetPose(L);}
         if(h.modern&&h.kind==Kind::Instance&&Eq(key,"velocity")) {
             auto& object=self.instance(L,1);Require(object.isPart(),"Velocidade requer uma peça");const auto value=ReadVector(L,3);std::string error;
             if(!self.runtime->partMotion(object.id(),value,game::PartMotion::Velocity,error))throw std::runtime_error(error);
