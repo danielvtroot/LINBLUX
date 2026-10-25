@@ -6,6 +6,7 @@
 #include "objects/Lighting.h"
 #include "objects/Workspace.h"
 #include "game/ImageAssets.h"
+#include "ui/ExperienceUI.h"
 #include "serialization/ProjectIO.h"
 #include "core/Diagnostics.h"
 #include <cmath>
