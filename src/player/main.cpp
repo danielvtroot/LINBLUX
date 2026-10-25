@@ -19,15 +19,15 @@ int main(int argc,char** argv) {
         else {std::fprintf(stderr,"Argumento inválido: %s\n",argument.c_str());return 2;}
     }
     if(project.empty()){std::fprintf(stderr,"Informe --project CAMINHO ou --validate CAMINHO.\n");return 2;}
-    SetTraceLogLevel(LOG_WARNING);Scene authoring;std::string error;
+    SetTraceLogLevel(LOG_WARNING);Scene authoring;std::string error,storageIdentity;
     try {
         experiences::ExperienceManager library;
         const std::filesystem::path path(project);
-        if(path.extension()==".lo")library.loadReadOnly(library.importPackage(path),authoring);
-        else if(path.filename()=="experience.json"||std::filesystem::is_directory(path))library.loadReadOnly(library.inspect(path.filename()=="experience.json"?path.parent_path():path),authoring);
-        else {if(!projectio::load(authoring,project,error))throw std::runtime_error(error);game::SetProjectAssetRoot(std::filesystem::absolute(path).parent_path().string());}
+        if(path.extension()==".lo"){const auto experience=library.importPackage(path);library.loadReadOnly(experience,authoring);storageIdentity="experience:"+experience.manifest.installationId;}
+        else if(path.filename()=="experience.json"||std::filesystem::is_directory(path)){const auto experience=library.inspect(path.filename()=="experience.json"?path.parent_path():path);library.loadReadOnly(experience,authoring);storageIdentity="experience:"+experience.manifest.installationId;}
+        else {if(!projectio::load(authoring,project,error))throw std::runtime_error(error);game::SetProjectAssetRoot(std::filesystem::absolute(path).parent_path().string());storageIdentity="scene:"+std::filesystem::weakly_canonical(path).string();}
     }catch(const std::exception& e){std::fprintf(stderr,"Falha ao abrir experiência: %s\n",e.what());return 1;}
-    game::RuntimeSession runtime;if(!runtime.start(authoring,error)){std::fprintf(stderr,"Falha na execução: %s\n",error.c_str());return 1;}
+    game::RuntimeSession runtime;if(!runtime.start(authoring,error,{storageIdentity,{},!validate})){std::fprintf(stderr,"Falha na execução: %s\n",error.c_str());return 1;}
     if(validate){
         for(int i=0;i<120;++i)runtime.update(1.f/60,{});
         const bool valid=runtime.validate(error);runtime.stop();std::size_t retainedErrors=0;
@@ -41,7 +41,7 @@ int main(int argc,char** argv) {
         return valid&&scriptErrors==0?0:1;
     }
     SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_VSYNC_HINT);InitWindow(1280,720,"LINBLUX Player");
-    if(!IsWindowReady()){runtime.stop();std::fprintf(stderr,"Falha ao criar a janela gráfica do LINBLUX Player.\n");return 1;}
+    if(!IsWindowReady()){runtime.stop(false);std::fprintf(stderr,"Falha ao criar a janela gráfica do LINBLUX Player.\n");return 1;}
     SetExitKey(KEY_NULL);SetWindowMinSize(900,560);SetTargetFPS(60);
     Image icon=LoadImage(game::BuiltinAssetPath("logo.png").c_str());if(icon.data){SetWindowIcon(icon);UnloadImage(icon);}
     Font font=GetFontDefault();bool customFont=false;
