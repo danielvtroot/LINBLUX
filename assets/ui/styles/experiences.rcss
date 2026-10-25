@@ -171,7 +171,7 @@
 .home-recent { display: flex; flex-wrap: wrap; margin: 0 -10px 0 0; }
 .home-recent .experience-card { display: flex; align-items: center; flex-grow: 1; flex-basis: 520px; width: auto; margin: 0 10px 10px 0; padding: 12px; background: #141318c9; border: 1px #ffffff12; border-radius: 10px; overflow: visible; }
 .home-recent .experience-card:hover { background: #1e1b21e0; border-color: #dc667473; }
-.home-recent .experience-cover { width: 132px; height: 78px; flex: 0 0 132px; margin-right: 14px; border-radius: 8px; background: #262329; }
+.home-recent .experience-cover { width: 132px; height: 78px; flex: 0 0 132px; margin-right: 14px; background: #262329; border: 1px #ffffff0f; border-radius: 8px; }
 .home-recent .experience-cover img { width: 100%; height: auto; }
 .home-recent .experience-cover img.experience-placeholder { width: 34px; height: 34px; }
 .home-recent .experience-card-body { flex: 1 1 auto; min-width: 0; padding: 0; }
@@ -194,15 +194,15 @@
 .experience-card-actions .experience-more.active, .experience-card-actions .experience-more:active { background: #3b2029; border-color: #e34255; color: #ffffff; }
 
 /* Card menu: one anchored popover shared by Home and the library. */
-.experience-card-menu { position: absolute; right: 8px; bottom: 46px; width: 214px; padding: 5px; background: #1a181df7; border: 1px #ffffff1f; border-radius: 9px; box-shadow: 0 14px 34px #000000b3; z-index: 8; }
-.home-recent .experience-card-menu { top: 76px; bottom: auto; right: 12px; }
-.experience-card-menu button { display: block; width: 100%; height: 30px; padding: 0 10px; background: transparent; border: 1px transparent; border-radius: 5px; color: #e8e3e8; font-size: 12px; text-align: left; }
-.experience-card-menu button:hover { background: #2b272e; }
+.experience-card-menu { position: absolute; right: 8px; bottom: 46px; width: 216px; padding: 5px; background: #1e1b21fa; border: 1px #ffffff2b; border-radius: 10px; box-shadow: 0 16px 36px #000000cc; z-index: 8; }
+.home-recent .experience-card-menu { top: 76px; right: 12px; }
+.experience-card-menu button { display: block; width: 100%; height: 30px; padding: 0 10px; background: transparent; border: 1px transparent; border-radius: 5px; color: #efeaef; font-size: 12px; text-align: left; }
+.experience-card-menu button:hover { background: #302b33; }
 .experience-card-menu button:active { background: #3a1e26; }
 .experience-card-menu button:focus { border-color: #e34255; }
-.experience-card-menu button.experience-menu-danger { color: #ef8b95; }
+.experience-card-menu button.experience-menu-danger { color: #ff8b95; }
 .experience-card-menu button.experience-menu-danger:hover { background: #3a1d24; color: #ffb3ba; }
-.experience-menu-rule { height: 1px; margin: 4px 6px; background: #ffffff14; }
+.experience-menu-rule { height: 1px; margin: 4px 6px; background: #ffffff1a; }
 
 /* Shared cards, forms and dialogs (library, archive, settings). */
 .experience-card { width: 240px; background: #131316c9; border: 1px #ffffff14; border-radius: 9px; }
