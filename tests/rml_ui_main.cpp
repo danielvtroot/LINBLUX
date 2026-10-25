@@ -63,6 +63,7 @@ bool SameProjectValue(const nlohmann::json& a,const nlohmann::json& b) {
 int main() {
     char pattern[]="/tmp/loblox-rml-ui-XXXXXX";const char* directory=mkdtemp(pattern);if(!directory)return 1;
     setenv("XDG_CONFIG_HOME",directory,1);diag::configure(std::string(directory)+"/events.jsonl");
+    setenv("XDG_STATE_HOME",(std::string(directory)+"/state").c_str(),1);
     std::filesystem::current_path(directory);
     SetTraceLogLevel(LOG_WARNING);SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(1366,768,"LINBLUX RML integration");SetWindowPosition(0,0);SetExitKey(KEY_NULL);SetTargetFPS(60);
@@ -111,12 +112,15 @@ int main() {
         // with X11 events, including dropdowns and independent child deletion.
         if(std::getenv("LINBLUX_SCRIPT_INPUT_ONLY")) {
             scene.createScript(InstanceClass::Script,nullptr,"EntradaReal.lua")->source=R"(
+assert(linblux.storage.status().persistent)
+linblux.scene.root:set_attribute("stored_presses",linblux.storage.get("tecla_e",0))
 linblux.camera.configure({locked=true, fov=85})
 linblux.camera.set_pose({position=linblux.vec3(15,10,15),target=linblux.vec3(0,2,0),fov=95})
 linblux.events.on("key_pressed", function(key)
     if key == "e" then
         local root = linblux.scene.root
         root:set_attribute("real_presses", (root:get_attribute("real_presses") or 0)+1)
+        linblux.storage.set("tecla_e",root:get_attribute("real_presses"))
         assert(linblux.input.key_down("e"))
         if root:get_attribute("real_presses") == 2 then linblux.camera.release() end
     end
@@ -129,7 +133,7 @@ linblux.events.on("mouse_pressed", function(button)
     end
 end)
 )";
-            const auto original=projectio::toJson(scene);click("play");frames(6);
+            const auto original=projectio::toJson(scene);CHECK(projectio::save(scene,config.defaultProjectPath,error));click("play");frames(6);
             auto& rt=EditorUITestAccess::runtime(ui);CHECK(rt.state()==game::RuntimeState::Playing);
             CHECK(rt.playerCamera().scripted());CHECK(rt.playerCamera().camera().fovy==95);
             CHECK(!EditorUITestAccess::captured(ui));CHECK(!IsCursorHidden());
@@ -144,6 +148,9 @@ end)
             key("e");CHECK(presses()==2);
             CHECK(!rt.playerCamera().scripted());CHECK(rt.playerCamera().camera().fovy==85);
             for(const auto& message:rt.scripts().messages()){if(message.error)std::fprintf(stderr,"Input Lua: %s\n",message.text.c_str());CHECK(!message.error);}
+            key("shift+F5");CHECK(!rt.active());CHECK(projectio::toJson(scene)==original);
+            click("play");frames(4);CHECK(rt.active());
+            CHECK(std::get<double>(rt.scene().workspace()->attributes().at("stored_presses"))==2);
             key("shift+F5");CHECK(!rt.active());CHECK(projectio::toJson(scene)==original);
         } else if(std::getenv("LOBLOX_MANIPULATION_ONLY")) {
             BuildManipulationFixture(scene);physics.syncScene(scene);scene.select(part);
