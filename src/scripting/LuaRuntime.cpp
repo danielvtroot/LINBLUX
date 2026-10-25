@@ -277,6 +277,80 @@ struct LuaRuntime::Impl {
     static void Field(lua_State* L,int index,const char* name) {
         index=lua_absindex(L,index);lua_pushstring(L,name);lua_rawget(L,index);
     }
+    static bool ValidPose(const Transform& pose) {
+        const auto bounded=[](Vector3 v){return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z)&&std::fabs(v.x)<=1e6&&std::fabs(v.y)<=1e6&&std::fabs(v.z)<=1e6;};
+        return bounded(pose.position)&&bounded(pose.size)&&pose.size.x>=kMinPartSize&&pose.size.y>=kMinPartSize&&pose.size.z>=kMinPartSize;
+    }
+    static Transform ReadPose(lua_State* L,int index,Transform pose) {
+        Require(lua_istable(L,index),"Transformação requer tabela");index=lua_absindex(L,index);
+        lua_pushnil(L);while(lua_next(L,index)){const char* key=Text(L,-2);Require(Eq(key,"position")||Eq(key,"rotation")||Eq(key,"size"),"Campo de transformação desconhecido");lua_pop(L,1);}
+        Field(L,index,"position");if(!lua_isnil(L,-1))pose.position=ReadVector(L,lua_gettop(L));lua_pop(L,1);
+        Field(L,index,"rotation");if(!lua_isnil(L,-1))pose.rotation=QuatFromEulerDegrees(ReadVector(L,lua_gettop(L)));lua_pop(L,1);
+        Field(L,index,"size");if(!lua_isnil(L,-1))pose.size=ReadVector(L,lua_gettop(L));lua_pop(L,1);
+        Require(ValidPose(pose),"Transformação fora dos limites de posição/tamanho");return pose;
+    }
+    static void PushPose(lua_State* L,const Transform& pose) {
+        lua_createtable(L,0,3);ModernVector(L,pose.position);lua_setfield(L,-2,"position");ModernVector(L,EulerDegreesFromQuat(pose.rotation));lua_setfield(L,-2,"rotation");ModernVector(L,pose.size);lua_setfield(L,-2,"size");
+    }
+    static Part& PartObject(lua_State* L,int index) {
+        auto& object=Host(L).instance(L,index);Require(object.isPart(),"Operação requer uma peça");return static_cast<Part&>(object);
+    }
+    static game::RigidTransform ParentFrame(const Part& part) {
+        for(auto* parent=part.parent();parent;parent=parent->parent())if(parent->isPart()){
+            const auto& reference=static_cast<const Part&>(*parent);return {reference.position(),reference.rotation()};
+        }
+        return {};
+    }
+    static game::RigidTransform ExplicitFrame(lua_State* L,int index) {
+        if(lua_gettop(L)<index||lua_isnil(L,index))return {};
+        const auto& reference=PartObject(L,index);return {reference.position(),reference.rotation()};
+    }
+    static Transform RelativePose(const Part& part,const game::RigidTransform& frame) {
+        auto value=part.transform();const auto relative=game::Compose(game::Inverse(frame),{value.position,value.rotation});
+        value.position=relative.position;value.rotation=relative.rotation;return value;
+    }
+    static int GetPose(lua_State* L) {
+        const auto& part=PartObject(L,1);PushPose(L,RelativePose(part,ExplicitFrame(L,2)));return 1;
+    }
+    template<bool Local> static int SetPose(lua_State* L) {
+        auto& part=PartObject(L,1);const auto frame=Local?ParentFrame(part):ExplicitFrame(L,3);
+        auto value=ReadPose(L,2,RelativePose(part,frame));const auto world=game::Compose(frame,{value.position,value.rotation});
+        value.position=world.position;value.rotation=world.rotation;Require(ValidPose(value),"Transformação mundial fora dos limites");part.setTransform(value);return 0;
+    }
+    template<bool Inverse,bool Direction> static int TransformVector(lua_State* L) {
+        const auto& part=PartObject(L,1);const auto input=ReadVector(L,2);
+        const game::RigidTransform frame{part.position(),part.rotation()};const auto basis=Inverse?game::Inverse(frame):frame;
+        auto result=Vector3RotateByQuaternion(input,basis.rotation);if(!Direction)result=Vector3Add(result,basis.position);
+        ModernVector(L,result);return 1;
+    }
+    static int ScalePart(lua_State* L) {
+        auto& part=PartObject(L,1);Vector3 factor;
+        if(lua_type(L,2)==LUA_TNUMBER){const auto value=float(Number(L,2));factor={value,value,value};}else factor=ReadVector(L,2);
+        Require(factor.x>0&&factor.y>0&&factor.z>0,"Escala requer fatores positivos");
+        auto pose=part.transform();pose.size=Vector3Multiply(pose.size,factor);Require(ValidPose(pose),"Escala resulta em tamanho inválido");part.setTransform(pose);return 0;
+    }
+    static int InterpolatePose(lua_State* L) {
+        const Transform unit{{},{0,0,0,1},{1,1,1}};const auto a=ReadPose(L,1,unit),b=ReadPose(L,2,unit);const auto t=Number(L,3);
+        Require(t>=0&&t<=1,"Interpolação requer fator entre 0 e 1");
+        PushPose(L,{Vector3Lerp(a.position,b.position,float(t)),QuaternionSlerp(a.rotation,b.rotation,float(t)),Vector3Lerp(a.size,b.size,float(t))});return 1;
+    }
+    static int AddScript(lua_State* L) {
+        auto& self=Host(L);auto& owner=self.instance(L,1);const auto type=owner.instanceClass();
+        Require(owner.isPart()||type==InstanceClass::Folder||type==InstanceClass::Model||type==InstanceClass::Workspace||type==InstanceClass::ServerScriptService,"Este objeto não aceita scripts");
+        const char* source=Text(L,2);const auto bytes=lua_rawlen(L,2);Require(bytes<=262144,"Script excede 256 KiB");
+        const char* name=lua_gettop(L)>2?Text(L,3):"Componente.lua";const auto length=std::strlen(name);Require(length>0&&length<=128,"Nome de script inválido");
+        self.nativeBudget(1,bytes+length+128);auto* script=self.runtime->mutableScene().createScript(InstanceClass::Script,&owner,name);Require(script,"Não foi possível adicionar o script");
+        script->source.assign(source,bytes);self.pushInstance(L,script,true);return 1;
+    }
+    static int Components(lua_State* L) {
+        auto& self=Host(L);auto& owner=self.instance(L,1);lua_newtable(L);int index=0;
+        for(const auto* child:owner.children())if(IsScriptClass(child->instanceClass())||IsSurfaceClass(child->instanceClass())){self.pushInstance(L,child,true);lua_rawseti(L,-2,++index);}return 1;
+    }
+    static int RemoveComponent(lua_State* L) {
+        auto& self=Host(L);auto& owner=self.instance(L,1);auto& child=self.instance(L,2);
+        Require(child.parent()==&owner&&(IsScriptClass(child.instanceClass())||IsSurfaceClass(child.instanceClass())),"Componente não pertence a este objeto");
+        Require(self.runtime->mutableScene().remove(&child),"Componente protegido contra remoção");return 0;
+    }
     static int SetMetatable(lua_State* L) {
         Require(lua_istable(L,1)&&(lua_isnil(L,2)||lua_istable(L,2)),"setmetatable requer tabela e metatabela ou nil");
         if(lua_getmetatable(L,1)) {
@@ -586,6 +660,17 @@ struct LuaRuntime::Impl {
     static int Index(lua_State* L) {
         auto& self=Host(L);const auto h=self.handle(L,1);const char* key=Text(L,2);
         if(h.modern&&h.kind==Kind::Instance) {
+            if(Eq(key,"transform")||Eq(key,"local_transform")){const auto& part=PartObject(L,1);PushPose(L,RelativePose(part,Eq(key,"local_transform")?ParentFrame(part):game::RigidTransform{}));return 1;}
+            if(Eq(key,"get_transform")){lua_pushcfunction(L,Safe<GetPose>);return 1;}
+            if(Eq(key,"set_transform")){lua_pushcfunction(L,Safe<SetPose<false>>);return 1;}
+            if(Eq(key,"scale_by")){lua_pushcfunction(L,Safe<ScalePart>);return 1;}
+            if(Eq(key,"point_to_world")){lua_pushcfunction(L,(Safe<TransformVector<false,false>>));return 1;}
+            if(Eq(key,"point_to_local")){lua_pushcfunction(L,(Safe<TransformVector<true,false>>));return 1;}
+            if(Eq(key,"vector_to_world")){lua_pushcfunction(L,(Safe<TransformVector<false,true>>));return 1;}
+            if(Eq(key,"vector_to_local")){lua_pushcfunction(L,(Safe<TransformVector<true,true>>));return 1;}
+            if(Eq(key,"add_script")){lua_pushcfunction(L,Safe<AddScript>);return 1;}
+            if(Eq(key,"components")){lua_pushcfunction(L,Safe<Components>);return 1;}
+            if(Eq(key,"remove_component")){lua_pushcfunction(L,Safe<RemoveComponent>);return 1;}
             if(Eq(key,"alive")){lua_pushboolean(L,self.runtime->scene().find(h.id)!=nullptr);return 1;}
             if(Eq(key,"id")){self.instance(L,1);lua_pushinteger(L,lua_Integer(h.id));return 1;}
             if(Eq(key,"type")){auto& object=self.instance(L,1);lua_pushstring(L,object.isPart()?"part":object.instanceClass()==InstanceClass::Folder?"group":object.instanceClass()==InstanceClass::Model?"model":IsScriptClass(object.instanceClass())?"script":"service");return 1;}
@@ -673,6 +758,7 @@ struct LuaRuntime::Impl {
     }
     static int NewIndex(lua_State* L) {
         auto& self=Host(L);const auto h=self.handle(L,1);const char* key=Text(L,2);
+        if(h.modern&&h.kind==Kind::Instance&&(Eq(key,"transform")||Eq(key,"local_transform"))){const bool local=Eq(key,"local_transform");lua_remove(L,2);return local?SetPose<true>(L):SetPose<false>(L);}
         if(h.modern&&h.kind==Kind::Instance&&Eq(key,"velocity")) {
             auto& object=self.instance(L,1);Require(object.isPart(),"Velocidade requer uma peça");const auto value=ReadVector(L,3);std::string error;
             if(!self.runtime->partMotion(object.id(),value,game::PartMotion::Velocity,error))throw std::runtime_error(error);
@@ -748,6 +834,7 @@ struct LuaRuntime::Impl {
         lua_newtable(L);lua_pushcfunction(L,Safe<ModernNew>);lua_setfield(L,-2,"create");lua_pushcfunction(L,Safe<ModernFind>);lua_setfield(L,-2,"find");self.pushInstance(L,self.runtime->scene().workspace(),true);lua_setfield(L,-2,"root");lua_setfield(L,-2,"scene");
         lua_newtable(L);lua_pushcfunction(L,Safe<On>);lua_setfield(L,-2,"on");lua_pushcfunction(L,Safe<Publish>);lua_setfield(L,-2,"emit");lua_setfield(L,-2,"events");
         lua_newtable(L);lua_pushcfunction(L,Safe<Raycast>);lua_setfield(L,-2,"raycast");lua_pushcfunction(L,Safe<Nearby>);lua_setfield(L,-2,"nearby");lua_pushcfunction(L,Safe<Gravity>);lua_setfield(L,-2,"gravity");lua_pushcfunction(L,Safe<SetGravity>);lua_setfield(L,-2,"set_gravity");lua_setfield(L,-2,"physics");
+        lua_newtable(L);lua_pushcfunction(L,Safe<InterpolatePose>);lua_setfield(L,-2,"interpolate");lua_setfield(L,-2,"transform");
         lua_newtable(L);lua_pushcfunction(L,(Safe<InputButton<0,0>>));lua_setfield(L,-2,"key_down");lua_pushcfunction(L,(Safe<InputButton<0,1>>));lua_setfield(L,-2,"key_pressed");lua_pushcfunction(L,(Safe<InputButton<0,2>>));lua_setfield(L,-2,"key_released");
         lua_pushcfunction(L,(Safe<InputButton<1,0>>));lua_setfield(L,-2,"mouse_down");lua_pushcfunction(L,(Safe<InputButton<1,1>>));lua_setfield(L,-2,"mouse_pressed");lua_pushcfunction(L,(Safe<InputButton<1,2>>));lua_setfield(L,-2,"mouse_released");
         lua_pushcfunction(L,(Safe<InputButton<2,0>>));lua_setfield(L,-2,"gamepad_down");lua_pushcfunction(L,(Safe<InputButton<2,1>>));lua_setfield(L,-2,"gamepad_pressed");lua_pushcfunction(L,(Safe<InputButton<2,2>>));lua_setfield(L,-2,"gamepad_released");
