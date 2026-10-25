@@ -1,4 +1,5 @@
 #include "scripting/LuaRuntime.h"
+#include <nlohmann/json.hpp>
 #include "game/Runtime.h"
 #include "scene/Scene.h"
 #include "core/Diagnostics.h"
@@ -1066,6 +1067,7 @@ void LuaRuntime::characterAdded(){impl_->characterAdded();}
 void LuaRuntime::healthChanged(float health,bool died){impl_->event(HealthChanged,health);if(died)impl_->event(Died);}
 const std::vector<Message>& LuaRuntime::messages()const{return impl_->output;}
 std::size_t LuaRuntime::errorCount()const{return impl_->errors;}
+void LuaRuntime::hostError(const std::string& text){impl_->message(true,0,text.c_str());}
 std::size_t LuaRuntime::memoryUsed()const{return impl_->memory;}
 std::size_t LuaRuntime::taskCount()const{return impl_->jobs.size();}
 bool LuaRuntime::active()const{return impl_->state!=nullptr;}

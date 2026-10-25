@@ -232,12 +232,13 @@ void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const Player
 }
 RuntimeSession::RuntimeSession() = default;
 RuntimeSession::~RuntimeSession() { stop(); }
-bool RuntimeSession::start(const Scene& authoring, std::string& error) {
+bool RuntimeSession::start(const Scene& authoring, std::string& error,const ProgressOptions& progress) {
     if (active()) { error = "Play already active"; return false; }
     if (!authoring.validate(error)) return false;
     state_ = RuntimeState::StartingPlay;
     correlation_ = diag::newCorrelationId();
     try {
+        progress_.open(progress);
         scene_ = std::make_unique<Scene>();
         if (!projectio::fromJson(*scene_, projectio::toJson(authoring), error)) { stop(); return false; }
         // Old maps receive a runtime-only R6; authoring is never changed by F5.
@@ -272,7 +273,7 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error) {
         if(spawnedDead && health_<=0)scripts_.healthChanged(health_,true);
         Event("runtime", "start", correlation_, {{"bodies", bodyCount()}, {"rig", rig_.id}});
         return true;
-    } catch (const std::exception& e) { error = std::string("Play startup: ") + e.what(); stop(); return false; }
+    } catch (const std::exception& e) { error = std::string("Play startup: ") + e.what(); stop(false); return false; }
 }
 void RuntimeSession::destroyCharacter() {
     for(auto it=activeContacts_.begin();it!=activeContacts_.end();) {
@@ -281,12 +282,14 @@ void RuntimeSession::destroyCharacter() {
     if (body_ && physics_) physics_->world_->removeRigidBody(body_.get());
     body_.reset(); motion_.reset(); capsule_.reset();
 }
-void RuntimeSession::stop() {
+void RuntimeSession::stop(bool saveProgress) {
     if (!active()) return;
     state_ = RuntimeState::StoppingPlay;
     if (!activeAnimation_.empty()) Event("animation", "stop", correlation_, {{"clip", activeAnimation_}});
     activeAnimation_.clear();
     scripts_.stop();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
+    if(saveProgress)try{progress_.flush();}catch(const std::exception& e){scripts_.hostError(e.what());}
+    progress_.close();
     destroyCharacter(); physics_.reset(); scene_.reset();
     accumulator_ = 0; jumpPending_ = false; coyoteTime_=jumpBufferTime_=0; pose_ = {};
     blendFrom_ = {}; poseSource_.clear(); poseWalking_ = false; wasAirborne_ = false; blendTime_ = 0;
@@ -297,6 +300,7 @@ void RuntimeSession::stop() {
 void RuntimeSession::pause() {
     if (state_ != RuntimeState::Playing) return;
     state_ = RuntimeState::Paused; jumpPending_ = false;jumpBufferTime_=0;
+    try{progress_.flush();}catch(const std::exception& e){scripts_.hostError(e.what());}
     Event("runtime", "pause", correlation_);
 }
 void RuntimeSession::resume() {
@@ -708,6 +712,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     std::vector<InstanceId> fallen;
     for(auto* part:scene_->parts()) if(!part->anchored() && part->deletable() && part->position().y<scene_->workspace()->fallenPartsDestroyHeight())fallen.push_back(part->id());
     for(auto id:fallen)scene_->removeById(id);
+    try{progress_.tick(dt);}catch(const std::exception& e){scripts_.hostError(e.what());}
 }
 float RuntimeSession::cameraClearance(Vector3 from, Vector3 to, float radius) const {
     if (!physics_ || Vector3Distance(from, to) < .001f) return 1;

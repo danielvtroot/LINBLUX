@@ -36,6 +36,7 @@ int Directory(const std::filesystem::path& path){
             const int next=::openat(current,name.c_str(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
             Check(next>=0,"Diretório de progresso contém link ou não pode ser aberto");::close(current);current=next;
         }
+        struct stat owner{};Check(::fstat(current,&owner)==0&&owner.st_uid==::getuid(),"Diretório privado pertence a outro usuário");
         Check(::fchmod(current,0700)==0,"Não foi possível proteger o diretório de progresso");return current;
     }catch(...){::close(current);throw;}
 }
@@ -95,8 +96,8 @@ void ProgressStore::open(const ProgressOptions& options){
         const char* xdg=std::getenv("XDG_STATE_HOME");const char* home=std::getenv("HOME");
         Check((xdg&&*xdg)||(home&&*home),"Diretório privado do usuário não disponível");
         base=(xdg&&*xdg)?std::filesystem::path(xdg):std::filesystem::path(home)/".local/state";
-        base/="linblux/progress";
     }
+    base/="linblux/progress";
     const int root=Directory(std::filesystem::absolute(base).lexically_normal());const auto token=Token(self.owner);
     if(::mkdirat(root,token.c_str(),0700)!=0&&errno!=EEXIST){::close(root);throw std::runtime_error("Não foi possível criar escopo de progresso");}
     self.directory=::openat(root,token.c_str(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);::close(root);
@@ -125,5 +126,9 @@ void ProgressStore::tick(float dt){
     if(impl_->elapsed>=2&&impl_->dirty){impl_->elapsed=0;flush();}
 }
 void ProgressStore::flush(){try{impl_->save();}catch(const std::exception& e){impl_->lastError=e.what();throw;}}
-void ProgressStore::close(){impl_=std::make_unique<Impl>();}
+void ProgressStore::close(){
+    if(impl_->lock>=0)::close(impl_->lock);if(impl_->directory>=0)::close(impl_->directory);
+    impl_->lock=impl_->directory=-1;impl_->values.clear();impl_->owner.clear();impl_->lastError.clear();
+    impl_->durable=impl_->dirty=false;impl_->elapsed=2;impl_->writes=impl_->reads=0;
+}
 }
