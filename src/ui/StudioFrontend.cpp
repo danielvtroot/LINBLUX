@@ -776,7 +776,7 @@ bool StudioFrontend::initialize(std::string& error) {
 }
 void StudioFrontend::draw() {
     auto& p=*impl_;const double started=GetTime();
-    if(std::getenv("LOBLOX_TRACE_HOME")&&ImGui::GetFrameCount()%90==0)std::fprintf(stderr,"TRACE state focus=%d pos=%.0f,%.0f down=%d clicked=%d\n",IsWindowFocused(),GetMouseX(),GetMouseY(),IsMouseButtonDown(0),ImGui::IsMouseClicked(0));
+    if(std::getenv("LOBLOX_TRACE_HOME")&&ImGui::GetFrameCount()%30==0)std::fprintf(stderr,"TRACE state focus=%d pos=%d,%d rl_down=%d imgui_down=%d overlay=%d\n",IsWindowFocused()?1:0,GetMouseX(),GetMouseY(),IsMouseButtonDown(0)?1:0,ImGui::IsMouseDown(0)?1:0,p.experiences?p.experiences->overlayActive():-1);
     if(p.experiences) {
         p.experiences->frame();
         const bool exclusive=p.experiences->overlayActive();p.document->SetClass("experience-exclusive",exclusive);
