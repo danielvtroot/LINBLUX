@@ -141,21 +141,29 @@ void walkImages(json& node,const std::function<std::string(const std::string&)>&
         else walkImages(it.value(),visit);
     } else if(node.is_array())for(auto& item:node)walkImages(item,visit);
 }
+// A referencia canonica e `assets/<arquivo>`. Referencias herdadas (nome solto
+// gravado pela UI antiga, caminho absoluto interno ou arquivo externo) sao
+// normalizadas aqui, entao projetos antigos continuam abrindo e salvando.
 std::string relocateWorld(const Scene& scene,const fs::path& from,const fs::path& target) {
     auto j=json::parse(projectio::toJson(scene));
     std::map<std::string,std::string> copied;
-    walkImages(j,[&](const std::string& ref){
+    walkImages(j,[&](const std::string& raw){
+        const std::string ref=game::NormalizeImageReference(raw);
         if(const auto it=copied.find(ref);it!=copied.end())return it->second;
         fs::path source;
-        if(safeRelativePath(ref)&&fs::is_regular_file(target/ref)) {
+        if(!ref.empty()&&safeRelativePath(ref)&&fs::is_regular_file(target/ref)) {
             ImageInfo info;if(!ReadSafeImageInfo(containedFile(target,ref).string(),info))throw std::runtime_error("Invalid project image: "+ref);
             copied[ref]=ref;return ref;
         }
-        else if(fs::path(ref).is_absolute())source=ref;
-        else if(!from.empty()&&safeRelativePath(ref)&&fs::is_regular_file(from/ref))source=containedFile(from,ref);
-        else if(fs::is_regular_file(ref))source=ref;
-        else source=game::BuiltinAssetPath(ref);
-        if(source.empty())throw std::runtime_error("Missing image asset: "+ref+". Original project was not changed.");
+        if(fs::path(ref).is_absolute())source=ref;
+        else if(!from.empty()&&safeRelativePath(ref)) {
+            const auto name=fs::path(ref).filename();
+            for(const auto& candidate:{from/ref,from/"assets"/ref,from/"assets"/name,from/name})
+                if(fs::is_regular_file(candidate)){source=candidate;break;}
+        }
+        if(source.empty()&&!ref.empty()&&fs::is_regular_file(ref))source=ref;
+        if(source.empty())source=game::BuiltinAssetPath(ref);
+        if(source.empty())throw std::runtime_error("Missing image asset: "+raw+". Original project was not changed.");
         const auto result=imageImport(target,source);copied[ref]=result;return result;
     });
     return j.dump(2);
@@ -163,9 +171,17 @@ std::string relocateWorld(const Scene& scene,const fs::path& from,const fs::path
 Scene& loadWorld(Scene& scene,const Experience& e) {
     const auto world=read(containedFile(e.root,e.manifest.mainPlace));
     auto j=boundedJson(world);
-    walkImages(j,[&](const std::string& ref){mediaPath(ref);const auto file=containedFile(e.root,ref);ImageInfo info;
-        if(!ReadSafeImageInfo(file.string(),info))throw std::runtime_error("Invalid/missing image asset: "+ref);
-        return ref;});
+    walkImages(j,[&](const std::string& raw){mediaPath(raw);const std::string ref=game::NormalizeImageReference(raw);
+        if(!ref.empty()&&safeRelativePath(ref)) {
+            const auto file=containedFile(e.root,ref);ImageInfo info;
+            if(fs::is_regular_file(file)&&ReadSafeImageInfo(file.string(),info))return ref;
+            // Legado: nome solto guardado em assets/.
+            const auto legacy=containedFile(e.root,"assets/"+fs::path(ref).filename().string());
+            if(fs::is_regular_file(legacy)&&ReadSafeImageInfo(legacy.string(),info))return "assets/"+fs::path(ref).filename().string();
+        }
+        const auto builtin=game::BuiltinAssetPath(ref);ImageInfo info;
+        if(!builtin.empty()&&ReadSafeImageInfo(builtin,info))return ref;
+        throw std::runtime_error("Invalid/missing image asset: "+raw);});
     for(const auto& ref:{e.manifest.icon,e.manifest.banner,e.manifest.loadingBackground,e.manifest.faceImage})if(!ref.empty()) {
         ImageInfo info;if(!ReadSafeImageInfo(containedFile(e.root,ref).string(),info))throw std::runtime_error("Invalid presentation image: "+ref);
     }
@@ -351,11 +367,15 @@ Experience ExperienceManager::snapshot(const Scene& scene,const fs::path& source
     manifest.mainPlace="places/"+newId()+".loblox.json";manifest.modified=now();
     if(manifest.faceImage.empty()&&fs::is_regular_file(sourceRoot/"experience.json"))manifest.faceImage=inspect(sourceRoot).manifest.faceImage;
     if(!manifest.faceImage.empty())manifest.faceImage=imageImport(stage.path,containedFile(sourceRoot,manifest.faceImage));
-    else if(const auto face=game::BuiltinAssetPath("rosto1.png");!face.empty())manifest.faceImage=imageImport(stage.path,face);
+    // Sem rosto imposto de fabrica: uma experiencia sem imagem de apresentacao
+    // continua valida; o rig padrao nao depende de arquivo externo.
     if(fs::is_regular_file(sourceRoot/"experience.json")&&fs::is_directory(sourceRoot/"assets"))
         for(const auto& file:fs::directory_iterator(containedFile(sourceRoot,"assets"))) {
             if(file.is_symlink())throw std::runtime_error("Symlink asset in snapshot");
-            if(file.is_regular_file())imageImport(stage.path,file.path());
+            if(!file.is_regular_file())continue;
+            std::string path,error;
+            if(!game::ImportMediaTo((stage.path/"assets").string(),file.path().string(),game::MediaKind::Any,path,error))
+                throw std::runtime_error(error);
         }
     for(auto* reference:{&manifest.icon,&manifest.banner,&manifest.loadingBackground})if(!reference->empty())*reference=imageImport(stage.path,containedFile(sourceRoot,*reference));
     Scene merged;

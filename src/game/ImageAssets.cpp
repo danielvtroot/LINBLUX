@@ -1,5 +1,8 @@
 #include "game/ImageAssets.h"
 #include "core/ImageInfo.h"
+#include "game/Rig.h"
+#include "objects/Part.h"
+#include "scene/Scene.h"
 #include "serialization/ProjectIO.h"
 
 #include <algorithm>
@@ -77,6 +80,69 @@ std::string ImageReference(const std::string& path) {
     return relative.generic_string();
 }
 
+std::string ImageAssetReference(const std::string& filename) {
+    const std::string name=std::filesystem::path(filename).filename().string();
+    if(name.empty())return {};
+    return "assets/"+name;
+}
+
+std::string NormalizeImageReference(const std::string& reference) {
+    if(reference.empty())return {};
+    const std::filesystem::path original(reference);
+    if(original.is_absolute()) {
+        const auto relative=ImageReference(reference);
+        if(relative!=reference)return NormalizeImageReference(relative);
+        return reference; // externo: a importação copia no próximo salvamento
+    }
+    auto text=original.lexically_normal().generic_string();
+    while(text.rfind("./",0)==0)text.erase(0,2);
+    if(text.empty())return {};
+    if(text.rfind("assets/",0)==0)return text;
+    if(text.find('/')!=std::string::npos)return text; // subdiretório do projeto
+    std::error_code error;
+    const std::filesystem::path inside=std::filesystem::path(AssetsDir())/text;
+    if(std::filesystem::is_regular_file(inside,error)&&!std::filesystem::is_symlink(std::filesystem::symlink_status(inside,error)))
+        return "assets/"+text;
+    return text;
+}
+
+bool ImageInUse(const Scene& scene, const std::string& reference) {
+    if(reference.empty())return false;
+    const auto wanted=std::filesystem::path(NormalizeImageReference(reference)).filename().string();
+    if(wanted.empty())return false;
+    const auto matches=[&](const std::string& value) {
+        return !value.empty()&&std::filesystem::path(value).filename().string()==wanted;
+    };
+    for(const Part* part:scene.parts()) {
+        if(!part)continue;
+        for(const auto& attribute:part->attributes()) {
+            if(attribute.first.find("image")==std::string::npos&&attribute.first!="FaceTexture")continue;
+            if(const auto* text=std::get_if<std::string>(&attribute.second))if(matches(*text))return true;
+        }
+    }
+    for(const auto& rig:scene.gameAssets().rigs) {
+        for(const auto& body:rig.bodies)if(matches(body.image))return true;
+        for(const auto& body:rig.bodies)for(const auto& decal:body.decals)if(matches(decal.surface.image))return true;
+    }
+    return false;
+}
+
+bool RemoveImageAsset(const std::string& assetsDir, const std::string& filename,
+                      bool inUse, std::string& error) {
+    error.clear();
+    if(inUse){error="A imagem está em uso na cena; remova as referências antes de apagá-la.";return false;}
+    const std::string name=std::filesystem::path(filename).filename().string();
+    if(name!=filename||name.empty()){error="Use apenas o nome do arquivo em assets/.";return false;}
+    const std::filesystem::path root=std::filesystem::path(assetsDir).lexically_normal();
+    const std::filesystem::path target=root/name;
+    std::error_code fsError;
+    if(!std::filesystem::is_regular_file(target,fsError)){error="Imagem não encontrada: "+name;return false;}
+    if(std::filesystem::is_symlink(std::filesystem::symlink_status(target,fsError))){error="Symlink não pode ser removido como asset.";return false;}
+    if(!std::filesystem::remove(target,fsError)||fsError){error="Falha ao remover "+name+": "+fsError.message();return false;}
+    ClearImageTextures();
+    return true;
+}
+
 std::string BuiltinAssetPath(const std::string& relativePath) {
     if(relativePath=="loblox.png")return BuiltinAssetPath("logo.png"); // legacy resource alias
     if(relativePath=="rosto1.png")return BuiltinAssetPath("character-face.png"); // original LINBLUX replacement
@@ -103,23 +169,55 @@ void ClearImageTextures() {
     textureCache.clear();
 }
 
-bool ImportImageTo(const std::string& assetsDir, const std::string& sourcePath,
-                   std::string& outAssetPath, std::string& error) {
+namespace {
+bool IsAudioExtension(const std::string& ext) {
+    return ext==".mp3"||ext==".wav"||ext==".ogg";
+}
+// O container e verificado antes de gravar. Sem isso, um arquivo renomeado
+// seria persistido e so falharia ao tocar, longe da importacao.
+bool ValidAudioContainer(const std::string& head,const std::string& ext,std::string& error) {
+    const auto at=[&](std::size_t index) {return static_cast<unsigned char>(index<head.size()?head[index]:0);};
+    if(ext==".wav") {
+        if(head.size()<12||head.compare(0,4,"RIFF")!=0||head.compare(8,4,"WAVE")!=0) {
+            error="Arquivo WAV inválido (cabeçalho RIFF/WAVE ausente)";return false;
+        }
+        return true;
+    }
+    if(ext==".ogg") {
+        if(head.size()<4||head.compare(0,4,"OggS")!=0){error="Arquivo OGG inválido (OggS ausente)";return false;}
+        return true;
+    }
+    // MP3: tag ID3 ou sincronismo de quadro MPEG (11 bits em 1).
+    if(head.size()>=3&&head.compare(0,3,"ID3")==0)return true;
+    if(head.size()>=2&&at(0)==0xFF&&(at(1)&0xE0)==0xE0)return true;
+    error="Arquivo MP3 inválido (tag ID3 ou quadro MPEG ausente)";return false;
+}
+}  // namespace
+
+bool ImportMediaTo(const std::string& assetsDir, const std::string& sourcePath,
+                   MediaKind kind, std::string& outAssetPath, std::string& error) {
     std::error_code fsError;
     const std::filesystem::path source(sourcePath);
-    ImageInfo info;
-    if(!ReadSafeImageInfo(sourcePath,info)){error="Invalid PNG/JPEG or image exceeds the 32 MiB file / 64 MiB decoded budget";return false;}
-    Image decoded=LoadProjectImage(sourcePath);
-    const bool valid=decoded.data&&decoded.width==int(info.width)&&decoded.height==int(info.height);
-    if(decoded.data)UnloadImage(decoded);
-    if(!valid){error="Image decoding failed: "+sourcePath;return false;}
+    if(kind!=MediaKind::Audio) {
+        ImageInfo info;
+        if(!ReadSafeImageInfo(sourcePath,info)){error="Invalid PNG/JPEG or image exceeds the 32 MiB file / 64 MiB decoded budget";return false;}
+        Image decoded=LoadProjectImage(sourcePath);
+        const bool valid=decoded.data&&decoded.width==int(info.width)&&decoded.height==int(info.height);
+        if(decoded.data)UnloadImage(decoded);
+        if(!valid){error="Image decoding failed: "+sourcePath;return false;}
+    }
     if (!std::filesystem::exists(source, fsError) || !std::filesystem::is_regular_file(source, fsError)) {
-        error = "arquivo de imagem não encontrado: " + sourcePath;
+        error = std::string(kind==MediaKind::Audio?"arquivo de áudio não encontrado: ":"arquivo de imagem não encontrado: ") + sourcePath;
         return false;
     }
     const std::string ext = LowerExt(source);
-    if (ext != ".png" && ext != ".jpg" && ext != ".jpeg") {
+    if (kind==MediaKind::Audio) {
+        if(!IsAudioExtension(ext)){error="formato de áudio não suportado (use MP3, WAV ou OGG): "+ext;return false;}
+    } else if (kind==MediaKind::Image && ext != ".png" && ext != ".jpg" && ext != ".jpeg") {
         error = "formato não suportado (use PNG ou JPEG): " + ext;
+        return false;
+    } else if (kind==MediaKind::Any && ext != ".png" && ext != ".jpg" && ext != ".jpeg" && !IsAudioExtension(ext)) {
+        error = "formato de asset não suportado: " + ext;
         return false;
     }
     std::ifstream in(source, std::ios::binary);
@@ -132,6 +230,10 @@ bool ImportImageTo(const std::string& assetsDir, const std::string& sourcePath,
     if (content.empty()) {
         error = "arquivo vazio: " + sourcePath;
         return false;
+    }
+    if(IsAudioExtension(ext)) {
+        if(content.size()>256ull*1024*1024){error="Áudio excede o limite de 256 MiB";return false;}
+        if(!ValidAudioContainer(content.substr(0,std::min<std::size_t>(content.size(),4096)),ext,error))return false;
     }
     // Sangue do ID: conteúdo + tamanho (evita colisão entre arquivos vazios).
     const std::string id = Fnv1aHex(content + std::to_string(content.size()));
@@ -156,6 +258,11 @@ bool ImportImageTo(const std::string& assetsDir, const std::string& sourcePath,
     return true;
 }
 
+bool ImportImageTo(const std::string& assetsDir, const std::string& sourcePath,
+                   std::string& outAssetPath, std::string& error) {
+    return ImportMediaTo(assetsDir,sourcePath,MediaKind::Image,outAssetPath,error);
+}
+
 std::vector<ImageAsset> ListImages(const std::string& assetsDir) {
     std::vector<ImageAsset> list;
     std::error_code fsError;
@@ -172,7 +279,8 @@ std::vector<ImageAsset> ListImages(const std::string& assetsDir) {
 
 std::string ResolveImagePath(const std::string& assetsDir, const std::string& assetPath) {
     if (assetPath.empty()) return {};
-    const std::filesystem::path direct(assetPath);
+    const auto normalized=NormalizeImageReference(assetPath);
+    const std::filesystem::path direct(normalized.empty()?assetPath:normalized);
     if(!projectRoot.empty()) {
         const auto relative=direct.is_absolute()?direct.lexically_relative(projectRoot):direct;
         for(const auto& part:relative)if(part=="..") {
@@ -187,13 +295,13 @@ std::string ResolveImagePath(const std::string& assetsDir, const std::string& as
         return std::filesystem::is_regular_file(bare)?bare.string():std::string{};
     }
     if (std::filesystem::exists(direct)) return direct.string();
-    const std::filesystem::path inside =
-        std::filesystem::path(assetsDir) / assetPath;
+    const std::filesystem::path inside = std::filesystem::path(assetsDir) / direct;
     if (std::filesystem::exists(inside)) return inside.string();
+    const std::string wanted=direct.filename().string();
     std::error_code fsError;
     for (const auto& entry : std::filesystem::directory_iterator(assetsDir, fsError)) {
         if (!entry.is_regular_file(fsError)) continue;
-        if (entry.path().stem().string() == assetPath) return entry.path().string();
+        if (entry.path().filename().string() == wanted) return entry.path().string();
     }
     return {};
 }

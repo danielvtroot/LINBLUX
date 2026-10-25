@@ -3,6 +3,10 @@
 #include <vector>
 #include "raylib.h"
 
+namespace loblox {
+class Scene;
+}
+
 namespace loblox::game {
 
 // Importação portátila de imagens: o projeto sempre referencia
@@ -25,7 +29,14 @@ std::string ProjectFaceImage();
 std::string BuiltinAssetPath(const std::string& relativePath);
 void ClearImageTextures(); // call before closing the graphics context
 
+enum class MediaKind { Any, Image, Audio };
+
 // Copia o arquivo para assets/ com ID estável. Não altera o original.
+// Imagens exigem decodificação real; áudio é validado pelo container
+// (RIFF/WAVE, OggS ou quadro MPEG) para que o arquivo gravado seja o mesmo que
+// o runtime abrirá depois.
+bool ImportMediaTo(const std::string& assetsDir, const std::string& sourcePath,
+                   MediaKind kind, std::string& outAssetPath, std::string& error);
 bool ImportImageTo(const std::string& assetsDir, const std::string& sourcePath,
                    std::string& outAssetPath, std::string& error);
 
