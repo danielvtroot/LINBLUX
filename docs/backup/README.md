@@ -21,6 +21,13 @@ repositório e índice isolados. A `main` nunca recebe commits de backup e o
 - **Sem dados privados:** `.env`, chaves, `*.pem`, `projects/`, `referencias/`,
   builds, caches, logs, mídia pesada e arquivos acima de 4 MiB ficam de fora.
   Arquivos com credenciais reconhecíveis são ignorados e listados no estado.
+  A varredura identifica padrões conhecidos; não prova ausência de todo segredo.
+- **Snapshot consistente por arquivo:** os bytes verificados são os mesmos
+  enviados. Links em qualquer componente do caminho são recusados. O conjunto
+  não é uma transação de todos os editores: arquivos em edição podem representar
+  instantes diferentes, identificados pelo checkpoint; valide antes de usar como release.
+- **Concorrência:** daemon e `run --once` compartilham a trava. O estado é fora
+  do projeto e branches main/master são recusados como destino de backup.
 
 ## Comandos
 
@@ -45,6 +52,27 @@ O instalador grava `~/.config/systemd/user/linblux-backup.service`
 serviço e instala o comando `backup-status`. O daemon roda com `python3` do
 sistema e não depende de OpenCode, desenvolvimento, desenvolvimento nem do Studio aberto.
 
+Sem um gerenciador systemd de usuário disponível, o instalador usa o **cron do
+próprio usuário**: uma entrada `@reboot` e um watchdog a cada minuto. Ele preserva
+as demais entradas do crontab. O monitor verifica mudanças a cada 15 s e faz
+checkpoints a cada 120 s; o watchdog só inicia o processo se a trava indicar que
+nenhum monitor está ativo. Uma falha é recuperada em até um minuto mais o tempo
+de início. Não depende de login gráfico. O daemon cron do sistema precisa estar
+ativo. Não se instala systemd sobre outro init nem se altera a main.
+
+```bash
+python3 tools/backup/backup.py service install --backend auto
+python3 tools/backup/backup.py service start   # idempotente
+crontab -l                                  # confira as duas linhas LINBLUX
+python3 tools/backup/backup.py status --json
+```
+
+Execute a instalação **como o dono do projeto**. Estado root e estado labubu são
+independentes. Aqui o serviço ativo pertence a labubu, com estado em
+`/home/labubu/.local/state/linblux-backup`. Se consultar como outro usuário,
+informe explicitamente `--state-dir`. Logs do backend cron: `daemon.log` e
+`watchdog.log` nesse diretório, com permissões privadas.
+
 ```bash
 systemctl --user status linblux-backup.service
 journalctl --user -u linblux-backup.service -f
@@ -63,6 +91,38 @@ Para conferir sem restaurar de verdade:
 ```bash
 python3 tools/backup/backup.py verify
 ```
+
+O branch de backup tem somente a allowlist: não é uma distribuição completa.
+Para recompilar, clone também main num diretório novo, siga o README e compare
+com o checkpoint antes de trazer as alterações desejadas. Main preserva o
+histórico e recursos públicos fora da política, como o vídeo oficial versionado.
+Não copie o checkpoint sobre a única cópia de uma experiência em uso. Um ambiente
+novo de backup busca o histórico remoto existente antes do primeiro checkpoint.
+
+A prova online optativa `tests/backup/remote_recovery.py` clona GitHub num diretório
+temporário, confere todo o manifesto e o marcador público, e verifica que main e
+o índice original não mudaram. Exige baseline/estado explícitos e supervisor
+TURBO; não roda na suíte offline nem publica arquivos por conta própria.
+
+## Dados privados e recursos fora do Git
+
+`protected_files` conta a cobertura local da allowlist; `remote_protected_files`
+conta bytes do manifesto atual confirmados em um checkpoint enviado. Um push
+pendente não protege contra perda do notebook. Nenhum desses números cobre
+experiências em projects/, arquivos ignorados, credenciais ou pastas pessoais.
+
+O vídeo e a logo oficiais estão versionados na main; só a logo entra na allowlist
+do AutoBackup. Vídeos pessoais e assets ignorados não entram em nenhum envio
+automático público. Para estes dados, mantenha os diretórios completos de cada
+experiência e exportações `.lo` em cópia privada num disco externo/NAS, com versões
+por data. Inclua recursos importados, scripts e manifestos; abra uma cópia e
+importe seu `.lo` em uma biblioteca separada para testar a recuperação.
+
+O destino privado externo ainda não foi informado nesta execução. Não há cópia
+externa privada configurada ou comprovada; uma pasta no mesmo notebook não
+substitui essa proteção. Não se envia dados privados ao GitHub para preencher
+essa lacuna. Após definir o destino, registre origem, periodicidade, retenção,
+permissões/criptografia do armazenamento e uma restauração real nesse destino.
 
 ## Configuração
 
