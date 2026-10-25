@@ -40,6 +40,9 @@ propriedades minúsculas. Os bindings legados preservam seus nomes. Veja
 por `linblux_studio`. Listeners/tarefas de scripts removidos ou desabilitados e
 escopos destruídos são cancelados nos pontos seguros do scheduler. Lua roda
 antes de `PhysicsWorld::syncScene`, nunca durante o passo de Bullet.
+Scripts clonados habilitados entram no scheduler; reativação inicia um contexto
+novo, sem herdar listeners/tarefas antigos. `destroy` entrega uma única notificação
+cancelável ao observador ainda existente, após a remoção do escopo.
 
 **Limites:** não é um sandbox de segurança contra código nativo arbitrário;
 não há multiplayer/rede. Coleta de lixo/limites são os do estado Lua e do

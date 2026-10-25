@@ -9,7 +9,10 @@ Não se declara uma API completa de física, NPCs, áudio ou UI nesta fase.
 Selecione uma peça no Explorador e adicione um Script como filho dela. Edite o
 código, salve e execute a experiência. Scripts globais ficam no serviço de scripts
 do mundo. Script e LocalScript habilitados sob o mundo ou esse serviço são
-inicializados ao entrar em execução; ModuleScript só executa por `require` com
+inicializados ao entrar em execução. Novos clones habilitados são descobertos
+na atualização seguinte; reabilitar um Script reinicia seu contexto, inclusive
+quando desativado e reativado no mesmo quadro. Fora da
+árvore executável, seus callbacks/tarefas são cancelados. ModuleScript só executa por `require` com
 handle de módulo do projeto. Não existe require por caminho ou biblioteca nativa.
 
 `linblux.self` é o objeto pai do script; `linblux.script` é o próprio script.
@@ -49,6 +52,8 @@ bloco:set_attribute("pontos", 10)
 - Métodos: `children()`, `descendants()`, `find_child(nome)`, `clone()`,
   `destroy()`, `get_attribute(nome)`, `set_attribute(nome, valor)`.
   Valor de atributo: booleano, número finito ou texto; nil remove o atributo.
+- Scripts/LocalScripts também expõem `enabled`, permitindo suspender e reiniciar
+  seus componentes durante a execução. ModuleScript continua sendo biblioteca.
 - Referências usam IDs e geração da sessão. Referências destruídas recusam
   acesso; `alive` permite consultá-las sem desreferenciar memória inválida.
 
@@ -135,16 +140,19 @@ daquela emissão: não é uma cópia profunda nem uma mensagem de rede.
 
 Eventos de ciclo de vida: `start`, após o primeiro passe de inicialização dos scripts;
 `update`, uma vez por atualização do runtime, com dt em segundos; `stop`, na saída,
-antes de liberar a cena. Somente a engine emite eventos nativos. Registre start
-antes de aguardar uma tarefa; não é reproduzido para listeners registrados depois.
+antes de liberar a cena. Somente a engine emite eventos nativos. Para scripts novos, start é entregue somente aos listeners daquele script após
+a inicialização. Lotes além da cota de tarefas são adiados, não descartados.
+Registre start antes de aguardar uma tarefa; não é reproduzido para listeners registrados depois.
 Stop cancela trabalhos pendentes, faz um passe com cota e libera tudo; seus
 callbacks não podem aguardar. Start/stop recebem o valor numérico 0.
 
 Ao remover/desabilitar o script ou destruir seu escopo explícito, callbacks e
 tarefas pendentes são cancelados no próximo ponto seguro. Uma função que já está
 executando pode terminar ou aguardar; não há preempção nativa no meio da função.
-Não existe callback público de destruição, colisão ou interação nesta fase.
-Scripts clonados após o início ainda não são inicializados automaticamente.
+O evento `destroy` requer um objeto de escopo e entrega seu ID após a remoção,
+num ponto seguro do scheduler. O observador precisa continuar existindo. A
+conexão é removida após o callback e `disconnect()` cancela notificações pendentes.
+Não há ainda callbacks de colisão ou interação na API nova.
 
 ## Tempo
 

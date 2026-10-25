@@ -394,6 +394,69 @@ print("metatable works")
     CHECK(std::chrono::duration<double>(std::chrono::steady_clock::now()-before).count()<2);
     CHECK(runtime.scripts().memoryUsed()==0&&runtime.scripts().taskCount()==0);CHECK(runtime.validate(error));
 }
+void DynamicScriptLifecycle() {
+    Scene author;author.buildDefaultScene();std::string error;
+    auto* part=author.createPart(PartShape::Block,{25,8,0},{2,2,2},"Original");part->setAnchored(true);
+    author.createScript(InstanceClass::Script,part,"Componente.lua")->source=R"(
+local owner = linblux.self
+linblux.events.on("start", function() owner:set_attribute("starts", (owner:get_attribute("starts") or 0)+1) end)
+linblux.events.on("update", function() owner:set_attribute("ticks", (owner:get_attribute("ticks") or 0)+1) end)
+)";
+    author.createScript(InstanceClass::Script,nullptr,"Controlador.lua")->source=R"(
+linblux.time.after(0.02, function()
+    local canceled = linblux.scene.create("part")
+    local connection = linblux.events.on("destroy", function() error("canceled destroy") end, canceled)
+    canceled:destroy()
+    local flush = linblux.events.on("nothing", function() end)
+    connection:disconnect()
+    flush:disconnect()
+    local copy = linblux.scene.find("Original"):clone()
+    copy.name = "Clone"
+    copy:set_attribute("starts", 0)
+    copy:set_attribute("ticks", 0)
+    local component
+    for _, child in ipairs(copy:children()) do if child.type == "script" then component = child end end
+    assert(component and component.enabled)
+    local root = linblux.scene.root
+    root:set_attribute("clone", copy.id)
+    linblux.events.on("destroy", function(id) root:set_attribute("removed", id) end, copy)
+    linblux.time.after(0.06, function()
+        assert(copy:get_attribute("starts") == 1 and copy:get_attribute("ticks") > 0)
+        local ticks = copy:get_attribute("ticks")
+        component.enabled = false
+        linblux.time.after(0.04, function()
+            assert(copy:get_attribute("ticks") == ticks)
+            component.enabled = true
+            linblux.time.after(0.05, function()
+                assert(copy:get_attribute("starts") == 2)
+                component.enabled = false
+                component.enabled = true
+                local ticks = copy:get_attribute("ticks")
+                linblux.time.after(0.05, function()
+                    assert(copy:get_attribute("starts") == 3)
+                    -- A restart must leave precisely one update subscription.
+                    local before = copy:get_attribute("ticks")
+                    linblux.time.after(0, function()
+                        assert(copy:get_attribute("ticks") == before + 1)
+                        copy:destroy()
+                    end)
+                end)
+            end)
+        end)
+    end)
+end)
+)";
+    const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+    for(int i=0;i<40;++i)runtime.update(1.f/60,{});
+    const auto& attributes=runtime.scene().workspace()->attributes();CHECK(attributes.count("clone")&&attributes.count("removed"));
+    if(attributes.count("removed")) {
+        CHECK(std::get<double>(attributes.at("clone"))==std::get<double>(attributes.at("removed")));
+        CHECK(runtime.scene().find(InstanceId(std::get<double>(attributes.at("clone"))))==nullptr);
+    }
+    CHECK(std::get<double>(runtime.scene().findPart(part->id())->attributes().at("starts"))==1);
+    for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Lifecycle Lua: %s\n",message.text.c_str());CHECK(!message.error);}
+    CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();CHECK(runtime.scripts().taskCount()==0);
+}
 void AnimationIds() {
     Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();std::string error;
     auto* service=scene.service(InstanceClass::ServerScriptService);CHECK(service && service->children().size()==1);
@@ -791,6 +854,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxPlayer();LuaFinalizerSafety();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

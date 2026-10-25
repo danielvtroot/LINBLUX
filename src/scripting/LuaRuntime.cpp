@@ -17,7 +17,7 @@
 namespace loblox::scripting {
 namespace {
 enum class Kind { Instance,Game,Players,Player,RunService,AnimationService,Character,Humanoid,Animator,Signal,Connection };
-enum Signal { Spawn=1,Heartbeat,HealthChanged,Died,EngineStart,EngineStop };
+enum Signal { Spawn=1,Heartbeat,HealthChanged,Died,EngineStart,EngineStop,EngineDestroy };
 struct Handle { Kind kind; InstanceId id; unsigned generation; unsigned avatar=0; bool modern=false; };
 constexpr std::size_t kNativeContentLimit=8*1024*1024, kNativeNodes=10000;
 bool Eq(const char* a,const char* b) { return std::strcmp(a,b)==0; }
@@ -68,13 +68,14 @@ struct LuaRuntime::Impl {
     Limits limits;
     bool stopping=false,closing=false;
     struct Job { lua_State* thread; int ref; int arguments; InstanceId script; double wake; bool done=false; InstanceId connection=0; };
-    struct Listener { int signal; int ref; InstanceId script; unsigned avatar=0; InstanceId owner=0; std::string topic; };
+    struct Listener { int signal; int ref; InstanceId script; unsigned avatar=0; InstanceId owner=0; std::string topic; bool once=false; };
     std::deque<Job> jobs;
     std::map<InstanceId,Listener> listeners;
     InstanceId nextConnection=0;
     std::vector<Message> output;
     std::map<InstanceId,int> modules;
     std::set<InstanceId> loading;
+    std::set<InstanceId> startedScripts;
 
     static Impl& Host(lua_State* L) { return **static_cast<Impl**>(lua_getextraspace(L)); }
     static void* Allocate(void* userdata,void* pointer,std::size_t old,std::size_t size) {
@@ -364,7 +365,7 @@ struct LuaRuntime::Impl {
     }
     static int NativeSignal(const char* topic) {
         return Eq(topic,"start")?EngineStart:Eq(topic,"update")?Heartbeat:Eq(topic,"stop")?EngineStop:
-            Eq(topic,"spawn")?Spawn:Eq(topic,"health_changed")?HealthChanged:Eq(topic,"death")?Died:0;
+            Eq(topic,"spawn")?Spawn:Eq(topic,"health_changed")?HealthChanged:Eq(topic,"death")?Died:Eq(topic,"destroy")?EngineDestroy:0;
     }
     static const char* Topic(lua_State* L) {
         const char* topic=Text(L,1);const auto length=lua_rawlen(L,1);
@@ -375,6 +376,7 @@ struct LuaRuntime::Impl {
         self.pruneListeners();
         Require(self.listeners.size()<self.limits.listeners,"event connection limit reached");
         const InstanceId owner=lua_gettop(L)>2&&!lua_isnil(L,3)?self.instance(L,3).id():0;
+        Require(!Eq(topic,"destroy")||owner!=0,"O evento destroy requer um objeto de escopo");
         lua_pushvalue(L,2);const int ref=luaL_ref(L,LUA_REGISTRYINDEX);const auto id=++self.nextConnection;
         self.listeners.emplace(id,Listener{NativeSignal(topic),ref,self.executing,0,owner,topic});self.push(L,Kind::Connection,id,true);return 1;
     }
@@ -501,7 +503,7 @@ struct LuaRuntime::Impl {
     static const char* ModernKey(const char* key) {
         const std::pair<const char*,const char*> aliases[]{
             {"name","Name"},{"parent","Parent"},{"position","Position"},{"rotation","Rotation"},{"size","Size"},
-            {"color","Color"},{"transparency","Transparency"},{"anchored","Anchored"},{"collidable","CanCollide"},{"material","Material"},
+            {"color","Color"},{"transparency","Transparency"},{"anchored","Anchored"},{"collidable","CanCollide"},{"material","Material"},{"enabled","Enabled"},
             {"children","GetChildren"},{"descendants","GetDescendants"},{"find_child","FindFirstChild"},{"clone","Clone"},
             {"destroy","Destroy"},{"get_attribute","GetAttribute"},{"set_attribute","SetAttribute"}};
         for(const auto& pair:aliases)if(Eq(key,pair.first))return pair.second;
@@ -568,6 +570,7 @@ struct LuaRuntime::Impl {
             if(Eq(key,"Name")){lua_pushlstring(L,object.name().data(),object.name().size());return 1;}
             if(Eq(key,"ClassName")){lua_pushstring(L,object.className());return 1;}
             if(Eq(key,"Parent")){self.pushInstance(L,object.parent(),h.modern);return 1;}
+            if(h.modern&&IsScriptClass(object.instanceClass())&&Eq(key,"Enabled")){lua_pushboolean(L,static_cast<const Script&>(object).enabled);return 1;}
             if(object.instanceClass()==InstanceClass::Workspace && Eq(key,"FallenPartsDestroyHeight")) {
                 lua_pushnumber(L,self.runtime->scene().workspace()->fallenPartsDestroyHeight());return 1;
             }
@@ -617,6 +620,11 @@ struct LuaRuntime::Impl {
         Require(h.kind==Kind::Instance,"readonly service property");auto& object=self.instance(L,1);
         if(Eq(key,"Name")){const char* name=Text(L,3);const auto size=std::strlen(name);Require(*name && size<=128,"Name length must be 1..128");self.nativeBudget(0,size>object.name().size()?size-object.name().size():0);object.setName(name);return 0;}
         if(Eq(key,"Parent")){auto& parent=self.instance(L,3);std::string error;const bool ok=self.runtime->mutableScene().reparent(&object,&parent,error);if(!ok)throw std::runtime_error(error);return 0;}
+        if(h.modern&&IsScriptClass(object.instanceClass())&&Eq(key,"Enabled")){
+            Require(lua_isboolean(L,3),"enabled requer booleano");static_cast<Script&>(object).enabled=lua_toboolean(L,3);
+            if(!static_cast<Script&>(object).enabled){self.startedScripts.erase(object.id());self.cancelScript(object.id());}
+            return 0;
+        }
         if(object.instanceClass()==InstanceClass::Workspace && Eq(key,"FallenPartsDestroyHeight")) {
             const auto height=Number(L,3);Require(std::fabs(height)<=100000,"void height outside supported range");
             self.runtime->mutableScene().workspace()->setFallenPartsDestroyHeight(float(height));return 0;
@@ -671,10 +679,16 @@ struct LuaRuntime::Impl {
         auto* thread=static_cast<lua_State*>(lua_touserdata(L,1));
         luaL_traceback(L,thread,lua_tostring(thread,-1),1);return 1;
     }
+    static int EmitDestroyed(lua_State* L) {
+        const int ref=int(lua_tointeger(L,1));const auto id=lua_tointeger(L,2);const auto connection=InstanceId(lua_tointeger(L,3));lua_settop(L,0);
+        lua_rawgeti(L,LUA_REGISTRYINDEX,ref);lua_pushinteger(L,id);SpawnTask(L);Host(L).jobs.back().connection=connection;return 0;
+    }
     bool scriptAlive(InstanceId id) const {
         if(!id)return true;
         const auto* object=runtime->scene().find(id);
-        return object&&IsScriptClass(object->instanceClass())&&static_cast<const Script*>(object)->enabled;
+        if(!object||!IsScriptClass(object->instanceClass())||!static_cast<const Script*>(object)->enabled)return false;
+        const auto* service=runtime->scene().service(InstanceClass::ServerScriptService);
+        return runtime->scene().workspace()->isAncestorOf(object)||(service&&service->isAncestorOf(object));
     }
     bool listenerAlive(const Listener& listener) const {
         return scriptAlive(listener.script)&&(!listener.owner||runtime->scene().find(listener.owner))&&
@@ -682,14 +696,26 @@ struct LuaRuntime::Impl {
     }
     void pruneListeners() {
         for(auto it=listeners.begin();it!=listeners.end();) {
-            if(!listenerAlive(it->second)){luaL_unref(state,LUA_REGISTRYINDEX,it->second.ref);it=listeners.erase(it);}else ++it;
+            auto& listener=it->second;
+            if(!listenerAlive(listener)) {
+                if(listener.signal==EngineDestroy&&scriptAlive(listener.script)&&listener.owner&&!runtime->scene().find(listener.owner)) {
+                    const auto previous=executing;executing=listener.script;
+                    lua_pushcfunction(state,Safe<EmitDestroyed>);lua_pushinteger(state,listener.ref);lua_pushinteger(state,lua_Integer(listener.owner));lua_pushinteger(state,lua_Integer(it->first));
+                    const bool queued=lua_pcall(state,3,0,0)==LUA_OK;
+                    if(!queued){message(true,executing,lua_tostring(state,-1));lua_pop(state,1);}
+                    executing=previous;
+                    if(queued){listener.owner=0;listener.once=true;++it;continue;}
+                }
+                luaL_unref(state,LUA_REGISTRYINDEX,listener.ref);it=listeners.erase(it);
+            }else ++it;
         }
     }
-    void event(int signal,float value=0) {
+    void event(int signal,float value=0,InstanceId onlyScript=0) {
         if(!state)return;
         pruneListeners();
         for(const auto& pair:listeners) {
             const auto& listener=pair.second;
+            if(onlyScript&&listener.script!=onlyScript)continue;
             if(listener.signal!=signal || (listener.avatar && listener.avatar!=runtime->characterGeneration()))continue;
             executing=listener.script; lua_pushcfunction(state,Safe<Emit>);
             // Legacy signals already emitted before respawn retain their original
@@ -725,14 +751,17 @@ struct LuaRuntime::Impl {
             }
         }
         for(auto it=jobs.begin();it!=jobs.end();) {
-            if(it->done){luaL_unref(state,LUA_REGISTRYINDEX,it->ref);it=jobs.erase(it);}else ++it;
+            if(it->done){
+                if(it->connection){const auto listener=listeners.find(it->connection);if(listener!=listeners.end()&&listener->second.once){luaL_unref(state,LUA_REGISTRYINDEX,listener->second.ref);listeners.erase(listener);}}
+                luaL_unref(state,LUA_REGISTRYINDEX,it->ref);it=jobs.erase(it);
+            }else ++it;
         }
         executing=0;
     }
     void close() {
-        jobs.clear();listeners.clear();modules.clear();loading.clear();
+        jobs.clear();listeners.clear();modules.clear();loading.clear();startedScripts.clear();
         if(state){closing=true;instructions=limits.instructionsPerTask;frameBudget=limits.instructionsPerFrame;lua_sethook(state,Hook,LUA_MASKCOUNT,1000);lua_close(state);}
-        jobs.clear();listeners.clear();modules.clear();loading.clear();
+        jobs.clear();listeners.clear();modules.clear();loading.clear();startedScripts.clear();
         state=nullptr;memory=0;runtime=nullptr;stopping=closing=false;
     }
     void stop() {
@@ -752,6 +781,33 @@ struct LuaRuntime::Impl {
         }
         event(Spawn);
     }
+    void cancelScript(InstanceId id) {
+        for(auto& job:jobs)if(job.script==id)job.done=true;
+        for(auto it=listeners.begin();it!=listeners.end();) {
+            if(it->second.script==id){luaL_unref(state,LUA_REGISTRYINDEX,it->second.ref);it=listeners.erase(it);}else ++it;
+        }
+    }
+    std::vector<InstanceId> discoverScripts() {
+        for(auto it=startedScripts.begin();it!=startedScripts.end();) {
+            if(!scriptAlive(*it))it=startedScripts.erase(it);else ++it;
+        }
+        std::vector<InstanceId> candidates,added;
+        const auto* service=runtime->scene().service(InstanceClass::ServerScriptService);
+        for(const auto& object:runtime->scene().objects())if(IsScriptClass(object->instanceClass())&&
+            object->instanceClass()!=InstanceClass::ModuleScript&&static_cast<const Script&>(*object).enabled&&!startedScripts.count(object->id())&&
+            (runtime->scene().workspace()->isAncestorOf(object.get())||(service&&service->isAncestorOf(object.get()))))candidates.push_back(object->id());
+        std::sort(candidates.begin(),candidates.end());
+        for(const auto id:candidates) {
+            if(jobs.size()>=limits.tasks)break; // defer the next batch, never silently drop scripts
+            // A function already running when disabled may finish its current call.
+            // Purge anything it registered afterwards before starting the new context.
+            cancelScript(id);
+            startedScripts.insert(id);added.push_back(id);
+            lua_pushcfunction(state,Safe<LoadAsset>);lua_pushinteger(state,lua_Integer(id));
+            if(lua_pcall(state,1,0,0)!=LUA_OK){message(true,id,lua_tostring(state,-1));lua_pop(state,1);}
+        }
+        return added;
+    }
 };
 LuaRuntime::LuaRuntime():impl_(std::make_unique<Impl>()){}
 LuaRuntime::~LuaRuntime(){stop();}
@@ -768,21 +824,15 @@ bool LuaRuntime::start(game::RuntimeSession& runtime) {
     *static_cast<Impl**>(lua_getextraspace(self.state))=&self;
     lua_pushcfunction(self.state,Impl::Safe<Impl::Setup>);
     if(lua_pcall(self.state,0,0,0)!=LUA_OK){self.message(true,0,lua_tostring(self.state,-1));self.close();return false;}
-    std::vector<InstanceId> scripts;
-    for(const auto& object:runtime.scene().objects()) if(IsScriptClass(object->instanceClass()) &&
-        object->instanceClass()!=InstanceClass::ModuleScript && static_cast<const Script&>(*object).enabled) {
-        const auto* service=runtime.scene().service(InstanceClass::ServerScriptService);
-        if(runtime.scene().workspace()->isAncestorOf(object.get()) || (service && service->isAncestorOf(object.get()))) scripts.push_back(object->id());
-    }
-    std::sort(scripts.begin(),scripts.end());
-    for(auto id:scripts) {
-        lua_pushcfunction(self.state,Impl::Safe<Impl::LoadAsset>);lua_pushinteger(self.state,lua_Integer(id));
-        if(lua_pcall(self.state,1,0,0)!=LUA_OK){self.message(true,id,lua_tostring(self.state,-1));lua_pop(self.state,1);}
-    }
+    self.discoverScripts();
     self.tick(0);self.event(EngineStart);self.event(Spawn);self.tick(0);return true;
 }
 void LuaRuntime::stop(){impl_->stop();}
-void LuaRuntime::update(float dt){impl_->event(Heartbeat,dt);impl_->tick(dt);}
+void LuaRuntime::update(float dt){
+    if(!impl_->state||!std::isfinite(dt)||dt<0)return;
+    const auto added=impl_->discoverScripts();impl_->event(Heartbeat,dt);impl_->tick(dt);
+    for(const auto id:added)impl_->event(EngineStart,0,id);
+}
 void LuaRuntime::characterAdded(){impl_->characterAdded();}
 void LuaRuntime::healthChanged(float health,bool died){impl_->event(HealthChanged,health);if(died)impl_->event(Died);}
 const std::vector<Message>& LuaRuntime::messages()const{return impl_->output;}
