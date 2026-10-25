@@ -480,17 +480,23 @@ struct LuaRuntime::Impl {
         Require(part.hasNpc(),"A peça não possui componente de NPC (use linblux.npc.create ou linblux.npc.attach)");
         return part;
     }
+    static bool IsNpcKey(const char* key) {
+        return Eq(key,"speed")||Eq(key,"max_health")||Eq(key,"respawn_delay")||Eq(key,"turn_speed")||Eq(key,"enabled");
+    }
+    // Le uma propriedade de NPC da pilha; chaves de criação são ignoradas aqui.
+    static void ReadNpcProperty(lua_State* L,const char* key,NpcProperties& properties) {
+        if(Eq(key,"speed"))properties.speed=float(Number(L,-1));
+        else if(Eq(key,"max_health"))properties.maxHealth=float(Number(L,-1));
+        else if(Eq(key,"respawn_delay"))properties.respawnDelay=float(Number(L,-1));
+        else if(Eq(key,"turn_speed"))properties.turnSpeed=float(Number(L,-1));
+        else if(Eq(key,"enabled")){Require(lua_isboolean(L,-1),"enabled requer booleano");properties.enabled=lua_toboolean(L,-1);}
+    }
     static NpcProperties ReadNpcOptions(lua_State* L,int index,NpcProperties base) {
         Require(lua_istable(L,index),"Opções de NPC requerem tabela");index=lua_absindex(L,index);
         lua_pushnil(L);while(lua_next(L,index)) {
             const char* key=Text(L,-2);
-            if(Eq(key,"speed"))base.speed=float(Number(L,-1));
-            else if(Eq(key,"max_health"))base.maxHealth=float(Number(L,-1));
-            else if(Eq(key,"respawn_delay"))base.respawnDelay=float(Number(L,-1));
-            else if(Eq(key,"turn_speed"))base.turnSpeed=float(Number(L,-1));
-            else if(Eq(key,"enabled")){Require(lua_isboolean(L,-1),"enabled requer booleano");base.enabled=lua_toboolean(L,-1);}
-            else throw std::runtime_error("Opção de NPC desconhecida");
-            lua_pop(L,1);
+            Require(IsNpcKey(key),"Opção de NPC desconhecida");
+            ReadNpcProperty(L,key,base);lua_pop(L,1);
         }
         std::string error;Require(base.validate(error),error.c_str());return base;
     }
@@ -517,7 +523,11 @@ struct LuaRuntime::Impl {
         Field(L,1,"shape");if(!lua_isnil(L,-1)){const char* value=Text(L,-1);Require(Eq(value,"box")||Eq(value,"sphere"),"shape aceita box ou sphere");shape=Eq(value,"sphere")?PartShape::Sphere:PartShape::Block;}lua_pop(L,1);
         Field(L,1,"script_name");if(!lua_isnil(L,-1)){scriptName=Text(L,-1);Require(!scriptName.empty()&&scriptName.size()<=128&&scriptName.size()==lua_rawlen(L,-1),"Nome do script do NPC inválido");}lua_pop(L,1);
         Field(L,1,"script");if(!lua_isnil(L,-1)){Require(lua_type(L,-1)==LUA_TSTRING,"script requer o código Lua como texto");Require(lua_rawlen(L,-1)<=262144,"Script do NPC excede 256 KiB");source.assign(Text(L,-1),lua_rawlen(L,-1));}lua_pop(L,1);
-        properties=ReadNpcOptions(L,1,properties);
+        lua_pushnil(L);while(lua_next(L,1)) {
+            const char* key=Text(L,-2);bool creation=false;for(const char* option:allowed)creation|=Eq(key,option);
+            Require(creation,"Opção de criação de NPC desconhecida");
+            ReadNpcProperty(L,key,properties);lua_pop(L,1);
+        }
         Require(size.x>=kMinPartSize&&size.y>=kMinPartSize&&size.z>=kMinPartSize,"Tamanho mínimo do NPC é 0,2");
         Require(color.x>=0&&color.y>=0&&color.z>=0&&color.x<=255&&color.y<=255&&color.z<=255,"Cor do NPC requer canais de 0 a 255");
         self.nativeBudget(1,size_t(name.size())+128);
