@@ -51,6 +51,10 @@ de notificações respeita a política de tarefas do host.
 de borda não fazem polling nativo nem consomem Escape/atalhos de saída. `ScriptInput`
 é transitório, fora da cena serializada. Testes: linblux_studio (amostras injetadas)
 e linblux_script_input_ui (teclado X11 real, gameplay e pausa).
+Tarefas modernas têm token próprio por VM (sem reutilizar referência de registro),
+active/cancel e intervalo every com um único coroutine. task.spawn legado mantém
+seu retorno. linblux_lua_player_validation verifica cenas salvas no Player real,
+incluindo recusa de sucesso falso para erro em inicialização ou stop.
 
 **Limites:** não é um sandbox de segurança contra código nativo arbitrário;
 não há multiplayer/rede. Coleta de lixo/limites são os do estado Lua e do

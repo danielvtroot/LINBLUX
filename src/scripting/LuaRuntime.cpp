@@ -16,7 +16,7 @@
 
 namespace loblox::scripting {
 namespace {
-enum class Kind { Instance,Game,Players,Player,RunService,AnimationService,Character,Humanoid,Animator,Signal,Connection };
+enum class Kind { Instance,Game,Players,Player,RunService,AnimationService,Character,Humanoid,Animator,Signal,Connection,Task };
 enum Signal { Spawn=1,Heartbeat,HealthChanged,Died,EngineStart,EngineStop,EngineDestroy,PhysicsUpdate,CollisionEnter,CollisionExit,
     KeyPressed,KeyReleased,MousePressed,MouseReleased,GamepadPressed,GamepadReleased };
 struct Handle { Kind kind; InstanceId id; unsigned generation; unsigned avatar=0; bool modern=false; };
@@ -62,17 +62,19 @@ struct LuaRuntime::Impl {
     lua_State* state=nullptr;
     game::RuntimeSession* runtime=nullptr;
     std::size_t memory=0;
+    std::size_t errors=0;
     double time=0;
     unsigned generation=0;
     int instructions=0, frameBudget=0, moduleDepth=0;
     InstanceId executing=0;
     Limits limits;
     bool stopping=false,closing=false,contactOverflowReported=false;
-    struct Job { lua_State* thread; int ref; int arguments; InstanceId script; double wake; bool done=false; InstanceId connection=0; };
+    struct Job { lua_State* thread; int ref; int arguments; InstanceId script; double wake; bool done=false; InstanceId connection=0; InstanceId token=0; };
     struct Listener { int signal; int ref; InstanceId script; unsigned avatar=0; InstanceId owner=0; std::string topic; bool once=false; };
     std::deque<Job> jobs;
     std::map<InstanceId,Listener> listeners;
     InstanceId nextConnection=0;
+    InstanceId nextTask=0;
     std::vector<Message> output;
     std::map<InstanceId,int> modules;
     std::set<InstanceId> loading;
@@ -133,6 +135,7 @@ struct LuaRuntime::Impl {
         Require(extraBytes<=kNativeContentLimit && bytes<=kNativeContentLimit-extraBytes,"native content budget exceeded");
     }
     void message(bool error,InstanceId id,const char* text) {
+        if(error)++errors;
         const auto* object=runtime?runtime->scene().find(id):nullptr;
         const std::string name=object?object->name():"Runtime";
         if(output.size()>=256) output.erase(output.begin());
@@ -171,7 +174,15 @@ struct LuaRuntime::Impl {
         Require(self.jobs.size()<self.limits.tasks,"Lua task limit reached");
         const int count=lua_gettop(L);lua_State* thread=lua_newthread(L);const int ref=luaL_ref(L,LUA_REGISTRYINDEX);
         for(int i=1;i<=count;++i)lua_pushvalue(L,i);
-        lua_xmove(L,thread,count);self.jobs.push_back({thread,ref,count-1,self.executing,self.time});return 0;
+        lua_xmove(L,thread,count);self.jobs.push_back({thread,ref,count-1,self.executing,self.time,false,0,++self.nextTask});return 0;
+    }
+    static int ModernSpawn(lua_State* L) {
+        SpawnTask(L);auto& self=Host(L);self.push(L,Kind::Task,self.jobs.back().token,true);return 1;
+    }
+    static int CancelTask(lua_State* L) {
+        auto& self=Host(L);const auto task=self.handle(L,1);Require(task.kind==Kind::Task,"cancel requer uma tarefa LINBLUX");
+        for(auto& job:self.jobs)if(job.token==task.id){const bool changed=!job.done;job.done=true;lua_pushboolean(L,changed);return 1;}
+        lua_pushboolean(L,false);return 1;
     }
     static int Wait(lua_State* L) {
         auto& self=Host(L); Require(self.moduleDepth==0,"ModuleScript cannot yield during require");
@@ -386,7 +397,18 @@ struct LuaRuntime::Impl {
     }
     static int After(lua_State* L) {
         auto& self=Host(L);const double delay=Number(L,1);Require(delay>=0&&delay<=3600,"Atraso deve estar entre 0 e 3600 segundos");
-        Require(lua_isfunction(L,2),"after requer uma função");lua_remove(L,1);SpawnTask(L);self.jobs.back().wake=self.time+delay;return 0;
+        Require(lua_isfunction(L,2),"after requer uma função");lua_remove(L,1);SpawnTask(L);self.jobs.back().wake=self.time+delay;self.push(L,Kind::Task,self.jobs.back().token,true);return 1;
+    }
+    static int Every(lua_State* L) {
+        const auto seconds=Number(L,1);Require(seconds>0&&seconds<=3600,"every requer intervalo maior que zero e até 3600 segundos");
+        Require(lua_isfunction(L,2),"every requer uma função");
+        // Trusted scheduler wrapper; imported scripts still cannot load source.
+        static constexpr char wrapper[]="return function(wait, seconds, callback, ...) while true do wait(seconds); callback(...) end end";
+        const int loaded=luaL_loadbufferx(L,wrapper,sizeof(wrapper)-1,"@linblux/interval","t");
+        Require(loaded==LUA_OK,"Não foi possível preparar o intervalo Lua");
+        const int called=lua_pcall(L,0,1,0);Require(called==LUA_OK,"Não foi possível iniciar o intervalo Lua");
+        lua_insert(L,1);lua_pushcfunction(L,Safe<Wait>);lua_insert(L,2);
+        return ModernSpawn(L);
     }
     static int NativeSignal(const char* topic) {
         return Eq(topic,"start")?EngineStart:Eq(topic,"update")?Heartbeat:Eq(topic,"stop")?EngineStop:
@@ -550,6 +572,13 @@ struct LuaRuntime::Impl {
             key=ModernKey(key);
         }
 #define METHOD(name,fn) if(Eq(key,name)){lua_pushcfunction(L,Safe<fn>);return 1;}
+        if(h.kind==Kind::Task){
+            METHOD("cancel",CancelTask)
+            if(Eq(key,"active")){
+                bool active=false;for(const auto& job:self.jobs)if(job.token==h.id)active=!job.done&&self.scriptAlive(job.script);
+                lua_pushboolean(L,active);return 1;
+            }
+        }
         if(h.kind==Kind::Player&&h.modern) {
             METHOD("damage",Damage) METHOD("heal",Heal) METHOD("respawn",Respawn) METHOD("teleport",Teleport) METHOD("set_checkpoint",Checkpoint) METHOD("set_animation",PlayerAnimation)
             if(Eq(key,"position")){ModernVector(L,self.runtime->position());return 1;}
@@ -700,7 +729,7 @@ struct LuaRuntime::Impl {
         lua_pushcfunction(L,(Safe<InputButton<1,0>>));lua_setfield(L,-2,"mouse_down");lua_pushcfunction(L,(Safe<InputButton<1,1>>));lua_setfield(L,-2,"mouse_pressed");lua_pushcfunction(L,(Safe<InputButton<1,2>>));lua_setfield(L,-2,"mouse_released");
         lua_pushcfunction(L,(Safe<InputButton<2,0>>));lua_setfield(L,-2,"gamepad_down");lua_pushcfunction(L,(Safe<InputButton<2,1>>));lua_setfield(L,-2,"gamepad_pressed");lua_pushcfunction(L,(Safe<InputButton<2,2>>));lua_setfield(L,-2,"gamepad_released");
         lua_pushcfunction(L,Safe<InputPointer>);lua_setfield(L,-2,"pointer");lua_pushcfunction(L,Safe<GamepadConnected>);lua_setfield(L,-2,"gamepad_connected");lua_pushcfunction(L,Safe<GamepadAxis>);lua_setfield(L,-2,"gamepad_axis");lua_setfield(L,-2,"input");
-        lua_newtable(L);lua_pushcfunction(L,Safe<Now>);lua_setfield(L,-2,"now");lua_pushcfunction(L,Safe<Wait>);lua_setfield(L,-2,"wait");lua_pushcfunction(L,Safe<After>);lua_setfield(L,-2,"after");lua_pushcfunction(L,Safe<SpawnTask>);lua_setfield(L,-2,"spawn");lua_setfield(L,-2,"time");lua_setglobal(L,"linblux");return 0;
+        lua_newtable(L);lua_pushcfunction(L,Safe<Now>);lua_setfield(L,-2,"now");lua_pushcfunction(L,Safe<Wait>);lua_setfield(L,-2,"wait");lua_pushcfunction(L,Safe<After>);lua_setfield(L,-2,"after");lua_pushcfunction(L,Safe<ModernSpawn>);lua_setfield(L,-2,"spawn");lua_pushcfunction(L,Safe<Every>);lua_setfield(L,-2,"every");lua_pushcfunction(L,Safe<CancelTask>);lua_setfield(L,-2,"cancel");lua_setfield(L,-2,"time");lua_setglobal(L,"linblux");return 0;
     }
     static int Emit(lua_State* L) {
         auto& self=Host(L);const int signal=int(lua_tointeger(L,1)),ref=int(lua_tointeger(L,2));
@@ -907,7 +936,7 @@ bool LuaRuntime::configure(const Limits& limits,std::string& error) {
 }
 const Limits& LuaRuntime::limits()const{return impl_->limits;}
 bool LuaRuntime::start(game::RuntimeSession& runtime) {
-    stop();auto& self=*impl_;self.runtime=&runtime;self.output.clear();self.time=0;self.moduleDepth=0;self.contactOverflowReported=false;++self.generation;
+    stop();auto& self=*impl_;self.runtime=&runtime;self.output.clear();self.errors=0;self.time=0;self.moduleDepth=0;self.contactOverflowReported=false;++self.generation;
     self.state=lua_newstate(Impl::Allocate,&self);
     if(!self.state){self.message(true,0,"Cannot allocate Lua VM");self.close();return false;}
     *static_cast<Impl**>(lua_getextraspace(self.state))=&self;
@@ -932,6 +961,7 @@ void LuaRuntime::contact(InstanceId first,InstanceId second,bool entering){impl_
 void LuaRuntime::characterAdded(){impl_->characterAdded();}
 void LuaRuntime::healthChanged(float health,bool died){impl_->event(HealthChanged,health);if(died)impl_->event(Died);}
 const std::vector<Message>& LuaRuntime::messages()const{return impl_->output;}
+std::size_t LuaRuntime::errorCount()const{return impl_->errors;}
 std::size_t LuaRuntime::memoryUsed()const{return impl_->memory;}
 std::size_t LuaRuntime::taskCount()const{return impl_->jobs.size();}
 bool LuaRuntime::active()const{return impl_->state!=nullptr;}

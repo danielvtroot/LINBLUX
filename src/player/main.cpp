@@ -28,7 +28,18 @@ int main(int argc,char** argv) {
         else {if(!projectio::load(authoring,project,error))throw std::runtime_error(error);game::SetProjectAssetRoot(std::filesystem::absolute(path).parent_path().string());}
     }catch(const std::exception& e){std::fprintf(stderr,"Falha ao abrir experiência: %s\n",e.what());return 1;}
     game::RuntimeSession runtime;if(!runtime.start(authoring,error)){std::fprintf(stderr,"Falha na execução: %s\n",error.c_str());return 1;}
-    if(validate){for(int i=0;i<120;++i)runtime.update(1.f/60,{});const bool valid=runtime.validate(error);runtime.stop();std::printf("LINBLUX Engine: %s\n",valid?"experiência validada":error.c_str());return valid?0:1;}
+    if(validate){
+        for(int i=0;i<120;++i)runtime.update(1.f/60,{});
+        const bool valid=runtime.validate(error);runtime.stop();std::size_t retainedErrors=0;
+        for(const auto& message:runtime.scripts().messages())if(message.error){
+            ++retainedErrors;std::fprintf(stderr,"%s:%d: %s\n",message.script.c_str(),message.line,message.text.c_str());
+        }
+        const auto scriptErrors=runtime.scripts().errorCount();
+        if(scriptErrors>retainedErrors)std::fprintf(stderr,"Erros anteriores omitidos pelo limite de registros; consulte os logs da sessão.\n");
+        if(!valid)std::fprintf(stderr,"Falha de runtime: %s\n",error.c_str());
+        std::printf("LINBLUX Engine: %s; erros Lua: %zu\n",valid&&scriptErrors==0?"experiência validada":"validação falhou",scriptErrors);
+        return valid&&scriptErrors==0?0:1;
+    }
     SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_VSYNC_HINT);InitWindow(1280,720,"LINBLUX Player");
     if(!IsWindowReady()){runtime.stop();std::fprintf(stderr,"Falha ao criar a janela gráfica do LINBLUX Player.\n");return 1;}
     SetExitKey(KEY_NULL);SetWindowMinSize(900,560);SetTargetFPS(60);
