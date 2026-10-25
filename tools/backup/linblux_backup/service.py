@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import signal
 import shutil
 import subprocess
 import sys
@@ -108,3 +109,20 @@ def install(runner: BackupRunner, backend: str, config_path: str | None = None) 
     record.write_text(json.dumps(result, indent=2) + "\n")
     record.chmod(0o600)
     return result
+
+
+def restart(runner: BackupRunner, config_path: str | None = None) -> dict:
+    if runner.daemon_running():
+        pid = int(runner.lock_path.read_text().split()[0])
+        process = Path(f"/proc/{pid}")
+        command = (process / "cmdline").read_bytes().split(b"\0")
+        expected = str(runner.project / "tools/backup/backup.py").encode()
+        if process.stat().st_uid != os.getuid() or expected not in command or b"run" not in command:
+            raise StoreError("monitor não identificado com segurança; nenhum processo encerrado")
+        os.kill(pid, signal.SIGTERM)
+        deadline = time.monotonic() + 10
+        while runner.daemon_running() and time.monotonic() < deadline:
+            time.sleep(.05)
+        if runner.daemon_running():
+            raise StoreError("monitor ainda finaliza um ciclo; nova instância não iniciada")
+    return start(runner, config_path)

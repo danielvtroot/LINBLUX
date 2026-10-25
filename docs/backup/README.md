@@ -63,6 +63,7 @@ ativo. Não se instala systemd sobre outro init nem se altera a main.
 ```bash
 python3 tools/backup/backup.py service install --backend auto
 python3 tools/backup/backup.py service start   # idempotente
+python3 tools/backup/backup.py service restart # carregar código/configuração nova
 crontab -l                                  # confira as duas linhas LINBLUX
 python3 tools/backup/backup.py status --json
 ```

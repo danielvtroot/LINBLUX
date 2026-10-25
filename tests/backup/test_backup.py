@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT / "tools" / "backup"))
 from linblux_backup.config import BackupConfig  # noqa: E402
 from linblux_backup.runner import BackupRunner, Logger, status_snapshot  # noqa: E402
 from linblux_backup.selection import Matcher  # noqa: E402
-from linblux_backup.service import cron_text, start  # noqa: E402
+from linblux_backup.service import cron_text, start, restart  # noqa: E402
 from linblux_backup.store import StoreError  # noqa: E402
 
 # Fixtures build the PEM marker at runtime so this file never contains a
@@ -152,6 +152,13 @@ class CheckpointTests(BackupTestCase):
         self.assertIn("src/big.cpp", skipped)
         self.assertIn("src/credentials.txt", skipped)
         self.assertIsNotNone(result.checkpoint)
+
+    def test_scanner_blocks_project_keys_and_fine_grained_tokens(self) -> None:
+        (self.project / "src/project-token.cpp").write_text("sk-" + "proj-" + "x" * 40)
+        (self.project / "src/github-token.cpp").write_text("github_" + "pat_" + "y" * 40)
+        selected = self.runner().collect()
+        self.assertIn("src/project-token.cpp", {item["path"] for item in selected.skipped})
+        self.assertIn("src/github-token.cpp", {item["path"] for item in selected.skipped})
 
     def test_checkpoint_waits_for_the_configured_interval(self) -> None:
         from datetime import datetime, timedelta, timezone
@@ -382,6 +389,10 @@ class SafetyAndServiceTests(BackupTestCase):
             while not runner.store.head() and time.monotonic() < deadline:
                 time.sleep(.05)
             self.assertIsNotNone(runner.store.head())
+            replacement = restart(runner)
+            self.assertTrue(replacement["active"])
+            self.assertNotEqual(replacement["pid"], result["pid"])
+            result = replacement
         finally:
             os.kill(result["pid"], signal.SIGTERM)
             deadline = time.monotonic() + 3

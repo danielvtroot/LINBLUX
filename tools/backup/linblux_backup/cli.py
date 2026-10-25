@@ -46,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify = subcommands.add_parser("verify", help="clona o branch remoto e valida a restauração")
     _add_common(verify)
     service = subcommands.add_parser("service", help="instala/inicia serviço do usuário (systemd ou cron)")
-    service.add_argument("action", choices=("install", "start"))
+    service.add_argument("action", choices=("install", "start", "restart"))
     service.add_argument("--backend", choices=("auto", "systemd", "cron"), default="auto")
     _add_common(service)
     return parser
@@ -215,7 +215,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "service":
         from . import service
         try:
-            result = service.install(runner, args.backend, args.config) if args.action == "install" else service.start(runner, args.config)
+            result = service.install(runner, args.backend, args.config) if args.action == "install" else getattr(service, args.action)(runner, args.config)
         except (StoreError, OSError, subprocess.TimeoutExpired) as failure:
             print(f"Serviço não confirmado: {failure}", file=sys.stderr)
             return 1

@@ -24,7 +24,8 @@ SECRET_PATTERNS = (
     re.compile(rb"\bAKIA[0-9A-Z]{16}\b"),
     re.compile(rb"\bASIA[0-9A-Z]{16}\b"),
     re.compile(rb"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
-    re.compile(rb"\bsk-[A-Za-z0-9]{20,}\b"),
+    re.compile(rb"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
+    re.compile(rb"\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}\b"),
     re.compile(rb"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),
     re.compile(rb"\bAIza[0-9A-Za-z_-]{35}\b"),
 )

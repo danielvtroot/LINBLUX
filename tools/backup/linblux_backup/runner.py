@@ -5,7 +5,9 @@ from __future__ import annotations
 import fcntl
 import os
 import subprocess
+import signal
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -235,22 +237,30 @@ class BackupRunner:
             self.log("outro daemon de backup já está ativo; encerrando")
             return 0
         started = time.monotonic()
+        stop = threading.Event()
+        previous_handler = signal.signal(signal.SIGTERM, lambda *_: stop.set())
         self.log(
             f"monitorando {self.project} → {self.config.branch} em {self.remote_url} "
             f"(checkpoint a cada {self.config.checkpoint_interval_seconds:.0f}s)"
         )
-        while True:
-            try:
-                result = self.run_once()
-                if result.error:
-                    self.log(f"aviso: {result.error}")
-            except (StoreError, OSError) as failure:
-                self.state.last_error = str(failure)
-                self.state.save(self.state_path)
-                self.log(f"erro: {failure}")
-            if stop_after is not None and time.monotonic() - started >= stop_after:
-                return 0
-            time.sleep(self.config.poll_interval_seconds)
+        try:
+            while not stop.is_set():
+                try:
+                    result = self.run_once()
+                    if result.error:
+                        self.log(f"aviso: {result.error}")
+                except (StoreError, OSError) as failure:
+                    self.state.last_error = str(failure)
+                    self.state.save(self.state_path)
+                    self.log(f"erro: {failure}")
+                if stop_after is not None and time.monotonic() - started >= stop_after:
+                    return 0
+                stop.wait(self.config.poll_interval_seconds)
+            return 0
+        finally:
+            signal.signal(signal.SIGTERM, previous_handler)
+            self._lock_handle.close()
+            self._lock_handle = None
 
 
 def status_snapshot(runner: BackupRunner) -> dict:
