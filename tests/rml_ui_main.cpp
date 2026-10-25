@@ -358,8 +358,11 @@ end)
             // Nome amigável é editável e persiste em assets/image-names.json.
             clickVisible("cmd-show:assets-");frames(3);
             clickVisible("cmd-rename-image-"+importedImage);
+            CHECK(ui.frontend()->elementText("dialog-title")=="Renomear imagem");
             click("dialog-value");key("ctrl+a");event("type --clearmodifiers Textura importada");
             click("dialog-confirm");frames(2);
+            if(ui.frontend()->elementBounds("dialog-value").width>0)
+                std::fprintf(stderr,"rename dialog still open; error=%s desc=%s\n",ui.frontend()->elementText("dialog-error").c_str(),ui.frontend()->elementText("dialog-description").c_str());
             CHECK(game::ImageDisplayName(game::AssetsDir(),importedImage)=="Textura importada");
             CHECK(ui.frontend()->elementBounds("image-query-"+importedImage).width>0);
             // Excluir imagem em uso é recusado com relatório de dependências.
