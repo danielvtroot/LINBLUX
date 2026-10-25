@@ -17,7 +17,7 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 | --- | --- | --- | --- |
 | 0 AutoBackup | PUBLICADO | cd4fb406cfccc6b030e56eadbede0c3965ef66f3, push main confirmado. Monitor labubu ativo via cron, @reboot/watchdog, checkpoints e push automático isolados. Clone remoto recuperou 315 arquivos; índice/main intactos; reinício em 20,005 s. Offline 20/20 e IMPACT 17/17, cobertura global parcial. Relatório 13. | Destino externo privado não informado (cópia externa não configurada). Backend systemd não executável neste host. |
 | 1 Lua/scripting | EM DESENVOLVIMENTO | Commits 5139c20, 5380967, cf53b09; guia SCRIPTING_LUA e testes studio/script_input_ui existentes. | Componentes/transformações/câmera/tempo/persistência restantes; áudio e UI integrados nas fases dependentes; novos testes. |
-| 2 NPCs/navegação | PENDENTE | Não se declara sistema implementado. | Entidades, rig/animações, vida/movimento, navegação física, oito demonstrações reais. |
+| 2 NPCs/navegação | EM DESENVOLVIMENTO | 5f29424: NPC como Part com `NpcProperties` persistidas + `NpcSystem`; grade de navegação XZ + A*; vida/dano/morte/respawn; `linblux.npc` (create/attach/move_to/health/...); degrau ≤1,2. Relatório 20. Studio 1824 verificações, FAST 13/13, IMPACT 22/22, quatro casos NPC no Player. | Rigs/animações de NPC, combate com armas/projéteis e as oito demonstrações completas da fase. |
 | 3 Áudio | PENDENTE | Nenhuma API de áudio anunciada como pronta. | Importação MP3/WAV/OGG, streaming, Editor/Player/Lua, referências, persistência/exportação. |
 | 4 Imagens/decals | PENDENTE | Há infraestrutura de imagens e superfícies a auditar com ATLAS. | Verificar/ampliar operações de assets, propriedades/Lua, exclusão segura, persistência/exportação. |
 | 5 Rosto de fábrica | PENDENTE | Não remover imagens de experiências existentes. | Identificar aplicação automática e alterar só fábrica com testes de rig/spawn. |
@@ -129,3 +129,34 @@ Checkpoint final de código: 4ce62e2b980bbb92ee7d9174ff56ec57a7bcf5f5. AutoBacku
 push/checkpoint de backup 7d6d02774dd9 confirmado, sem alterações cobertas
 pendentes. Nenhuma compilação ou bateria de testes ativa ao encerrar.
 Parada por solicitação explícita do usuário, para economizar créditos.
+
+## Checkpoint NPCs e navegação — 25/10/2026
+
+Incrementos 1–4 da missão de NPCs publicados como uma unidade funcional em
+`5f29424d29f20ddecec53fe6557db9ce9f2b324e` (código) e
+`1fad7e30786040412d5c56909e606f03c01df901` (exemplos, testes e docs), com push
+normal e hash remoto confirmado em `origin/main` (base anterior `48dba40`).
+Relatório 20 descreve a
+entrega completa: API `linblux.npc`, `game::NpcSystem`, `game::NavGrid` (grade XZ
++ A*), trava de rotação/degrau no `PhysicsWorld`, persistência no campo `npc` do
+objeto JSON, três exemplos Lua reais e testes headless.
+
+Evidência: `linblux_studio` com 1824 verificações e zero falhas (inclui
+`LinbluxNpc` e `NpcExamples`), `linblux_lua_player_validation` com 23 casos no
+binário real do Player (quatro novos de NPC), TURBO FAST 13/13 (15,3 s) e TURBO
+IMPACT 22/22 (84,6 s), cobertura global parcial declarada pelo TURBO. Nenhum
+FULL e nenhum teste gráfico novo: não houve alteração de frontend.
+
+Limitações registradas, não maquiadas: grade XZ em vez de navmesh; apenas
+geometria estática entra na navegação; sem saltos, sem ligação entre ilhas e sem
+desvio dinâmico de agentes; degraus acima de 1,2 elevam a `unreachable`; o
+agente padrão da grade é uma caixa de raio 1,0 e altura 4,5; vida/destino/
+waypoints são estado de execução e não são gravados.
+
+Fase 2 continua EM DESENVOLVIMENTO. Próximo incremento pendente: rigs/animações
+para NPCs e combate com armas/projéteis, seguido das oito demonstrações
+exigidas. Áudio (3), imagens/decals (4), rosto de fábrica (5), UI Lua (6), vida
+circular (7), menu lateral (8) e integração (9) permanecem pendentes. O destino
+externo privado do AutoBackup continua não configurado. Diffs preexistentes em
+`.opencode`, `AGENTS.md`, locales, `EditorUI/GamePanels`, `engine_default_restart`
+e ferramentas TURBO foram preservados e não entraram nestes commits.
