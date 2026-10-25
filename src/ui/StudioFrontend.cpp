@@ -632,7 +632,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(a.first=="spawn"||a.first=="Spawn"||a.first=="spawn_priority"||a.first=="SpawnPriority")continue;
             // Imagens de superfície têm seletor visual próprio; não repetir o
             // caminho técnico como campo de texto avançado.
-            if(a.first=="decal_image"||a.first=="texture_image")continue;
+            if(a.first.rfind("decal_",0)==0||a.first.rfind("texture_",0)==0)continue;
             if(!attributesOpen){group("ATTRIBUTES");attributesOpen=true;}
             std::string v;
             if(const auto* text=std::get_if<std::string>(&a.second))v=*text;
@@ -815,7 +815,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         } else {
             if(GetTime()-imageScan>2){images=game::ListImages(game::AssetsDir());imageScan=GetTime();}
             const auto sounds=game::ListAudioAssets(game::AssetsDir());
-            s="<h2>Imagens locais</h2><p class=\"muted\">PNG / JPEG · selecione uma peça e aplique adesivo ou textura. Renomear muda só o nome exibido.</p>"+Button("import-dialog","Importar imagem","folder");
+            s="<h2>Imagens locais</h2><p class=\"muted\">PNG / JPEG · selecione uma peça e aplique adesivo ou textura. Renomear muda só o nome exibido.</p>"+Button("import-dialog","Importar imagem","folder","","assets");
             if(images.empty())s+="<p>Nenhuma imagem importada ainda.</p>";
             s+="<div class=\"asset-grid\">";
             for(const auto& image:images){const auto path=std::filesystem::absolute(std::filesystem::path(game::AssetsDir())/image.filename).string();
