@@ -33,6 +33,14 @@ experiências/defaults que carregam scripts e testes de UI que executam Play.
 **Como estender:** adicione bindings com validação de tipo/handle e teste Lua;
 não exponha ponteiros de autoria. Mantenha mensagens e erros observáveis.
 
+**API v1 LINBLUX:** `linblux.scene`, `linblux.events`, `linblux.time`,
+`linblux.vec3`, contexto por script (`self`/`script`) e handles próprios com
+propriedades minúsculas. Os bindings legados preservam seus nomes. Veja
+[SCRIPTING_LUA](../../SCRIPTING_LUA.md) para contrato, cotas e exemplos executados
+por `linblux_studio`. Listeners/tarefas de scripts removidos ou desabilitados e
+escopos destruídos são cancelados nos pontos seguros do scheduler. Lua roda
+antes de `PhysicsWorld::syncScene`, nunca durante o passo de Bullet.
+
 **Limites:** não é um sandbox de segurança contra código nativo arbitrário;
 não há multiplayer/rede. Coleta de lixo/limites são os do estado Lua e do
 runtime, não um isolamento de processos.
