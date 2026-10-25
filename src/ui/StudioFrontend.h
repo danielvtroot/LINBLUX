@@ -19,6 +19,9 @@ public:
     // Diagnostic geometry/state, also used by actual GUI integration tests.
     Rectangle elementBounds(const std::string& id) const;
     std::string elementText(const std::string& id) const;
+    // Rola o painel até o controle ficar visível. Usado por automação de UI e
+    // por foco de teclado em painéis longos (galeria de imagens).
+    void scrollIntoView(const std::string& id);
     bool textFocused() const;
     void enableExperiences(experiences::ExperienceManager& manager,bool home);
     void resetDocumentView();
