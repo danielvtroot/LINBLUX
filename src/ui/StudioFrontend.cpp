@@ -512,7 +512,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             text("property-title",decal?decal->name+" · Adesivo":game::BodyDisplayName(body.name)+" · corpo R6");
             auto field=[&](const char* key,const std::string& v){s+="<div class=\"property\"><label>"+std::string(key)+"</label><input id=\"rig-prop-"+key+"\" data-rig-property=\""+key+"\" value=\""+Escape(v)+"\"/></div>";};
             if(decal) {
-                s=Button("rig-decal-add","Adicionar adesivo","image")+Button("import-dialog","Importar imagem","folder")+"<div class=\"property-group\">ADESIVO</div>";field("Name",decal->name);
+                s=Button("rig-decal-add","Adicionar adesivo","image")+Button("import-dialog","Importar imagem","folder")+Button("show:assets","Recursos de imagem","image")+"<div class=\"property-group\">ADESIVO</div>";field("Name",decal->name);
                 s+="<div class=\"property\"><label>Face</label><select id=\"rig-prop-Face\" data-rig-property=\"Face\">";
                 const char* faces[]={"Frente (-Z)","Trás (+Z)","Esquerda (-X)","Direita (+X)","Topo (+Y)","Base (-Y)"};
                 for(int i=0;i<6;++i)s+="<option value=\""+std::to_string(i)+"\" "+(decal->surface.face==i?"selected=\"selected\"":"")+">"+faces[i]+"</option>";
@@ -521,7 +521,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                 field("Transparency",Num(decal->surface.transparency));
                 s+=Button("rig-decal-delete","Remover adesivo","delete")+Button("show:rig","Editar corpo","rig");
                 s+="<div class=\"property-help\">ID: rig://"+Escape(rig->id)+"/"+Escape(decal->id)+"<br/>Membro: "+Escape(game::BodyDisplayName(body.name))+"</div>";
-            }else s="<div class=\"property-help\">Selecione um adesivo para editar face e imagem. A frente é o eixo local -Z.</div>"+Button("rig-decal-add","Adicionar adesivo","image")+Button("import-dialog","Importar imagem","folder")+Button("show:rig","Editar corpo","rig");
+            }else s="<div class=\"property-help\">Selecione um adesivo para editar face e imagem. A frente é o eixo local -Z.</div>"+Button("rig-decal-add","Adicionar adesivo","image")+Button("import-dialog","Importar imagem","folder")+Button("show:assets","Recursos de imagem","image")+Button("show:rig","Editar corpo","rig");
             html("property-body",s,propertyMarkup);return;
         }
         if(!node) {auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);text("property-title",rig?rig->name:"No selection");s=rig?Button("show:rig","Edit character","rig")+Button("show:animation","Animate","animation")+Button("rename","Rename")+Button("duplicate","Duplicate")+Button("delete","Delete"):"<div class=\"empty-state\">Select an object to edit properties.</div>";html("property-body",s,propertyMarkup);return;}
