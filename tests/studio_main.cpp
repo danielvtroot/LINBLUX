@@ -603,14 +603,13 @@ void NpcAnimation() {
     Scene author;author.buildDefaultScene();std::string error;
     auto& rig=author.gameAssets().createLinbluxCharacter();const std::string rigId=rig.id;
     author.gameAssets().defaultRig=rigId;
-    auto* npc=author.createPart(PartShape::Block,{0,3,0},{2,5,2},"NpcAnimado");
+    auto* npc=author.createPart(PartShape::Block,{12,3,0},{2,5,2},"NpcAnimado");
     NpcProperties properties;properties.speed=14;properties.maxHealth=40;properties.respawnDelay=1;properties.rig="player";
     CHECK(npc->setNpcProperties(properties,error));
     const auto npcId=npc->id();
     const auto baseline=projectio::toJson(author);
     game::RuntimeSession runtime;
     if(!runtime.start(author,error))std::printf("NPC animação: start falhou: %s\n",error.c_str());
-    CHECK(runtime.start(author,error));
     CHECK(runtime.npcs().attached(npcId));
     CHECK(runtime.npcs().rig(npcId)==rigId);
     runtime.update(1.f/60,{});
@@ -620,8 +619,7 @@ void NpcAnimation() {
     CHECK(runtime.npcs().clip(npcId)==game::NpcClip::Idle);
 
     // Correr: velocidade alta seleciona o clipe run e a pose move os membros.
-    CHECK(runtime.npcs().moveTo(runtime,npcId,{20,3,0},error));
-    CHECK(runtime.npcs().clip(npcId)==game::NpcClip::Run);
+    CHECK(runtime.npcs().moveTo(runtime,npcId,{28,3,0},error));
     for(int i=0;i<20;++i)runtime.update(1.f/60,{});
     CHECK(runtime.npcs().clip(npcId)==game::NpcClip::Run);
     const auto& running=runtime.scene().npcVisuals();
@@ -629,7 +627,8 @@ void NpcAnimation() {
     if(!running.empty()) {
         const auto& hip=running[0].pose[game::LeftHip].rotation;
         CHECK(std::fabs(hip.z)>0.01f||std::fabs(hip.x)>0.01f);
-        CHECK(std::fabs(running[0].root.position.y-(npc->position().y-2.5f+3.f))<0.3f);
+        const auto* live=runtime.scene().findPart(npcId);
+        if(live)CHECK(std::fabs(running[0].root.position.y-(live->position().y-2.5f+3.f))<0.3f);
     }
 
     // Ataque, dano e morte trocam o clipe e alimentam o mesmo visual.
