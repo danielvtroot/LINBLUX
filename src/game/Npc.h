@@ -8,6 +8,7 @@
 
 #include "core/Math.h"
 #include "game/Navigation.h"
+#include "game/Rig.h"
 #include "objects/Instance.h"
 #include "objects/Part.h"
 
