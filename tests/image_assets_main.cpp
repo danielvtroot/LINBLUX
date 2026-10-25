@@ -117,7 +117,7 @@ int main() {
         const auto derived = library.create(fresh);
         Scene derivedScene;
         library.open(derived, derivedScene);
-        const auto* derivedPart = derivedScene.findPart(decalPart->id());
+        auto* derivedPart = derivedScene.findPart(decalPart->id());
         require(derivedPart && attribute(*derivedPart, "decal_image") == reference,
                 "Decal não foi herdado pelo padrão da engine");
         require(fs::is_regular_file(derived.root / reference),

@@ -171,7 +171,7 @@ std::string relocateWorld(const Scene& scene,const fs::path& from,const fs::path
 Scene& loadWorld(Scene& scene,const Experience& e) {
     const auto world=read(containedFile(e.root,e.manifest.mainPlace));
     auto j=boundedJson(world);
-    walkImages(j,[&](const std::string& raw){mediaPath(raw);const std::string ref=game::NormalizeImageReference(raw);
+    walkImages(j,[&](const std::string& raw){const std::string ref=game::NormalizeImageReference(raw);
         if(!ref.empty()&&safeRelativePath(ref)) {
             const auto file=containedFile(e.root,ref);ImageInfo info;
             if(fs::is_regular_file(file)&&ReadSafeImageInfo(file.string(),info))return ref;
