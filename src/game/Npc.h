@@ -20,8 +20,8 @@ const char* NpcStateName(NpcState state);
 bool NpcStateFromName(const std::string& name, NpcState& out);
 
 // Clipe procedural do rig do NPC. Não depende de AnimationClip importado:
-// idle/walk/run/attack/hurt/death são derivados do estado do controlador e
-exportados para o renderer em Scene::npcVisuals().
+// idle/walk/run/attack/hurt/death vêm do estado do controlador e o resultado
+// é publicado para o renderer em Scene::npcVisuals().
 enum class NpcClip { Idle, Walk, Run, Attack, Hurt, Death };
 const char* NpcClipName(NpcClip clip);
 bool NpcClipFromName(const std::string& name, NpcClip& out);
