@@ -61,7 +61,9 @@ int main() {
                 for (const auto& decal : body.decals)
                     require(decal.surface.image.empty(), "Rig de fábrica veio com decal de rosto");
             }
-        const auto factoryCharacter = json::parse(read(root / "factory/character.loblox.json"));
+        const auto factoryCharacterPath = game::BuiltinAssetPath("assets/defaults/factory/character.loblox.json");
+        require(!factoryCharacterPath.empty(), "Personagem de fábrica não encontrado");
+        const auto factoryCharacter = json::parse(read(factoryCharacterPath));
         for (const auto& rig : factoryCharacter["game"]["rigs"])
             for (const auto& body : rig["bodies"]) {
                 require(!body.contains("image"), "Personagem de fábrica traz imagem embutida");
