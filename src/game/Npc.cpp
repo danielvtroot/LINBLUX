@@ -401,7 +401,24 @@ void NpcSystem::tick(RuntimeSession& runtime, float dt) {
         if (controller.state != NpcState::Moving) controller.state = NpcState::Moving;
 
         if (controller.speed > .01f && moving < controller.speed * .2f) {
+            const float previous = controller.stuckTime;
             controller.stuckTime += dt;
+            // Degrau de no maximo maxStep: so eleva o corpo onde ha espaco livre
+            // a frente. Nao atravessa paredes e nao substitui o deslocamento.
+            if (previous < .25f && controller.stuckTime >= .25f) {
+                const Vector3 size = part->size();
+                const float reach = std::max(size.x, size.z) * .5f + .05f;
+                const Vector3 half = Vector3Scale(size, .49f);
+                for (float lift = .1f; lift <= config_.maxStep + .01f; lift += .1f) {
+                    const Vector3 candidate{position.x + direction.x * reach, position.y + lift,
+                                            position.z + direction.z * reach};
+                    if (!runtime.physics_->isSpaceClear(candidate, half, controller.part)) continue;
+                    part->setPosition(candidate);
+                    runtime.physics_->syncScene(*runtime.scene_);
+                    controller.stuckTime = 0;
+                    break;
+                }
+            }
             if (controller.stuckTime >= 1.f) {
                 controller.stuckTime = 0;
                 const auto planned = controller.target;

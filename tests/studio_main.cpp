@@ -545,13 +545,18 @@ void NpcExamples() {
         Scene author;author.buildDefaultScene();std::string error;
         author.createScript(InstanceClass::Script,nullptr,"npc_patrulha.lua")->source=source("npc_patrulha.lua");
         const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
-        for(int i=0;i<600;++i)runtime.update(1.f/60,{});
+        float farthest=0;
+        for(int i=0;i<600;++i){
+            runtime.update(1.f/60,{});
+            const auto* guard=find(runtime,"GuardaPatrulha");
+            if(guard)farthest=std::max(farthest,Vector3Distance(guard->position(),{-30,2.6f,-30}));
+        }
         const auto& attrs=runtime.scene().workspace()->attributes();
         CHECK(attrs.count("patrulha_pronta"));
         CHECK(attrs.count("patrulha_pontos")&&std::get<double>(attrs.at("patrulha_pontos"))>=2);
         CHECK(!attrs.count("patrulha_inacessivel"));
         const auto* guard=find(runtime,"GuardaPatrulha");CHECK(guard!=nullptr);
-        if(guard)CHECK(Vector3Distance(guard->position(),{ -30,2.6f,-30 })>5);
+        CHECK(farthest>10); // percorreu a rota, nao ficou parado
         noErrors(runtime,"patrulha");CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
     }
 

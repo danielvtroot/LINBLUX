@@ -544,6 +544,39 @@ bool PhysicsWorld::setBodyYaw(InstanceId id, float yawDegrees) {
     return true;
 }
 
+bool PhysicsWorld::isSpaceClear(Vector3 center, Vector3 halfExtents, InstanceId ignore) const {
+    if (!std::isfinite(center.x) || !std::isfinite(center.y) || !std::isfinite(center.z) ||
+        !(halfExtents.x > 0) || !(halfExtents.y > 0) || !(halfExtents.z > 0)) {
+        return false;
+    }
+    btBoxShape box(btVector3(halfExtents.x, halfExtents.y, halfExtents.z));
+    btCollisionObject probe;
+    probe.setCollisionShape(&box);
+    probe.setCollisionFlags(btCollisionObject::CF_NO_CONTACT_RESPONSE);
+    btTransform transform;
+    transform.setIdentity();
+    transform.setOrigin(ToBullet(center));
+    probe.setWorldTransform(transform);
+    struct Clear final : btCollisionWorld::ContactResultCallback {
+        InstanceId ignore;
+        mutable bool blocked = false;
+        bool needsCollision(btBroadphaseProxy* proxy) const override {
+            const auto* body = static_cast<const btCollisionObject*>(proxy->m_clientObject);
+            const auto* part = static_cast<const Part*>(body->getUserPointer());
+            if (!part || part->id() == ignore || !body->hasContactResponse()) return false;
+            return ContactResultCallback::needsCollision(proxy);
+        }
+        btScalar addSingleResult(btManifoldPoint& point, const btCollisionObjectWrapper*, int, int,
+                                 const btCollisionObjectWrapper*, int, int) override {
+            if (point.getDistance() <= .001f) blocked = true;
+            return 0;
+        }
+    } callback;
+    callback.ignore = ignore;
+    world_->contactTest(&probe, callback);
+    return !callback.blocked;
+}
+
 bool PhysicsWorld::lockAngularMotion(InstanceId id, bool locked) {
     const auto it = bodies_.find(id);
     if (it == bodies_.end()) return false;

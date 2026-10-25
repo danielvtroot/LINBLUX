@@ -92,6 +92,10 @@ public:
     bool setBodyYaw(InstanceId id, float yawDegrees);
     bool lockAngularMotion(InstanceId id, bool locked);
 
+    // Verdadeiro quando nenhuma Part solida ocupa a caixa indicada. Usado pelo
+    // degrau do NPC: a subida so e aplicada onde o corpo cabe de fato.
+    bool isSpaceClear(Vector3 center, Vector3 halfExtents, InstanceId ignore) const;
+
 private:
     friend class game::RuntimeSession; // single explicitly-owned runtime capsule
     struct BodyEntry {
