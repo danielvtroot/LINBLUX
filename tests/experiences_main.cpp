@@ -31,7 +31,9 @@ int main(int argc,char** argv) {
         try {
             ex::ExperienceManager target(ex::ExperienceManager::defaultDataRoot(),"/factory-unavailable");
             const auto e=target.importPackage(argv[2]);Scene world;target.open(e,world);
-            if(world.parts().empty()||world.gameAssets().rigs.empty()||game::ProjectAssetRoot().find(std::getenv("HOME"))!=0||game::ResolveImagePath(game::AssetsDir(),e.manifest.faceImage).empty())return 3;
+            if(world.parts().empty()||world.gameAssets().rigs.empty()||game::ProjectAssetRoot().find(std::getenv("HOME"))!=0)return 3;
+            // Rosto opcional: quando existe, precisa resolver; ausente é válido.
+            if(!e.manifest.faceImage.empty()&&game::ResolveImagePath(game::AssetsDir(),e.manifest.faceImage).empty())return 3;
             game::RuntimeSession runtime;std::string error;if(!runtime.start(world,error))return 4;runtime.update(1.f/60,{});runtime.stop();return 0;
         } catch(const std::exception& e){std::fprintf(stderr,"Receiver subprocess: %s\n",e.what());return 5;}
     }
@@ -116,8 +118,12 @@ int main(int argc,char** argv) {
         if(pid==0){setenv("HOME",receivingHome.c_str(),1);setenv("XDG_DATA_HOME",receivingData.c_str(),1);if(chdir(receivingHome.c_str())!=0)_exit(6);execl(executable.c_str(),executable.c_str(),"--receive",packagePath.c_str(),static_cast<char*>(nullptr));_exit(7);}
         if(pid>0){int status=0;CHECK(waitpid(pid,&status,0)==pid);CHECK(WIFEXITED(status)&&WEXITSTATUS(status)==0);}
         auto received=receiver.importPackage(portable);CHECK(received.manifest.id==custom.manifest.id);CHECK(received.manifest.installationId!=custom.manifest.installationId);
-        CHECK(!received.manifest.faceImage.empty());CHECK(fs::is_regular_file(received.root/received.manifest.faceImage));
+        // Nada de rosto de fábrica imposto: a experiência é válida sem
+        // faceImage e o rig continua sendo a fonte visual do personagem.
+        CHECK(received.manifest.faceImage.empty());
         author.close();Scene receivedScene;receiver.open(received,receivedScene);
+        for(const auto& rig:receivedScene.gameAssets().rigs)for(const auto& body:rig.bodies)
+            if(!body.image.empty())CHECK(!game::ResolveImagePath(game::AssetsDir(),body.image).empty());
         CHECK(receivedScene.findPart(partId));CHECK(receivedScene.gameAssets().findRig(rigId));
         const auto& receivedBody=receivedScene.findPart(partId)->bodyProperties();CHECK(NearlyEqual(receivedBody.density,2.5f));CHECK(NearlyEqual(receivedBody.friction,.3f));CHECK(NearlyEqual(receivedBody.restitution,.7f));CHECK(NearlyEqual(receivedBody.linearDamping,.2f));CHECK(NearlyEqual(receivedBody.angularDamping,.4f));
         CHECK(fs::current_path()==cwd);CHECK(!game::ResolveImagePath(game::AssetsDir(),received.manifest.banner).empty());
