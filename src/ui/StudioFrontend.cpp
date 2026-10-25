@@ -955,6 +955,7 @@ void StudioFrontend::filter(EditorInput& in,InputContext& c) {
 Rectangle StudioFrontend::viewport()const{return impl_->view;}
 Rectangle StudioFrontend::elementBounds(const std::string& id)const{return impl_->bounds(id);}
 std::string StudioFrontend::elementText(const std::string& id)const{auto* e=impl_->el(id);return e?e->GetInnerRML():std::string();}
+void StudioFrontend::scrollIntoView(const std::string& id){if(auto* e=impl_->el(id))e->ScrollIntoView(false);}
 bool StudioFrontend::textFocused()const{return impl_->editing();}
 void StudioFrontend::enableExperiences(experiences::ExperienceManager& manager,bool home) {
     auto& p=*impl_;
