@@ -29,7 +29,7 @@ css+='.pause-tabs button { border-radius: 6px; }\n'
 css+='#game-topbar button { border-radius: 7px; }\n'
 css+=f".group-tools button.active {{ background-color: {p['selected']}; border-color: {p['accent']}; }}\n"
 css+=f".group-tools button:hover, #experience-file-menu button:hover {{ background-color: {p['hover']}; border-color: {p['accent']}; }}\n"
-css+='.group-tools button, .compact .group-tools button { width: auto; min-width: 60px; flex: 0 0 auto; padding: 3px 8px; }\n'
+css+='.group-tools button { width: 86px; min-width: 86px; flex: 0 0 86px; padding: 3px 3px; }\n.compact .group-tools button { width: 80px; min-width: 80px; flex: 0 0 80px; padding: 3px 3px; }\n'
 
 ray='#pragma once\n#include "raylib.h"\nnamespace loblox::ui::theme {\n'
 for name,value in p.items():

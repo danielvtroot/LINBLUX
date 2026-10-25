@@ -96,7 +96,7 @@ static void selectPart(Camera3D camera) {
 }
 int main() {
     SetConfigFlags(FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT);
-    InitWindow(1024, 640, "Loblox Open-Source 0.2");
+    InitWindow(1024, 640, "LINBLUX Engine · protótipo histórico 0.2");
     SetTargetFPS(60);
     DisableCursor();
     // Starter playground: anchored platforms and a few loose test objects.
@@ -147,7 +147,7 @@ int main() {
         drawAvatar();
         DrawGrid(40,1.0f);
         EndMode3D();
-        DrawRectangle(10,10,250,22,Fade(BLACK,0.55f)); DrawText("LOBLOX OPEN-SOURCE  |  v0.2",18,15,12,RAYWHITE);
+        DrawRectangle(10,10,250,22,Fade(BLACK,0.55f)); DrawText("LINBLUX ENGINE  |  protótipo v0.2",18,15,12,RAYWHITE);
         DrawText(TextFormat("Parts: %i   Physics: %s",(int)parts.size(),physics?"ON":"OFF"),12,38,14,DARKBLUE);
         DrawText("WASD mover  ESPACO pular  Mouse olhar",12,58,13,DARKBLUE);
         DrawText("B bloco  N esfera  clique selecionar  G soltar/fixar",12,76,13,DARKBLUE);

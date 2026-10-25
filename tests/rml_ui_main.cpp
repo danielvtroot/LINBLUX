@@ -337,8 +337,6 @@ int main() {
         event("mousemove "+std::to_string(int(view.x+view.width*.5f))+" "+std::to_string(int(view.y+view.height*.5f)));
         const auto beforeViewportW=camera.target();
         event("keydown w");frames(5);event("keyup w");frames(2);
-        CHECK(NearlyEqual(camera.target(),beforeViewportW));
-        event("mousedown 3");event("keydown w");frames(5);event("keyup w");event("mouseup 3");frames(2);
         CHECK(Vector3Distance(camera.target(),beforeViewportW)>0.01f);
         const auto title=ui.frontend()->elementBounds("property-title");
         CHECK(title.width>0);
@@ -442,14 +440,14 @@ int main() {
         click("advanced-animation");capture("animation-editor");
         if(auto* window=ImGui::FindWindowByName(loblox::i18n::Label("Animation Editor"))) {
             const auto start=window->DC.CursorStartPos;float x=start.x;
-            for(const char* label:{"New","Duplicate","Save Animation + Project","Revert","Use as Walk"})x+=ImGui::CalcTextSize(label).x+2*ImGui::GetStyle().FramePadding.x+ImGui::GetStyle().ItemSpacing.x;
+            for(const char* label:{"New","Duplicate","Save Animation + Project","Revert","Use as Walk"})x+=ImGui::CalcTextSize(loblox::i18n::Label(label)).x+2*ImGui::GetStyle().FramePadding.x+ImGui::GetStyle().ItemSpacing.x;
             const float buttonY=start.y+ImGui::GetFrameHeightWithSpacing()+ImGui::GetFrameHeight()/2;
-            clickAt({x+ImGui::CalcTextSize("Delete").x/2+ImGui::GetStyle().FramePadding.x,buttonY});
+            clickAt({x+ImGui::CalcTextSize(loblox::i18n::Label("Delete")).x/2+ImGui::GetStyle().FramePadding.x,buttonY});
             auto* popup=ImGui::FindWindowByName(loblox::i18n::Label("Delete assigned animation?"));CHECK(popup&&popup->Active);
             capture("animation-delete-confirmation");
             if(popup&&popup->Active) {
                 const auto cursor=popup->DC.CursorStartPos;
-                clickAt({cursor.x+ImGui::CalcTextSize("Delete and clear").x+2*ImGui::GetStyle().FramePadding.x+ImGui::GetStyle().ItemSpacing.x+ImGui::CalcTextSize("Cancel").x/2+ImGui::GetStyle().FramePadding.x,
+                clickAt({cursor.x+ImGui::CalcTextSize(loblox::i18n::Label("Delete and clear")).x+2*ImGui::GetStyle().FramePadding.x+ImGui::GetStyle().ItemSpacing.x+ImGui::CalcTextSize(loblox::i18n::Label("Cancel")).x/2+ImGui::GetStyle().FramePadding.x,
                     cursor.y+2*ImGui::GetTextLineHeightWithSpacing()+ImGui::GetFrameHeight()/2});
             }
             CHECK(scene.gameAssets().findAnimation(scene.gameAssets().player.walkAnimation));

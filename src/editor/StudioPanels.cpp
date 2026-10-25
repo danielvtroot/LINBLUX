@@ -536,7 +536,7 @@ void EditorUI::drawScriptEditorBody(Instance& object,ScriptDraft& draft,bool cen
         draft.pendingCursor=0;draft.restoreFocus=true;
     }
     ImGui::SameLine();ImGui::TextDisabled(i18n::Label("%zu / 262144 bytes | Lua 5.4"),draft.text.size());
-    ImGui::SetNextItemWidth(180);ImGui::InputTextWithHint(i18n::Label("##find"),"Find text",draft.search,sizeof(draft.search));
+    ImGui::SetNextItemWidth(180);ImGui::InputTextWithHint(i18n::Label("##find"),i18n::Label("Find text"),draft.search,sizeof(draft.search));
     if(*draft.search) {
         const auto found=draft.text.find(draft.search);
         ImGui::SameLine();if(found==std::string::npos)ImGui::TextDisabled(i18n::Label("Not found"));

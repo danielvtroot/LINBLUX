@@ -10,7 +10,7 @@
  <div class="ribbon-group"><div class="group-tools"><button data-action="focus" title="Enquadrar seleção · F"><img src="icon-focus"/>Foco</button><button data-action="show:assets"><img src="icon-image"/>Imagens</button></div><div class="group-name">Superfície</div></div>
 </div>
 <div id="ribbon-Avatar" class="ribbon-page">
- <div class="ribbon-group"><div class="group-tools"><button id="cmd-r6-" data-action="r6"><img src="icon-rig"/>Criar personagem articulado</button><button id="cmd-show:rig-" data-action="show:rig"><img src="icon-rig"/>Editor de personagem</button><button id="cmd-show:animation-" data-action="show:animation"><img src="icon-animation"/>Animar</button></div><div class="group-name">Ferramentas de personagem</div></div>
+ <div class="ribbon-group"><div class="group-tools"><button id="cmd-r6-" data-action="r6"><img src="icon-rig"/>Personagem</button><button id="cmd-show:rig-" data-action="show:rig"><img src="icon-rig"/>Editar rig</button><button id="cmd-show:animation-" data-action="show:animation"><img src="icon-animation"/>Animar</button></div><div class="group-name">Ferramentas de personagem</div></div>
  <div class="ribbon-group"><div class="group-tools"><button data-action="show:settings"><img src="icon-settings"/>Jogador</button></div><div class="group-name">Configuração</div></div>
 </div>
 <div id="ribbon-Script" class="ribbon-page">

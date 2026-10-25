@@ -185,8 +185,9 @@ add_custom_target(linblux_builtin_assets ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/builtin
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/logo.png ${CMAKE_CURRENT_SOURCE_DIR}/assets/builtin/character-face.png ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/builtin)
 add_dependencies(linblux linblux_builtin_assets)
-add_custom_target(linblux_media_assets ALL COMMAND ${CMAKE_COMMAND} -E copy_directory
-  ${CMAKE_CURRENT_SOURCE_DIR}/midia ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia)
+add_custom_target(linblux_media_assets ALL
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/logo.png ${CMAKE_CURRENT_SOURCE_DIR}/midia/careditfullhd.mp4 ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia)
 add_dependencies(linblux linblux_media_assets)
 install(FILES midia/logo.png midia/careditfullhd.mp4 DESTINATION share/linblux/midia COMPONENT Linblux)
 install(TARGETS linblux RUNTIME DESTINATION bin COMPONENT Linblux)
