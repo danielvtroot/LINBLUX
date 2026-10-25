@@ -13,7 +13,6 @@ namespace loblox {
 namespace {
 
 constexpr float kMinMass = 0.1f;
-constexpr float kDensity = 1.0f;
 
 float PartVolume(const Part& part) {
     const Vector3 size = part.size();
@@ -25,7 +24,7 @@ float PartVolume(const Part& part) {
 }
 
 float PartMass(const Part& part) {
-    return part.anchored() ? 0.0f : std::max(kMinMass, PartVolume(part) * kDensity);
+    return part.anchored() ? 0.0f : std::max(kMinMass, PartVolume(part) * part.bodyProperties().density);
 }
 
 btVector3 ToBullet(Vector3 value) {
@@ -122,10 +121,11 @@ btRigidBody* PhysicsWorld::createBody(Part& part, btCollisionShape* shape) {
     auto* motionState = new btDefaultMotionState(transform);
 
     btRigidBody::btRigidBodyConstructionInfo info(mass, motionState, shape, inertia);
-    info.m_friction = 0.8f;
-    info.m_restitution = 0.0f;
-    info.m_linearDamping = 0.02f;
-    info.m_angularDamping = 0.1f;
+    const auto& properties=part.bodyProperties();
+    info.m_friction = properties.friction;
+    info.m_restitution = properties.restitution;
+    info.m_linearDamping = properties.linearDamping;
+    info.m_angularDamping = properties.angularDamping;
 
     auto* body = new btRigidBody(info);
     body->setUserPointer(&part);
@@ -287,6 +287,15 @@ void PhysicsWorld::applyChanges(Part* part) {
     if (pending.collide) {
         applyCollisionFlag(*part, entry.body);
         entry.body->activate(true);
+    }
+    if(pending.body) {
+        const auto& properties=part->bodyProperties();
+        const float mass=PartMass(*part);btVector3 inertia(0,0,0);
+        if(mass>0)entry.shape->calculateLocalInertia(mass,inertia);
+        entry.body->setMassProps(mass,inertia);entry.body->updateInertiaTensor();
+        entry.body->setFriction(properties.friction);entry.body->setRestitution(properties.restitution);
+        entry.body->setDamping(properties.linearDamping,properties.angularDamping);
+        if(!isPartEditing(part->id()))entry.body->activate(true);
     }
     dirty.clear();
 }

@@ -2251,6 +2251,13 @@ void EditorUI::drawPartProperties(Part& part) {
     if (ImGui::Checkbox(i18n::Label("CanCollide"), &canCollide)) {
         part.setCanCollide(canCollide);
     }
+    auto body=part.bodyProperties();bool bodyChanged=false;
+    bodyChanged|=ImGui::DragFloat("Densidade",&body.density,.01f,.001f,1000,"%.3f",ImGuiSliderFlags_AlwaysClamp);
+    bodyChanged|=ImGui::DragFloat("Atrito",&body.friction,.01f,0,10,"%.2f",ImGuiSliderFlags_AlwaysClamp);
+    bodyChanged|=ImGui::DragFloat("Restituição",&body.restitution,.01f,0,1,"%.2f",ImGuiSliderFlags_AlwaysClamp);
+    bodyChanged|=ImGui::DragFloat("Amortecimento linear",&body.linearDamping,.01f,0,1,"%.2f",ImGuiSliderFlags_AlwaysClamp);
+    bodyChanged|=ImGui::DragFloat("Amortecimento angular",&body.angularDamping,.01f,0,1,"%.2f",ImGuiSliderFlags_AlwaysClamp);
+    if(bodyChanged){std::string error;if(!part.setBodyProperties(body,error))setStatus(error);}
 
     ImGui::Separator();
     if (ImGui::Button(i18n::Label("Focar (F)"), ImVec2(-FLT_MIN, 0.0f))) {

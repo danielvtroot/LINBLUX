@@ -42,6 +42,7 @@ struct ParsedObject {
     PartMaterial material = PartMaterial::SmoothPlastic;
     bool anchored = false;
     bool canCollide = true;
+    BodyProperties bodyProperties;
     std::string source;
     bool enabled = true;
 };
@@ -414,6 +415,22 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
     }
     out.anchored = anchored->get<bool>();
     out.canCollide = canCollide->get<bool>();
+    if(value.contains("body")) {
+        const auto& body=value["body"];
+        if(!body.is_object()){error=prefix+"body deve ser objeto";return false;}
+        for(auto entry=body.begin();entry!=body.end();++entry) {
+            if(!entry.value().is_number()){error=prefix+"body requer números";return false;}
+            float* target=nullptr;
+            if(entry.key()=="density")target=&out.bodyProperties.density;
+            else if(entry.key()=="friction")target=&out.bodyProperties.friction;
+            else if(entry.key()=="restitution")target=&out.bodyProperties.restitution;
+            else if(entry.key()=="linearDamping")target=&out.bodyProperties.linearDamping;
+            else if(entry.key()=="angularDamping")target=&out.bodyProperties.angularDamping;
+            else {error=prefix+"body contém propriedade desconhecida: "+entry.key();return false;}
+            *target=entry.value().get<float>();
+        }
+        if(!out.bodyProperties.validate(error)){error=prefix+error;return false;}
+    }
     return true;
 }
 
@@ -507,6 +524,9 @@ std::string toJson(const Scene& scene) {
                            {"material", PartMaterialName(part->material())},
                            {"anchored", part->anchored()},
                            {"canCollide", part->canCollide()}});
+        const auto& body=part->bodyProperties();
+        objects.back()["body"]={{"density",body.density},{"friction",body.friction},
+            {"restitution",body.restitution},{"linearDamping",body.linearDamping},{"angularDamping",body.angularDamping}};
         for (const auto* child : node->children()) append(child);
     };
     for (const auto* child : scene.workspace()->children()) append(child);
@@ -764,6 +784,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         part->setMaterial(object.material);
         part->setAnchored(object.anchored);
         part->setCanCollide(object.canCollide);
+        if(!part->setBodyProperties(object.bodyProperties,error))return false;
         part->clearDirty();
     }
 

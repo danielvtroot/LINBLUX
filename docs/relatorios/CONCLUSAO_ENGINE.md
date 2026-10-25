@@ -41,7 +41,8 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 | Diagnóstico no Player | PUBLICADO | 26066dff73dc128c50987de2f5f25dfcf71ff89b, push main confirmado. Relatório 14: Player --validate + contador LuaRuntime; lua_player_validation.py, quatro cenas reais. | Validação simula 2 s e Stop, não prova todas as ações futuras. Recusa erros evictos do buffer. |
 | Segurança/cotas/erros | PUBLICADO | Base cf53b09; limites host-only, finalizadores restritos, VM sem APIs de SO; testes studio. | É limite de confiabilidade em processo, não isolamento de SO; trabalho nativo também exige limites. |
 | Persistência de scripts/autoria | PUBLICADO | ProjectIO + LinbluxExamples: salvar/reabrir e executar. | Persistência de estado de gameplay/configurações via API controlada ainda PENDENTE. |
-| Estado privado por experiência | VALIDADO NO PLAYER | Relatório 17: ProgressStore, storage Lua, Studio/Player; FAST 14/14, IMPACT 18/18 e integração gráfica pertinente 4/4. | Não exportado, limites explícitos, sem backup externo configurado. Publicação deste incremento em andamento. |
+| Estado privado por experiência | PUBLICADO | e44b4e8f07c803fe3bea4198dd234910c42808fe, remoto confirmado. Relatório 17: ProgressStore, storage Lua, Studio/Player; FAST 14/14, IMPACT 18/18 e integração gráfica pertinente 4/4. | Não exportado, limites explícitos, sem backup externo configurado. Publicado; recuperação privada externa continua pendente. |
+| Volumes Bullet e controle Lua do jogador | VALIDADO NO PLAYER | Relatório 18: overlap_box/overlap_sphere reais, filtros, cotas, intenção de movimento, salto, velocidade, força/impulso. FAST/IMPACT 13/13. | script_input_ui 1/1 em 20,792 s; publicação em andamento. Regiões contínuas e NPCs pendentes. |
 | Áudio por Lua | PENDENTE | Não há namespace documentado como implementado. | Dependência da Fase 3: backend/importação/streaming/referências reais. |
 | UI por Lua | PENDENTE | Não há namespace documentado como implementado. | Dependência da Fase 6: modelo/render/input e UI protegida. |
 
@@ -80,13 +81,13 @@ FULL ou nova validação gráfica neste incremento de scheduler/CLI. Nenhum buil
 ou teste ficou ativo; manter apenas o serviço de backup solicitado.
 
 Não há trabalho de NPC/áudio/decals/HUD/menu escondido como pronto. A próxima ação
-concreta agora é ampliar consultas espaciais reais e controle de personagem Lua.
+concreta agora é ampliar propriedades de corpos rígidos e preparar NPCs com a física existente.
 Câmera, transformações de peças e persistência privada estão implementadas/
 validadas conforme relatórios 15–17. Consultar ATLAS para PhysicsWorld,
 RuntimeSession::partMotion/PlayerInput e LuaRuntime. Não duplicar o Bullet nem
 mudar a hierarquia/serialização sem migração.
 
-Depois, tratar transformações/componentes e a persistência controlada de estado.
+Transformações/componentes e persistência controlada já estão publicados.
 Armazenamento de progresso deve usar escopo definido pelo host, diretório privado
 fora de assets exportados, validação de caminhos e limites; não expor io/os/load.
 Áudio/UI continuam dependências reais a implementar, não métodos a documentar antes
