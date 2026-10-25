@@ -136,6 +136,34 @@ Métodos: `player:damage(valor)`, `heal(valor)`, `respawn()`, `teleport(posiçã
 recursos presentes (id, nome em `name`, duração e loop). Nenhuma animação externa
 é carregada automaticamente por esses métodos.
 
+### Câmera de experiência e transições
+
+`camera.configure` também aceita `fov` vertical entre 1 e 170 graus. O campo
+cameraFov dos padrões do jogador é persistido; cenas antigas sem ele usam 60.
+No Studio, o padrão pode ser editado em “Campo de visão vertical”.
+
+`linblux.camera.set_pose({position=vetor, target=vetor, up=vetor?, fov=número?,
+duration=segundos?})` assume a câmera da experiência. Alternativamente use
+`rotation=vec3(pitch,yaw,roll)` em graus no lugar de target/up. Duração de 0 a
+60 segundos, padrão 0. Posição e alvo não podem coincidir; up não pode ser zero
+nem paralelo à direção. Opções inválidas são rejeitadas antes de alterar a câmera.
+
+Durante uma pose, mouse/zoom não movem a câmera e não forçam captura do cursor.
+ESC e o menu da aplicação continuam funcionando. A transição usa interpolação
+suave de posição/FOV e quaternion para orientação, evitando colapso na rotação
+de 180 graus. Pausa congela a transição. Teleporte preserva a pose; respawn
+reinicia a câmera nativa. Poses não fazem desvio automático de obstáculos.
+
+`camera.release()` devolve o controle ao jogador, restaurando yaw/pitch/distância
+anteriores e os padrões atuais (incluindo FOV). `configure` altera os padrões,
+sem encerrar uma pose: use release explicitamente. O controle de movimento do
+jogador mantém a referência de órbita anterior durante a pose.
+
+`camera.state()` inclui `position`, `target`, `up`, `rotation` em graus, `fov`,
+`scripted` e `transitioning`, além das consultas anteriores. A pose é transitória;
+salve o Script para reconstruí-la ao executar. [camera.lua](../assets/examples/lua/camera.lua)
+é executado após salvar/reabrir e também pelo Player independente.
+
 Teleporte exige cápsula livre e destino válido; não move o jogador para dentro
 de um obstáculo. Checkpoint sem posição usa a posição atual. Na respawn, tenta o
 checkpoint e depois os spawns normais se estiver obstruído. É estado da sessão,
