@@ -18,6 +18,13 @@ namespace loblox::game {
 enum class RuntimeState { Editing, StartingPlay, Playing, Paused, StoppingPlay };
 enum class HumanoidState { Idle, Walking, Jumping, Freefall, Landing, Dead };
 enum class PartMotion { Velocity, Force, Impulse };
+struct SpatialQuery {
+    Vector3 center{},size{1,1,1},rotation{};
+    float radius=0; // zero selects an oriented box, positive selects sphere
+    InstanceId ignore=0;
+    bool includePlayer=true,solidOnly=false;
+    unsigned maxResults=256;
+};
 const char* StateName(HumanoidState state);
 struct PlayerInput {
     bool shiftKey = false; // roteado ao gameplay; edge detect do Shift Lock
@@ -120,6 +127,10 @@ public:
     bool setGravity(float magnitude,std::string& error);
     bool teleportPlayer(Vector3 position,std::string& error);
     bool setCheckpoint(Vector3 position,std::string& error);
+    std::vector<InstanceId> overlap(const SpatialQuery& query,bool& truncated,std::string& error);
+    bool movePlayer(Vector3 direction,bool cameraRelative,std::string& error);
+    bool jumpPlayer(std::string& error);
+    bool playerMotion(Vector3 value,PartMotion operation,std::string& error);
     bool raycastParts(Vector3 origin,Vector3 direction,float distance,Part*& object,
                       Vector3& point,Vector3& normal,InstanceId ignored=0);
     // Sphere sweep for camera, ignores avatar and non-collidable Parts.
@@ -170,6 +181,8 @@ private:
     float coyoteTime_ = 0;        // tempo restante para pular após sair do chão
     float jumpBufferTime_ = 0;    // buffer de pulo pressionado no ar
     bool jumpPending_ = false;
+    std::optional<Vector3> scriptMovement_;
+    unsigned spatialQueries_=0;
     bool lastJumpDown_ = false;   // edge detection: holding jump must not bunny-hop
     bool suppressJump_ = false;   // a key held through respawn/pause needs a release
     unsigned respawns_ = 0;

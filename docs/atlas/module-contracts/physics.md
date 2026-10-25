@@ -37,3 +37,8 @@ não consulte UI/render dentro da simulação.
 **Limites:** não há física de juntas/ragdoll, veículos ou terreno avançado;
 materiais/fricção são propriedades simples; CCD é complementado por sweep
 manual para o personagem.
+
+Consultas Lua de caixa orientada/esfera usam `RuntimeSession::overlap`: probe
+transitório não registrado no mundo, `contactTest`, resultados por ID e filtros
+de sensor/jogador/peça. O callback apenas coleta IDs; Lua recebe cópia após a
+enumeração. Cota compartilhada por quadro e máximo 256 resultados.

@@ -1,0 +1,35 @@
+local v,physics,player=linblux.vec3,linblux.physics,linblux.player
+local part=linblux.scene.create("part",{position=v(80,10,0),size=v(2,2,2)})
+local sensor=linblux.scene.create("part",{position=v(80,10,0),size=v(4,4,4),collidable=false})
+local rod=linblux.scene.create("part",{position=v(90,10,0),size=v(8,0.2,0.2),rotation=v(0,45,0)})
+local hits,truncated=physics.overlap_box(v(80,10,0),v(1,1,1))
+assert(#hits==2 and not truncated)
+hits=physics.overlap_sphere(v(80,10,0),0.4,{ignore=sensor})
+assert(#hits==1 and hits[1]==part)
+hits=physics.overlap_box(player.position,v(0.2,0.2,0.2))
+assert(#hits==1 and hits[1]==player and hits[1].id==0 and hits[1].type=="player")
+hits=physics.overlap_box(player.position,v(0.2,0.2,0.2),{include_player=false})
+assert(#hits==0)
+hits,truncated=physics.overlap_box(v(80,10,0),v(1,1,1),{max_results=1})
+assert(#hits==1 and truncated)
+hits=physics.overlap_box(v(80,10,0),v(1,1,1),{solid_only=true})
+assert(#hits==1 and hits[1]==part)
+hits=physics.overlap_box(v(92,10,2),v(0.2,0.2,0.2))
+assert(#hits==0) -- inside the rod's AABB, outside its actual oriented geometry
+hits=physics.overlap_box(v(90,10,0),v(8,0.2,0.2),{rotation=v(0,45,0)})
+assert(#hits==1 and hits[1]==rod)
+local initial=player.position
+player.velocity=v(0,0,0)
+player:apply_impulse(v(140,0,0))
+assert(player.velocity.x>0)
+player:apply_force(v(0,1,0))
+local jumped=false
+linblux.events.on("update",function()
+    if linblux.time.now()<0.35 then player:move(v(1,0,0),"world") end
+    if player.velocity.y>1 then jumped=true end
+end)
+linblux.time.after(0.05,function() player:jump() end)
+linblux.time.after(0.6,function()
+    assert(jumped and player.position.x>initial.x+0.5)
+    linblux.scene.root:set_attribute("consultas_controle_concluido",true)
+end)

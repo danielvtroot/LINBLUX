@@ -14,6 +14,7 @@ struct Limits {
     std::size_t memoryBytes=8*1024*1024;
     int instructionsPerTask=100000, instructionsPerFrame=250000;
     std::size_t tasks=128, listeners=128;
+    unsigned spatialQueries=8;
 };
 // One quota-limited in-process Lua 5.4 VM per Play, never an editor evaluator.
 // This is a reliability boundary, not an OS security boundary for hostile code.
