@@ -3,6 +3,9 @@
 A Fase 1 inteira NÃO está concluída. Esta unidade fecha tarefas canceláveis,
 intervalos e validação de erros no Player, sem implementar APIs fictícias de
 NPCs, áudio ou UI. A Fase 0 foi publicada em cd4fb406cfccc6b030e56eadbede0c3965ef66f3.
+Código deste incremento publicado em 26066dff73dc128c50987de2f5f25dfcf71ff89b,
+hash remoto main confirmado após push normal. Este registro documental é posterior
+ao commit de código para não presumir sucesso de um envio ainda pendente.
 
 Implementado em LuaRuntime: spawn/after modernos retornam tarefa com active,
 cancel e token próprio; cancelar uma referência antiga não atinge tarefas novas
