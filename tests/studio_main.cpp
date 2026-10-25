@@ -2,6 +2,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
+#include <filesystem>
+#include <fstream>
 #include <nlohmann/json.hpp>
 #include "scene/Scene.h"
 #include "physics/PhysicsWorld.h"
@@ -142,6 +144,147 @@ print("Game task completed")
     CHECK(trace);CHECK(quota);CHECK(oom);CHECK(destroyed);CHECK(parse);CHECK(!forbiddenRun);
     CHECK(runtime.scripts().taskCount()>0);CHECK(runtime.validate(error));
     runtime.stop();CHECK(runtime.scripts().taskCount()==0);CHECK(runtime.validate(error));
+}
+void LinbluxScripts() {
+    Scene author;author.buildDefaultScene();std::string error;
+    auto* platform=author.createPart(PartShape::Block,{20,8,0},{6,1,6},"Plataforma");platform->setAnchored(true);
+    auto* bound=author.createScript(InstanceClass::Script,platform,"Plataforma.lua");
+    bound->source=R"(
+assert(linblux.api_version == 1 and linblux.self.name == "Plataforma")
+assert(linblux.script.parent == linblux.self and linblux.script.type == "script")
+local part = linblux.self
+part.material = "metal"
+part.color = linblux.vec3(210, 35, 65)
+part.transparency = 0.25
+part.size = linblux.vec3(8, 2, 6)
+part.rotation = linblux.vec3(0, 45, 0)
+linblux.events.on("start", function() part:set_attribute("started", true) end)
+linblux.events.on("update", function(dt)
+    local p = part.position
+    part.position = linblux.vec3(p.x + dt * 3, p.y, p.z)
+end)
+linblux.time.after(0.03, function() part:set_attribute("timer", true) end)
+)";
+    auto* global=author.createScript(InstanceClass::Script,nullptr,"Mundo.lua");
+    global->source=R"(
+local root = linblux.scene.root
+assert(linblux.self.type == "service")
+local group = linblux.scene.create("group", {name="ObjetosLua"})
+local part = linblux.scene.create("part", {name="CriadoLua", parent=group,
+    position=linblux.vec3(30,9,0), size=linblux.vec3(2,3,4), material="emissive", shape="sphere"})
+assert(part.type == "part" and part.anchored and part.collidable)
+assert(part.parent == group and group:find_child("CriadoLua") == part)
+assert(linblux.scene.find(part.id) == part and linblux.scene.find("CriadoLua") == part)
+assert(#group:children() == 1 and #group:descendants() == 1)
+local copy = part:clone()
+assert(copy.id ~= part.id)
+copy:destroy()
+assert(not copy.alive)
+local canceled = linblux.events.on("pontuar", function() error("listener cancelado") end)
+canceled:disconnect()
+assert(not canceled.connected)
+local connection
+connection = linblux.events.on("pontuar", function(payload)
+    root:set_attribute("score", payload.value)
+    connection:disconnect()
+end)
+linblux.events.emit("pontuar", {value=42})
+linblux.time.spawn(function()
+    linblux.time.wait(0.04)
+    assert(linblux.time.now() >= 0.04)
+    root:set_attribute("waited", true)
+end)
+linblux.events.on("stop", function() print("LINBLUX cleanup") end)
+)";
+    const auto baseline=projectio::toJson(author);Scene reopened;
+    CHECK(projectio::fromJson(reopened,baseline,error));CHECK(projectio::toJson(reopened)==baseline);
+    game::RuntimeSession runtime;
+    scripting::Limits policy;policy.memoryBytes=2*1024*1024;
+    CHECK(runtime.scripts().configure(policy,error));CHECK(runtime.start(reopened,error));
+    CHECK(!runtime.scripts().configure(policy,error));
+    for(int i=0;i<12;++i)runtime.update(1.f/60,{});
+    const auto* moved=runtime.scene().findPart(platform->id());
+    CHECK(moved&&moved->position().x>20.4f&&moved->size().x==8);
+    CHECK(moved->material()==PartMaterial::Metal&&moved->color().r==210&&moved->color().a==191);
+    CHECK(moved->attributes().count("timer")&&moved->attributes().count("started"));
+    CHECK(runtime.scene().workspace()->attributes().count("score"));
+    CHECK(runtime.scene().workspace()->attributes().count("waited"));
+    for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Lua error: %s\n",message.text.c_str());CHECK(!message.error);}
+    CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);
+    runtime.stop();bool cleanup=false;for(const auto& message:runtime.scripts().messages())cleanup|=message.text=="LINBLUX cleanup";
+    CHECK(cleanup);CHECK(runtime.scripts().memoryUsed()==0);CHECK(runtime.scripts().taskCount()==0);
+
+    // Removing a bound script or an explicit scope cancels callbacks already queued.
+    Scene scoped;scoped.buildDefaultScene();
+    auto* owner=scoped.createPart(PartShape::Block,{15,5,0},{2,2,2},"Escopo");owner->setAnchored(true);
+    auto* listener=scoped.createScript(InstanceClass::Script,owner,"Listener.lua");
+    listener->source=R"(linblux.events.on("late", function() error("orphan listener") end)
+linblux.time.after(0.1, function() error("orphan timer") end))";
+    auto* controller=scoped.createScript(InstanceClass::Script,nullptr,"Controller.lua");
+    controller->source=R"(
+local scope = linblux.scene.find("Escopo")
+local scoped = linblux.events.on("late", function() error("dead scope") end, scope)
+linblux.events.emit("late", {})
+scope:destroy()
+assert(not scoped.connected)
+linblux.time.after(0.02, function()
+    for i=1,150 do
+        local p = linblux.scene.create("part")
+        linblux.events.on("late", function() error("scope leaked") end, p)
+        p:destroy()
+        linblux.time.wait(0)
+    end
+    linblux.events.emit("late", {})
+    print("scopes cleaned")
+end)
+)";
+    CHECK(runtime.start(scoped,error));for(int i=0;i<170;++i)runtime.update(1.f/60,{});
+    bool cleaned=false;for(const auto& message:runtime.scripts().messages()){CHECK(!message.error);cleaned|=message.text=="scopes cleaned";}
+    CHECK(cleaned);CHECK(runtime.scripts().taskCount()==0);runtime.stop();
+
+    // Invalid creation is transactional; quotas and errors leave native gameplay valid.
+    Scene hostile;hostile.buildDefaultScene();
+    auto* invalid=hostile.createScript(InstanceClass::Script,nullptr,"Invalid.lua");invalid->source="linblux.scene.create('part', {size=linblux.vec3(-1,2,3)})";
+    auto* loop=hostile.createScript(InstanceClass::Script,nullptr,"Quota.lua");loop->source="while true do end";
+    auto* memory=hostile.createScript(InstanceClass::Script,nullptr,"Memory.lua");memory->source="string.rep('x', 4*1024*1024)";
+    auto* blocked=hostile.createScript(InstanceClass::Script,nullptr,"Sandbox.lua");blocked->source=R"(
+assert(os==nil and io==nil and package==nil and debug==nil)
+assert(load==nil and loadfile==nil and dofile==nil and string.dump==nil)
+assert(pcall==nil and xpcall==nil)
+require("/tmp/unsafe.lua")
+)";
+    CHECK(runtime.start(hostile,error));CHECK(runtime.scene().parts().size()==hostile.parts().size());
+    bool quota=false,oom=false,invalidOption=false,denied=false;
+    for(const auto& message:runtime.scripts().messages()){
+        quota|=message.error&&message.text.find("quota")!=std::string::npos;
+        oom|=message.error&&message.text.find("memory")!=std::string::npos;
+        invalidOption|=message.error&&message.script=="Invalid.lua"&&message.line==1;
+        denied|=message.error&&message.script=="Sandbox.lua";
+    }
+    CHECK(quota&&oom&&invalidOption&&denied);CHECK(runtime.validate(error));runtime.stop();
+    policy.memoryBytes=1;CHECK(!runtime.scripts().configure(policy,error));
+}
+void LinbluxExamples() {
+    const auto root=std::filesystem::path(__FILE__).parent_path().parent_path();
+    const auto source=[&](const char* name){std::ifstream file(root/"assets/examples/lua"/name);CHECK(file.good());return std::string(std::istreambuf_iterator<char>(file),{});};
+    Scene author;author.buildDefaultScene();std::string error;
+    auto* platform=author.createPart(PartShape::Block,{20,8,0},{6,1,6},"PlataformaExemplo");
+    auto* door=author.createPart(PartShape::Block,{30,6,0},{3,8,1},"PortaExemplo");
+    author.createScript(InstanceClass::Script,platform,"Plataforma.lua")->source=source("plataforma.lua");
+    author.createScript(InstanceClass::Script,door,"Porta.lua")->source=source("porta.lua");
+    author.createScript(InstanceClass::Script,nullptr,"Mundo.lua")->source=source("mundo.lua");
+    const auto baseline=projectio::toJson(author);
+    const auto testDir=root/".turbo"/"lua-examples";std::filesystem::create_directories(testDir);
+    const auto path=(testDir/(std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".json")).string();
+    CHECK(projectio::save(author,path,error));Scene reopened;CHECK(projectio::load(reopened,path,error));
+    CHECK(projectio::toJson(reopened)==baseline);
+    game::RuntimeSession runtime;CHECK(runtime.start(reopened,error));
+    for(int i=0;i<90;++i)runtime.update(1.f/60,{});
+    CHECK(runtime.scene().findPart(platform->id())->position().x>25);
+    CHECK(runtime.scene().findPart(door->id())->position().y==13);
+    CHECK(std::get<bool>(runtime.scene().findPart(door->id())->attributes().at("aberta")));
+    for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Example: %s\n",message.text.c_str());CHECK(!message.error);}
+    CHECK(projectio::toJson(reopened)==baseline);CHECK(runtime.validate(error));runtime.stop();std::filesystem::remove(path);
 }
 void AnimationIds() {
     Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();std::string error;
@@ -540,6 +683,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Scripts();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }
