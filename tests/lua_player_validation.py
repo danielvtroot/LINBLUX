@@ -14,6 +14,9 @@ def main():
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     base = json.loads((root / "assets/defaults/factory/world.loblox.json").read_text())
+    # Os exemplos animados precisam do rig R6 de fábrica (personagem e clipes).
+    character_game = json.loads((root / "assets/defaults/factory/character.loblox.json").read_text())["game"]
+    animated_cases = {"NpcPatrulhaAnimada.lua", "NpcMonstroAnimado.lua"}
     workspace = next(o["id"] for o in base["objects"] if o["class"] == "Workspace")
     example = (root / "assets/examples/lua/temporizadores.lua").read_text()
     example += '\nlinblux.events.on("stop", function() assert(linblux.scene.root:get_attribute("timer_concluido")) end)\n'
@@ -35,6 +38,8 @@ def main():
         ("CameraInvalida.lua","linblux.camera.set_pose({position=linblux.vec3(1,2,3),target=linblux.vec3(1,2,3)})",1,"Pose de câmera inválida"),
         ("Temporizadores.lua", example, 0, "erros Lua: 0"),
         ("NpcPatrulha.lua", (root / "assets/examples/lua/npc_patrulha.lua").read_text()+'\nlinblux.events.on("stop",function() assert(linblux.scene.root:get_attribute("patrulha_pronta")) end)', 0, "erros Lua: 0"),
+        ("NpcPatrulhaAnimada.lua", (root / "assets/examples/lua/npc_patrulha_animado.lua").read_text()+'\nlinblux.events.on("stop",function() assert(linblux.scene.root:get_attribute("patrulha_animada_pronta")); assert(linblux.scene.root:get_attribute("patrulha_run")) end)', 0, "erros Lua: 0"),
+        ("NpcMonstroAnimado.lua", (root / "assets/examples/lua/npc_monstro_animado.lua").read_text()+'\nlinblux.events.on("stop",function() assert(linblux.scene.root:get_attribute("monstro_rig") ~= nil) end)', 0, "erros Lua: 0"),
         ("NpcDano.lua", "local npc=linblux.npc.create{name='Alvo',position=linblux.vec3(10,2.6,10),max_health=10}\nlinblux.npc.damage(npc,15)\nassert(linblux.npc.state(npc)=='dead' and linblux.npc.health(npc)==0)", 0, "erros Lua: 0"),
         ("NpcInvalido.lua", "linblux.npc.create{size=linblux.vec3(-1,2,3)}", 1, "Tamanho mínimo do NPC"),
         ("NpcSemComponente.lua", "local p=linblux.scene.create('part',{name='SemNpc',position=linblux.vec3(5,5,5)})\nlinblux.npc.move_to(p, linblux.vec3(0,2,0))", 1, "não possui componente de NPC"),
@@ -50,6 +55,8 @@ def main():
         shutil.copy(root / "tests/fixtures/audio/tone.ogg", audio_dir / "tone.ogg")
         for name, source, expected, diagnostic in cases:
             scene = copy.deepcopy(base)
+            if name in animated_cases:
+                scene["game"] = copy.deepcopy(character_game)
             identifier = scene["nextId"]
             scene["nextId"] += 1
             scene["objects"].append({"class": "Script", "id": identifier, "name": name,
