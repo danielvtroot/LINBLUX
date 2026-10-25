@@ -62,6 +62,7 @@ struct LuaRuntime::Impl {
     lua_State* state=nullptr;
     game::RuntimeSession* runtime=nullptr;
     std::size_t memory=0;
+    std::size_t errors=0;
     double time=0;
     unsigned generation=0;
     int instructions=0, frameBudget=0, moduleDepth=0;
@@ -134,6 +135,7 @@ struct LuaRuntime::Impl {
         Require(extraBytes<=kNativeContentLimit && bytes<=kNativeContentLimit-extraBytes,"native content budget exceeded");
     }
     void message(bool error,InstanceId id,const char* text) {
+        if(error)++errors;
         const auto* object=runtime?runtime->scene().find(id):nullptr;
         const std::string name=object?object->name():"Runtime";
         if(output.size()>=256) output.erase(output.begin());
@@ -934,7 +936,7 @@ bool LuaRuntime::configure(const Limits& limits,std::string& error) {
 }
 const Limits& LuaRuntime::limits()const{return impl_->limits;}
 bool LuaRuntime::start(game::RuntimeSession& runtime) {
-    stop();auto& self=*impl_;self.runtime=&runtime;self.output.clear();self.time=0;self.moduleDepth=0;self.contactOverflowReported=false;++self.generation;
+    stop();auto& self=*impl_;self.runtime=&runtime;self.output.clear();self.errors=0;self.time=0;self.moduleDepth=0;self.contactOverflowReported=false;++self.generation;
     self.state=lua_newstate(Impl::Allocate,&self);
     if(!self.state){self.message(true,0,"Cannot allocate Lua VM");self.close();return false;}
     *static_cast<Impl**>(lua_getextraspace(self.state))=&self;
@@ -959,6 +961,7 @@ void LuaRuntime::contact(InstanceId first,InstanceId second,bool entering){impl_
 void LuaRuntime::characterAdded(){impl_->characterAdded();}
 void LuaRuntime::healthChanged(float health,bool died){impl_->event(HealthChanged,health);if(died)impl_->event(Died);}
 const std::vector<Message>& LuaRuntime::messages()const{return impl_->output;}
+std::size_t LuaRuntime::errorCount()const{return impl_->errors;}
 std::size_t LuaRuntime::memoryUsed()const{return impl_->memory;}
 std::size_t LuaRuntime::taskCount()const{return impl_->jobs.size();}
 bool LuaRuntime::active()const{return impl_->state!=nullptr;}

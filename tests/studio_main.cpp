@@ -410,8 +410,10 @@ end)
         else if(message.script=="IntervaloComErro.lua")++intervalErrors;
         else {std::printf("Task Lua: %s\n",message.text.c_str());CHECK(false);}
     }
-    CHECK(zero&&invalid&&intervalErrors==1);CHECK(runtime.scripts().taskCount()==0);
+    CHECK(zero&&invalid&&intervalErrors==1);CHECK(runtime.scripts().errorCount()==3);CHECK(runtime.scripts().taskCount()==0);
     CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
+    CHECK(runtime.scripts().errorCount()==3);
+    Scene clean;clean.buildDefaultScene();CHECK(runtime.start(clean,error));CHECK(runtime.scripts().errorCount()==0);runtime.stop();
 }
 void LinbluxInput() {
     Scene author;author.buildDefaultScene();std::string error;

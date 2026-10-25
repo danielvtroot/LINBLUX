@@ -33,6 +33,7 @@ public:
     void characterAdded();
     void healthChanged(float health,bool died);
     const std::vector<Message>& messages() const;
+    std::size_t errorCount() const; // retained across stop, reset on the next Play
     std::size_t memoryUsed() const;
     std::size_t taskCount() const;
     bool active() const;

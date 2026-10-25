@@ -20,6 +20,7 @@ def main():
         ("Temporizadores.lua", example, 0, "erros Lua: 0"),
         ("FalhaDeScript.lua", "error('probe validation failure')", 1, "FalhaDeScript.lua:1"),
         ("FalhaNoStop.lua", "linblux.events.on('stop', function() error('probe stop failure') end)", 1, "probe stop failure"),
+        ("ErroEvicto.lua", "error('old error evicted by output')", 1, "erros Lua: 1"),
     ]
     with tempfile.TemporaryDirectory(prefix="linblux-lua-player-") as temporary:
         for name, source, expected, diagnostic in cases:
@@ -28,6 +29,10 @@ def main():
             scene["nextId"] += 1
             scene["objects"].append({"class": "Script", "id": identifier, "name": name,
                                      "parent": workspace, "source": source, "enabled": True})
+            if name == "ErroEvicto.lua":
+                scene["objects"].append({"class": "Script", "id": scene["nextId"], "name": "MuitasMensagens.lua",
+                    "parent": workspace, "source": "for i=1,300 do print('buffer', i) end", "enabled": True})
+                scene["nextId"] += 1
             path = Path(temporary) / (name + ".json")
             path.write_text(json.dumps(scene, ensure_ascii=False))
             before = path.read_bytes()
