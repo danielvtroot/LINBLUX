@@ -133,7 +133,10 @@ Parada por solicitação explícita do usuário, para economizar créditos.
 ## Checkpoint NPCs e navegação — 25/10/2026
 
 Incrementos 1–4 da missão de NPCs publicados como uma unidade funcional em
-`5f29424d29f20ddecec53fe6557db9ce9f2b324e` (código). Relatório 20 descreve a
+`5f29424d29f20ddecec53fe6557db9ce9f2b324e` (código) e
+`1fad7e30786040412d5c56909e606f03c01df901` (exemplos, testes e docs), com push
+normal e hash remoto confirmado em `origin/main` (base anterior `48dba40`).
+Relatório 20 descreve a
 entrega completa: API `linblux.npc`, `game::NpcSystem`, `game::NavGrid` (grade XZ
 + A*), trava de rotação/degrau no `PhysicsWorld`, persistência no campo `npc` do
 objeto JSON, três exemplos Lua reais e testes headless.

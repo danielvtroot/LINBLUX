@@ -20,6 +20,17 @@ Publicação: os incrementos 1–4 compartilham os mesmos arquivos de implementa
 publicados como uma unidade funcional, com os artefatos de exemplo, teste e
 documentação na sequência.
 
+Commits (push normal em `origin/main`):
+
+- `5f29424d29f20ddecec53fe6557db9ce9f2b324e` — implementação (cena, física,
+  navegação, runtime Lua, persistência, CMake).
+- `1fad7e30786040412d5c56909e606f03c01df901` — exemplos, testes, docs e este
+  relatório; hash confirmado em `origin/main`, acima de `48dba40`.
+
+Após o envio, uma linha redundante (`error.clear()` em `RuntimeSession::start`)
+foi removida; `linblux_studio`, `linblux_game` e `linblux_lua_player_validation`
+foram reexecutados e passaram 3/3 com o código final.
+
 ## API Lua adicionada (namespace `linblux.npc`)
 
 - `create{name, position, size, color, material, shape, parent, script,
