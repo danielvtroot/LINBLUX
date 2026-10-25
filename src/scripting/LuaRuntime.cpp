@@ -658,6 +658,7 @@ struct LuaRuntime::Impl {
     static int AudioVolume(lua_State* L) { auto& self=Host(L);lua_pushnumber(L,self.runtime->audio().volume(AudioHandle(L,1)));return 1; }
     static int AudioIsPlaying(lua_State* L) { auto& self=Host(L);lua_pushboolean(L,self.runtime->audio().playing(AudioHandle(L,1)));return 1; }
     static int AudioIsPaused(lua_State* L) { auto& self=Host(L);lua_pushboolean(L,self.runtime->audio().isPaused(AudioHandle(L,1)));return 1; }
+    static int AudioIsLooping(lua_State* L) { auto& self=Host(L);lua_pushboolean(L,self.runtime->audio().looping(AudioHandle(L,1)));return 1; }
     static int AudioDuration(lua_State* L) {
         auto& self=Host(L);Require(lua_type(L,1)==LUA_TSTRING,"duracao requer referencia ou id");
         std::string reference=Text(L,1);if(const auto* library=FindSound(*self.runtime,reference))reference=library->reference;
@@ -1192,6 +1193,7 @@ struct LuaRuntime::Impl {
         lua_pushcfunction(L,Safe<AudioVolume>);lua_setfield(L,-2,"volume");
         lua_pushcfunction(L,Safe<AudioIsPlaying>);lua_setfield(L,-2,"is_playing");
         lua_pushcfunction(L,Safe<AudioIsPaused>);lua_setfield(L,-2,"is_paused");
+        lua_pushcfunction(L,Safe<AudioIsLooping>);lua_setfield(L,-2,"looping");
         lua_pushcfunction(L,Safe<AudioDuration>);lua_setfield(L,-2,"duration");
         lua_pushcfunction(L,Safe<AudioStopAll>);lua_setfield(L,-2,"stop_all");
         lua_pushcfunction(L,Safe<AudioList>);lua_setfield(L,-2,"list");

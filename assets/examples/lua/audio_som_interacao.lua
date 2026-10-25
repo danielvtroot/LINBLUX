@@ -20,14 +20,14 @@ local botao = linblux.scene.create("part", {
 botao.Anchored = true
 raiz:set_attribute("interacao_pronta", true)
 
-local ultimo = 0
+local ultimo = -1
 local function tocar(motivo)
     if not som then
         warn("Importe um som (kind sound) para ouvir a interação.")
         return
     end
     -- Intervalo mínimo para não empilhar dezenas de vozes no contato contínuo.
-    local agora = linblux.time.now() + ultimo
+    local agora = linblux.time.now()
     if agora - ultimo < 0.25 then return end
     ultimo = agora
     local handle = linblux.audio.play(som.id, { volume = 0.8 })
@@ -37,9 +37,9 @@ local function tocar(motivo)
     end
 end
 
-linblux.events.on("collision_enter", function(outra)
-    if outra == botao then tocar("entrou") end
+linblux.events.on("collision_enter", function(contato)
+    if contato.first == botao or contato.second == botao then tocar("entrou") end
 end)
-linblux.events.on("collision_exit", function(outra)
-    if outra == botao then tocar("saiu") end
+linblux.events.on("collision_exit", function(contato)
+    if contato.first == botao or contato.second == botao then tocar("saiu") end
 end)
