@@ -532,7 +532,8 @@ struct LuaRuntime::Impl {
     }
     static int CameraPose(lua_State* L) {
         auto& self=Host(L);Require(lua_istable(L,1),"set_pose requer tabela");
-        auto pose=self.runtime->playerCamera().camera();double seconds=0;bool position=false,target=false,rotation=false,up=false;Vector3 angles{};
+        auto pose=self.runtime->playerCamera().camera();if(!self.runtime->playerCamera().scripted())pose.fovy=self.runtime->settings().cameraFov;
+        double seconds=0;bool position=false,target=false,rotation=false,up=false;Vector3 angles{};
         lua_pushnil(L);while(lua_next(L,1)){
             const char* key=Text(L,-2);
             if(Eq(key,"position")){pose.position=ReadVector(L,lua_gettop(L));position=true;}
