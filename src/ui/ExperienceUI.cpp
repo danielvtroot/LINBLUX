@@ -238,7 +238,7 @@ void ExperienceUI::buildPage() {
                 const auto& entry=entries_[i];fs::path thumb;try{thumb=manager_.thumbnail(entry);}catch(const std::exception&){}
                 const auto& id=entry.manifest.installationId;
                 html+=std::string("<div class=\"experience-card")+(page_=="home"?" home-card":"")+"\" data-experience-card=\""+id+"\"><div class=\"experience-cover\"><img class=\""+std::string(thumb.empty()?"experience-placeholder":"")+"\" src=\""+esc(thumb.empty()?"linblux-logo":thumb.string())+"\"/></div><div class=\"experience-card-body\"><h3>"+esc(entry.manifest.name)+"</h3><p>"+esc(entry.manifest.description.empty()?"Uma experiência LINBLUX local":entry.manifest.description)+"</p><div class=\"experience-card-meta\"><small>Local</small><span class=\"experience-card-dot\"/><small>"+esc(entry.manifest.modified.substr(0,10))+"</small></div></div><div class=\"experience-card-actions\">"+button(archive?"details":"open",archive?"Manage":"Open",id,"exp-open-"+std::to_string(i),true)+button("card-menu","…",id,"exp-details-"+std::to_string(i),false,std::string("experience-more")+(cardMenu_==id?" active":""))+"</div>";
-                if(cardMenu_==id)html+="<div class=\"experience-card-menu\">"+button("details","Rename / Edit Details…",id,"exp-card-details")+button("duplicate","Duplicate")+button("export","Export .lo…")+"<div class=\"experience-menu-rule\"/>"+button(archive?"restore":"archive",archive?"Restaurar":"Arquivar")+"<div class=\"experience-menu-rule\"/>"+button("delete","Delete…",{},{},false,"experience-menu-danger")+"<div class=\"experience-menu-rule\"/>"+button("dismiss-card","Close")+"</div>";
+                if(cardMenu_==id)html+="<div id=\"experience-card-menu\" class=\"experience-card-menu\">"+button("details","Rename / Edit Details…",id,"exp-card-details")+button("duplicate","Duplicate")+button("export","Export .lo…")+"<div class=\"experience-menu-rule\"/>"+button(archive?"restore":"archive",archive?"Restaurar":"Arquivar")+"<div class=\"experience-menu-rule\"/>"+button("delete","Delete…",{},{},false,"experience-menu-danger")+"<div class=\"experience-menu-rule\"/>"+button("dismiss-card","Close")+"</div>";
                 html+="</div>";
             }
             html+="</div>";
@@ -353,5 +353,6 @@ void ExperienceUI::frame() {
     text(document_,"experience-error",error_);show(document_,"experience-error",!error_.empty());
     document_.SetClass("experience-compact",GetScreenWidth()<1400);
     for(const char* page:{"home","library","templates","archive"})if(auto* el=document_.GetElementById(std::string("exp-nav-")+page))el->SetClass("active",page_==page);
+    if(std::getenv("LOBLOX_TRACE_HOME")){auto* menu=document_.GetElementById("experience-card-menu");if(menu){const auto offset=menu->GetAbsoluteOffset(Rml::BoxArea::Border);const auto size=menu->GetBox().GetSize(Rml::BoxArea::Border);std::fprintf(stderr,"HOME card menu: at %.0f,%.0f size %.0fx%.0f display=%s cardMenu=%s\n",offset.x,offset.y,size.x,size.y,menu->GetProperty("display")->ToString().c_str(),cardMenu_.c_str());}}
 }
 } // namespace loblox
