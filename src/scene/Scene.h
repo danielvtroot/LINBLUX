@@ -17,6 +17,16 @@
 
 namespace loblox {
 
+// Apresentação visual de um NPC com rig, reconstruída a cada passo fixo pelo
+// NpcSystem. Vive apenas na cena de execução: nunca é serializada nem chega à
+// cena autoral, por isso o Play continua sem tocar no documento.
+struct NpcVisual {
+    InstanceId part = 0;
+    std::string rigId;
+    game::Pose pose{};
+    game::RigidTransform root{};
+};
+
 // Dona de todos os objetos da cena e da hierarquia. Nao conhece ImGui, OpenGL
 // nem Bullet: a fisica se registra como listener de remocao.
 class Scene {
@@ -85,6 +95,8 @@ public:
     const std::vector<Part*>& parts() const { return parts_; }
     game::GameAssets& gameAssets() { return gameAssets_; }
     const game::GameAssets& gameAssets() const { return gameAssets_; }
+    std::vector<NpcVisual>& npcVisuals() { return npcVisuals_; }
+    const std::vector<NpcVisual>& npcVisuals() const { return npcVisuals_; }
 
     Instance* selection() const { return selection_; }
     void select(Instance* object);
@@ -119,6 +131,7 @@ private:
     Instance* selection_ = nullptr;
     InstanceId nextId_ = 1;
     game::GameAssets gameAssets_;
+    std::vector<NpcVisual> npcVisuals_;
 };
 
 }  // namespace loblox
