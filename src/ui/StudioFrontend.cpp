@@ -61,6 +61,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     std::set<InstanceId> collapsed;InstanceId dragNode=0,dragTarget=0;Vector2 dragStart{};
     bool dragging=false,mouseOwned=false,escapeConsumed=false,dialogOpen=false,treeKeyboard=false,restoreFocus=false;
     bool initialized=false,syncing=false,keyboardOwned=false;float shownHealth=100,healthTrail=100;int w=0,h=0;
+    std::vector<game::ImageUsage> imageUses;
     std::vector<EditorCommand> commands;
     std::unique_ptr<ExperienceUI> experiences;
     const bool timing=std::getenv("LOBLOX_UI_TIMINGS")!=nullptr;
@@ -388,7 +389,13 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(action=="import-sound"){prompt("import-sound");return;}
         if(action=="clear-image") {
             if(ui.runtime_.active())return;
-            if(v=="rig") {
+            if(v=="rig-body") {
+                auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);if(!rig||ui.selectedRigBody_<0)return;
+                rig->bodies[ui.selectedRigBody_].image.clear();ui.setStatus("Imagem removida do membro; rig e animações preservados.");
+            }else if(v=="surface") {
+                auto* object=ui.scene_.selection();if(!object||!IsSurfaceClass(object->instanceClass()))return;
+                auto& surface=static_cast<Surface&>(*object);auto value=surface.properties();value.image.clear();surface.setProperties(value);
+            }else if(v=="rig") {
                 auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);
                 auto* decal=rig&&selectedDecalRig==rig->id?rig->findDecal(selectedRigDecal):nullptr;
                 if(!decal)return;
@@ -402,6 +409,24 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             }
             invalidateImages();treeHash=0;return;
         }
+        if(action=="image-use"||action=="image-unlink") {
+            if(ui.runtime_.active())return;
+            const auto index=std::stoul(v);if(index>=imageUses.size())return;const auto use=imageUses[index];
+            if(action=="image-unlink") {
+                std::string error;const bool ok=use.kind=="presentation"?experiences&&experiences->clearPresentationImage(use,error):game::SetImageUsage(ui.scene_,use,"",error);
+                ui.setStatus(ok?"Associação removida; a imagem continua na biblioteca.":error,!ok);
+            }else if(!use.rig.empty()) {
+                ui.selectRig(use.rig,use.body);selectedRigDecal=use.decal;selectedDecalRig=use.rig;
+            }else if(use.object)ui.scene_.select(ui.scene_.find(use.object));
+            else ui.setStatus("Use Substituir imagem ou Remover associação para alterar a apresentação.");
+            dialogOpen=false;context->GetRootElement()->Focus();invalidateImages();treeHash=0;return;
+        }
+        if(action=="apply-body-image") {
+            if(ui.runtime_.active())return;auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);
+            if(!rig||ui.selectedRigBody_<0)return;
+            if(game::ResolveImagePath(game::AssetsDir(),v).empty())return;
+            rig->bodies[ui.selectedRigBody_].image=game::ImageAssetReference(v);invalidateImages();treeHash=0;return;
+        }
         if(action=="rename-image"||action=="replace-image"||action=="delete-image") {
             if(ui.runtime_.active())return;
             ui.endGizmoSession(true,"dialog");ui.cancelRigGizmo();ui.camera_.releaseCapture();
@@ -409,20 +434,18 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             auto* field=dynamic_cast<Rml::ElementFormControl*>(el("dialog-value"));
             const auto displayName=game::ImageDisplayName(game::AssetsDir(),v);
             if(action=="delete-image") {
-                std::vector<std::string> uses;
-                for(const auto& use:game::DescribeImageUsage(ui.scene_,v))uses.push_back(use.where);
-                if(experiences)for(const auto& use:experiences->presentationUses(v))uses.push_back(use);
-                std::string report;
-                if(uses.empty())report="Nenhuma referência encontrada. A imagem será excluída apenas desta experiência; o arquivo original no computador não é apagado.";
-                else {
-                    report="Esta imagem está em uso e não será excluída: ";
-                    for(std::size_t i=0;i<uses.size();++i)report+=(i?" · ":"")+uses[i];
-                    report+=". Remova ou substitua essas referências (Incluindo apresentação) e tente novamente.";
-                }
+                imageUses=game::DescribeImageUsage(ui.scene_,v);
+                if(experiences){const auto presentation=experiences->presentationReferences(v);imageUses.insert(imageUses.end(),presentation.begin(),presentation.end());}
+                std::string report=imageUses.empty()?"A cena será salva e a imagem será excluída apenas desta experiência. O arquivo original não será apagado.":"A imagem está em uso. Localize ou remova as associações abaixo antes de excluir; remover associação preserva o arquivo.";
+                std::string rows="<div class=\"image-usages\">";
+                for(std::size_t i=0;i<imageUses.size();++i)rows+="<div class=\"image-usage\"><span>"+Escape(imageUses[i].where+" · "+imageUses[i].property)+"</span>"+Button("image-use","Localizar","focus",std::to_string(i),"usage")+Button("image-unlink","Remover associação","delete",std::to_string(i),"usage")+"</div>";
+                rows+="</div>";el("appearance-controls")->SetInnerRML(i18n::Markup(rows));
+                if(auto* confirm=dynamic_cast<Rml::ElementFormControl*>(el("confirm-dialog")))confirm->SetDisabled(!imageUses.empty());
                 dialog="delete-image:"+v;text("dialog-title","Excluir imagem");text("dialog-description",report);
                 field->SetDisabled(true);field->SetValue(displayName);display("dialog-overlay",true,"flex");context->GetRootElement()->Focus();return;
             }
             field->SetDisabled(false);
+            if(auto* confirm=dynamic_cast<Rml::ElementFormControl*>(el("confirm-dialog")))confirm->SetDisabled(false);
             if(action=="rename-image") {
                 dialog="rename-image:"+v;text("dialog-title","Renomear imagem");
                 text("dialog-description","Só o nome exibido muda: o arquivo e o ID técnico continuam iguais, então nenhuma referência quebra. Nomes repetidos são permitidos.");
@@ -494,6 +517,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(active)for(int b=0;b<game::kBodyCount;++b) {
                 const auto attributes=" data-rig=\""+rid+"\" data-rig-body=\""+std::to_string(b)+"\"";
                 s+="<div id=\"rig-body-"+rid+"-"+std::to_string(b)+"\" class=\"tree-row"+std::string(ui.selectedRigBody_==b&&selectedRigDecal.empty()?" selected":"")+"\""+attributes+" style=\"padding-left:25px\"><img src=\"icon-part\"/><span class=\"node-name\">"+Escape(game::BodyDisplayName(rig.bodies[b].name))+"</span></div>";
+                if(!rig.bodies[b].image.empty())s+="<div id=\"rig-image-"+rid+"-"+std::to_string(b)+"\" class=\"tree-row\""+attributes+" style=\"padding-left:43px\"><img src=\"icon-image\"/><span class=\"node-name\">Imagem do membro</span></div>";
                 for(const auto& d:rig.bodies[b].decals)s+="<div id=\"rig-decal-"+rid+"-"+Escape(d.id)+"\" class=\"tree-row"+std::string(ui.selectedRigBody_==b&&selectedRigDecal==d.id?" selected":"")+"\""+attributes+" data-rig-decal=\""+Escape(d.id)+"\" style=\"padding-left:43px\"><img src=\"icon-image\"/><span class=\"node-name\">"+Escape(d.name)+"</span></div>";
             }
         }
@@ -522,6 +546,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                 s+=Button("rig-decal-delete","Remover adesivo","delete")+Button("show:rig","Editar corpo","rig");
                 s+="<div class=\"property-help\">ID: rig://"+Escape(rig->id)+"/"+Escape(decal->id)+"<br/>Membro: "+Escape(game::BodyDisplayName(body.name))+"</div>";
             }else s="<div class=\"property-help\">Selecione um adesivo para editar face e imagem. A frente é o eixo local -Z.</div>"+Button("rig-decal-add","Adicionar adesivo","image")+Button("import-dialog","Importar imagem","folder")+Button("show:assets","Recursos de imagem","image")+Button("show:rig","Editar corpo","rig");
+            if(!decal)s+=ImagePicker(body.image,"apply-body-image","rig-body","image-query-body");
             html("property-body",s,propertyMarkup);return;
         }
         if(!node) {auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);text("property-title",rig?rig->name:"No selection");s=rig?Button("show:rig","Edit character","rig")+Button("show:animation","Animate","animation")+Button("rename","Rename")+Button("duplicate","Duplicate")+Button("delete","Delete"):"<div class=\"empty-state\">Select an object to edit properties.</div>";html("property-body",s,propertyMarkup);return;}
@@ -584,6 +609,13 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                 auto it=p.attributes().find(entry.first);if(it!=p.attributes().end()){if(auto* text=std::get_if<std::string>(&it->second))v=*text;else if(auto* number=std::get_if<double>(&it->second))v=Num(*number);}
                 input(entry.first,v,entry.second);
             }
+        } else if(IsSurfaceClass(node->instanceClass())) {
+            const auto& surface=static_cast<const Surface&>(*node);const auto& value=surface.properties();group("Superfície");
+            s+=ImagePicker(value.image,"apply-surface-image","surface","image-query-surface");
+            input("Surface.Face",std::to_string(value.face),"Face (0–5)");input("Surface.Transparency",Num(value.transparency),"Transparência");
+            input("Surface.Rotation",Num(value.rotation),"Rotação");input("Surface.OffsetU",Num(value.offsetU),"Deslocamento U");input("Surface.OffsetV",Num(value.offsetV),"Deslocamento V");
+            input("Surface.TileU",Num(value.studsPerTileU),"Repetição U");input("Surface.TileV",Num(value.studsPerTileV),"Repetição V");
+            s+=Button("delete","Remover componente","delete");
         } else if(node==ui.scene_.lighting()) {
             const auto* l=ui.scene_.lighting();group("PROCEDURAL ATMOSPHERE");check("SkyEnabled",l->skyEnabled());input("Brightness",Num(l->brightness()));input("SunIntensity",Num(l->sunIntensity()));
             input("CloudCoverage",Num(l->cloudDensity()));input("SkyRotation",Num(l->skyRotation()));input("FogDensity",Num(l->fogDensity()));

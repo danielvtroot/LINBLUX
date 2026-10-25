@@ -1,4 +1,5 @@
 #pragma once
+#include "game/ImageAssets.h"
 #include "experiences/ExperienceManager.h"
 #include "ui/NativeFileDialog.h"
 #include "media/VideoBackground.h"
@@ -33,6 +34,8 @@ public:
     // Dependências da imagem na apresentação da experiência (ícone, banner,
     // fundo de carregamento e rosto). A UI mostra antes de excluir.
     std::vector<std::string> presentationUses(const std::string& reference) const;
+    std::vector<game::ImageUsage> presentationReferences(const std::string& reference) const;
+    bool clearPresentationImage(const game::ImageUsage& use,std::string& error);
     // Troca a imagem em todas as referências de apresentação e devolve quantas
     // mudaram. Usado por Substituir imagem antes de excluir a antiga.
     std::size_t replaceImageReferences(const std::string& from,const std::string& to);

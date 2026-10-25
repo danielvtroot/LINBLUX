@@ -59,7 +59,9 @@ std::filesystem::path NamesPath(const std::string& assetsDir) {
 
 std::map<std::string, std::string> ReadImageNames(const std::string& assetsDir) {
     std::map<std::string, std::string> names;
-    std::ifstream input(NamesPath(assetsDir), std::ios::binary);
+    std::error_code ec;const auto file=NamesPath(assetsDir);
+    if(std::filesystem::is_symlink(std::filesystem::symlink_status(file,ec))||!std::filesystem::is_regular_file(file,ec)||std::filesystem::file_size(file,ec)>512*1024||ec)return names;
+    std::ifstream input(file, std::ios::binary);
     if (!input) return names;
     const std::string text((std::istreambuf_iterator<char>(input)), {});
     if (text.empty() || text.size() > 512 * 1024) return names;
@@ -92,7 +94,9 @@ bool WriteImageNames(const std::string& assetsDir, const std::map<std::string, s
 }
 
 std::string FileKey(const std::string& reference) {
-    return std::filesystem::path(NormalizeImageReference(reference)).filename().string();
+    const auto path=std::filesystem::path(NormalizeImageReference(reference)).lexically_normal();
+    if(path.is_absolute()||(!path.parent_path().empty()&&path.parent_path()!="assets")||path.filename()==".."||path.filename()==".")return {};
+    return path.filename().string();
 }
 
 std::string ShortId(const std::string& filename) {
@@ -311,7 +315,7 @@ std::vector<ImageAsset> ListImages(const std::string& assetsDir) {
     const auto names = ReadImageNames(assetsDir);
     std::error_code fsError;
     for (const auto& entry : std::filesystem::directory_iterator(assetsDir, fsError)) {
-        if (!entry.is_regular_file(fsError)) continue;
+        if (entry.is_symlink(fsError)||!entry.is_regular_file(fsError)) continue;
         const std::string ext = LowerExt(entry.path());
         if (ext != ".png" && ext != ".jpg" && ext != ".jpeg") continue;
         ImageAsset asset;
@@ -342,7 +346,7 @@ bool RenameImageAsset(const std::string& assetsDir, const std::string& reference
     const auto filename = FileKey(reference);
     if (filename.empty()) { error = "Selecione uma imagem da experiência para renomear."; return false; }
     std::error_code fsError;
-    if (!std::filesystem::is_regular_file(std::filesystem::path(assetsDir) / filename, fsError)) {
+    if (std::filesystem::is_symlink(std::filesystem::symlink_status(std::filesystem::path(assetsDir)/filename,fsError))||!std::filesystem::is_regular_file(std::filesystem::path(assetsDir) / filename, fsError)) {
         error = "Imagem não encontrada em assets/: " + filename;
         return false;
     }

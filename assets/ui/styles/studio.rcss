@@ -125,8 +125,8 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 .image-query { width: 100%; height: 24px; margin: 2px 0 4px; padding: 3px 6px; font-size: 11px; background-color: #23262c; border: 1px #454b57; }
 .image-options { width: 100%; height: 196px; overflow: auto; padding: 2px; background-color: #23262c; border: 1px #3d434e; }
 .image-option { display: flex; align-items: center; width: 100%; height: 42px; padding: 2px 4px; border: 1px transparent; background-color: transparent; border-radius: 2px; text-align: left; font-size: 11px; }
-.image-option:hover { background-color: #365c8c; }
-.image-option.selected { background-color: #315d91; border: 1px #78b8ff; }
+.image-option:hover { background-color: #373137; }
+.image-option.selected { background-color: #592631; border: 1px #e34255; }
 .image-option img { flex: 0 0 34px; width: 34px; height: 34px; margin-right: 7px; }
 .image-option-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .image-option-type { flex: 0 0 auto; margin-left: 6px; color: #98a3b4; font-size: 9px; }
@@ -188,3 +188,12 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 .compact .group-tools button { width: 48px; min-width: 48px; flex-basis: 48px; font-size: 10px; }
 .compact .ribbon-group { padding: 0 4px; margin-right: 4px; }
 .compact .group-tools img { width: 24px; height: 24px; }
+
+/* Referências de imagens: rolagem limitada no diálogo, sem cobrir os comandos. */
+.image-usages { max-height: 200px; overflow: auto; }
+.image-usage { padding: 6px 0; border-bottom: 1px #ffffff18; }
+.image-usage span { display: block; margin-bottom: 4px; font-size: 12px; }
+.image-usage button { height: 26px; margin-right: 5px; padding: 3px 7px; }
+#dialog { max-height: 88%; overflow: auto; }
+.image-picker, .image-query, .image-options, .image-option { box-sizing: border-box; }
+.asset-card { box-sizing: border-box; }

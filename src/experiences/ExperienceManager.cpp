@@ -144,12 +144,9 @@ std::string imageImport(const fs::path& root,const fs::path& source) {
     return reference;
 }
 bool isImageKey(const std::string& key) {
-    return key=="image"||key=="decal_image"||key=="texture_image"||key=="FaceTexture"||
-        key=="skyFront"||key=="skyBack"||key=="skyLeft"||key=="skyRight"||key=="skyUp"||key=="skyDown"||
-        // Biblioteca de áudio e atributos de som: a mesma normalização de
-        // caminho, mas o arquivo é copiado como áudio.
-        key=="reference"||key=="sound"||key=="music";
+    return game::IsImageProperty(key)||key=="reference"||key=="sound"||key=="music";
 }
+
 // Only known image fields are relocated. Script source and arbitrary string
 // attributes are never rewritten by a substring replacement.
 void walkImages(json& node,const std::function<std::string(const std::string&)>& visit) {
@@ -616,17 +613,11 @@ void ExperienceManager::removeAsset(const std::string& reference,bool usedByScen
     const auto tail=normalized.rfind("assets/",0)==0?normalized.substr(7):std::string();
     if(tail.empty()||tail.find('/')!=std::string::npos||tail.find('\\')!=std::string::npos)
         throw std::runtime_error("Selecione um asset importado da experiência");
-    // O manifesto em disco é a verdade: comparar pelo nome do arquivo cobre
-    // referências absolutas herdadas e metadados atualizados nesta sessão.
     const auto current=inspect(active_->root);
-    const auto same=[&](const std::string& ref) {
-        return !ref.empty()&&std::filesystem::path(game::NormalizeImageReference(ref)).filename().string()==tail;
-    };
-    for(const auto& entry:{std::pair<const char*,std::string>{"ícone",current.manifest.icon},
-                           std::pair<const char*,std::string>{"banner",current.manifest.banner},
-                           std::pair<const char*,std::string>{"fundo de carregamento",current.manifest.loadingBackground},
-                           std::pair<const char*,std::string>{"rosto",current.manifest.faceImage}})
-        if(same(entry.second))throw std::runtime_error(std::string("A imagem é usada no ")+entry.first+" da experiência; substitua a imagem antes de removê-la");
+    const auto uses=game::DescribeImageUsage(current.manifest,normalized);
+    if(!uses.empty())throw std::runtime_error("A imagem é usada em "+uses.front().where+"; remova ou substitua essa referência antes de excluir.");
+    Scene saved;loadWorld(saved,current);
+    if(game::ImageInUse(saved,normalized))throw std::runtime_error("A imagem ainda é usada pela cena salva. Remova as referências e salve a experiência antes de excluir.");
     std::string error;
     if(!game::RemoveAssetFile((root/"assets").string(),tail,usedByScene,error))throw std::runtime_error(error);
     event("asset_removed",root);

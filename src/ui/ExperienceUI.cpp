@@ -95,20 +95,21 @@ void ExperienceUI::removeAsset(const std::string& reference,bool usedByScene) {
     manager_.removeAsset(reference,usedByScene);
     dirty_=true;
 }
+std::vector<game::ImageUsage> ExperienceUI::presentationReferences(const std::string& reference) const {
+    const auto active=manager_.active();return active?game::DescribeImageUsage(manager_.inspect(active->root).manifest,reference):std::vector<game::ImageUsage>{};
+}
 std::vector<std::string> ExperienceUI::presentationUses(const std::string& reference) const {
-    std::vector<std::string> uses;
-    const auto active=manager_.active();if(!active)return uses;
-    const auto file=std::filesystem::path(game::NormalizeImageReference(reference)).filename().string();
-    if(file.empty())return uses;
-    const auto& m=active->manifest;
-    const auto matches=[&](const std::string& value) {
-        return !value.empty()&&std::filesystem::path(value).filename().string()==file;
-    };
-    if(matches(m.icon))uses.push_back("Ícone da experiência");
-    if(matches(m.banner))uses.push_back("Banner da experiência");
-    if(matches(m.loadingBackground))uses.push_back("Fundo de carregamento");
-    if(matches(m.faceImage))uses.push_back("Rosto da experiência");
-    return uses;
+    std::vector<std::string> result;for(const auto& use:presentationReferences(reference))result.push_back(use.where);return result;
+}
+bool ExperienceUI::clearPresentationImage(const game::ImageUsage& use,std::string& error) {
+    try {
+        const auto active=manager_.active();if(!active)throw std::runtime_error("Nenhuma experiência aberta.");
+        auto manifest=manager_.inspect(active->root).manifest;std::string* field=nullptr;
+        if(use.property=="icon")field=&manifest.icon;else if(use.property=="banner")field=&manifest.banner;
+        else if(use.property=="loadingBackground")field=&manifest.loadingBackground;else if(use.property=="faceImage")field=&manifest.faceImage;
+        if(!field||*field!=use.reference)throw std::runtime_error("Referência alterada. Consulte os usos novamente.");
+        field->clear();manager_.updateMetadata(manifest);game::SetProjectFaceImage(manifest.faceImage);dirty_=true;error.clear();return true;
+    }catch(const std::exception& e){error=e.what();return false;}
 }
 std::size_t ExperienceUI::replaceImageReferences(const std::string& from,const std::string& to) {
     const auto active=manager_.active();if(!active)return 0;
@@ -117,7 +118,7 @@ std::size_t ExperienceUI::replaceImageReferences(const std::string& from,const s
     auto manifest=active->manifest;
     std::size_t replaced=0;
     const auto swap=[&](std::string& value) {
-        if(value.empty()||std::filesystem::path(value).filename().string()!=source)return;
+        if(!game::ImageReferenceMatches(value,from))return;
         value=to;++replaced;
     };
     swap(manifest.icon);swap(manifest.banner);swap(manifest.loadingBackground);swap(manifest.faceImage);
