@@ -660,7 +660,10 @@ struct LuaRuntime::Impl {
     static int AudioIsPaused(lua_State* L) { auto& self=Host(L);lua_pushboolean(L,self.runtime->audio().isPaused(AudioHandle(L,1)));return 1; }
     static int AudioIsLooping(lua_State* L) { auto& self=Host(L);lua_pushboolean(L,self.runtime->audio().looping(AudioHandle(L,1)));return 1; }
     static int AudioDuration(lua_State* L) {
-        auto& self=Host(L);Require(lua_type(L,1)==LUA_TSTRING,"duracao requer referencia ou id");
+        auto& self=Host(L);
+        // Aceita handle (voz já tocando) ou referência/id da biblioteca.
+        if(lua_isinteger(L,1)){lua_pushnumber(L,self.runtime->audio().duration(AudioHandle(L,1)));return 1;}
+        Require(lua_type(L,1)==LUA_TSTRING,"duracao requer handle, referencia ou id");
         std::string reference=Text(L,1);if(const auto* library=FindSound(*self.runtime,reference))reference=library->reference;
         double seconds=0;std::string error;Require(self.runtime->audio().probe(reference,seconds,error),error.c_str());
         lua_pushnumber(L,seconds);return 1;
