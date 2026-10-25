@@ -69,10 +69,18 @@ python3 tools/backup/backup.py verify
 `tools/backup/config.json` define `include`, `exclude`, limites e cadência.
 Um ajuste local pode ser colocado em `~/.config/linblux/backup.json` (mesmas
 chaves, mescladas sobre o arquivo do projeto) ou apontado por
-`LINBLUX_BACKUP_CONFIG`.
+`LINBLUX_BACKUP_CONFIG`. A configuração é lida na inicialização: depois de
+editá-la, reinicie o daemon (`systemctl --user restart linblux-backup`).
 
 Caminhos úteis: `LINBLUX_BACKUP_STATE` (estado), `LINBLUX_BACKUP_PROJECT`
 (projeto) e `--state-dir`, `--project`, `--config`.
+
+## Verificação contínua
+
+O daemon grava cada ciclo no log do systemd (ou em
+`~/.local/state/linblux-backup/daemon.log` quando iniciado manualmente). Uma
+instância por usuário é garantida por trava exclusiva em `backup.lock`: se
+outro processo já monitora, o novo encerra sem duplicar checkpoints.
 
 ## Testes
 
