@@ -314,6 +314,32 @@ struct LuaRuntime::Impl {
         else {const char* name=Text(L,1);const Instance* found=nullptr;for(const auto& object:self.runtime->scene().objects())if(object->name()==name){found=object.get();break;}self.pushInstance(L,found,true);}
         return 1;
     }
+    template<game::PartMotion Operation> static int Motion(lua_State* L) {
+        auto& self=Host(L);auto& object=self.instance(L,1);Require(object.isPart(),"Movimento físico requer uma peça");
+        const auto value=ReadVector(L,2);std::string error;
+        if(!self.runtime->partMotion(object.id(),value,Operation,error))throw std::runtime_error(error);
+        return 0;
+    }
+    static int Raycast(lua_State* L) {
+        auto& self=Host(L);const auto origin=ReadVector(L,1),direction=ReadVector(L,2);const double distance=Number(L,3);
+        Require(distance>0&&distance<=1000000&&Vector3LengthSqr(direction)>1e-12f,"Raio requer direção não nula e distância de 0 a 1000000");
+        const auto ignored=lua_gettop(L)>3&&!lua_isnil(L,4)?self.instance(L,4).id():0;
+        Part* object=nullptr;Vector3 point{},normal{};
+        if(!self.runtime->raycastParts(origin,direction,float(distance),object,point,normal,ignored)){lua_pushnil(L);return 1;}
+        lua_createtable(L,0,4);self.pushInstance(L,object,true);lua_setfield(L,-2,"object");ModernVector(L,point);lua_setfield(L,-2,"point");ModernVector(L,normal);lua_setfield(L,-2,"normal");lua_pushnumber(L,Vector3Distance(origin,point));lua_setfield(L,-2,"distance");return 1;
+    }
+    static int Nearby(lua_State* L) {
+        auto& self=Host(L);const auto center=ReadVector(L,1);const double radius=Number(L,2);
+        Require(radius>=0&&radius<=1000000,"Raio de consulta fora do intervalo");lua_newtable(L);int index=0;
+        for(const auto* part:self.runtime->scene().parts())if(Vector3DistanceSqr(center,part->position())<=radius*radius){self.pushInstance(L,part,true);lua_rawseti(L,-2,++index);}
+        return 1;
+    }
+    static int Gravity(lua_State* L){lua_pushnumber(L,Host(L).runtime->settings().gravity);return 1;}
+    static int SetGravity(lua_State* L) {
+        auto& self=Host(L);const auto value=Number(L,1);std::string error;
+        if(!self.runtime->setGravity(float(value),error))throw std::runtime_error(error);
+        return 0;
+    }
     static int ModernVec(lua_State* L) {
         const Vector3 value{float(Number(L,1)),float(Number(L,2)),float(Number(L,3))};
         Require(std::isfinite(value.x)&&std::isfinite(value.y)&&std::isfinite(value.z)&&std::fabs(value.x)<=1000000&&std::fabs(value.y)<=1000000&&std::fabs(value.z)<=1000000,"Vetor fora do intervalo suportado");ModernVector(L,value);return 1;
@@ -417,6 +443,9 @@ struct LuaRuntime::Impl {
             if(Eq(key,"alive")){lua_pushboolean(L,self.runtime->scene().find(h.id)!=nullptr);return 1;}
             if(Eq(key,"id")){self.instance(L,1);lua_pushinteger(L,lua_Integer(h.id));return 1;}
             if(Eq(key,"type")){auto& object=self.instance(L,1);lua_pushstring(L,object.isPart()?"part":object.instanceClass()==InstanceClass::Folder?"group":object.instanceClass()==InstanceClass::Model?"model":IsScriptClass(object.instanceClass())?"script":"service");return 1;}
+            if(Eq(key,"velocity")){auto& object=self.instance(L,1);Require(object.isPart(),"Velocidade requer uma peça");ModernVector(L,self.runtime->partVelocity(object.id()));return 1;}
+            if(Eq(key,"apply_force")){lua_pushcfunction(L,Safe<Motion<game::PartMotion::Force>>);return 1;}
+            if(Eq(key,"apply_impulse")){lua_pushcfunction(L,Safe<Motion<game::PartMotion::Impulse>>);return 1;}
             key=ModernKey(key);
         }
 #define METHOD(name,fn) if(Eq(key,name)){lua_pushcfunction(L,Safe<fn>);return 1;}
@@ -480,6 +509,11 @@ struct LuaRuntime::Impl {
     }
     static int NewIndex(lua_State* L) {
         auto& self=Host(L);const auto h=self.handle(L,1);const char* key=Text(L,2);
+        if(h.modern&&h.kind==Kind::Instance&&Eq(key,"velocity")) {
+            auto& object=self.instance(L,1);Require(object.isPart(),"Velocidade requer uma peça");const auto value=ReadVector(L,3);std::string error;
+            if(!self.runtime->partMotion(object.id(),value,game::PartMotion::Velocity,error))throw std::runtime_error(error);
+            return 0;
+        }
         if(h.modern&&h.kind==Kind::Instance)key=ModernKey(key);
         if(h.kind==Kind::Humanoid) {
             if(Eq(key,"Health")) {const auto value=Number(L,3);Require(std::fabs(value)<=100000,"Health outside range");std::string error;if(!self.runtime->setHealth(float(value),error))throw std::runtime_error(error);return 0;}
@@ -539,6 +573,7 @@ struct LuaRuntime::Impl {
         lua_newtable(L);lua_pushinteger(L,1);lua_setfield(L,-2,"api_version");lua_pushcfunction(L,Safe<ModernVec>);lua_setfield(L,-2,"vec3");
         lua_newtable(L);lua_pushcfunction(L,Safe<ModernNew>);lua_setfield(L,-2,"create");lua_pushcfunction(L,Safe<ModernFind>);lua_setfield(L,-2,"find");self.pushInstance(L,self.runtime->scene().workspace(),true);lua_setfield(L,-2,"root");lua_setfield(L,-2,"scene");
         lua_newtable(L);lua_pushcfunction(L,Safe<On>);lua_setfield(L,-2,"on");lua_pushcfunction(L,Safe<Publish>);lua_setfield(L,-2,"emit");lua_setfield(L,-2,"events");
+        lua_newtable(L);lua_pushcfunction(L,Safe<Raycast>);lua_setfield(L,-2,"raycast");lua_pushcfunction(L,Safe<Nearby>);lua_setfield(L,-2,"nearby");lua_pushcfunction(L,Safe<Gravity>);lua_setfield(L,-2,"gravity");lua_pushcfunction(L,Safe<SetGravity>);lua_setfield(L,-2,"set_gravity");lua_setfield(L,-2,"physics");
         lua_newtable(L);lua_pushcfunction(L,Safe<Now>);lua_setfield(L,-2,"now");lua_pushcfunction(L,Safe<Wait>);lua_setfield(L,-2,"wait");lua_pushcfunction(L,Safe<After>);lua_setfield(L,-2,"after");lua_pushcfunction(L,Safe<SpawnTask>);lua_setfield(L,-2,"spawn");lua_setfield(L,-2,"time");lua_setglobal(L,"linblux");return 0;
     }
     static int Emit(lua_State* L) {

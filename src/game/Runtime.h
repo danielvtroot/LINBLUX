@@ -13,6 +13,7 @@ class btDefaultMotionState;
 namespace loblox::game {
 enum class RuntimeState { Editing, StartingPlay, Playing, Paused, StoppingPlay };
 enum class HumanoidState { Idle, Walking, Jumping, Freefall, Landing, Dead };
+enum class PartMotion { Velocity, Force, Impulse };
 const char* StateName(HumanoidState state);
 struct PlayerInput {
     bool shiftKey = false; // roteado ao gameplay; edge detect do Shift Lock
@@ -96,6 +97,12 @@ public:
     bool grounded() const;
     std::size_t bodyCount() const;
     bool validate(std::string& error) const;
+    // Validated script operations; called only outside Bullet's simulation step.
+    bool partMotion(InstanceId id,Vector3 value,PartMotion operation,std::string& error);
+    Vector3 partVelocity(InstanceId id);
+    bool setGravity(float magnitude,std::string& error);
+    bool raycastParts(Vector3 origin,Vector3 direction,float distance,Part*& object,
+                      Vector3& point,Vector3& normal,InstanceId ignored=0);
     // Sphere sweep for camera, ignores avatar and non-collidable Parts.
     float cameraClearance(Vector3 from, Vector3 to, float radius) const;
     PlayerSettings& settings() { return settings_; } // session preferences, not project writes

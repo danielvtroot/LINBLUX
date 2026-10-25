@@ -1,4 +1,4 @@
-# Lua do LINBLUX — API v1, Fase 1
+# Lua do LINBLUX — API v1, implementação progressiva
 
 A API nova é `linblux`, com `api_version == 1`. Os nomes antigos continuam
 funcionando em projetos existentes. Novos exemplos usam os namespaces próprios.
@@ -55,6 +55,35 @@ bloco:set_attribute("pontos", 10)
 Os handles novos usam propriedades em minúsculas e vetores x/y/z. Handles dos
 bindings legados mantêm suas propriedades e vetores originais; inclusive filhos
 com nomes que poderiam coincidir com uma propriedade nova.
+
+## Física — incremento 2A
+
+```lua
+local bola = linblux.scene.create("part", {
+    name="Bola", shape="sphere", position=linblux.vec3(10, 12, 0), anchored=false
+})
+bola.velocity = linblux.vec3(0, 2, 0)
+bola:apply_impulse(linblux.vec3(15, 10, 0))
+```
+
+- `peça.velocity`: velocidade real do corpo Bullet; pode ser atribuída em peças
+  dinâmicas. `apply_impulse(vetor)` aplica impulso central; `apply_force(vetor)`
+  acumula força central para o próximo passo físico efetivo. Chamadas de força
+  se somam; não são uma força persistente nem devem ser repetidas por FPS para
+  simular um controlador de passo fixo. Peças ancoradas recusam essas escritas.
+- `linblux.physics.gravity()` retorna a magnitude vertical. `set_gravity(valor)`
+  aceita de 1 a 500 e atualiza tanto o Bullet quanto os cálculos do jogador.
+- `physics.raycast(origem, direção, distância, peça_ignorada?)` retorna nil ou
+  `{object, point, normal, distance}` com dados reais do Bullet. Ignora a cápsula
+  do jogador; inclui peças mesmo sem resposta de contato. Direção não nula;
+  distância positiva até 1 milhão de unidades.
+- `physics.nearby(centro, raio)` retorna peças cujos **centros** estão no raio.
+  É uma consulta de proximidade, não teste exato de interseção de volumes; não
+  inclui o jogador. Raio de 0 a 1 milhão.
+
+Essas operações são exclusivas da cópia de runtime. Contatos, ciclo de passo
+fixo, consultas de volumes e controle de personagem na API nova ainda dependem
+dos próximos incrementos da Fase 2.
 
 ## Eventos e ciclo de vida
 

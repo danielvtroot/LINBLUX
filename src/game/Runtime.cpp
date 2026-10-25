@@ -651,6 +651,55 @@ float RuntimeSession::cameraClearance(Vector3 from, Vector3 to, float radius) co
     physics_->world_->convexSweepTest(&sphere, a, b, hit);
     return hit.hasHit() ? hit.m_closestHitFraction : 1.f;
 }
+bool RuntimeSession::partMotion(InstanceId id,Vector3 value,PartMotion operation,std::string& error) {
+    auto* part=scene_?scene_->findPart(id):nullptr;
+    if(!physics_||!part||part->anchored()||!std::isfinite(value.x)||!std::isfinite(value.y)||!std::isfinite(value.z)||
+       std::fabs(value.x)>1000000||std::fabs(value.y)>1000000||std::fabs(value.z)>1000000) {
+        error="Movimento físico requer uma peça dinâmica e um vetor finito no intervalo suportado.";return false;
+    }
+    physics_->syncScene(*scene_);
+    const auto found=physics_->bodies_.find(id);
+    if(found==physics_->bodies_.end()||found->second.body->isStaticOrKinematicObject()){error="Corpo dinâmico indisponível.";return false;}
+    auto* body=found->second.body;
+    switch(operation) {
+        case PartMotion::Velocity:body->setLinearVelocity(Bt(value));break;
+        case PartMotion::Force:body->applyCentralForce(Bt(value));break;
+        case PartMotion::Impulse:body->applyCentralImpulse(Bt(value));break;
+        default:error="Operação física desconhecida.";return false;
+    }
+    body->activate(true);error.clear();return true;
+}
+Vector3 RuntimeSession::partVelocity(InstanceId id) {
+    if(!physics_||!scene_)return {};
+    physics_->syncScene(*scene_);return physics_->linearVelocity(id);
+}
+bool RuntimeSession::setGravity(float magnitude,std::string& error) {
+    if(!physics_){error="Física da sessão indisponível.";return false;}
+    auto candidate=settings_;candidate.gravity=magnitude;
+    if(!candidate.validate(error))return false;
+    settings_=candidate;physics_->setGravity({0,-magnitude,0});error.clear();return true;
+}
+bool RuntimeSession::raycastParts(Vector3 origin,Vector3 direction,float distance,Part*& object,
+                                 Vector3& point,Vector3& normal,InstanceId ignored) {
+    object=nullptr;
+    if(!physics_||!scene_||!std::isfinite(distance)||distance<=0||distance>1000000||
+       !std::isfinite(origin.x)||!std::isfinite(origin.y)||!std::isfinite(origin.z)||
+       !std::isfinite(direction.x)||!std::isfinite(direction.y)||!std::isfinite(direction.z)||Vector3LengthSqr(direction)<1e-12f)return false;
+    physics_->syncScene(*scene_);
+    const auto from=Bt(origin),to=Bt(Vector3Add(origin,Vector3Scale(Vector3Normalize(direction),distance)));
+    struct Ray final:btCollisionWorld::ClosestRayResultCallback {
+        InstanceId ignored;
+        Ray(btVector3 from,btVector3 to,InstanceId skip):ClosestRayResultCallback(from,to),ignored(skip){}
+        bool needsCollision(btBroadphaseProxy* proxy) const override {
+            const auto* body=static_cast<const btCollisionObject*>(proxy->m_clientObject);
+            const auto* part=static_cast<const Part*>(body->getUserPointer());
+            return part&&part->id()!=ignored&&ClosestRayResultCallback::needsCollision(proxy);
+        }
+    } result(from,to,ignored);
+    physics_->world_->rayTest(from,to,result);if(!result.hasHit())return false;
+    object=static_cast<Part*>(result.m_collisionObject->getUserPointer());
+    point=Vec(result.m_hitPointWorld);normal=Vec(result.m_hitNormalWorld);return object!=nullptr;
+}
 std::size_t RuntimeSession::bodyCount() const {
     return physics_ ? static_cast<std::size_t>(physics_->world_->getNumCollisionObjects()) : 0;
 }

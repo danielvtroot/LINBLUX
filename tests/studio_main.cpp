@@ -286,6 +286,41 @@ void LinbluxExamples() {
     for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Example: %s\n",message.text.c_str());CHECK(!message.error);}
     CHECK(projectio::toJson(reopened)==baseline);CHECK(runtime.validate(error));runtime.stop();std::filesystem::remove(path);
 }
+void LinbluxPhysics() {
+    Scene author;author.buildDefaultScene();std::string error;
+    auto* script=author.createScript(InstanceClass::Script,nullptr,"Fisica.lua");
+    script->source=R"(
+linblux.physics.set_gravity(10)
+assert(linblux.physics.gravity() == 10)
+local p = linblux.scene.create("part", {name="FisicaLua", position=linblux.vec3(40,20,0),
+    size=linblux.vec3(1,1,1), anchored=false})
+p.velocity = linblux.vec3(0,2,0)
+p:apply_impulse(linblux.vec3(1,0,0))
+p:apply_force(linblux.vec3(0,60,0))
+assert(math.abs(p.velocity.x - 1) < 0.01)
+local hit = linblux.physics.raycast(linblux.vec3(40,30,0), linblux.vec3(0,-1,0), 15)
+assert(hit and hit.object == p and hit.normal.y > 0.9)
+assert(math.abs(hit.point.y - 20.5) < 0.1 and math.abs(hit.distance - 9.5) < 0.1)
+assert(linblux.physics.raycast(linblux.vec3(40,30,0), linblux.vec3(0,-1,0), 15, p) == nil)
+local nearby = linblux.physics.nearby(p.position, 2)
+assert(#nearby == 1 and nearby[1] == p)
+linblux.scene.root:set_attribute("physics_ready", true)
+)";
+    const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+    CHECK(runtime.scene().workspace()->attributes().count("physics_ready"));
+    const Part* dynamic=nullptr;for(const auto* part:runtime.scene().parts())if(part->name()=="FisicaLua")dynamic=part;
+    CHECK(dynamic!=nullptr);
+    if(dynamic) {
+        const auto id=dynamic->id();for(int i=0;i<10;++i)runtime.update(1.f/60,{});
+        CHECK(dynamic->position().x>40.1f&&dynamic->position().y>20);
+        CHECK(runtime.partVelocity(id).x>.9f);
+        CHECK(!runtime.partMotion(id,{NAN,0,0},game::PartMotion::Force,error));
+    }
+    CHECK(!runtime.partMotion(author.parts().front()->id(),{1,0,0},game::PartMotion::Impulse,error));
+    CHECK(!runtime.setGravity(0,error));CHECK(runtime.settings().gravity==10);
+    for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Physics Lua: %s\n",message.text.c_str());CHECK(!message.error);}
+    CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
+}
 void AnimationIds() {
     Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();std::string error;
     auto* service=scene.service(InstanceClass::ServerScriptService);CHECK(service && service->children().size()==1);
@@ -683,6 +718,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }
