@@ -3,6 +3,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include "game/Audio.h"
 #include "game/Npc.h"
 #include "game/Rig.h"
 #include "game/ScriptInput.h"
@@ -103,6 +104,8 @@ public:
     NpcSystem& npcs() { return npcs_; }
     const NpcSystem& npcs() const { return npcs_; }
     ProgressStore& storage(){return progress_;}
+    AudioSystem& audio(){return audio_;}
+    const AudioSystem& audio() const {return audio_;}
     const ScriptInput& scriptInput() const { return scriptInput_; }
     const ScriptInput& previousScriptInput() const { return previousScriptInput_; }
     unsigned characterGeneration() const { return respawns_; }
@@ -195,6 +198,7 @@ private:
     std::string activeAnimation_;
     scripting::LuaRuntime scripts_;
     NpcSystem npcs_;
+    AudioSystem audio_;
     ProgressStore progress_;
     std::set<std::pair<InstanceId,InstanceId>> activeContacts_;
     ScriptInput scriptInput_,previousScriptInput_;

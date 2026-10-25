@@ -3,6 +3,7 @@
 #include "core/Config.h"
 #include "core/Diagnostics.h"
 #include "core/ImageInfo.h"
+#include "game/Audio.h"
 #include "game/ImageAssets.h"
 #include "serialization/ProjectIO.h"
 #include "nlohmann/json.hpp"
@@ -124,14 +125,20 @@ struct Stage {
     ~Stage(){if(!committed){std::error_code error;fs::remove_all(path,error);}}
     fs::path publish(const std::string& id){const auto target=path.parent_path()/id;if(fs::exists(target))throw std::runtime_error("Installation ID already exists");fs::rename(path,target);committed=true;return target;}
 };
-std::string imageImport(const fs::path& root,const fs::path& source) {
+std::string assetImport(const fs::path& root,const fs::path& source,game::MediaKind kind) {
     std::string path,error;
-    if(!game::ImportImageTo((root/"assets").string(),source.string(),path,error))throw std::runtime_error(error);
+    if(!game::ImportMediaTo((root/"assets").string(),source.string(),kind,path,error))throw std::runtime_error(error);
     return "assets/"+fs::path(path).filename().string();
+}
+std::string imageImport(const fs::path& root,const fs::path& source) {
+    return assetImport(root,source,game::MediaKind::Image);
 }
 bool isImageKey(const std::string& key) {
     return key=="image"||key=="decal_image"||key=="texture_image"||key=="FaceTexture"||
-        key=="skyFront"||key=="skyBack"||key=="skyLeft"||key=="skyRight"||key=="skyUp"||key=="skyDown";
+        key=="skyFront"||key=="skyBack"||key=="skyLeft"||key=="skyRight"||key=="skyUp"||key=="skyDown"||
+        // Biblioteca de áudio e atributos de som: a mesma normalização de
+        // caminho, mas o arquivo é copiado como áudio.
+        key=="reference"||key=="sound"||key=="music";
 }
 // Only known image fields are relocated. Script source and arbitrary string
 // attributes are never rewritten by a substring replacement.
@@ -150,9 +157,12 @@ std::string relocateWorld(const Scene& scene,const fs::path& from,const fs::path
     walkImages(j,[&](const std::string& raw){
         const std::string ref=game::NormalizeImageReference(raw);
         if(const auto it=copied.find(ref);it!=copied.end())return it->second;
+        const bool audio=game::IsAudioReference(ref);
         fs::path source;
         if(!ref.empty()&&safeRelativePath(ref)&&fs::is_regular_file(target/ref)) {
-            ImageInfo info;if(!ReadSafeImageInfo(containedFile(target,ref).string(),info))throw std::runtime_error("Invalid project image: "+ref);
+            if(audio) {double seconds;std::string probeError;
+                if(!game::ProbeAudio(containedFile(target,ref).string(),seconds,probeError))throw std::runtime_error(probeError);}
+            else {ImageInfo info;if(!ReadSafeImageInfo(containedFile(target,ref).string(),info))throw std::runtime_error("Invalid project image: "+ref);}
             copied[ref]=ref;return ref;
         }
         if(fs::path(ref).is_absolute())source=ref;
@@ -162,9 +172,10 @@ std::string relocateWorld(const Scene& scene,const fs::path& from,const fs::path
                 if(fs::is_regular_file(candidate)){source=candidate;break;}
         }
         if(source.empty()&&!ref.empty()&&fs::is_regular_file(ref))source=ref;
-        if(source.empty())source=game::BuiltinAssetPath(ref);
-        if(source.empty())throw std::runtime_error("Missing image asset: "+raw+". Original project was not changed.");
-        const auto result=imageImport(target,source);copied[ref]=result;return result;
+        if(source.empty()&&!audio)source=game::BuiltinAssetPath(ref);
+        if(source.empty())throw std::runtime_error(std::string(audio?"Missing audio asset: ":"Missing image asset: ")+raw+". Original project was not changed.");
+        const auto result=assetImport(target,source,audio?game::MediaKind::Audio:game::MediaKind::Image);
+        copied[ref]=result;return result;
     });
     return j.dump(2);
 }
@@ -172,16 +183,26 @@ Scene& loadWorld(Scene& scene,const Experience& e) {
     const auto world=read(containedFile(e.root,e.manifest.mainPlace));
     auto j=boundedJson(world);
     walkImages(j,[&](const std::string& raw){const std::string ref=game::NormalizeImageReference(raw);
+        const bool audio=game::IsAudioReference(ref);
         if(!ref.empty()&&safeRelativePath(ref)) {
             const auto file=containedFile(e.root,ref);ImageInfo info;
-            if(fs::is_regular_file(file)&&ReadSafeImageInfo(file.string(),info))return ref;
+            if(audio) {
+                double seconds;std::string probeError;
+                if(fs::is_regular_file(file)&&game::ProbeAudio(file.string(),seconds,probeError))return ref;
+            } else if(fs::is_regular_file(file)&&ReadSafeImageInfo(file.string(),info))return ref;
             // Legado: nome solto guardado em assets/.
-            const auto legacy=containedFile(e.root,"assets/"+fs::path(ref).filename().string());
-            if(fs::is_regular_file(legacy)&&ReadSafeImageInfo(legacy.string(),info))return "assets/"+fs::path(ref).filename().string();
+            const auto legacyName=fs::path(ref).filename().string();
+            const auto legacy=containedFile(e.root,"assets/"+legacyName);
+            if(audio) {
+                double seconds;std::string probeError;
+                if(fs::is_regular_file(legacy)&&game::ProbeAudio(legacy.string(),seconds,probeError))return "assets/"+legacyName;
+            } else if(fs::is_regular_file(legacy)&&ReadSafeImageInfo(legacy.string(),info))return "assets/"+legacyName;
         }
-        const auto builtin=game::BuiltinAssetPath(ref);ImageInfo info;
-        if(!builtin.empty()&&ReadSafeImageInfo(builtin,info))return ref;
-        throw std::runtime_error("Invalid/missing image asset: "+raw);});
+        if(!audio) {
+            const auto builtin=game::BuiltinAssetPath(ref);ImageInfo info;
+            if(!builtin.empty()&&ReadSafeImageInfo(builtin,info))return ref;
+        }
+        throw std::runtime_error(std::string(audio?"Invalid/missing audio asset: ":"Invalid/missing image asset: ")+raw);});
     for(const auto& ref:{e.manifest.icon,e.manifest.banner,e.manifest.loadingBackground,e.manifest.faceImage})if(!ref.empty()) {
         ImageInfo info;if(!ReadSafeImageInfo(containedFile(e.root,ref).string(),info))throw std::runtime_error("Invalid presentation image: "+ref);
     }

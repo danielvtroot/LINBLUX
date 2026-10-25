@@ -1,8 +1,10 @@
 #include "game/Rig.h"
 #include "core/Geometry.h"
+#include "game/Audio.h"
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <set>
 #include <stdexcept>
 
@@ -430,8 +432,41 @@ const AnimationClip* GameAssets::findAnimation(const std::string& id) const {
     for (const auto& c : animations) if (c.id == key) return &c;
     return nullptr;
 }
+SoundAsset* GameAssets::findSound(const std::string& id) {
+    for (auto& sound : sounds) if (sound.id == id) return &sound;
+    return nullptr;
+}
+const SoundAsset* GameAssets::findSound(const std::string& id) const {
+    for (const auto& sound : sounds) if (sound.id == id) return &sound;
+    return nullptr;
+}
+SoundAsset& GameAssets::addSound(const std::string& reference, const std::string& name) {
+    SoundAsset sound;
+    sound.reference = reference;
+    sound.filename = std::filesystem::path(reference).filename().string();
+    sound.id = std::filesystem::path(reference).stem().string();
+    if (sound.id.empty()) sound.id = "sound-" + std::to_string(sounds.size() + 1);
+    for (int suffix = 2; findSound(sound.id); ++suffix) sound.id = std::filesystem::path(reference).stem().string() + "-" + std::to_string(suffix);
+    sound.name = name.empty() ? sound.id : name;
+    sounds.push_back(std::move(sound));
+    return sounds.back();
+}
+bool GameAssets::removeSound(const std::string& id) {
+    const auto before = sounds.size();
+    sounds.erase(std::remove_if(sounds.begin(), sounds.end(), [&](const SoundAsset& sound) { return sound.id == id; }), sounds.end());
+    return sounds.size() != before;
+}
 bool GameAssets::validate(std::string& error) const {
     if (rigs.size() > 128 || animations.size() > 256) { error = "game: asset limit exceeded"; return false; }
+    if (sounds.size() > 256) { error = "game: sound limit exceeded"; return false; }
+    std::set<std::string> soundIds;
+    for (const auto& sound : sounds) {
+        if (sound.id.empty() || sound.id.size() > 128 || sound.reference.size() > 512 || !soundIds.insert(sound.id).second) {
+            error = "game: invalid or duplicate sound id"; return false;
+        }
+        if (!std::isfinite(sound.volume) || sound.volume < 0 || sound.volume > 1) { error = "game: sound volume out of range"; return false; }
+        if (sound.reference.rfind("assets/", 0) != 0) { error = "game: sound reference must live in assets/"; return false; }
+    }
     std::set<std::string> ids;
     for (const auto& r : rigs) if (!r.validate(error) || !ids.insert(r.id).second) { if (error.empty()) error = "duplicate rig id"; return false; }
     ids.clear();

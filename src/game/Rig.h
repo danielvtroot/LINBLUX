@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "game/Audio.h"
 #include "objects/Part.h"
 
 namespace loblox::game {
@@ -168,6 +169,9 @@ struct PlayerSettings {
 struct GameAssets {
     std::vector<Rig> rigs;
     std::vector<AnimationClip> animations;
+    // Biblioteca de áudio do projeto: metadados + referência canonical em
+    // assets/. O arquivo em si é um asset da experiência, nunca um ponteiro.
+    std::vector<SoundAsset> sounds;
     std::string defaultRig;
     PlayerSettings player;
     Rig& createR6(); // compatibility constructor for authored legacy rigs
@@ -178,6 +182,10 @@ struct GameAssets {
     bool removeRig(const std::string& id);
     AnimationClip* findAnimation(const std::string& id);
     const AnimationClip* findAnimation(const std::string& id) const;
+    SoundAsset* findSound(const std::string& id);
+    const SoundAsset* findSound(const std::string& id) const;
+    SoundAsset& addSound(const std::string& reference, const std::string& name = {});
+    bool removeSound(const std::string& id);
     bool validate(std::string& error) const;
 };
 
