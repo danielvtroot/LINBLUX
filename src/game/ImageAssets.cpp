@@ -198,27 +198,29 @@ bool ImportMediaTo(const std::string& assetsDir, const std::string& sourcePath,
                    MediaKind kind, std::string& outAssetPath, std::string& error) {
     std::error_code fsError;
     const std::filesystem::path source(sourcePath);
-    if(kind!=MediaKind::Audio) {
+    if (!std::filesystem::exists(source, fsError) || !std::filesystem::is_regular_file(source, fsError)) {
+        error = std::string(kind==MediaKind::Audio?"arquivo de áudio não encontrado: ":"arquivo de imagem não encontrado: ") + sourcePath;
+        return false;
+    }
+    const std::string ext = LowerExt(source);
+    const bool audioExt = IsAudioExtension(ext);
+    const bool imageExt = ext == ".png" || ext == ".jpg" || ext == ".jpeg";
+    if (kind==MediaKind::Audio) {
+        if(!audioExt){error="formato de áudio não suportado (use MP3, WAV ou OGG): "+ext;return false;}
+    } else if (kind==MediaKind::Image && !imageExt) {
+        error = "formato não suportado (use PNG ou JPEG): " + ext;
+        return false;
+    } else if (kind==MediaKind::Any && !imageExt && !audioExt) {
+        error = "formato de asset não suportado: " + ext;
+        return false;
+    }
+    if(!audioExt) {
         ImageInfo info;
         if(!ReadSafeImageInfo(sourcePath,info)){error="Invalid PNG/JPEG or image exceeds the 32 MiB file / 64 MiB decoded budget";return false;}
         Image decoded=LoadProjectImage(sourcePath);
         const bool valid=decoded.data&&decoded.width==int(info.width)&&decoded.height==int(info.height);
         if(decoded.data)UnloadImage(decoded);
         if(!valid){error="Image decoding failed: "+sourcePath;return false;}
-    }
-    if (!std::filesystem::exists(source, fsError) || !std::filesystem::is_regular_file(source, fsError)) {
-        error = std::string(kind==MediaKind::Audio?"arquivo de áudio não encontrado: ":"arquivo de imagem não encontrado: ") + sourcePath;
-        return false;
-    }
-    const std::string ext = LowerExt(source);
-    if (kind==MediaKind::Audio) {
-        if(!IsAudioExtension(ext)){error="formato de áudio não suportado (use MP3, WAV ou OGG): "+ext;return false;}
-    } else if (kind==MediaKind::Image && ext != ".png" && ext != ".jpg" && ext != ".jpeg") {
-        error = "formato não suportado (use PNG ou JPEG): " + ext;
-        return false;
-    } else if (kind==MediaKind::Any && ext != ".png" && ext != ".jpg" && ext != ".jpeg" && !IsAudioExtension(ext)) {
-        error = "formato de asset não suportado: " + ext;
-        return false;
     }
     std::ifstream in(source, std::ios::binary);
     if (!in) {
