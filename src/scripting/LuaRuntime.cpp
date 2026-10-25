@@ -617,7 +617,7 @@ struct LuaRuntime::Impl {
     // ---- Audio -------------------------------------------------------------
     // Reproducao 2D global (som nao posicional). Aceita a referencia
     // assets/<arquivo> ou o id da biblioteca do projeto (Game Config).
-    static const SoundAsset* FindSound(const RuntimeSession& runtime,const std::string& id) {
+    static const game::SoundAsset* FindSound(const game::RuntimeSession& runtime,const std::string& id) {
         for(const auto& sound:runtime.scene().gameAssets().sounds)if(sound.id==id)return &sound;
         return nullptr;
     }
