@@ -532,6 +532,76 @@ end)
     CHECK(projectio::toJson(author)==baseline);
     runtime.stop();CHECK(runtime.npcs().count()==0);CHECK(runtime.validate(error));
 }
+void NpcExamples() {
+    const auto root=std::filesystem::path(__FILE__).parent_path().parent_path();
+    const auto source=[&](const char* name){std::ifstream file(root/"assets/examples/lua"/name);CHECK(file.good());return std::string(std::istreambuf_iterator<char>(file),{});};
+    const auto find=[&](const game::RuntimeSession& runtime,const char* name)->const Part*{
+        for(const auto* part:runtime.scene().parts())if(part->name()==name)return part;return nullptr;};
+    const auto noErrors=[&](const game::RuntimeSession& runtime,const char* label){
+        for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("NPC %s: %s\n",label,message.text.c_str());CHECK(!message.error);}};
+
+    // Patrulha: percorre o ciclo e para em cada waypoint.
+    {
+        Scene author;author.buildDefaultScene();std::string error;
+        author.createScript(InstanceClass::Script,nullptr,"npc_patrulha.lua")->source=source("npc_patrulha.lua");
+        const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+        for(int i=0;i<600;++i)runtime.update(1.f/60,{});
+        const auto& attrs=runtime.scene().workspace()->attributes();
+        CHECK(attrs.count("patrulha_pronta"));
+        CHECK(attrs.count("patrulha_pontos")&&std::get<double>(attrs.at("patrulha_pontos"))>=2);
+        CHECK(!attrs.count("patrulha_inacessivel"));
+        const auto* guard=find(runtime,"GuardaPatrulha");CHECK(guard!=nullptr);
+        if(guard)CHECK(Vector3Distance(guard->position(),{ -30,2.6f,-30 })>5);
+        noErrors(runtime,"patrulha");CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
+    }
+
+    // Perseguidor: atualiza o destino quando o alvo se move e para ao perde-lo.
+    {
+        Scene author;author.buildDefaultScene();std::string error;
+        author.createScript(InstanceClass::Script,nullptr,"npc_perseguidor.lua")->source=source("npc_perseguidor.lua");
+        author.createScript(InstanceClass::Script,nullptr,"MovimentoJogador.lua")->source=R"(
+linblux.time.after(1.5, function() linblux.player:teleport(linblux.vec3(-24, 6, 0)) end)
+linblux.time.after(3.0, function() linblux.player:teleport(linblux.vec3(60, 6, 60)) end)
+)";
+        const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+        const auto* monster=find(runtime,"Perseguidor");CHECK(monster!=nullptr);
+        const Vector3 spawn=monster?monster->position():Vector3{};
+        for(int i=0;i<220;++i)runtime.update(1.f/60,{});
+        const auto& attrs=runtime.scene().workspace()->attributes();
+        CHECK(attrs.count("perseguindo"));
+        CHECK(attrs.count("replanejamentos")&&std::get<double>(attrs.at("replanejamentos"))>=2);
+        CHECK(attrs.count("alvo_perdido"));
+        if(monster)CHECK(Vector3Distance(monster->position(),spawn)>3&&runtime.npcs().state(monster->id())!=game::NpcState::Moving);
+        noErrors(runtime,"perseguidor");CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
+    }
+
+    // Monstro com dano: persegue, ataca pela vida real e morre ao zerar a vida.
+    {
+        Scene author;author.buildDefaultScene();std::string error;
+        author.createScript(InstanceClass::Script,nullptr,"npc_monstro.lua")->source=source("npc_monstro.lua");
+        author.createScript(InstanceClass::Script,nullptr,"Ataque.lua")->source=R"(
+linblux.time.after(6.0, function() linblux.events.emit("atacar_monstro", {dano = 100}) end)
+)";
+        const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+        const float maxHealth=runtime.settings().maxHealth;
+        for(int i=0;i<420;++i)runtime.update(1.f/60,{});
+        const auto& attrs=runtime.scene().workspace()->attributes();
+        std::printf("DBG health=%.1f attrs:",runtime.health());
+        for(const auto& entry:attrs)std::printf(" %s",entry.first.c_str());
+        std::printf("\n");
+        CHECK(attrs.count("ataques")&&std::get<double>(attrs.at("ataques"))>=1);
+        CHECK(runtime.health()<maxHealth);
+        CHECK(attrs.count("monstro_morto"));
+        const auto* monster=find(runtime,"Monstro");CHECK(monster!=nullptr);
+        if(monster)std::printf("DBG monster=(%.1f,%.1f,%.1f) state=%s target=%d player=(%.1f,%.1f,%.1f)\n",
+            monster->position().x,monster->position().y,monster->position().z,
+            game::NpcStateName(runtime.npcs().state(monster->id())),
+            int(runtime.npcs().target(monster->id()).has_value()),
+            runtime.position().x,runtime.position().y,runtime.position().z);
+        if(monster)CHECK(runtime.npcs().state(monster->id())==game::NpcState::Dead);
+        noErrors(runtime,"monstro");CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
+    }
+}
 void LinbluxProgress() {
     const auto root=std::filesystem::path(__FILE__).parent_path().parent_path();
     const auto directory=root/".turbo"/("progress-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -1233,6 +1303,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }
