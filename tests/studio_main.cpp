@@ -591,18 +591,10 @@ linblux.time.after(6.0, function() linblux.events.emit("atacar_monstro", {dano =
         const float maxHealth=runtime.settings().maxHealth;
         for(int i=0;i<420;++i)runtime.update(1.f/60,{});
         const auto& attrs=runtime.scene().workspace()->attributes();
-        std::printf("DBG health=%.1f attrs:",runtime.health());
-        for(const auto& entry:attrs)std::printf(" %s",entry.first.c_str());
-        std::printf("\n");
         CHECK(attrs.count("ataques")&&std::get<double>(attrs.at("ataques"))>=1);
         CHECK(runtime.health()<maxHealth);
         CHECK(attrs.count("monstro_morto"));
         const auto* monster=find(runtime,"Monstro");CHECK(monster!=nullptr);
-        if(monster)std::printf("DBG monster=(%.1f,%.1f,%.1f) state=%s target=%d player=(%.1f,%.1f,%.1f)\n",
-            monster->position().x,monster->position().y,monster->position().z,
-            game::NpcStateName(runtime.npcs().state(monster->id())),
-            int(runtime.npcs().target(monster->id()).has_value()),
-            runtime.position().x,runtime.position().y,runtime.position().z);
         if(monster)CHECK(runtime.npcs().state(monster->id())==game::NpcState::Dead);
         noErrors(runtime,"monstro");CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
     }
