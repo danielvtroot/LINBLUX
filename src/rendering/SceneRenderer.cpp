@@ -824,8 +824,11 @@ void DrawPartSkins(const Part& part, const std::string& assetsDir,
 
 Texture2D& FaceTexture() {
     static Texture2D tex{};
-    static const auto path=game::BuiltinAssetPath("rosto1.png");
-    tex=game::AssetTexture(game::ProjectFaceImage().empty()?path:game::ProjectFaceImage());
+    // Sem rosto obrigatório: só desenha a face quando o projeto define uma
+    // imagem. Personagens novos usam os olhos mínimos desenhados na cabeça;
+    // experiências antigas que já têm faceImage continuam intactas.
+    const auto& reference=game::ProjectFaceImage();
+    tex=reference.empty()?Texture2D{}:game::AssetTexture(reference);
     return tex;
 }
 

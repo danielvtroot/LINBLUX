@@ -4,6 +4,7 @@
 #include "objects/Part.h"
 #include "scene/Scene.h"
 #include "serialization/ProjectIO.h"
+#include "nlohmann/json.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -12,6 +13,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <unordered_map>
 #include <unistd.h>
 
@@ -50,6 +52,60 @@ std::string LowerExt(const std::filesystem::path& path) {
 // GL_EXT_texture_filter_anisotropic is optional. Asking for
 // GL_MAX_ANISOTROPY_EXT on a driver without it is a GL error, so the
 // extension is probed once before any texture asks for anisotropic filtering.
+std::filesystem::path NamesPath(const std::string& assetsDir) {
+    return std::filesystem::path(assetsDir) / "image-names.json";
+}
+
+std::map<std::string, std::string> ReadImageNames(const std::string& assetsDir) {
+    std::map<std::string, std::string> names;
+    std::ifstream input(NamesPath(assetsDir), std::ios::binary);
+    if (!input) return names;
+    const std::string text((std::istreambuf_iterator<char>(input)), {});
+    if (text.empty() || text.size() > 512 * 1024) return names;
+    try {
+        const auto json = nlohmann::json::parse(text);
+        if (!json.is_object() || json.value("version", 0) != 1) return names;
+        const auto it = json.find("names");
+        if (it == json.end() || !it->is_object()) return names;
+        for (auto entry = it->begin(); entry != it->end(); ++entry) {
+            if (!entry.value().is_string()) continue;
+            const auto name = entry.value().get<std::string>();
+            if (!name.empty() && name.size() <= 80) names[entry.key()] = name;
+        }
+    } catch (const std::exception&) {
+        // Arquivo de nomes corrompido não impede abrir o projeto; ele é
+        // simplesmente regenerado no próximo rename.
+    }
+    return names;
+}
+
+bool WriteImageNames(const std::string& assetsDir, const std::map<std::string, std::string>& names,
+                     std::string& error) {
+    nlohmann::json json;
+    json["version"] = 1;
+    json["names"] = names;
+    std::error_code fsError;
+    std::filesystem::create_directories(assetsDir, fsError);
+    if (fsError) { error = "Não foi possível criar " + assetsDir + ": " + fsError.message(); return false; }
+    return projectio::writeFileAtomically(NamesPath(assetsDir).string(), json.dump(2), error);
+}
+
+std::string FileKey(const std::string& reference) {
+    return std::filesystem::path(NormalizeImageReference(reference)).filename().string();
+}
+
+std::string ShortId(const std::string& filename) {
+    const auto stem = std::filesystem::path(filename).stem().string();
+    return stem.size() <= 4 ? stem : stem.substr(stem.size() - 4);
+}
+
+std::string TrimName(const std::string& value) {
+    std::size_t begin = 0, end = value.size();
+    while (begin < end && std::isspace(static_cast<unsigned char>(value[begin]))) ++begin;
+    while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1]))) --end;
+    return value.substr(begin, end - begin);
+}
+
 bool AnisotropicFilteringSupported() {
 #if defined(LINBLUX_GL_HEADER)
     static const bool supported = []() {
@@ -139,6 +195,7 @@ bool RemoveAssetFile(const std::string& assetsDir, const std::string& filename,
     if(!std::filesystem::is_regular_file(target,fsError)){error="Asset não encontrado: "+name;return false;}
     if(std::filesystem::is_symlink(std::filesystem::symlink_status(target,fsError))){error="Symlink não pode ser removido como asset.";return false;}
     if(!std::filesystem::remove(target,fsError)||fsError){error="Falha ao remover "+name+": "+fsError.message();return false;}
+    ForgetImageAssetName(assetsDir,name);
     ClearImageTextures();
     return true;
 }
@@ -267,16 +324,134 @@ bool ImportImageTo(const std::string& assetsDir, const std::string& sourcePath,
 
 std::vector<ImageAsset> ListImages(const std::string& assetsDir) {
     std::vector<ImageAsset> list;
+    const auto names = ReadImageNames(assetsDir);
     std::error_code fsError;
     for (const auto& entry : std::filesystem::directory_iterator(assetsDir, fsError)) {
         if (!entry.is_regular_file(fsError)) continue;
         const std::string ext = LowerExt(entry.path());
         if (ext != ".png" && ext != ".jpg" && ext != ".jpeg") continue;
-        list.push_back({entry.path().stem().string(), entry.path().filename().string()});
+        ImageAsset asset;
+        asset.id = entry.path().stem().string();
+        asset.filename = entry.path().filename().string();
+        const auto named = names.find(asset.filename);
+        asset.name = named != names.end() ? named->second : "Imagem " + ShortId(asset.filename);
+        list.push_back(std::move(asset));
     }
-    std::sort(list.begin(), list.end(),
-              [](const ImageAsset& a, const ImageAsset& b) { return a.filename < b.filename; });
+    std::sort(list.begin(), list.end(), [](const ImageAsset& a, const ImageAsset& b) {
+        if (a.name != b.name) return a.name < b.name;
+        return a.filename < b.filename;
+    });
     return list;
+}
+
+std::string ImageDisplayName(const std::string& assetsDir, const std::string& reference) {
+    const auto filename = FileKey(reference);
+    if (filename.empty()) return {};
+    const auto names = ReadImageNames(assetsDir);
+    if (const auto it = names.find(filename); it != names.end()) return it->second;
+    return "Imagem " + ShortId(filename);
+}
+
+bool RenameImageAsset(const std::string& assetsDir, const std::string& reference,
+                      const std::string& name, std::string& error) {
+    error.clear();
+    const auto filename = FileKey(reference);
+    if (filename.empty()) { error = "Selecione uma imagem da experiência para renomear."; return false; }
+    std::error_code fsError;
+    if (!std::filesystem::is_regular_file(std::filesystem::path(assetsDir) / filename, fsError)) {
+        error = "Imagem não encontrada em assets/: " + filename;
+        return false;
+    }
+    const auto trimmed = TrimName(name);
+    if (trimmed.empty() || trimmed.size() > 80) {
+        error = "O nome da imagem deve ter entre 1 e 80 caracteres.";
+        return false;
+    }
+    for (unsigned char c : trimmed)
+        if (c < 32 || c == 127) { error = "O nome da imagem não pode ter caracteres de controle."; return false; }
+    auto names = ReadImageNames(assetsDir);
+    names[filename] = trimmed;
+    return WriteImageNames(assetsDir, names, error);
+}
+
+void ForgetImageAssetName(const std::string& assetsDir, const std::string& reference) {
+    const auto filename = FileKey(reference);
+    if (filename.empty()) return;
+    auto names = ReadImageNames(assetsDir);
+    if (names.erase(filename) == 0) return;
+    std::string error;
+    WriteImageNames(assetsDir, names, error);
+}
+
+std::vector<ImageUsage> DescribeImageUsage(const Scene& scene, const std::string& reference) {
+    std::vector<ImageUsage> usage;
+    const auto wanted = FileKey(reference);
+    if (wanted.empty()) return usage;
+    const auto matches = [&](const std::string& value) {
+        return !value.empty() && std::filesystem::path(value).filename().string() == wanted;
+    };
+    for (const Part* part : scene.parts()) {
+        if (!part) continue;
+        for (const auto& attribute : part->attributes()) {
+            const auto* text = std::get_if<std::string>(&attribute.second);
+            if (!text || !matches(*text)) continue;
+            const bool texture = attribute.first.rfind("texture", 0) == 0;
+            usage.push_back({"Peça \"" + part->name() + "\"", texture ? "texture" : "decal", part->id()});
+        }
+    }
+    for (const auto& rig : scene.gameAssets().rigs) {
+        for (int index = 0; index < static_cast<int>(rig.bodies.size()); ++index) {
+            const auto& body = rig.bodies[index];
+            if (matches(body.image))
+                usage.push_back({"Personagem \"" + rig.name + "\" · imagem de " + BodyDisplayName(body.name),
+                                 "body", 0});
+            for (const auto& decal : body.decals) {
+                if (!matches(decal.surface.image)) continue;
+                usage.push_back({"Personagem \"" + rig.name + "\" · adesivo \"" + decal.name + "\" em " +
+                                 BodyDisplayName(body.name), "decal", 0});
+            }
+        }
+    }
+    return usage;
+}
+
+std::size_t ReplaceImageReferences(Scene& scene, const std::string& from, const std::string& to) {
+    const auto source = FileKey(from);
+    const auto target = NormalizeImageReference(to);
+    if (source.empty() || target.empty()) return 0;
+    std::size_t replaced = 0;
+    const auto swap = [&](std::string& value) {
+        if (value.empty() || std::filesystem::path(value).filename().string() != source) return;
+        value = target;
+        ++replaced;
+    };
+    for (Part* part : scene.parts()) {
+        if (!part) continue;
+        for (const auto& attribute : part->attributes()) {
+            const auto* text = std::get_if<std::string>(&attribute.second);
+            if (!text || attribute.first.find("image") == std::string::npos) continue;
+            std::string value = *text;
+            swap(value);
+            if (value != *text) part->setAttribute(attribute.first, value);
+        }
+    }
+    for (auto& rig : scene.gameAssets().rigs) {
+        for (auto& body : rig.bodies) {
+            swap(body.image);
+            for (auto& decal : body.decals) swap(decal.surface.image);
+        }
+    }
+    return replaced;
+}
+
+std::string BodyDisplayName(const std::string& bodyName) {
+    if (bodyName == "Head") return "Cabeça";
+    if (bodyName == "Torso") return "Torso";
+    if (bodyName == "Left Arm") return "Braço esquerdo";
+    if (bodyName == "Right Arm") return "Braço direito";
+    if (bodyName == "Left Leg") return "Perna esquerda";
+    if (bodyName == "Right Leg") return "Perna direita";
+    return bodyName;
 }
 
 std::string ResolveImagePath(const std::string& assetsDir, const std::string& assetPath) {
