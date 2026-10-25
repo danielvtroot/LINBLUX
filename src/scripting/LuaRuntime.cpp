@@ -667,7 +667,7 @@ struct LuaRuntime::Impl {
             if(Eq(key,"remove_component")){lua_pushcfunction(L,Safe<RemoveComponent>);return 1;}
             if(Eq(key,"alive")){lua_pushboolean(L,self.runtime->scene().find(h.id)!=nullptr);return 1;}
             if(Eq(key,"id")){self.instance(L,1);lua_pushinteger(L,lua_Integer(h.id));return 1;}
-            if(Eq(key,"type")){auto& object=self.instance(L,1);lua_pushstring(L,object.isPart()?"part":object.instanceClass()==InstanceClass::Folder?"group":object.instanceClass()==InstanceClass::Model?"model":IsScriptClass(object.instanceClass())?"script":"service");return 1;}
+            if(Eq(key,"type")){auto& object=self.instance(L,1);const auto type=object.instanceClass();lua_pushstring(L,object.isPart()?"part":type==InstanceClass::Folder?"group":type==InstanceClass::Model?"model":IsScriptClass(type)?"script":type==InstanceClass::Decal?"decal":type==InstanceClass::Texture?"texture":"service");return 1;}
             if(Eq(key,"velocity")){auto& object=self.instance(L,1);Require(object.isPart(),"Velocidade requer uma peça");ModernVector(L,self.runtime->partVelocity(object.id()));return 1;}
             if(Eq(key,"apply_force")){lua_pushcfunction(L,Safe<Motion<game::PartMotion::Force>>);return 1;}
             if(Eq(key,"apply_impulse")){lua_pushcfunction(L,Safe<Motion<game::PartMotion::Impulse>>);return 1;}
