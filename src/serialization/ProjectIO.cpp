@@ -438,6 +438,10 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
         if(!npc.is_object()){error=prefix+"npc deve ser objeto";return false;}
         for(auto entry=npc.begin();entry!=npc.end();++entry) {
             const auto& field=entry.value();
+            if(entry.key()=="rig") {
+                if(!field.is_string()){error=prefix+"npc.rig deve ser texto";return false;}
+                out.npcProperties.rig=field.get<std::string>();continue;
+            }
             if(entry.key()=="enabled") {
                 if(!field.is_boolean()){error=prefix+"npc.enabled deve ser booleano";return false;}
                 out.npcProperties.enabled=field.get<bool>();continue;
@@ -552,6 +556,7 @@ std::string toJson(const Scene& scene) {
             const auto& npc=*part->npcProperties();
             objects.back()["npc"]={{"enabled",npc.enabled},{"speed",npc.speed},{"maxHealth",npc.maxHealth},
                 {"respawnDelay",npc.respawnDelay},{"turnSpeed",npc.turnSpeed}};
+            if(!npc.rig.empty())objects.back()["npc"]["rig"]=npc.rig;
         }
         for (const auto* child : node->children()) append(child);
     };

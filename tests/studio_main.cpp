@@ -599,6 +599,155 @@ linblux.time.after(6.0, function() linblux.events.emit("atacar_monstro", {dano =
         noErrors(runtime,"monstro");CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
     }
 }
+void NpcAnimatedExamples() {
+    const auto root=std::filesystem::path(__FILE__).parent_path().parent_path();
+    const auto source=[&](const char* name){std::ifstream file(root/"assets/examples/lua"/name);CHECK(file.good());return std::string(std::istreambuf_iterator<char>(file),{});};
+
+    // Patrulha animada: rig aplicado e clipes reais vistos em movimento.
+    {
+        Scene author;author.buildDefaultScene();std::string error;
+        auto& rig=author.gameAssets().createLinbluxCharacter();author.gameAssets().defaultRig=rig.id;
+        author.createScript(InstanceClass::Script,nullptr,"npc_patrulha_animado.lua")->source=source("npc_patrulha_animado.lua");
+        const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+        for(int i=0;i<420;++i)runtime.update(1.f/60,{});
+        const auto& attrs=runtime.scene().workspace()->attributes();
+        CHECK(attrs.count("patrulha_animada_pronta"));
+        CHECK(attrs.count("patrulha_rig")&&!std::get<std::string>(attrs.at("patrulha_rig")).empty());
+        CHECK(attrs.count("patrulha_run"));
+        CHECK(attrs.count("patrulha_animada_pontos")&&std::get<double>(attrs.at("patrulha_animada_pontos"))>=1);
+        for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Patrulha animada: %s\n",message.text.c_str());CHECK(!message.error);}
+        CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
+    }
+
+    // Perseguidor animado: run/perseguição/ataque sem erro.
+    {
+        Scene author;author.buildDefaultScene();std::string error;
+        auto& rig=author.gameAssets().createLinbluxCharacter();author.gameAssets().defaultRig=rig.id;
+        author.createScript(InstanceClass::Script,nullptr,"npc_perseguidor_animado.lua")->source=source("npc_perseguidor_animado.lua");
+        const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+        for(int i=0;i<420;++i)runtime.update(1.f/60,{});
+        const auto& attrs=runtime.scene().workspace()->attributes();
+        CHECK(attrs.count("perseguidor_animado_pronto"));
+        CHECK(attrs.count("perseguidor_perseguindo"));
+        CHECK(attrs.count("perseguidor_ataques")&&std::get<double>(attrs.at("perseguidor_ataques"))>=1);
+        CHECK(attrs.count("perseguidor_clipe"));
+        for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Perseguidor animado: %s\n",message.text.c_str());CHECK(!message.error);}
+        CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
+    }
+
+    // Monstro animado: ataque, hurt, morte com clipe e respawn.
+    {
+        Scene author;author.buildDefaultScene();std::string error;
+        auto& rig=author.gameAssets().createLinbluxCharacter();author.gameAssets().defaultRig=rig.id;
+        author.createScript(InstanceClass::Script,nullptr,"npc_monstro_animado.lua")->source=source("npc_monstro_animado.lua");
+        author.createScript(InstanceClass::Script,nullptr,"FerirMonstro.lua")->source=R"(
+linblux.time.after(3.0, function() linblux.events.emit("atacar_monstro", {dano = 20}) end)
+linblux.time.after(4.0, function() linblux.events.emit("atacar_monstro", {dano = 100}) end)
+)";
+        const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+        for(int i=0;i<540;++i)runtime.update(1.f/60,{});
+        const auto& attrs=runtime.scene().workspace()->attributes();
+        CHECK(attrs.count("monstro_animado_pronto"));
+        CHECK(attrs.count("monstro_ataques")&&std::get<double>(attrs.at("monstro_ataques"))>=1);
+        CHECK(attrs.count("monstro_ferido"));
+        CHECK(attrs.count("monstro_morto"));
+        CHECK(attrs.count("monstro_morte_animada"));
+        CHECK(attrs.count("monstro_respawn"));
+        for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Monstro animado: %s\n",message.text.c_str());CHECK(!message.error);}
+        CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
+    }
+}
+
+void NpcAnimation() {
+    Scene author;author.buildDefaultScene();std::string error;
+    auto& rig=author.gameAssets().createLinbluxCharacter();const std::string rigId=rig.id;
+    author.gameAssets().defaultRig=rigId;
+    auto* npc=author.createPart(PartShape::Block,{12,3,0},{2,5,2},"NpcAnimado");
+    NpcProperties properties;properties.speed=14;properties.maxHealth=40;properties.respawnDelay=1;properties.rig="player";
+    CHECK(npc->setNpcProperties(properties,error));
+    const auto npcId=npc->id();
+    const auto baseline=projectio::toJson(author);
+    game::RuntimeSession runtime;
+    if(!runtime.start(author,error))std::printf("NPC animação: start falhou: %s\n",error.c_str());
+    CHECK(runtime.npcs().attached(npcId));
+    CHECK(runtime.npcs().rig(npcId)==rigId);
+    runtime.update(1.f/60,{});
+    CHECK(runtime.scene().npcVisuals().size()==1);
+    CHECK(runtime.scene().npcVisuals()[0].rigId==rigId);
+    CHECK(runtime.scene().npcVisuals()[0].part==npcId);
+    CHECK(runtime.npcs().clip(npcId)==game::NpcClip::Idle);
+
+    // Correr: velocidade alta seleciona o clipe run e a pose move os membros.
+    CHECK(runtime.npcs().moveTo(runtime,npcId,{28,3,0},error));
+    for(int i=0;i<20;++i)runtime.update(1.f/60,{});
+    CHECK(runtime.npcs().clip(npcId)==game::NpcClip::Run);
+    const auto& running=runtime.scene().npcVisuals();
+    CHECK(running.size()==1);
+    if(!running.empty()) {
+        const auto& hip=running[0].pose[game::LeftHip].rotation;
+        CHECK(std::fabs(hip.z)>0.01f||std::fabs(hip.x)>0.01f);
+        const auto* live=runtime.scene().findPart(npcId);
+        if(live)CHECK(std::fabs(running[0].root.position.y-(live->position().y-2.5f+3.f))<0.3f);
+    }
+
+    // Ataque, dano e morte trocam o clipe e alimentam o mesmo visual.
+    CHECK(runtime.npcs().attack(runtime,npcId,error));
+    runtime.update(1.f/60,{});
+    CHECK(runtime.npcs().clip(npcId)==game::NpcClip::Attack);
+    CHECK(std::fabs(runtime.scene().npcVisuals()[0].pose[game::RightShoulder].rotation.z)>0.01f);
+    CHECK(runtime.npcs().damage(runtime,npcId,5,error));
+    runtime.update(1.f/60,{});
+    CHECK(runtime.npcs().clip(npcId)==game::NpcClip::Hurt);
+    for(int i=0;i<25;++i)runtime.update(1.f/60,{});
+    CHECK(runtime.npcs().clip(npcId)!=game::NpcClip::Hurt);
+    CHECK(runtime.npcs().damage(runtime,npcId,1000,error));
+    runtime.update(1.f/60,{});
+    CHECK(runtime.npcs().state(npcId)==game::NpcState::Dead);
+    CHECK(runtime.npcs().clip(npcId)==game::NpcClip::Death);
+    bool refused=false;
+    try{refused=!runtime.npcs().attack(runtime,npcId,error);}catch(...){refused=true;}
+    CHECK(refused);
+    for(int i=0;i<35;++i)runtime.update(1.f/60,{});
+    CHECK(!runtime.scene().npcVisuals().empty());
+    if(!runtime.scene().npcVisuals().empty())
+        CHECK(std::fabs(runtime.scene().npcVisuals()[0].pose[game::RootJoint].rotation.z)>0.2f);
+
+    // Respawn coerente: vida cheia, clipe fora de death e visual recriado.
+    for(int i=0;i<90;++i)runtime.update(1.f/60,{});
+    CHECK(runtime.npcs().state(npcId)!=game::NpcState::Dead);
+    CHECK(runtime.npcs().health(npcId)==runtime.npcs().maxHealth(npcId));
+    CHECK(runtime.npcs().clip(npcId)!=game::NpcClip::Death);
+    CHECK(!runtime.scene().npcVisuals().empty());
+
+    // Sem rig o NPC volta a ser apenas a Part dinâmica.
+    CHECK(runtime.npcs().setRig(runtime,npcId,"",error));
+    runtime.update(1.f/60,{});
+    CHECK(runtime.scene().npcVisuals().empty());
+    CHECK(!runtime.npcs().setRig(runtime,npcId,"rig-inexistente",error));
+    CHECK(!error.empty());
+    CHECK(runtime.npcs().setRig(runtime,npcId,rigId,error));
+    runtime.update(1.f/60,{});
+    CHECK(runtime.scene().npcVisuals().size()==1);
+
+    // Rig removido da cena é detectado, nunca desenhado como ponteiro órfão.
+    runtime.mutableScene().gameAssets().removeRig(rigId);
+    CHECK(!runtime.npcs().validate(runtime,error));
+    CHECK(projectio::toJson(author)==baseline);
+    runtime.stop();
+
+    // O id do rig é serializado como texto estável (nunca ponteiro).
+    properties.rig=rigId;CHECK(npc->setNpcProperties(properties,error));
+    Scene roundTrip;CHECK(projectio::fromJson(roundTrip,projectio::toJson(author),error));
+    CHECK(roundTrip.findPart(npcId)!=nullptr);
+    if(roundTrip.findPart(npcId)){
+        CHECK(roundTrip.findPart(npcId)->npcProperties()->rig==rigId);
+        game::RuntimeSession replay;CHECK(replay.start(roundTrip,error));
+        replay.update(1.f/60,{});
+        CHECK(replay.scene().npcVisuals().size()==1);
+        replay.stop();
+    }
+}
+
 void LinbluxProgress() {
     const auto root=std::filesystem::path(__FILE__).parent_path().parent_path();
     const auto directory=root/".turbo"/("progress-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -1300,6 +1449,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

@@ -92,6 +92,10 @@ bool NpcProperties::validate(std::string& error) const {
         error="Propriedades de NPC fora dos limites: velocidade 0–1000; vida 1–100000; respawn 0–3600 s; giro 0–20.";
         return false;
     }
+    if(rig.size()>128 || rig.find_first_of("\r\n")!=std::string::npos) {
+        error="Rig de NPC deve ter até 128 bytes, sem quebra de linha.";
+        return false;
+    }
     error.clear();return true;
 }
 

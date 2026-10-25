@@ -20,6 +20,90 @@ float WrapDegrees(float value) {
     while (value < -180.f) value += 360.f;
     return value;
 }
+// Aceita id, nome do rig ou "player" (rig padrão da cena). Nunca aceita
+// caminho: o rig é dado do projeto, não um arquivo externo.
+bool ResolveNpcRig(const Scene& scene, const std::string& requested, std::string& resolved,
+                   std::string& error) {
+    resolved.clear();
+    if (requested.empty()) return true;
+    const auto& assets = scene.gameAssets();
+    if (requested == "player" || requested == "default") {
+        resolved = assets.defaultRig;
+        if (resolved.empty()) {
+            error = "O NPC pediu o rig do jogador, mas a cena não define um rig padrão.";
+            return false;
+        }
+        return true;
+    }
+    for (const auto& rig : assets.rigs) {
+        if (rig.id == requested || rig.name == requested) {
+            resolved = rig.id;
+            return true;
+        }
+    }
+    error = "Rig de NPC não encontrado: " + requested;
+    return false;
+}
+
+// Pose procedural: os seis clipes são calculados a partir do estado do
+// controlador, sem depender de AnimationClip importado. Tempo em segundos.
+Pose NpcPose(NpcClip clip, float time, float speed) {
+    Pose pose{};
+    const float breathing = std::sin(time * 1.8f);
+    switch (clip) {
+    case NpcClip::Idle:
+        pose[Neck].rotation = QuaternionFromEuler(breathing * .02f, std::sin(time * .7f) * .05f, 0);
+        pose[LeftShoulder].rotation = QuaternionFromEuler(0, 0, .05f + breathing * .02f);
+        pose[RightShoulder].rotation = QuaternionFromEuler(0, 0, -.05f - breathing * .02f);
+        pose[RootJoint].position.y = breathing * .02f;
+        break;
+    case NpcClip::Walk:
+    case NpcClip::Run: {
+        const bool run = clip == NpcClip::Run;
+        const float rate = run ? 9.f : 6.f;
+        // Velocidade real só modula a amplitude: o clipe continua previsível.
+        const float intensity = std::clamp(speed / (run ? 20.f : 8.f), .35f, 1.2f);
+        const float swing = (run ? .9f : .5f) * intensity;
+        const float phase = std::sin(time * rate);
+        pose[LeftHip].rotation = QuaternionFromEuler(phase * swing, 0, 0);
+        pose[RightHip].rotation = QuaternionFromEuler(-phase * swing, 0, 0);
+        pose[LeftShoulder].rotation = QuaternionFromEuler(-phase * swing * .8f, 0, .06f);
+        pose[RightShoulder].rotation = QuaternionFromEuler(phase * swing * .8f, 0, -.06f);
+        pose[RootJoint].position.y = std::fabs(std::cos(time * rate)) * (run ? .12f : .06f);
+        pose[Neck].rotation = QuaternionFromEuler(run ? .12f : .04f, 0, 0);
+        break;
+    }
+    case NpcClip::Attack: {
+        const float attack = std::clamp(time / .55f, 0.f, 1.f);
+        const float angle = attack < .35f ? -.4f - 1.4f * (attack / .35f)
+                                          : -1.8f + 2.4f * ((attack - .35f) / .65f);
+        pose[RightShoulder].rotation = QuaternionFromEuler(angle, 0, -.2f);
+        pose[LeftShoulder].rotation = QuaternionFromEuler(.25f, 0, .15f);
+        pose[Neck].rotation = QuaternionFromEuler(0, .25f * std::sin(attack * 3.14f), 0);
+        pose[RightHip].rotation = QuaternionFromEuler(-.15f, 0, 0);
+        break;
+    }
+    case NpcClip::Hurt: {
+        const float hurt = std::sin(std::clamp(time / .35f, 0.f, 1.f) * 3.14f);
+        pose[Neck].rotation = QuaternionFromEuler(-.35f * hurt, 0, 0);
+        pose[RootJoint].position.y = -.03f * hurt;
+        pose[LeftShoulder].rotation = QuaternionFromEuler(-.4f * hurt, 0, .5f * hurt);
+        pose[RightShoulder].rotation = QuaternionFromEuler(-.4f * hurt, 0, -.5f * hurt);
+        break;
+    }
+    case NpcClip::Death: {
+        const float fall = std::clamp(time / .55f, 0.f, 1.f) * 1.45f;
+        pose[RootJoint].rotation = QuaternionFromEuler(0, 0, fall);
+        pose[LeftHip].rotation = QuaternionFromEuler(-.2f, 0, 0);
+        pose[RightHip].rotation = QuaternionFromEuler(.2f, 0, 0);
+        pose[LeftShoulder].rotation = QuaternionFromEuler(-.35f, 0, .3f);
+        pose[RightShoulder].rotation = QuaternionFromEuler(-.35f, 0, -.3f);
+        pose[Neck].rotation = QuaternionFromEuler(-.2f, 0, 0);
+        break;
+    }
+    }
+    return pose;
+}
 }  // namespace
 
 const char* NpcStateName(NpcState state) {
@@ -31,6 +115,29 @@ const char* NpcStateName(NpcState state) {
     case NpcState::Dead: return "dead";
     }
     return "idle";
+}
+
+const char* NpcClipName(NpcClip clip) {
+    switch (clip) {
+    case NpcClip::Idle: return "idle";
+    case NpcClip::Walk: return "walk";
+    case NpcClip::Run: return "run";
+    case NpcClip::Attack: return "attack";
+    case NpcClip::Hurt: return "hurt";
+    case NpcClip::Death: return "death";
+    }
+    return "idle";
+}
+
+bool NpcClipFromName(const std::string& name, NpcClip& out) {
+    if (name == "idle") out = NpcClip::Idle;
+    else if (name == "walk") out = NpcClip::Walk;
+    else if (name == "run") out = NpcClip::Run;
+    else if (name == "attack") out = NpcClip::Attack;
+    else if (name == "hurt") out = NpcClip::Hurt;
+    else if (name == "death") out = NpcClip::Death;
+    else return false;
+    return true;
 }
 
 bool NpcStateFromName(const std::string& name, NpcState& out) {
@@ -79,6 +186,8 @@ bool NpcSystem::attach(RuntimeSession& runtime, InstanceId part, std::string& er
     }
     const auto& properties = *object->npcProperties();
     if (!properties.validate(error)) return false;
+    std::string resolvedRig;
+    if (!ResolveNpcRig(*runtime.scene_, properties.rig, resolvedRig, error)) return false;
     runtime.physics_->syncScene(*runtime.scene_);
     if (!runtime.physics_->isDynamic(part)) {
         error = "Corpo dinâmico indisponível para o NPC.";
@@ -93,7 +202,8 @@ bool NpcSystem::attach(RuntimeSession& runtime, InstanceId part, std::string& er
     controller.turnSpeed = properties.turnSpeed;
     controller.respawnDelay = properties.respawnDelay;
     controller.spawn = object->position();
-    controller.state = properties.enabled ? NpcState::Idle : NpcState::Idle;
+    controller.state = NpcState::Idle;
+    controller.rig = resolvedRig;
     controllers_[part] = controller;
     error.clear();
     return true;
@@ -174,6 +284,46 @@ float NpcSystem::maxHealth(InstanceId part) const {
     return controller ? controller->maxHealth : 0;
 }
 
+bool NpcSystem::setRig(RuntimeSession& runtime, InstanceId part, const std::string& rig,
+                       std::string& error) {
+    auto* controller = find(part);
+    if (!controller) { error = "NPC não anexado a esta peça."; return false; }
+    Part* object = runtime.scene_ ? runtime.scene_->findPart(part) : nullptr;
+    if (!object || !object->hasNpc()) { error = "A peça não possui propriedades de NPC."; return false; }
+    std::string resolved;
+    if (!ResolveNpcRig(*runtime.scene_, rig, resolved, error)) return false;
+    NpcProperties properties = *object->npcProperties();
+    properties.rig = resolved;
+    if (!object->setNpcProperties(properties, error)) return false;
+    controller->rig = resolved;
+    controller->pose = NpcPose(controller->clip, controller->clipTime, controller->speed);
+    error.clear();
+    return true;
+}
+
+std::string NpcSystem::rig(InstanceId part) const {
+    const auto* controller = find(part);
+    return controller ? controller->rig : std::string();
+}
+
+NpcClip NpcSystem::clip(InstanceId part) const {
+    const auto* controller = find(part);
+    return controller ? controller->clip : NpcClip::Idle;
+}
+
+bool NpcSystem::attack(RuntimeSession& runtime, InstanceId part, std::string& error) {
+    auto* controller = find(part);
+    if (!controller) { error = "NPC não anexado a esta peça."; return false; }
+    if (controller->state == NpcState::Dead || controller->health <= 0) {
+        error = "NPC morto não pode atacar.";
+        return false;
+    }
+    controller->attackTime = .55f;
+    error.clear();
+    (void)runtime;
+    return true;
+}
+
 bool NpcSystem::setHealth(RuntimeSession& runtime, InstanceId part, float value, std::string& error) {
     auto* controller = find(part);
     if (!controller) { error = "NPC não anexado a esta peça."; return false; }
@@ -198,7 +348,11 @@ bool NpcSystem::damage(RuntimeSession& runtime, InstanceId part, float amount, s
     }
     auto* controller = find(part);
     if (!controller) { error = "NPC não anexado a esta peça."; return false; }
-    return setHealth(runtime, part, controller->health - amount, error);
+    const float remaining = controller->health - amount;
+    const bool damaged = setHealth(runtime, part, remaining, error);
+    // Dano sobrevivente entra no clipe hurt; a morte já é tratada por die().
+    if (damaged && remaining > 0) controller->hurtTime = .35f;
+    return damaged;
 }
 
 bool NpcSystem::heal(RuntimeSession& runtime, InstanceId part, float amount, std::string& error) {
@@ -209,6 +363,40 @@ bool NpcSystem::heal(RuntimeSession& runtime, InstanceId part, float amount, std
     auto* controller = find(part);
     if (!controller) { error = "NPC não anexado a esta peça."; return false; }
     return setHealth(runtime, part, controller->health + amount, error);
+}
+
+void NpcSystem::updateClip(Controller& controller, float dt, bool moving) {
+    if (!std::isfinite(dt) || dt < 0) dt = 0;
+    controller.attackTime = std::max(0.f, controller.attackTime - dt);
+    controller.hurtTime = std::max(0.f, controller.hurtTime - dt);
+    NpcClip next = controller.clip;
+    if (controller.state == NpcState::Dead) next = NpcClip::Death;
+    else if (controller.hurtTime > 0) next = NpcClip::Hurt;
+    else if (controller.attackTime > 0) next = NpcClip::Attack;
+    else if (moving) next = controller.speed >= 12.f ? NpcClip::Run : NpcClip::Walk;
+    else next = NpcClip::Idle;
+    if (next != controller.clip) {
+        controller.clip = next;
+        controller.clipTime = 0;
+    }
+    controller.clipTime += dt;
+    controller.pose = NpcPose(controller.clip, controller.clipTime, controller.speed);
+}
+
+void NpcSystem::publishVisual(RuntimeSession& runtime, const Controller& controller) {
+    if (controller.rig.empty() || !runtime.scene_) return;
+    const Part* part = runtime.scene_->findPart(controller.part);
+    if (!part) return;
+    if (!runtime.scene_->gameAssets().findRig(controller.rig)) return;
+    NpcVisual visual;
+    visual.part = controller.part;
+    visual.rigId = controller.rig;
+    visual.pose = controller.pose;
+    const Vector3 position = part->position();
+    // O root do R6 é o centro do torso; a sola fica 3 unidades abaixo.
+    visual.root.position = {position.x, position.y - part->size().y * .5f + 3.f, position.z};
+    visual.root.rotation = part->rotation();
+    runtime.scene_->npcVisuals().push_back(visual);
 }
 
 void NpcSystem::halt(RuntimeSession& runtime, Controller& controller) {
@@ -434,6 +622,16 @@ void NpcSystem::tick(RuntimeSession& runtime, float dt) {
         }
         ++it;
     }
+    // Apresentação: reconstruída do estado pós-movimento, uma vez por passo.
+    if (runtime.scene_) {
+        auto& visuals = runtime.scene_->npcVisuals();
+        visuals.clear();
+        for (auto& entry : controllers_) {
+            Controller& controller = entry.second;
+            updateClip(controller, dt, controller.state == NpcState::Moving);
+            publishVisual(runtime, controller);
+        }
+    }
 }
 
 bool NpcSystem::validate(const RuntimeSession& runtime, std::string& error) const {
@@ -446,6 +644,10 @@ bool NpcSystem::validate(const RuntimeSession& runtime, std::string& error) cons
         const Part* part = runtime.scene_->findPart(pair.first);
         if (!part || !part->hasNpc()) {
             error = "npc: controlador órfão " + std::to_string(pair.first);
+            return false;
+        }
+        if (!pair.second.rig.empty() && !runtime.scene_->gameAssets().findRig(pair.second.rig)) {
+            error = "npc: rig ausente " + pair.second.rig;
             return false;
         }
         if (pair.second.maxHealth <= 0 || pair.second.health < 0 ||

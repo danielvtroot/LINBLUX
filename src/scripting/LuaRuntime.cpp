@@ -481,7 +481,7 @@ struct LuaRuntime::Impl {
         return part;
     }
     static bool IsNpcKey(const char* key) {
-        return Eq(key,"speed")||Eq(key,"max_health")||Eq(key,"respawn_delay")||Eq(key,"turn_speed")||Eq(key,"enabled");
+        return Eq(key,"speed")||Eq(key,"max_health")||Eq(key,"respawn_delay")||Eq(key,"turn_speed")||Eq(key,"enabled")||Eq(key,"rig");
     }
     // Le uma propriedade de NPC da pilha; chaves de criação são ignoradas aqui.
     static void ReadNpcProperty(lua_State* L,const char* key,NpcProperties& properties) {
@@ -490,6 +490,7 @@ struct LuaRuntime::Impl {
         else if(Eq(key,"respawn_delay"))properties.respawnDelay=float(Number(L,-1));
         else if(Eq(key,"turn_speed"))properties.turnSpeed=float(Number(L,-1));
         else if(Eq(key,"enabled")){Require(lua_isboolean(L,-1),"enabled requer booleano");properties.enabled=lua_toboolean(L,-1);}
+        else if(Eq(key,"rig")){Require(lua_type(L,-1)==LUA_TSTRING,"rig requer id ou nome do rig");properties.rig=Text(L,-1);Require(properties.rig.size()<=128,"Rig de NPC deve ter até 128 bytes");}
     }
     static NpcProperties ReadNpcOptions(lua_State* L,int index,NpcProperties base) {
         Require(lua_istable(L,index),"Opções de NPC requerem tabela");index=lua_absindex(L,index);
@@ -503,7 +504,7 @@ struct LuaRuntime::Impl {
     static int NpcCreate(lua_State* L) {
         auto& self=Host(L);Require(lua_istable(L,1),"linblux.npc.create requer tabela de opções");
         static const char* allowed[]{"name","parent","position","size","color","material","shape",
-            "speed","max_health","respawn_delay","turn_speed","enabled","script","script_name"};
+            "speed","max_health","respawn_delay","turn_speed","enabled","rig","script","script_name"};
         lua_pushnil(L);while(lua_next(L,1)) {
             const char* key=Text(L,-2);bool known=false;for(const char* option:allowed)known|=Eq(key,option);
             Require(known,"Opção de criação de NPC desconhecida");lua_pop(L,1);
@@ -522,6 +523,7 @@ struct LuaRuntime::Impl {
         Field(L,1,"material");if(!lua_isnil(L,-1))material=Material(L,-1);lua_pop(L,1);
         Field(L,1,"shape");if(!lua_isnil(L,-1)){const char* value=Text(L,-1);Require(Eq(value,"box")||Eq(value,"sphere"),"shape aceita box ou sphere");shape=Eq(value,"sphere")?PartShape::Sphere:PartShape::Block;}lua_pop(L,1);
         Field(L,1,"script_name");if(!lua_isnil(L,-1)){scriptName=Text(L,-1);Require(!scriptName.empty()&&scriptName.size()<=128&&scriptName.size()==lua_rawlen(L,-1),"Nome do script do NPC inválido");}lua_pop(L,1);
+        Field(L,1,"rig");if(!lua_isnil(L,-1)){Require(lua_type(L,-1)==LUA_TSTRING,"rig requer id, nome ou 'player'");properties.rig=Text(L,-1);Require(properties.rig.size()<=128,"Rig de NPC deve ter até 128 bytes");}lua_pop(L,1);
         Field(L,1,"script");if(!lua_isnil(L,-1)){Require(lua_type(L,-1)==LUA_TSTRING,"script requer o código Lua como texto");Require(lua_rawlen(L,-1)<=262144,"Script do NPC excede 256 KiB");source.assign(Text(L,-1),lua_rawlen(L,-1));}lua_pop(L,1);
         lua_pushnil(L);while(lua_next(L,1)) {
             const char* key=Text(L,-2);bool creation=false;for(const char* option:allowed)creation|=Eq(key,option);
@@ -587,6 +589,17 @@ struct LuaRuntime::Impl {
     static int NpcHeal(lua_State* L) {
         auto& self=Host(L);auto& part=NpcObject(L,1);std::string error;
         Require(self.runtime->npcs().heal(*self.runtime,part.id(),float(Number(L,2)),error),error.c_str());return 0;
+    }
+    static int NpcSetRig(lua_State* L) {
+        auto& self=Host(L);auto& part=NpcObject(L,1);std::string error;
+        const std::string value=lua_isnil(L,2)?std::string():Text(L,2);
+        Require(self.runtime->npcs().setRig(*self.runtime,part.id(),value,error),error.c_str());return 0;
+    }
+    static int NpcRig(lua_State* L) { auto& part=NpcObject(L,1);lua_pushstring(L,Host(L).runtime->npcs().rig(part.id()).c_str());return 1; }
+    static int NpcClip(lua_State* L) { auto& part=NpcObject(L,1);lua_pushstring(L,game::NpcClipName(Host(L).runtime->npcs().clip(part.id())));return 1; }
+    static int NpcAttack(lua_State* L) {
+        auto& self=Host(L);auto& part=NpcObject(L,1);std::string error;
+        Require(self.runtime->npcs().attack(*self.runtime,part.id(),error),error.c_str());return 0;
     }
     static int NpcTarget(lua_State* L) {
         auto& part=NpcObject(L,1);const auto target=Host(L).runtime->npcs().target(part.id());
@@ -1181,6 +1194,10 @@ struct LuaRuntime::Impl {
         lua_pushcfunction(L,Safe<NpcSetHealth>);lua_setfield(L,-2,"set_health");
         lua_pushcfunction(L,Safe<NpcDamage>);lua_setfield(L,-2,"damage");
         lua_pushcfunction(L,Safe<NpcHeal>);lua_setfield(L,-2,"heal");
+        lua_pushcfunction(L,Safe<NpcSetRig>);lua_setfield(L,-2,"set_rig");
+        lua_pushcfunction(L,Safe<NpcRig>);lua_setfield(L,-2,"rig");
+        lua_pushcfunction(L,Safe<NpcClip>);lua_setfield(L,-2,"animation");
+        lua_pushcfunction(L,Safe<NpcAttack>);lua_setfield(L,-2,"attack");
         lua_pushcfunction(L,Safe<NpcTarget>);lua_setfield(L,-2,"target");
         lua_pushcfunction(L,Safe<NpcPath>);lua_setfield(L,-2,"path");
         lua_pushcfunction(L,Safe<NpcFindPath>);lua_setfield(L,-2,"find_path");
