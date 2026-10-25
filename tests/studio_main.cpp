@@ -275,6 +275,7 @@ void LinbluxExamples() {
     author.createScript(InstanceClass::Script,nullptr,"Mundo.lua")->source=source("mundo.lua");
     author.createScript(InstanceClass::Script,nullptr,"Temporizadores.lua")->source=source("temporizadores.lua");
     author.createScript(InstanceClass::Script,nullptr,"Camera.lua")->source=source("camera.lua");
+    author.createScript(InstanceClass::Script,nullptr,"Transformacoes.lua")->source=source("transformacoes.lua");
     author.gameAssets().player.cameraFov=80;
     const auto baseline=projectio::toJson(author);
     const auto testDir=root/".turbo"/"lua-examples";std::filesystem::create_directories(testDir);
@@ -289,6 +290,7 @@ void LinbluxExamples() {
     CHECK(std::get<bool>(runtime.scene().findPart(door->id())->attributes().at("aberta")));
     CHECK(runtime.scene().workspace()->attributes().count("timer_concluido"));
     CHECK(runtime.scene().workspace()->attributes().count("camera_concluida"));
+    CHECK(runtime.scene().workspace()->attributes().count("transformacoes_concluidas"));
     CHECK(runtime.playerCamera().camera().fovy==75);
     for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Example: %s\n",message.text.c_str());CHECK(!message.error);}
     CHECK(projectio::toJson(reopened)==baseline);CHECK(runtime.validate(error));runtime.stop();std::filesystem::remove(path);
