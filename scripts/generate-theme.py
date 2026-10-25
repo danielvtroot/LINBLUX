@@ -18,7 +18,7 @@ css+=f"button:active, button.active, select option:hover, select option:checked 
 css+=f"button.primary, .experience-primary {{ background-color: #ba2838; border-color: {p['accent']}; }}\n"
 css+=f"button:focus, input:focus, textarea:focus, select:focus {{ border-color: {p['accent']}; }}\n"
 css+=f"#header, #tabs, #ribbon, #status {{ background-color: {p['background']}; }}\n"
-css+=f".panel, #advanced, #dialog, #context-menu {{ background-color: {p['panel']}; border-color: {p['border']}; }}\n"
+css+=f".panel, #dialog, #context-menu {{ background-color: {p['panel']}; border-color: {p['border']}; }}\n"
 css+=f".panel-heading, .document-tab, .group-name {{ background-color: {p['raised']}; }}\n"
 css+=f"input[type=checkbox]:checked {{ background-color: {p['accent']}; decorator: none; }}\n"
 css+=f".tree-row.selected, .tree-row:hover, .document-tab.active, #tabs button.active {{ background-color: {p['selected']}; border-color: {p['accent']}; }}\n"
