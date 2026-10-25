@@ -1,3 +1,6 @@
+> Registro histórico anterior à migração LINBLUX. Nomes, capturas, comandos e
+> status antigos são preservados como evidência; consulte o [README atual](../../README.md).
+
 # Reprodução determinística de animações R6 — 2026-10-23
 
 Base: `0e5262c`. Escopo: interpolação de keyframes, reprodução no runtime,

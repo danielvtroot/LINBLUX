@@ -1,3 +1,6 @@
+> Registro histórico anterior à migração LINBLUX. Nomes, capturas, comandos e
+> status antigos são preservados como evidência; consulte o [README atual](../../README.md).
+
 # Continuidade — Experiences 1.0
 
 Base: c0ed911; worktree inicial sem mudanças rastreadas. Untracked do usuário

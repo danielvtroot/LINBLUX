@@ -1,3 +1,6 @@
+> Registro histórico anterior à migração LINBLUX. Nomes, capturas, comandos e
+> status antigos são preservados como evidência; consulte o [README atual](../../README.md).
+
 # Progresso — fundação do editor
 
 Data desta etapa: 2026-10-19

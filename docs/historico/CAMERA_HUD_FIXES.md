@@ -1,3 +1,6 @@
+> Registro histórico anterior à migração LINBLUX. Nomes, capturas, comandos e
+> status antigos são preservados como evidência; consulte o [README atual](../../README.md).
+
 # Correções focadas — Studio camera / Health
 
 - Base: `30134a2`; menu Esc/topbar preservados.

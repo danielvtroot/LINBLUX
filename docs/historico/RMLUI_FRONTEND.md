@@ -1,3 +1,6 @@
+> Registro histórico anterior à migração LINBLUX. Nomes, capturas, comandos e
+> status antigos são preservados como evidência; consulte o [README atual](../../README.md).
+
 # Frontend RmlUi
 
 RmlUi 6.3, MIT, fixado em `ba95ffe8bfb6370efb2cdcca927eaad4710c5413`.

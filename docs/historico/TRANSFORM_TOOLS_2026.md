@@ -1,3 +1,6 @@
+> Registro histórico anterior à migração LINBLUX. Nomes, capturas, comandos e
+> status antigos são preservados como evidência; consulte o [README atual](../../README.md).
+
 # Ferramentas de transformação — 2026-10-23
 
 Base: `4185c00`. Escopo: Move, Scale e Rotate do editor 3D. Câmera de

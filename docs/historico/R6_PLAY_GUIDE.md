@@ -1,3 +1,6 @@
+> Registro histórico anterior à migração LINBLUX. Nomes, capturas, comandos e
+> status antigos são preservados como evidência; consulte o [README atual](../../README.md).
+
 # R6, animação e Play local
 
 Implementação própria, original, de um jogador local. Não há execução Luau,

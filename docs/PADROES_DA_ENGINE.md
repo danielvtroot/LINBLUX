@@ -1,48 +1,73 @@
-# Mundo e personagem padrão LINBLUX
+# Mundo Padrão da Engine
 
-No Início, abra **Configurações → Editar mundo padrão** ou **Editar personagem
-padrão**. O Studio cria uma cópia de edição na biblioteca. Edite objetos,
-iluminação, spawn, propriedades físicas, corpo, juntas, materiais e animações.
-No menu Arquivo, use **Salvar como padrão da engine** ou **Salvar personagem
-como padrão da engine** (selecione o personagem no Explorador).
-Salvar uma cópia aberta pelo comando de edição também atualiza o respectivo padrão.
+O Início contém um cartão permanente **Mundo Padrão da Engine → Editar padrão**,
+separado das experiências recentes. Ele abre o mundo e o personagem atuais juntos
+no editor 3D. O documento de edição fica em `data/engine-workspaces`, protegido
+contra exclusão e arquivamento, sem aparecer como experiência comum.
 
-Durante desenvolvimento no checkout, os padrões são salvos em
-`assets/defaults`: `index.json` aponta para snapshots imutáveis em `revisions/`.
-Adicione esses arquivos ao Git e use o fluxo de checkpoint para protegê-los no
-GitHub. Recompilar não recria nem sobrescreve essa fonte. Novas experiências
-recebem cópias dos recursos atuais, não referências mutáveis ao padrão.
-Um projeto comum só modifica o padrão mediante o comando explícito.
+Edite objetos, iluminação, céu, spawn, atributos/componentes, scripts, articulações,
+materiais, imagens, animações e configurações de física, movimento e câmera que
+a engine suporta e serializa. Gravidade e colisões do jogador ficam nas configurações
+do jogo; o runtime aplica esses valores. Terreno avançado e malhas externas ainda
+não são sistemas implementados nesta base.
 
-`factory/world.loblox.json` e `factory/character.loblox.json` são os padrões de
-fábrica versionados. A restauração exige confirmação e remove os ponteiros de
-personalização; preserva revisões anteriores e experiências existentes.
+## Substituir o personagem
 
-## Formato
+Exclua o personagem atual no Explorador e crie um original no editor de personagem,
+ou use **Importar personagem…** para um projeto JSON, manifesto/pasta ou pacote
+`.lo` compatível. A importação copia imagens e animações, cria IDs independentes e
+preserva o arquivo de origem. Não é um importador de FBX/glTF ou de malhas arbitrárias.
 
-`index.json`: `format: linblux-engine-defaults`, `version: 1`, `world` e
-`character` opcionais, caminhos relativos de snapshots. Cada snapshot usa o
-manifesto de experiência v1, uma cena JSON v3 e assets relativos independentes.
-As assinaturas JSON antigas são mantidas por compatibilidade. Versões futuras,
-links e caminhos inválidos são recusados; uma carga inválida não substitui o projeto.
-A gravação do snapshot precede a troca atômica do índice. Falhas de permissões
-são exibidas; não se promete persistência quando a gravação não ocorreu.
+No editor de personagem é possível alterar corpos, nomes, materiais, proporções,
+conexões, poses e a hierarquia topológica de articulações. O formato atual preserva
+seis corpos/juntas para compatibilidade. **Usar como jogador** associa o rig ao
+controlador nativo configurável; ajuste movimento, colisão, câmera e animações nas
+configurações do jogo. Scripts do mundo podem personalizar o comportamento.
+Não se apresenta um controlador arbitrário de terceiros como já implementado.
 
-Instalações carregam `share/linblux/defaults`; para desenvolvimento em outro
-local use `LINBLUX_DEFAULTS_ROOT=/caminho/absoluto/versionado`. Um diretório de
-instalação sem permissão de escrita exige um checkout ou override gravável.
-Gerenciadores com diretório de dados explícito (testes/embutidos) gravam os
-padrões isoladamente em `data/engine-defaults`, salvo raiz explícita no construtor.
+## Publicar o padrão
 
-## Personagem original e limites atuais
+Use o botão do cabeçalho **Salvar como padrão da engine**, ou a mesma ação em
+Arquivo. Há uma confirmação explícita. Mundo, personagem selecionado como jogador,
+animações, imagens, scripts e configurações são gravados em snapshots antes de
+publicar ambos os ponteiros numa única troca atômica do índice. Uma falha não
+publica metade da dupla. **Salvar rascunho / Ctrl+S** guarda somente a edição;
+não publica o padrão sem confirmação. **Definir como padrão da engine**, no editor
+de personagem, publica a dupla usando o personagem selecionado.
 
-O padrão de fábrica é o **Sentinela LINBLUX**, com proporções, materiais, cores
-e visor próprios. Preserva o formato de seis corpos/juntas para abrir animações
-legadas. Controlador, colisão, câmera, movimento e animações fazem parte dos
-recursos copiados. Experiências antigas mantêm seus personagens serializados.
+Em desenvolvimento no checkout, o destino é `assets/defaults`. O índice v1
+`index.json` contém `format: linblux-engine-defaults`, `version: 1` e caminhos
+relativos `world`/`character` para snapshots em `revisions/`. Esses recursos usam
+manifesto v1, cenas JSON v3 e assets relativos. Assinaturas legadas permanecem
+por compatibilidade. Versões futuras e caminhos inseguros são recusados.
 
-O runtime atual ainda usa seis corpos e seis juntas. Importação de malhas e
-esqueletos arbitrários NÃO está implementada; necessita evolução versionada do
-formato, do renderizador e do animador. O editor permite modificar essa hierarquia
-compatível, não qualquer esqueleto externo. Esse limite está no roadmap, sem
-apresentar o antigo tipo serializado como uma implementação nova de malhas.
+Novas experiências recebem cópias independentes. Editar uma experiência comum
+não muda o padrão. Projetos existentes nunca são atualizados automaticamente.
+Recompilar copia os recursos-fonte; não recria nem sobrescreve o padrão versionado.
+
+## Restaurar e recuperar
+
+**Restaurar padrão de fábrica** exige confirmação e cria primeiro um backup do
+índice em `assets/defaults/backups/*-index.json`. Revisões e suas imagens permanecem
+em `revisions/`. Se o backup falhar, a restauração não prossegue. Ela publica os
+recursos de `factory/`, preservando experiências e rascunhos existentes.
+
+Para recuperar uma revisão, feche o Studio e restaure o índice de backup desejado
+como `index.json`, mantendo as revisões referidas. Esse backup de índice depende
+do restante da pasta defaults; copie/versione a pasta completa. Não substitui o
+backup das experiências pessoais nem de preferências legadas da pasta de dados.
+
+Registre `assets/defaults` no Git após revisar seus recursos e execute o fluxo de
+checkpoint para protegê-los no GitHub. Instalações usam `share/linblux/defaults`;
+`LINBLUX_DEFAULTS_ROOT=/caminho/absoluto/versionado` permite uma raiz de autoria
+gravável. Erros de permissão são exibidos sem prometer uma gravação inexistente.
+Gerenciadores de teste usam raízes isoladas, evitando modificar os recursos reais.
+
+## Validação
+
+`linblux_engine_default_lifecycle` cria um original, configura articulações,
+animação, imagem, física, câmera e script, publica, reinicia em outro processo,
+cria uma experiência e executa o personagem correto em movimento. Também testa
+importação, publicação transacional, proteção, backup e preservação do projeto antigo.
+`linblux_engine_default_restart` abre o executável real, usa o cartão, fecha e
+reinicia o Studio, cria uma experiência pela UI e confirma no runtime o rig herdado.

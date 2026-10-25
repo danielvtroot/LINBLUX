@@ -1,3 +1,6 @@
+> Registro histórico anterior à migração LINBLUX. Nomes, capturas, comandos e
+> status antigos são preservados como evidência; consulte o [README atual](../../README.md).
+
 # Studio 3 — referências e evidências visuais
 
 ## RmlUi — revisão de direção em 22/10/2026

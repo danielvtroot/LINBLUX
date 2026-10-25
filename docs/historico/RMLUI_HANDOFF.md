@@ -1,3 +1,6 @@
+> Registro histórico anterior à migração LINBLUX. Nomes, capturas, comandos e
+> status antigos são preservados como evidência; consulte o [README atual](../../README.md).
+
 # Continuidade RmlUi — 22/10/2026
 
 Atualização Player UI, 23/10: [PLAYER_UI_2026.md](PLAYER_UI_2026.md).

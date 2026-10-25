@@ -1,3 +1,6 @@
+> Registro histórico anterior à migração LINBLUX. Nomes, capturas, comandos e
+> status antigos são preservados como evidência; consulte o [README atual](../../README.md).
+
 # Mouse Lock — 2026-10-23
 
 Base: `7f315c4`. Escopo: câmera/cursor de gameplay. EditorCamera, aparência

@@ -1,3 +1,6 @@
+> Registro histórico anterior à migração LINBLUX. Nomes, capturas, comandos e
+> status antigos são preservados como evidência; consulte o [README atual](../../README.md).
+
 # Decisões técnicas
 
 Registro cronológico das decisões que moldam o projeto. Alterar uma decisão

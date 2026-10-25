@@ -7,7 +7,10 @@ normal: nenhum commit anterior foi descartado e não se utiliza push forçado.
 Antes da migração em 24/10/2026 foi criado e verificado com `git bundle verify`
 um backup em `/tmp/linblux-backup-20261024-205533`: `history.bundle`, cópia do
 working tree (inclusive arquivos ainda não registrados), patch binário e SHA256SUMS.
-**/tmp não é armazenamento permanente**: copie esse conjunto para outro dispositivo.
+**/tmp não é armazenamento permanente**. Uma segunda cópia local foi preservada
+em `/home/labubu/projeto/linblux-backups/`, incluindo o snapshot complementar
+`linblux-resume-20261024-212921`. Copie esses conjuntos para outro dispositivo;
+nenhuma pasta no mesmo notebook protege contra perda física do equipamento.
 O GitHub protege somente os arquivos efetivamente enviados. Builds, credenciais,
 referências pessoais, logs e experiências pessoais não fazem parte desse backup remoto.
 Faça cópias externas dessas experiências e de seus pacotes `.lo`.
@@ -35,3 +38,8 @@ Offline: `git clone /caminho/history.bundle LINBLUX`, confira os hashes e extrai
 `working-tree.tar.gz` em um diretório separado antes de reconciliar os arquivos.
 As experiências do usuário devem ser restauradas de uma cópia própria ou importadas
 de `.lo`. Não confunda o repositório da engine com backup automático dos mundos.
+
+O comando `python3 scripts/checkpoint.py --help` documenta o checkpoint de uma
+mudança revisada: arquivos explícitos, compilação, CTest, commit e push normal.
+O script recusa pastas genéricas, links, arquivos ignorados, segredos conhecidos
+e arquivos maiores que 50 MiB. Não substitui a revisão humana do conteúdo.

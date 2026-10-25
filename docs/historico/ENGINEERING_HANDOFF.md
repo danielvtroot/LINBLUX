@@ -1,3 +1,6 @@
+> Registro histórico anterior à migração LINBLUX. Nomes, capturas, comandos e
+> status antigos são preservados como evidência; consulte o [README atual](../../README.md).
+
 # Continuidade — R6 e primeiro runtime local — 2026-10-21
 
 Migração atual do frontend: [RMLUI_HANDOFF.md](RMLUI_HANDOFF.md).

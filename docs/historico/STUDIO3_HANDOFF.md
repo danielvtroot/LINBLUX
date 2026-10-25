@@ -1,3 +1,6 @@
+> Registro histórico anterior à migração LINBLUX. Nomes, capturas, comandos e
+> status antigos são preservados como evidência; consulte o [README atual](../../README.md).
+
 # Studio 3 — continuidade verificada em 21/10/2026
 
 ## Atualização prioritária — código validado em 8e89c73

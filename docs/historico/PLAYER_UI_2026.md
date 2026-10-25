@@ -1,3 +1,6 @@
+> Registro histórico anterior à migração LINBLUX. Nomes, capturas, comandos e
+> status antigos são preservados como evidência; consulte o [README atual](../../README.md).
+
 # Player UI — referência e validação
 
 Atualização prioritária: [CAMERA_HUD_FIXES.md](CAMERA_HUD_FIXES.md).
