@@ -67,11 +67,12 @@ bool NavGrid::build(const Scene& scene, const PhysicsWorld& physics, const Confi
         return false;
     }
 
-    // Limites derivados das Parts solidas, nunca de uma constante fixa do mapa.
+    // Limites derivados das Parts estaticas solidas, nunca de uma constante do
+    // mapa. Corpos dinamicos (NPCs, caixas moveis) ficam fora da grade.
     bool any = false;
     float minX = 0, maxX = 0, minY = 0, maxY = 0, minZ = 0, maxZ = 0;
     for (const Part* part : scene.parts()) {
-        if (part == nullptr || !part->canCollide()) continue;
+        if (part == nullptr || !part->canCollide() || !part->anchored()) continue;
         const Vector3 p = part->position();
         const Vector3 half = Vector3Scale(part->size(), .5f);
         const float lo[3] = {p.x - half.x, p.y - half.y, p.z - half.z};
@@ -120,14 +121,16 @@ bool NavGrid::build(const Scene& scene, const PhysicsWorld& physics, const Confi
             const float z = originZ_ + (float(row) + .5f) * cell;
             Part* hit = nullptr;
             Vector3 point{}, normal{};
-            if (!physics.raycast({x, top, z}, {0, -1, 0}, down, &hit, &point, &normal, true) ||
+            if (!physics.raycast({x, top, z}, {0, -1, 0}, down, &hit, &point, &normal,
+                                 true, 0, true) ||
                 hit == nullptr || normal.y < config_.minNormalY) {
                 continue;
             }
             // Altura livre: um teto baixo impede a passagem do corpo do NPC.
             Part* ceiling = nullptr;
             if (physics.raycast({x, point.y + .15f, z}, {0, 1, 0},
-                                config_.agentHeight - .15f, &ceiling, nullptr, nullptr, true)) {
+                                config_.agentHeight - .15f, &ceiling, nullptr, nullptr,
+                                true, 0, true)) {
                 continue;
             }
             // Folga lateral: impede rotas que raspam paredes ou quinas.
@@ -135,7 +138,7 @@ bool NavGrid::build(const Scene& scene, const PhysicsWorld& physics, const Confi
             for (const Vector3 direction : horizontal) {
                 Part* wall = nullptr;
                 if (physics.raycast({x, point.y + knee, z}, direction, probe, &wall,
-                                    nullptr, nullptr, true)) {
+                                    nullptr, nullptr, true, 0, true)) {
                     blocked = true;
                     break;
                 }

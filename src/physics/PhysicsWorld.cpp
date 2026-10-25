@@ -481,7 +481,7 @@ Vector3 PhysicsWorld::linearVelocity(InstanceId id) const {
 
 bool PhysicsWorld::raycast(Vector3 origin, Vector3 direction, float maxDistance, Part** hitPart,
                            Vector3* hitPoint, Vector3* hitNormal, bool solidOnly,
-                           InstanceId ignore) const {
+                           InstanceId ignore, bool staticOnly) const {
     if (hitPart != nullptr) {
         *hitPart = nullptr;
     }
@@ -496,18 +496,19 @@ bool PhysicsWorld::raycast(Vector3 origin, Vector3 direction, float maxDistance,
     // Filtro por corpo: usado pela navegacao para nao considerar volumes sem
     // colisao como chao ou parede. Ignora tambem o proprio agente.
     struct FilteredRay final : btCollisionWorld::ClosestRayResultCallback {
-        bool solidOnly;
+        bool solidOnly, staticOnly;
         InstanceId ignore;
-        FilteredRay(btVector3 a, btVector3 b, bool solid, InstanceId skip)
-            : ClosestRayResultCallback(a, b), solidOnly(solid), ignore(skip) {}
+        FilteredRay(btVector3 a, btVector3 b, bool solid, InstanceId skip, bool statics)
+            : ClosestRayResultCallback(a, b), solidOnly(solid), staticOnly(statics), ignore(skip) {}
         bool needsCollision(btBroadphaseProxy* proxy) const override {
             const auto* body = static_cast<const btCollisionObject*>(proxy->m_clientObject);
             const auto* part = static_cast<const Part*>(body->getUserPointer());
             if (!part || part->id() == ignore) return false;
             if (solidOnly && !body->hasContactResponse()) return false;
+            if (staticOnly && !body->isStaticObject()) return false;
             return ClosestRayResultCallback::needsCollision(proxy);
         }
-    } callback(from, to, solidOnly, ignore);
+    } callback(from, to, solidOnly, ignore, staticOnly);
     world_->rayTest(from, to, callback);
     if (!callback.hasHit()) {
         return false;
