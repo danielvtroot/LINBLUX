@@ -397,4 +397,37 @@ A cota de instruções também não mede todo o trabalho interno de funções C.
 
 Copie cada exemplo para o editor de scripts. O importador de cena declarativa
 `.lua` não executa esses scripts e não deve ser usado para importá-los como cenas.
-NPCs, navegação, entrada, dano, áudio, decals e UI na API nova são as fases seguintes.
+NPCs, navegação, áudio, decals e UI na API nova continuam dependências em desenvolvimento.
+Entrada e dano já estão disponíveis conforme as seções acima.
+
+## Consultas de volumes e controle do jogador
+
+`linblux.physics.overlap_box(centro, tamanho, opcoes?)` e
+`overlap_sphere(centro, raio, opcoes?)` retornam `objetos, truncado`. O Bullet
+testa a geometria real, inclusive sensores (`collidable=false`), não só centros
+ou caixas envolventes. Opções: `rotation` Euler em graus (apenas caixa),
+`ignore` (peça), `include_player` (padrão true), `solid_only` (false) e
+`max_results` (1–256, padrão 256). Resultado ordenado por ID; jogador tem ID 0
+e type="player". `truncado=true` significa que candidatos de broadphase não
+foram examinados após atingir o limite; não garante outra interseção exata.
+
+Limites: oito consultas por quadro compartilhadas entre scripts e subpassos;
+o host pode configurar `Limits.spatialQueries` (1–128) com a sessão parada.
+Raio até 1000; dimensões de caixa entre 0,001 e 2000; coordenadas finitas até
+1 milhão. Consultas sincronizam mudanças de peças antes de ler o mundo físico,
+sem chamar Lua dentro da enumeração Bullet. Não há assinatura contínua de
+regiões nesta API: o script compara os conjuntos de IDs de cada consulta.
+
+`linblux.player:move(direcao, referencia?)` define intenção horizontal XZ até o
+próximo quadro. Referência "world" (padrão) ou "camera"; -Z representa frente.
+Magnitude acima de 1 é normalizada. Sem chamada no próximo quadro, o controle
+normal do usuário retorna. `:jump()` solicita salto ao controlador existente,
+respeitando chão, coyote time e buffer. Não é teletransporte.
+`player.velocity = vetor`, `:apply_force(vetor)` e `:apply_impulse(vetor)`
+atuam na cápsula Bullet. O controlador pode alterar a velocidade horizontal no
+passo seguinte; forças não substituem intenção de movimento. APIs recusam uso
+com jogador morto ou sessão fora de execução.
+
+[consultas_controle.lua](../assets/examples/lua/consultas_controle.lua) é salvo,
+reaberto e executado pelo teste Studio e pelo Player independente, com
+verificações de caixa orientada, exclusão de falsos positivos, salto e movimento.
