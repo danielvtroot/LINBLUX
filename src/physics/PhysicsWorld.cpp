@@ -136,6 +136,13 @@ btRigidBody* PhysicsWorld::createBody(Part& part, btCollisionShape* shape) {
                                 btCollisionObject::CF_STATIC_OBJECT);
         body->setActivationState(DISABLE_DEACTIVATION);
     } else {
+        // Um NPC e um corpo dinamico conduzido pelo controlador: fica em pe
+        // (sem tombamento) e sempre ativo, porque a velocidade e reescrita a
+        // cada passo fixo.
+        if (part.hasNpc()) {
+            body->setAngularFactor(btVector3(0, 0, 0));
+            body->setActivationState(DISABLE_DEACTIVATION);
+        }
         // CCD evita que pecas rapidas atravessem a Baseplate.
         const float minSize = std::min(size.x, std::min(size.y, size.z));
         body->setCcdMotionThreshold(std::max(0.2f, minSize * 0.5f));
@@ -293,6 +300,8 @@ void PhysicsWorld::applyChanges(Part* part) {
         const float mass=PartMass(*part);btVector3 inertia(0,0,0);
         if(mass>0)entry.shape->calculateLocalInertia(mass,inertia);
         entry.body->setMassProps(mass,inertia);entry.body->updateInertiaTensor();
+        // Liga/desliga o travamento de rotacao do NPC sem recriar o corpo.
+        entry.body->setAngularFactor(part->hasNpc()?btVector3(0,0,0):btVector3(1,1,1));
         entry.body->setFriction(properties.friction);entry.body->setRestitution(properties.restitution);
         entry.body->setDamping(properties.linearDamping,properties.angularDamping);
         if(!isPartEditing(part->id()))entry.body->activate(true);
@@ -471,7 +480,8 @@ Vector3 PhysicsWorld::linearVelocity(InstanceId id) const {
 }
 
 bool PhysicsWorld::raycast(Vector3 origin, Vector3 direction, float maxDistance, Part** hitPart,
-                           Vector3* hitPoint, Vector3* hitNormal) const {
+                           Vector3* hitPoint, Vector3* hitNormal, bool solidOnly,
+                           InstanceId ignore) const {
     if (hitPart != nullptr) {
         *hitPart = nullptr;
     }
@@ -483,7 +493,21 @@ bool PhysicsWorld::raycast(Vector3 origin, Vector3 direction, float maxDistance,
     const btVector3 from = ToBullet(origin);
     const btVector3 to = ToBullet(Vector3Add(origin, Vector3Scale(normalized, maxDistance)));
 
-    btCollisionWorld::ClosestRayResultCallback callback(from, to);
+    // Filtro por corpo: usado pela navegacao para nao considerar volumes sem
+    // colisao como chao ou parede. Ignora tambem o proprio agente.
+    struct FilteredRay final : btCollisionWorld::ClosestRayResultCallback {
+        bool solidOnly;
+        InstanceId ignore;
+        FilteredRay(btVector3 a, btVector3 b, bool solid, InstanceId skip)
+            : ClosestRayResultCallback(a, b), solidOnly(solid), ignore(skip) {}
+        bool needsCollision(btBroadphaseProxy* proxy) const override {
+            const auto* body = static_cast<const btCollisionObject*>(proxy->m_clientObject);
+            const auto* part = static_cast<const Part*>(body->getUserPointer());
+            if (!part || part->id() == ignore) return false;
+            if (solidOnly && !body->hasContactResponse()) return false;
+            return ClosestRayResultCallback::needsCollision(proxy);
+        }
+    } callback(from, to, solidOnly, ignore);
     world_->rayTest(from, to, callback);
     if (!callback.hasHit()) {
         return false;
@@ -503,6 +527,27 @@ bool PhysicsWorld::raycast(Vector3 origin, Vector3 direction, float maxDistance,
     if (hitNormal != nullptr) {
         *hitNormal = FromBullet(callback.m_hitNormalWorld);
     }
+    return true;
+}
+
+bool PhysicsWorld::setBodyYaw(InstanceId id, float yawDegrees) {
+    if (!std::isfinite(yawDegrees)) return false;
+    const auto it = bodies_.find(id);
+    if (it == bodies_.end() || it->second.body->isStaticOrKinematicObject()) return false;
+    btTransform transform = it->second.body->getWorldTransform();
+    const btQuaternion yaw(btVector3(0, 1, 0), yawDegrees * DEG2RAD);
+    transform.setRotation(yaw);
+    it->second.body->setWorldTransform(transform);
+    it->second.body->getMotionState()->setWorldTransform(transform);
+    it->second.body->activate(true);
+    return true;
+}
+
+bool PhysicsWorld::lockAngularMotion(InstanceId id, bool locked) {
+    const auto it = bodies_.find(id);
+    if (it == bodies_.end()) return false;
+    it->second.body->setAngularFactor(locked ? btVector3(0, 0, 0) : btVector3(1, 1, 1));
+    it->second.body->activate(true);
     return true;
 }
 
