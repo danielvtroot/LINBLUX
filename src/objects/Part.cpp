@@ -97,7 +97,10 @@ bool NpcProperties::validate(std::string& error) const {
 
 bool Part::setNpcProperties(const NpcProperties& value,std::string& error) {
     if(!value.validate(error))return false;
-    npcProperties_=value;return true;
+    npcProperties_=value;
+    // O corpo precisa aplicar/retirar o travamento de rotacao do NPC.
+    dirty_.body=true;
+    return true;
 }
 
 bool Part::setBodyProperties(const BodyProperties& value,std::string& error) {

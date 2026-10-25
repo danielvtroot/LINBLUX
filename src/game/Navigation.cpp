@@ -92,7 +92,7 @@ bool NavGrid::build(const Scene& scene, const PhysicsWorld& physics, const Confi
     float cell = config_.cellSize;
     const double estimate = double(spanX / cell + 1) * double(spanZ / cell + 1);
     if (estimate > double(config_.maxCells)) {
-        cell = std::max(1.0f, std::sqrt(double(spanX) * double(spanZ) / double(config_.maxCells)));
+        cell = std::max(1.0f, float(std::sqrt(double(spanX) * double(spanZ) / double(config_.maxCells))));
     }
     config_.cellSize = cell;
     columns_ = unsigned(std::floor(spanX / cell)) + 1;

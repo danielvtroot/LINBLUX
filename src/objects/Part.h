@@ -117,7 +117,8 @@ public:
     const std::optional<NpcProperties>& npcProperties() const { return npcProperties_; }
     bool hasNpc() const { return npcProperties_.has_value(); }
     bool setNpcProperties(const NpcProperties& properties, std::string& error);
-    void clearNpcProperties() { npcProperties_.reset(); }
+    // Remover o componente devolve a rotacao livre ao corpo no proximo sync.
+    void clearNpcProperties() { if(npcProperties_){npcProperties_.reset();dirty_.body=true;} }
 
     // Escrita vinda do motor fisico: nao marca dirty (evita loop de sync).
     void syncFromPhysics(Vector3 position, Quaternion rotation);

@@ -3,6 +3,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include "game/Npc.h"
 #include "game/Rig.h"
 #include "game/ScriptInput.h"
 #include "game/ProgressStore.h"
@@ -99,6 +100,8 @@ public:
     Scene& mutableScene() { return *scene_; } // validated native bindings, runtime only
     scripting::LuaRuntime& scripts() { return scripts_; }
     const scripting::LuaRuntime& scripts() const { return scripts_; }
+    NpcSystem& npcs() { return npcs_; }
+    const NpcSystem& npcs() const { return npcs_; }
     ProgressStore& storage(){return progress_;}
     const ScriptInput& scriptInput() const { return scriptInput_; }
     const ScriptInput& previousScriptInput() const { return previousScriptInput_; }
@@ -146,6 +149,7 @@ public:
     PlayerCamera& playerCamera() { return camera_; }
     const PlayerCamera& playerCamera() const { return camera_; }
 private:
+    friend class NpcSystem; // controlador de NPC conduz corpos e navegacao
     void destroyCharacter();
     void step(float dt, Vector3 desired, bool jump);
     void updateContacts();
@@ -190,6 +194,7 @@ private:
     std::string correlation_;
     std::string activeAnimation_;
     scripting::LuaRuntime scripts_;
+    NpcSystem npcs_;
     ProgressStore progress_;
     std::set<std::pair<InstanceId,InstanceId>> activeContacts_;
     ScriptInput scriptInput_,previousScriptInput_;
