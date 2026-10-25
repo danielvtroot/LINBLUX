@@ -2,6 +2,7 @@
 /Testing/
 /cache/
 /.cache/
+/.atlas/
 /compile_commands.json
 *.o
 *.a

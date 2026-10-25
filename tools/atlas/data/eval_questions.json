@@ -1,0 +1,86 @@
+[
+  {
+    "id": "camera-follow",
+    "query": "a camera nao acompanha o personagem",
+    "expect_modules": ["rendering", "game", "editor"],
+    "expect_symbols": ["EditorCamera", "RuntimeSession", "PlayerSettings"],
+    "notes": "Camera de edição e controlador de runtime."
+  },
+  {
+    "id": "rig-load",
+    "query": "o rig nao carrega corretamente",
+    "expect_modules": ["game", "serialization", "editor"],
+    "expect_symbols": ["Rig", "ProjectIO"],
+    "notes": "Persistência de rig e painéis de personagem."
+  },
+  {
+    "id": "default-world-save",
+    "query": "o mundo padrao nao salva",
+    "expect_modules": ["experiences", "editor"],
+    "expect_symbols": ["ExperienceManager", "saveEngineDefaults"],
+    "notes": "Publicação atômica do Mundo Padrão."
+  },
+  {
+    "id": "home-video-freeze",
+    "query": "o video da tela inicial trava",
+    "expect_modules": ["media", "app", "ui"],
+    "expect_symbols": ["VideoBackground", "Application"],
+    "notes": "Decoder assíncrono e Home."
+  },
+  {
+    "id": "black-ui-startup",
+    "query": "a interface fica preta ao iniciar",
+    "expect_modules": ["ui", "rendering", "app"],
+    "expect_symbols": ["StudioFrontend", "SceneRenderer", "Application"],
+    "notes": "Frontend RmlUi, camada gráfica e inicialização."
+  },
+  {
+    "id": "add-physics-component",
+    "query": "adicionar um novo componente de fisica",
+    "expect_modules": ["physics", "game"],
+    "expect_symbols": ["PhysicsWorld", "RuntimeSession"],
+    "notes": "Ponto de extensão da física Bullet."
+  },
+  {
+    "id": "object-disappears",
+    "query": "por que esse objeto desaparece",
+    "expect_modules": ["scene", "rendering", "serialization"],
+    "expect_symbols": ["Scene", "SceneRenderer"],
+    "notes": "Cena, renderização e persistência."
+  },
+  {
+    "id": "where-animation",
+    "query": "onde devo implementar o sistema de animacoes",
+    "expect_modules": ["game", "editor", "serialization"],
+    "expect_symbols": ["AnimationClip", "Rig"],
+    "notes": "Rig, clipes e editor de animação."
+  },
+  {
+    "id": "impact-scene",
+    "query": "que modulos serao afetados se eu modificar a classe Scene",
+    "expect_modules": ["scene", "game", "editor", "serialization"],
+    "expect_symbols": ["Scene"],
+    "notes": "Impacto estrutural de Scene."
+  },
+  {
+    "id": "character-missing",
+    "query": "personagem nao aparece ao iniciar",
+    "expect_modules": ["game", "scene", "player"],
+    "expect_symbols": ["RuntimeSession", "Spawn", "Rig"],
+    "notes": "Spawn, cópia de runtime e player."
+  },
+  {
+    "id": "export-experience",
+    "query": "salvar e exportar experiencia .lo",
+    "expect_modules": ["experiences", "editor"],
+    "expect_symbols": ["ExperienceManager", "exportPackage"],
+    "notes": "Pacote .lo e interface de experiências."
+  },
+  {
+    "id": "import-character",
+    "query": "importar personagem pelo Studio",
+    "expect_modules": ["experiences", "editor", "game"],
+    "expect_symbols": ["ExperienceManager", "importCharacter"],
+    "notes": "Importação de personagem e seleção no editor."
+  }
+]

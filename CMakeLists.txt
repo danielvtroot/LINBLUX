@@ -373,3 +373,14 @@ endif()
 install(FILES packaging/linblux.desktop packaging/linblux-player.desktop DESTINATION share/applications COMPONENT Linblux)
 install(FILES packaging/linblux-mime.xml DESTINATION share/mime/packages COMPONENT Linblux)
 install(FILES midia/logo.png DESTINATION share/pixmaps COMPONENT Linblux RENAME linblux.png)
+
+# ATLAS: testes locais da inteligência estrutural (Python stdlib, sem rede).
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME linblux_atlas
+    COMMAND ${Python3_EXECUTABLE} -m unittest discover
+            -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/atlas -p "test_*.py" -v)
+  set_tests_properties(linblux_atlas PROPERTIES
+    TIMEOUT 180
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+endif()

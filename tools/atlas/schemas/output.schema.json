@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LINBLUX ATLAS JSON output",
+  "type": "object",
+  "required": ["ok", "command", "data"],
+  "properties": {
+    "ok": {"type": "boolean"},
+    "command": {"type": "string"},
+    "data": {"type": "object"},
+    "error": {"type": "string"}
+  },
+  "additionalProperties": true
+}
