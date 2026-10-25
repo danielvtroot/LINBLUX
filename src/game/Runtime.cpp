@@ -673,6 +673,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     if (!std::isfinite(input.movement.x) || !std::isfinite(input.movement.y) ||
         !std::isfinite(input.look.x) || !std::isfinite(input.look.y) || !std::isfinite(input.zoom)) return;
     dt = std::min(dt, .1f);
+    spatialQueries_=0;scriptMovement_.reset();
     // Toggle do Shift Lock (Left Shift) detectado por borda; ignorado sem a
     // opção habilitada e nunca dispara no editor (route só roteia gameplay).
     const bool shiftDown = input.shiftKey;
@@ -691,13 +692,13 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
         if(deadTime_>=settings_.respawnDelay) { std::string error;if(!respawn(error))pause(); }
     }
     camera_.processInput(dt,input,settings_);
-    const Vector3 desired = camera_.moveDirection(input.movement);
     jumpPending_ = jumpPending_ || jumpPressed;
     accumulator_ += dt;
     constexpr float fixed = 1.f / 60;
     int steps = 0;
     while (accumulator_ + .000001f >= fixed && steps++ < 6) {
         scripts_.fixedUpdate(fixed);
+        const Vector3 desired=scriptMovement_?*scriptMovement_:camera_.moveDirection(input.movement);
         physics_->syncScene(*scene_);
         previousCharacterPosition_=position();
         step(fixed, desired, jumpPending_); jumpPending_ = false;
@@ -749,6 +750,59 @@ bool RuntimeSession::setGravity(float magnitude,std::string& error) {
     auto candidate=settings_;candidate.gravity=magnitude;
     if(!candidate.validate(error))return false;
     settings_=candidate;physics_->setGravity({0,-magnitude,0});error.clear();return true;
+}
+bool RuntimeSession::movePlayer(Vector3 direction,bool cameraRelative,std::string& error){
+    if(state_!=RuntimeState::Playing||health_<=0||!std::isfinite(direction.x)||!std::isfinite(direction.y)||!std::isfinite(direction.z)||
+       std::fabs(direction.x)>1e6||std::fabs(direction.z)>1e6||std::fabs(direction.y)>.00001f){error="Movimento do jogador requer direção horizontal finita durante execução.";return false;}
+    if(Vector3Length(direction)>1)direction=Vector3Normalize(direction);
+    scriptMovement_=cameraRelative?camera_.moveDirection({direction.x,-direction.z}):direction;error.clear();return true;
+}
+bool RuntimeSession::jumpPlayer(std::string& error){
+    if(state_!=RuntimeState::Playing||health_<=0){error="Jogador não pode saltar neste estado.";return false;}
+    jumpPending_=true;error.clear();return true;
+}
+bool RuntimeSession::playerMotion(Vector3 value,PartMotion operation,std::string& error){
+    if(state_!=RuntimeState::Playing||!body_||health_<=0||!std::isfinite(value.x)||!std::isfinite(value.y)||!std::isfinite(value.z)||
+       std::fabs(value.x)>1e6||std::fabs(value.y)>1e6||std::fabs(value.z)>1e6){error="Movimento físico do jogador fora dos limites.";return false;}
+    switch(operation){
+        case PartMotion::Velocity:body_->setLinearVelocity(Bt(value));break;
+        case PartMotion::Force:body_->applyCentralForce(Bt(value));break;
+        case PartMotion::Impulse:body_->applyCentralImpulse(Bt(value));break;
+        default:error="Operação física inválida.";return false;
+    }
+    body_->activate(true);error.clear();return true;
+}
+std::vector<InstanceId> RuntimeSession::overlap(const SpatialQuery& query,bool& truncated,std::string& error){
+    truncated=false;const auto valid=[](Vector3 v){return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z)&&std::fabs(v.x)<=1e6&&std::fabs(v.y)<=1e6&&std::fabs(v.z)<=1e6;};
+    if(!physics_||!valid(query.center)||!valid(query.rotation)||!valid(query.size)||!std::isfinite(query.radius)||query.radius<0||query.radius>1000||
+       (query.radius==0&&(query.size.x<.001f||query.size.y<.001f||query.size.z<.001f||query.size.x>2000||query.size.y>2000||query.size.z>2000))||
+       query.maxResults==0||query.maxResults>256){error="Volume de consulta fora dos limites.";return {};}
+    if(++spatialQueries_>scripts_.limits().spatialQueries){error="Limite de consultas espaciais por quadro atingido.";return {};}
+    if(query.ignore&&!scene_->findPart(query.ignore)){error="Peça ignorada não existe.";return {};}
+    physics_->syncScene(*scene_);
+    btBoxShape box(Bt(Vector3Scale(query.size,.5f)));btSphereShape sphere(query.radius>0?query.radius:.001f);
+    btCollisionObject probe;probe.setCollisionShape(query.radius>0?static_cast<btCollisionShape*>(&sphere):static_cast<btCollisionShape*>(&box));
+    probe.setCollisionFlags(btCollisionObject::CF_NO_CONTACT_RESPONSE);
+    btTransform transform;transform.setIdentity();transform.setOrigin(Bt(query.center));const auto q=QuatFromEulerDegrees(query.rotation);transform.setRotation({q.x,q.y,q.z,q.w});probe.setWorldTransform(transform);
+    struct QueryContacts final:btCollisionWorld::ContactResultCallback {
+        const Scene& scene;const SpatialQuery& query;const btCollisionObject* player;const btCollisionObject* probe;
+        std::set<InstanceId> ids;mutable bool clipped=false;
+        QueryContacts(const Scene& s,const SpatialQuery& q,const btCollisionObject* p,const btCollisionObject* test):scene(s),query(q),player(p),probe(test){}
+        bool identify(const btCollisionObject* object,InstanceId& id)const{
+            if(object==player){id=0;return query.includePlayer;}
+            const auto* part=static_cast<const Part*>(object->getUserPointer());if(!part||scene.findPart(part->id())!=part||part->id()==query.ignore)return false;id=part->id();return true;
+        }
+        bool needsCollision(btBroadphaseProxy* proxy)const override{
+            const auto* object=static_cast<const btCollisionObject*>(proxy->m_clientObject);InstanceId id;
+            if(!identify(object,id)||(query.solidOnly&&!object->hasContactResponse()))return false;
+            if(ids.size()>=query.maxResults&&!ids.count(id)){clipped=true;return false;}
+            return ContactResultCallback::needsCollision(proxy);
+        }
+        btScalar addSingleResult(btManifoldPoint& point,const btCollisionObjectWrapper* a,int,int,const btCollisionObjectWrapper* b,int,int)override{
+            if(point.getDistance()<=.001f){const auto* other=a->getCollisionObject()==probe?b->getCollisionObject():a->getCollisionObject();InstanceId id;if(identify(other,id))ids.insert(id);}return 0;
+        }
+    } contacts(*scene_,query,body_.get(),&probe);
+    physics_->world_->contactTest(&probe,contacts);truncated=contacts.clipped;error.clear();return {contacts.ids.begin(),contacts.ids.end()};
 }
 bool RuntimeSession::setCheckpoint(Vector3 position,std::string& error) {
     if(!scene_||!std::isfinite(position.x)||!std::isfinite(position.y)||!std::isfinite(position.z)||
