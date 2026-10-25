@@ -32,15 +32,15 @@ std::string DefaultPath() {
     namespace fs = std::filesystem;
     const char* stateHome = std::getenv("XDG_STATE_HOME");
     if (stateHome != nullptr && stateHome[0] == '/') {
-        return (fs::path(stateHome) / "loblox/loblox.jsonl").string();
+        return (fs::path(stateHome) / "linblux/linblux.jsonl").string();
     }
     const char* home = std::getenv("HOME");
     if (home != nullptr && home[0] != '\0') {
-        return (fs::path(home) / ".local/state/loblox/loblox.jsonl").string();
+        return (fs::path(home) / ".local/state/linblux/linblux.jsonl").string();
     }
     std::error_code error;
     const fs::path temporary = fs::temp_directory_path(error);
-    return ((error ? fs::path("/tmp") : temporary) / "loblox/loblox.jsonl").string();
+    return ((error ? fs::path("/tmp") : temporary) / "linblux/linblux.jsonl").string();
 }
 
 std::string Timestamp() {

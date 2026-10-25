@@ -217,14 +217,14 @@ void EditorUI::drawInstanceProperties(Instance& object) {
     const auto row=[&](const char* label,const char* help="") {
         if (!Matches(label,propertiesFilter_)) return false;
         ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(label);
-        if (*help && ImGui::IsItemHovered()) ImGui::SetTooltip("%s",help);
+        ImGui::TextUnformatted(i18n::Label(label));
+        if (*help && ImGui::IsItemHovered()) ImGui::SetTooltip(i18n::Label("%s"),help);
         ImGui::TableSetColumnIndex(1); ImGui::SetNextItemWidth(-1); return true;
     };
     if (category("Data") && table("Data values")) {
         if (row("Name","Enter commits; Esc cancels the text edit.")) {
             char text[129]; std::snprintf(text,sizeof(text),"%s",object.name().c_str());
-            if (ImGui::InputText("##Name",text,sizeof(text),ImGuiInputTextFlags_EnterReturnsTrue)) {
+            if (ImGui::InputText(i18n::Label("##Name"),text,sizeof(text),ImGuiInputTextFlags_EnterReturnsTrue)) {
                 if (*text) object.setName(text); else setStatus("Name nao pode ser vazio.",true);
             }
         }
@@ -269,7 +269,7 @@ void EditorUI::drawInstanceProperties(Instance& object) {
         if (category("Appearance") && table("Appearance values")) {
             if (row("Color")) {
                 const auto c=part.color(); float color[]{c.r/255.f,c.g/255.f,c.b/255.f};
-                if (ImGui::ColorEdit3("##Color",color,ImGuiColorEditFlags_NoInputs))
+                if (ImGui::ColorEdit3(i18n::Label("##Color"),color,ImGuiColorEditFlags_NoInputs))
                     part.setColor({static_cast<unsigned char>(std::lround(std::clamp(color[0],0.f,1.f)*255)),
                         static_cast<unsigned char>(std::lround(std::clamp(color[1],0.f,1.f)*255)),
                         static_cast<unsigned char>(std::lround(std::clamp(color[2],0.f,1.f)*255)),c.a});
@@ -352,7 +352,7 @@ void EditorUI::drawInstanceProperties(Instance& object) {
                     return std::clamp(byte, 0, 255) / 255.0f;
                 };
                 float tintValue[3] = {channel(0), channel(2), channel(4)};
-                if (ImGui::ColorEdit3("##decal_tint", tintValue)) {
+                if (ImGui::ColorEdit3(i18n::Label("##decal_tint"), tintValue)) {
                     char hexOut[8]; std::snprintf(hexOut,sizeof(hexOut),"%02X%02X%02X",
                         (int)std::lround(tintValue[0]*255),(int)std::lround(tintValue[1]*255),(int)std::lround(tintValue[2]*255));
                     part.setAttribute("decal_tint", std::string(hexOut));
@@ -650,10 +650,10 @@ void EditorUI::drawScriptEditorBody(Instance& object,ScriptDraft& draft,bool cen
 }
 
 void EditorUI::drawScriptEditor() {
-    if (!ImGui::FindWindowByName("Script Editor")) {
-        if(auto* view=ImGui::FindWindowByName("Viewport");view && view->DockId) {
+    if (!ImGui::FindWindowByName(i18n::Label("Script Editor"))) {
+        if(auto* view=ImGui::FindWindowByName(i18n::Label("Viewport"));view && view->DockId) {
             ImGuiID upper;auto lower=ImGui::DockBuilderSplitNode(view->DockId,ImGuiDir_Down,.5f,nullptr,&upper);
-            ImGui::DockBuilderDockWindow("Viewport",upper);ImGui::DockBuilderDockWindow("Script Editor",lower);
+            ImGui::DockBuilderDockWindow(i18n::Label("Viewport"),upper);ImGui::DockBuilderDockWindow(i18n::Label("Script Editor"),lower);
             ImGui::DockBuilderFinish(ImGui::GetID("LinbluxDockspace"));
         }
     }
@@ -689,8 +689,8 @@ void EditorUI::drawScriptEditor() {
     ImGui::End();
 }
 void EditorUI::drawOutput() {
-    if (!ImGui::FindWindowByName("Output")) {
-        if(auto* editor=ImGui::FindWindowByName("Script Editor");editor && editor->DockId)
+    if (!ImGui::FindWindowByName(i18n::Label("Output"))) {
+        if(auto* editor=ImGui::FindWindowByName(i18n::Label("Script Editor"));editor && editor->DockId)
             ImGui::SetNextWindowDockID(editor->DockId,ImGuiCond_FirstUseEver);
     }
     ImGui::SetNextWindowSize({740,230},ImGuiCond_FirstUseEver);

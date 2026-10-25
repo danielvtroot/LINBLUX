@@ -9,7 +9,7 @@
 // a newly applied image is opaque by default, not merely "doesn't crash".
 int main() {
     char temp[]="/tmp/loblox-decal-render-XXXXXX";const char* dir=mkdtemp(temp);if(!dir)return 1;
-    SetTraceLogLevel(LOG_WARNING);InitWindow(256,256,"Loblox decal regression");
+    SetTraceLogLevel(LOG_WARNING);InitWindow(256,256,"LINBLUX decal regression");
     int failures=0,checks=0;
     {
         const std::string file=std::string(dir)+"/sample.png";

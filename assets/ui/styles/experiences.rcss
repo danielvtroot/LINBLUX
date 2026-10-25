@@ -1,4 +1,4 @@
-/* Loblox Experiences surfaces: graphite #202227, raised #2a2d34,
+/* LINBLUX Experiences surfaces: graphite #202227, raised #2a2d34,
    text #f1f3f7, secondary #aeb7c7, accent #377ed2; spacing 8/16/24/32. */
 #experience-root { display: none; position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 120; pointer-events: none; }
 #experience-host { position: absolute; left: 0; right: 0; top: 0; bottom: 0; pointer-events: none; }
@@ -154,3 +154,15 @@
 
 .experience-settings { padding: 24px; background: #151519e0; border-radius: 8px; }
 .experience-settings button { display: block; width: 420px; max-width: 100%; height: 40px; margin-bottom: 12px; text-align: left; }
+
+.home-default-card { display: flex; align-items: center; padding: 16px 22px; margin: 0 0 22px; border: 1px #ffffff16; border-radius: 8px; background: #151318b8; }
+.home-default-card img { width: 48px; height: auto; margin-right: 18px; }
+.home-default-card div { flex: 1; }
+.home-default-card h2 { font-size: 18px; margin: 0 0 5px; }
+.home-default-card p { font-size: 13px; color: #d3c8ce; margin: 0 0 6px; }
+.home-default-card small { font-size: 9px; color: #dd8c98; letter-spacing: 1px; }
+.home-default-card button { height: 38px; padding: 9px 17px; margin-left: 16px; border-color: #df68794a; background: #35202bd9; }
+#exp-header-default-save { height: 26px; padding: 3px 10px; font-size: 11px; margin: 0 8px; }
+
+#experience-form-actions { display: none; position: absolute; left: 0; right: 0; bottom: 0; height: 76px; padding: 16px 5%; margin: 0; background: #141318f2; border-top: 1px #ffffff16; }
+#experience-form-actions button { height: 42px; padding: 10px 22px; font-size: 14px; }

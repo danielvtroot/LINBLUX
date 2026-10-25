@@ -86,7 +86,7 @@ def main():
     environment = dict(os.environ, XDG_DATA_HOME=str(root / "data"),
                        XDG_STATE_HOME=str(root / "state"), LOBLOX_TRACE_INPUT="1",
                        LIBGL_ALWAYS_SOFTWARE="1")
-    log = root / "state/loblox/loblox.jsonl"
+    log = root / "state/linblux/linblux.jsonl"
 
     def events():
         return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
@@ -101,7 +101,7 @@ def main():
             try:
                 def find_window():
                     result = subprocess.run(["xdotool", "search", "--pid", str(process.pid),
-                                             "--name", "^Loblox Studio$"],
+                                             "--name", "^LINBLUX Studio$"],
                                             capture_output=True, text=True, timeout=2)
                     return result.stdout.strip().splitlines()[-1] if result.returncode == 0 else None
                 window = wait_for(find_window, process)
@@ -141,13 +141,13 @@ def main():
     # Explicit missing path must preserve the default scene and not overwrite
     # the failed startup file when saving normally.
     missing = root / "missing.json"
-    default = root / "data/loblox/projects/default.loblox.json"
+    default = root / "data/linblux/projects/default.loblox.json"
     # Normal startup is now Home; it must not silently open/rewrite an old
     # default project. Explicit legacy projects retain their original contract.
     with (root / "home.log").open("w") as output:
         process = subprocess.Popen([binary], cwd=root, env=environment, stdout=output, stderr=output)
         try:
-            window = wait_for(lambda: subprocess.run(["xdotool", "search", "--pid", str(process.pid), "--name", "^Loblox Studio$"], capture_output=True,text=True).stdout.strip(), process)
+            window = wait_for(lambda: subprocess.run(["xdotool", "search", "--pid", str(process.pid), "--name", "^LINBLUX Studio$"], capture_output=True,text=True).stdout.strip(), process)
             wait_for(lambda: any(e["event"] == "startup_ready" for e in events()), process)
             assert not default.exists(), "Home must not create a legacy default file"
             close_window(window.splitlines()[-1]);assert process.wait(timeout=10) == 0

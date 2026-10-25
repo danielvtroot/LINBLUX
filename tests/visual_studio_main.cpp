@@ -1,3 +1,4 @@
+#include "ui/Localization.h"
 // Production UI/renderer, actual window events, measurable overlay geometry.
 #include <cstdio>
 #include <cstdlib>
@@ -41,7 +42,7 @@ int main() {
     const char* directory=mkdtemp(temp);if(!directory)return 1;
     diag::configure(std::string(directory)+"/events.jsonl");
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);SetTraceLogLevel(LOG_WARNING);
-    InitWindow(1366,768,"Loblox visual acceptance");SetWindowPosition(0,0);SetExitKey(KEY_NULL);SetTargetFPS(60);
+    InitWindow(1366,768,"LINBLUX visual acceptance");SetWindowPosition(0,0);SetExitKey(KEY_NULL);SetTargetFPS(60);
     rlImGuiSetup(true);auto& io=ImGui::GetIO();io.ConfigFlags|=ImGuiConfigFlags_DockingEnable;
     io.ConfigWindowsMoveFromTitleBarOnly=true;io.IniFilename=nullptr;
     const char* font="/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
@@ -61,10 +62,10 @@ int main() {
         auto key=[&](const char* key){event(std::string("keydown ")+key);event(std::string("keyup ")+key);};
         auto click=[&](ImVec2 at){event("mousemove "+std::to_string(int(at.x))+" "+std::to_string(int(at.y)));event("mousedown 1");event("mouseup 1");};
         auto capture=[&](const std::string& name){frames();TakeScreenshot((std::string(directory)+"/"+name+".png").c_str());};
-        frames(5);event("search --name '^Loblox visual acceptance$' windowfocus --sync");
+        frames(5);event("search --name '^LINBLUX visual acceptance$' windowfocus --sync");
         capture("studio-1366");
         for(const char* label:{"Avatar","Script","Home"}) {
-            auto* toolbar=ImGui::FindWindowByName("##Toolbar");
+            auto* toolbar=ImGui::FindWindowByName(loblox::i18n::Label("##Toolbar"));
             auto* bar=GImGui->TabBars.GetByKey(toolbar->GetID("##RibbonTabs"));CHECK(bar);
             if(bar)for(auto& tab:bar->Tabs)if(std::string(ImGui::TabBarGetTabName(bar,&tab))==label) {
                 const ImVec2 at{bar->BarRect.Min.x+tab.Offset+tab.Width*.5f,bar->BarRect.Min.y+ImGui::GetTextLineHeight()*.5f};
@@ -101,7 +102,7 @@ int main() {
             }
             key("Escape");CHECK(runtime.state()==game::RuntimeState::Paused);
             CHECK(EditorUITestAccess::healthHud(ui).width==0);
-            const auto vp=EditorUITestAccess::viewport(ui);auto* menu=ImGui::FindWindowByName("Play paused");
+            const auto vp=EditorUITestAccess::viewport(ui);auto* menu=ImGui::FindWindowByName(loblox::i18n::Label("Play paused"));
             CHECK(menu!=nullptr);CHECK(vp.x>0 && vp.y>0);
             if(menu) {
                 CHECK(menu->Pos.x>=vp.x && menu->Pos.y>=vp.y);
@@ -131,37 +132,37 @@ int main() {
             EditorUITestAccess::hideScript(ui);break;
         }
         EditorUITestAccess::animation(ui);frames();
-        if(auto* panel=ImGui::FindWindowByName("Animation Editor")) {
+        if(auto* panel=ImGui::FindWindowByName(loblox::i18n::Label("Animation Editor"))) {
             ImGui::SetWindowDock(panel,0,ImGuiCond_Always);
-            ImGui::SetWindowPos("Animation Editor",{270,410});ImGui::SetWindowSize("Animation Editor",{715,345});
+            ImGui::SetWindowPos(loblox::i18n::Label("Animation Editor"),{270,410});ImGui::SetWindowSize(loblox::i18n::Label("Animation Editor"),{715,345});
             capture("animation-editor");
         }
         // Actual Animation Editor New -> rename -> save -> Delete, followed by
         // confirmation for an assigned clip. Only private fixture files are used.
-        ImGui::SetWindowSize("Animation Editor",{715,530});ImGui::SetWindowPos("Animation Editor",{270,220});frames();
+        ImGui::SetWindowSize(loblox::i18n::Label("Animation Editor"),{715,530});ImGui::SetWindowPos(loblox::i18n::Label("Animation Editor"),{270,220});frames();
         const auto button=[&](const char* target) {
-            auto* panel=ImGui::FindWindowByName("Animation Editor");float x=panel->DC.CursorStartPos.x;
+            auto* panel=ImGui::FindWindowByName(loblox::i18n::Label("Animation Editor"));float x=panel->DC.CursorStartPos.x;
             for(const char* name:{"New","Duplicate","Save Animation + Project","Revert","Use as Walk","Delete"}) {
-                const float width=ImGui::CalcTextSize(name).x+ImGui::GetStyle().FramePadding.x*2;
+                const float width=ImGui::CalcTextSize(loblox::i18n::Label(name)).x+ImGui::GetStyle().FramePadding.x*2;
                 if(std::string(name)==target) {click({x+width/2,panel->DC.CursorStartPos.y+ImGui::GetFrameHeightWithSpacing()+ImGui::GetFrameHeight()/2});break;}
                 x+=width+ImGui::GetStyle().ItemSpacing.x;
             }
         };
         const auto count=scene.gameAssets().animations.size();button("New");
         CHECK(scene.gameAssets().animations.size()==count+1);const auto created=EditorUITestAccess::clip(ui);
-        auto* panel=ImGui::FindWindowByName("Animation Editor");
+        auto* panel=ImGui::FindWindowByName(loblox::i18n::Label("Animation Editor"));
         click({panel->DC.CursorStartPos.x+40,panel->DC.CursorStartPos.y+2*ImGui::GetFrameHeightWithSpacing()+ImGui::GetFrameHeight()/2});
         event("keydown ctrl");key("a");event("keyup ctrl");event("type --delay 0 RenamedClip");key("Return");
         button("Save Animation + Project");CHECK(scene.gameAssets().findAnimation(created)->name=="RenamedClip");
         button("Delete");CHECK(!scene.gameAssets().findAnimation(created));
         EditorUITestAccess::open(ui,scene.gameAssets().player.walkAnimation);frames();button("Delete");
-        auto* confirm=ImGui::FindWindowByName("Delete assigned animation?");CHECK(confirm && confirm->Active);
+        auto* confirm=ImGui::FindWindowByName(loblox::i18n::Label("Delete assigned animation?"));CHECK(confirm && confirm->Active);
         if(confirm)click({confirm->DC.CursorStartPos.x+40,confirm->DC.CursorStartPos.y+2*ImGui::GetTextLineHeightWithSpacing()+ImGui::GetFrameHeight()/2});
         CHECK(scene.gameAssets().player.walkAnimation.empty());
         CHECK(scene.gameAssets().player.jumpAnimation!=scene.gameAssets().player.fallAnimation);
         EditorUITestAccess::hideAnimation(ui);frames();
         Part* base=nullptr;for(auto* p:scene.parts())if(p->instanceClass()==InstanceClass::Baseplate)base=p;
-        CHECK(base);if(base) {const auto id=base->id();scene.select(base);key("Delete");CHECK(!scene.find(id));CHECK(!physics.hasBody(id));}
+        CHECK(base);if(base) {const auto id=base->id();scene.select(base);if(auto* view=ImGui::FindWindowByName(loblox::i18n::Label("Viewport")))ImGui::FocusWindow(view);key("Delete");CHECK(!scene.find(id));CHECK(!physics.hasBody(id));}
         event("keydown ctrl");key("s");event("keyup ctrl");
         Scene reloaded;CHECK(projectio::load(reloaded,config.defaultProjectPath,error));
         CHECK(!reloaded.gameAssets().findAnimation(created));CHECK(reloaded.gameAssets().player.walkAnimation.empty());

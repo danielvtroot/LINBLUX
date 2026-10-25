@@ -1,3 +1,4 @@
+#include "ui/Localization.h"
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -25,7 +26,7 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-ui-XXXXXX"; const char* directory=mkdtemp(temporary); if(!directory)return 1;
     diag::configure(std::string(directory)+"/studio.jsonl");
-    SetTraceLogLevel(LOG_WARNING); InitWindow(1280,800,"Loblox studio regression");
+    SetTraceLogLevel(LOG_WARNING); InitWindow(1280,800,"LINBLUX studio regression");
     if(!IsWindowReady())return 1; SetExitKey(KEY_NULL); SetTargetFPS(60); rlImGuiSetup(true);
     ImGui::GetIO().ConfigFlags|=ImGuiConfigFlags_DockingEnable; ImGui::GetIO().IniFilename=nullptr;
     ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly=true;
@@ -44,12 +45,12 @@ int main() {
         // queue between batches; a real application pumps frames while typing.
         auto type=[&](const std::string& text){for(std::size_t at=0;at<text.size();at+=8)
             command("type --clearmodifiers --delay 0 -- '"+text.substr(at,8)+"'");};
-        frames(); command("search --name '^Loblox studio regression$' windowfocus --sync");
-        auto* window=ImGui::FindWindowByName("Explorer"); CHECK(window);
+        frames(); command("search --name '^LINBLUX studio regression$' windowfocus --sync");
+        auto* window=ImGui::FindWindowByName(loblox::i18n::Label("Explorer")); CHECK(window);
         if (!window) return 1;
         ImGui::SetWindowDock(window,0,ImGuiCond_Always);
-        ImGui::SetWindowPos("Explorer",{10,175}); ImGui::SetWindowSize("Explorer",{390,590}); frames();
-        auto* explorer=ImGui::FindWindowByName("Explorer");
+        ImGui::SetWindowPos(loblox::i18n::Label("Explorer"),{10,175}); ImGui::SetWindowSize(loblox::i18n::Label("Explorer"),{390,590}); frames();
+        auto* explorer=ImGui::FindWindowByName(loblox::i18n::Label("Explorer"));
         const Vector2 origin{explorer->DC.CursorStartPos.x,explorer->DC.CursorStartPos.y};
         click(Vector2Add(origin,{30,8})); auto* folder=scene.selection();
         CHECK(folder && folder->instanceClass()==InstanceClass::Folder);
@@ -70,13 +71,18 @@ int main() {
         CHECK(reopened.find(id)->parent()->id()==child->id());
         TakeScreenshot((std::string(directory)+"/explorer.png").c_str());
         scene.select(nullptr);frames();
-        click({279,9}); // Script menu in the fixed-font menu bar.
-        click({315,30}); // New Script
-        auto* scriptWindow=ImGui::FindWindowByName("Script Editor");CHECK(scriptWindow);
+        auto* toolbar=ImGui::FindWindowByName(loblox::i18n::Label("##Toolbar"));
+        auto* tabs=GImGui->TabBars.GetByKey(toolbar->GetID("##RibbonTabs"));CHECK(tabs);
+        if(tabs)for(auto& tab:tabs->Tabs)if(std::string(ImGui::TabBarGetTabName(tabs,&tab))==loblox::i18n::Label("Script")) {
+            click({tabs->BarRect.Min.x+tab.Offset+tab.Width*.5f,tabs->BarRect.Min.y+ImGui::GetTextLineHeight()*.5f});break;
+        }
+        const float createWidth=std::max(ImGui::CalcTextSize(loblox::i18n::Label("New Script")).x+16.f,54.f);
+        click({toolbar->DC.CursorStartPos.x+createWidth*.5f,toolbar->Pos.y+66});
+        auto* scriptWindow=ImGui::FindWindowByName(loblox::i18n::Label("Script Editor"));CHECK(scriptWindow);
         if (scriptWindow) {
             auto* script=scene.selection();CHECK(script && script->instanceClass()==InstanceClass::Script);
-            ImGui::SetWindowDock(scriptWindow,0,ImGuiCond_Always);ImGui::SetWindowPos("Script Editor",{410,175});
-            ImGui::SetWindowSize("Script Editor",{850,590});frames();
+            ImGui::SetWindowDock(scriptWindow,0,ImGuiCond_Always);ImGui::SetWindowPos(loblox::i18n::Label("Script Editor"),{410,175});
+            ImGui::SetWindowSize(loblox::i18n::Label("Script Editor"),{850,590});frames();
             const Vector2 editorOrigin{scriptWindow->DC.CursorStartPos.x,scriptWindow->DC.CursorStartPos.y};
             click(EditorUITestAccess::sourceField(ui)); CHECK(ImGui::GetIO().WantTextInput);
             command("keydown ctrl");key("a");command("keyup ctrl");
@@ -86,7 +92,9 @@ int main() {
             command("keydown ctrl");key("s");command("keyup ctrl");
             CHECK(script && static_cast<Script*>(script)->source.find("Vector3.new(33")!=std::string::npos);
             TakeScreenshot((std::string(directory)+"/script.png").c_str());
-            click(Vector2Add(editorOrigin,{333,8})); // Play button
+            float playX=editorOrigin.x;
+            for(const char* caption:{"New Script","New Module","Save All + Project"})playX+=ImGui::CalcTextSize(loblox::i18n::Label(caption)).x+2*ImGui::GetStyle().FramePadding.x+ImGui::GetStyle().ItemSpacing.x;
+            click({playX+ImGui::CalcTextSize(loblox::i18n::Label("Play")).x*.5f+ImGui::GetStyle().FramePadding.x,editorOrigin.y+ImGui::GetFrameHeight()*.5f});
             CHECK(ui.playing());
             if(ui.playing()) {
                 CHECK(EditorUITestAccess::runtime(ui).scene().findPart(id)->position().x==33);
@@ -101,7 +109,7 @@ int main() {
         // The real Lighting row must reach its own Properties, not the generic
         // root-service inspector. Its right-click owns exactly one popup ID.
         EditorUITestAccess::lightingFilter(ui);frames();
-        auto* lightExplorer=ImGui::FindWindowByName("Explorer");
+        auto* lightExplorer=ImGui::FindWindowByName(loblox::i18n::Label("Explorer"));
         const Vector2 lightAt{lightExplorer->DC.CursorStartPos.x+45,
             lightExplorer->DC.CursorStartPos.y+2*ImGui::GetFrameHeightWithSpacing()+ImGui::GetTextLineHeight()*.5f};
         click(lightAt);CHECK(scene.selection()==scene.lighting());

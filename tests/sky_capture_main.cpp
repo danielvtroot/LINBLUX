@@ -14,7 +14,7 @@ int failures=0,checks=0;
 int main() {
     char temp[]="/tmp/loblox-sky-capture-XXXXXX";const char* dir=mkdtemp(temp);if(!dir)return 1;
     diag::configure(std::string(dir)+"/events.jsonl");
-    SetTraceLogLevel(LOG_WARNING);InitWindow(640,360,"Loblox procedural sky regression");SetExitKey(KEY_NULL);
+    SetTraceLogLevel(LOG_WARNING);InitWindow(640,360,"LINBLUX procedural sky regression");SetExitKey(KEY_NULL);
     {
         Scene scene;auto* lighting=scene.lighting();lighting->setSkyEnabled(true);
         lighting->setCloudDensity(0);lighting->setAtmosphereStrength(.3f);

@@ -42,7 +42,11 @@ int main() {
         auto frames=[&](int n=2){for(int i=0;i<n;++i){BeginDrawing();ClearBackground(BLACK);rlImGuiBegin();editor.draw();rlImGuiEnd();editor.renderModernFrontend();EndDrawing();if(observe)observe();}};
         auto event=[&](const std::string& command){CHECK(std::system(("xdotool "+command).c_str())==0);frames();};
         auto key=[&](const std::string& name){event("keydown "+name);event("keyup "+name);};
-        auto click=[&](const std::string& id){frames();const auto r=editor.frontend()->elementBounds(id);std::fprintf(stderr,"click %s: %.0f %.0f %.0f %.0f\n",id.c_str(),r.x,r.y,r.width,r.height);CHECK(r.width>0&&r.height>0);
+        auto click=[&](const std::string& id){frames();auto r=editor.frontend()->elementBounds(id);
+            for(int attempt=0;attempt<30&&r.height>0&&(r.y<0||r.y+r.height>GetScreenHeight());++attempt) {
+                event("mousemove 700 "+std::to_string(GetScreenHeight()-110));event(std::string("click ")+(r.y<0?"4":"5"));r=editor.frontend()->elementBounds(id);
+            }
+            std::fprintf(stderr,"click %s: %.0f %.0f %.0f %.0f\n",id.c_str(),r.x,r.y,r.width,r.height);CHECK(r.width>0&&r.height>0);
             event("mousemove "+std::to_string(int(r.x+r.width*.5f))+" "+std::to_string(int(r.y+r.height*.5f)));event("mousedown 1");event("mouseup 1");frames(3);};
         auto fill=[&](const std::string& id,const std::string& value){click(id);key("ctrl+a");for(size_t i=0;i<value.size();i+=8)event("type --clearmodifiers "+Quote(value.substr(i,8)));};
         auto capture=[&](const std::string& name){frames();TakeScreenshot((directory/(name+".png")).c_str());};
@@ -115,7 +119,7 @@ int main() {
             for(int b=0;b<game::kBodyCount;++b)CHECK(NearlyEqual(after.bodies[b].size,Vector3Scale(before.bodies[b].size,factor),.001f));
             CHECK(NearlyEqual(camera.position(),editorEye));capture("rig-whole-scaled");
         }
-        click("experience-menu");click("exp-default-r6");click("experience-menu");click("exp-default-map");
+        click("experience-menu");click("exp-default-r6");click("exp-confirm-ok");click("experience-menu");click("exp-default-map");click("exp-confirm-ok");
         bool myDefault=false;for(const auto& item:manager.templates())myDefault|=item.id=="engine-default";CHECK(myDefault);
         click("experience-menu");click("exp-details");capture("experience-details");fill("exp-name","Renamed Experience");click("exp-save-details");CHECK(manager.active()->manifest.name=="Renamed Experience");
         const auto authoring=projectio::toJson(scene);bool loadingPainted=false;

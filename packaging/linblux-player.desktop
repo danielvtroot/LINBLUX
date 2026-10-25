@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=LINBLUX Player
+Comment=Execute uma experiência LINBLUX local
+Exec=linblux_player --project %f
+Icon=linblux
+Terminal=false
+NoDisplay=true
+MimeType=application/x-linblux-experience;
+Categories=Game;

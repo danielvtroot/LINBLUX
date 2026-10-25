@@ -80,7 +80,7 @@ target_compile_definitions(linblux_imgui PUBLIC NO_FONT_AWESOME)
 target_link_libraries(linblux_imgui PUBLIC ${RAYLIB_LIBRARIES} OpenGL::GL)
 
 # Camada sem interface: modelo de objetos, cena, fisica e persistencia.
-add_library(linblux_core STATIC
+add_library(linblux_engine STATIC
   src/experiences/ExperienceManager.cpp
   src/scripting/LuaRuntime.cpp
   src/game/Rig.cpp
@@ -100,6 +100,23 @@ add_library(linblux_core STATIC
   src/physics/PhysicsWorld.cpp
   src/serialization/ProjectIO.cpp
   src/serialization/SceneLua.cpp
+)
+target_include_directories(linblux_engine PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+  ${BULLET_INCLUDE_DIR}
+  ${RAYLIB_INCLUDE_DIRS}
+)
+target_include_directories(linblux_engine SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
+target_link_libraries(linblux_engine PUBLIC ${BULLET_LIBRARIES} ${RAYLIB_LIBRARIES} OpenGL::GL Threads::Threads PkgConfig::LUA)
+target_link_libraries(linblux_engine PUBLIC ZLIB::ZLIB)
+target_compile_definitions(linblux_engine PRIVATE LINBLUX_FACTORY_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/templates")
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(linblux_engine PRIVATE -Wall -Wextra)
+endif()
+
+# Editor support has no ownership over runtime scene/physics/Lua.
+add_library(linblux_editing STATIC
   src/editor/EditHistory.cpp
   src/editor/GizmoMath.cpp
   src/editor/GizmoLayout.cpp
@@ -107,20 +124,15 @@ add_library(linblux_core STATIC
   src/editor/TransformMetrics.cpp
   src/editor/TransformSession.cpp
   src/rendering/EditorCamera.cpp
+  src/editor/SceneRendererAdapter.cpp
 )
-target_include_directories(linblux_core PUBLIC
-  ${CMAKE_CURRENT_SOURCE_DIR}/src
-  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
-  ${BULLET_INCLUDE_DIR}
-  ${RAYLIB_INCLUDE_DIRS}
-)
-target_include_directories(linblux_core SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
-target_link_libraries(linblux_core PUBLIC ${BULLET_LIBRARIES} ${RAYLIB_LIBRARIES} OpenGL::GL Threads::Threads PkgConfig::LUA)
-target_link_libraries(linblux_core PUBLIC ZLIB::ZLIB)
-target_compile_definitions(linblux_core PRIVATE LINBLUX_FACTORY_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/templates")
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  target_compile_options(linblux_core PRIVATE -Wall -Wextra)
-endif()
+target_link_libraries(linblux_editing PUBLIC linblux_engine)
+add_library(linblux_core INTERFACE) # transitional test/embedding facade
+ target_link_libraries(linblux_core INTERFACE linblux_engine linblux_editing)
+add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp)
+target_link_libraries(linblux_renderer PUBLIC linblux_engine)
+add_library(linblux_presentation STATIC src/ui/Localization.cpp)
+target_link_libraries(linblux_presentation PUBLIC linblux_engine)
 
 option(LINBLUX_ENABLE_VIDEO "Video de fundo com FFmpeg" ON)
 if(LINBLUX_ENABLE_VIDEO)
@@ -136,23 +148,27 @@ else()
   message(WARNING "FFmpeg indisponivel: tela inicial usara fundo estatico")
 endif()
 
-add_library(linblux_editor STATIC
-  src/ui/Localization.cpp
+add_library(linblux_studio STATIC
   src/ui/ExperienceUI.cpp
   src/ui/NativeFileDialog.cpp
   src/ui/StudioFrontend.cpp
   src/ui/EditorActions.cpp
   src/ui/RmlFrontendSupport.cpp
-  src/rendering/SceneRenderer.cpp
   src/editor/EditorUI.cpp
   src/editor/GamePanels.cpp
   src/editor/StudioPanels.cpp
 )
-target_link_libraries(linblux_editor PUBLIC linblux_core linblux_media linblux_imgui linblux_rml_gl3 OpenGL::GL)
-target_compile_definitions(linblux_editor PRIVATE LINBLUX_UI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/ui")
+target_link_libraries(linblux_studio PUBLIC linblux_core linblux_renderer linblux_presentation linblux_media linblux_imgui linblux_rml_gl3 OpenGL::GL)
+target_compile_definitions(linblux_studio PRIVATE LINBLUX_UI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/ui")
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  target_compile_options(linblux_editor PRIVATE -Wall -Wextra)
+  target_compile_options(linblux_studio PRIVATE -Wall -Wextra)
 endif()
+add_library(linblux_editor ALIAS linblux_studio)
+
+add_executable(linblux_player src/player/main.cpp)
+target_link_libraries(linblux_player PRIVATE linblux_engine linblux_renderer linblux_presentation)
+install(TARGETS linblux_player RUNTIME DESTINATION bin COMPONENT Linblux)
+
 add_executable(linblux src/main.cpp src/app/Application.cpp)
 target_link_libraries(linblux PRIVATE linblux_editor)
 add_custom_target(linblux_ui_assets ALL COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -184,6 +200,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 enable_testing()
+add_test(NAME linblux_player_help COMMAND linblux_player --help)
+add_test(NAME linblux_player_validate COMMAND linblux_player --validate ${CMAKE_CURRENT_SOURCE_DIR}/assets/defaults/factory/world.loblox.json)
 add_executable(linblux_experience_tests tests/experiences_main.cpp)
 target_link_libraries(linblux_experience_tests PRIVATE linblux_core)
 add_test(NAME linblux_experiences COMMAND linblux_experience_tests)
@@ -328,3 +346,29 @@ endif()
 add_executable(linblux_defaults_tests tests/defaults_main.cpp)
 target_link_libraries(linblux_defaults_tests PRIVATE linblux_core)
 add_test(NAME linblux_defaults COMMAND linblux_defaults_tests)
+add_executable(linblux_engine_default_tests tests/engine_default_main.cpp)
+target_link_libraries(linblux_engine_default_tests PRIVATE linblux_engine)
+add_test(NAME linblux_engine_default_lifecycle COMMAND linblux_engine_default_tests)
+
+# Preserve notices for every static third-party component shipped in the application.
+install(FILES LICENSE DESTINATION share/linblux/licenses COMPONENT Linblux RENAME LINBLUX-MIT.txt)
+install(FILES third_party/imgui/LICENSE.txt DESTINATION share/linblux/licenses COMPONENT Linblux RENAME Dear-ImGui-MIT.txt)
+install(FILES third_party/rlimgui/LICENSE DESTINATION share/linblux/licenses COMPONENT Linblux RENAME rlImGui-zlib.txt)
+install(FILES third_party/nlohmann/LICENSE.MIT DESTINATION share/linblux/licenses COMPONENT Linblux RENAME nlohmann-json-MIT.txt)
+install(FILES ${rmlui_SOURCE_DIR}/LICENSE.txt DESTINATION share/linblux/licenses COMPONENT Linblux RENAME RmlUi-MIT.txt)
+set_tests_properties(linblux_player_validate PROPERTIES ENVIRONMENT
+  "XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/test-data/player;XDG_STATE_HOME=${CMAKE_CURRENT_BINARY_DIR}/test-state/player")
+if(Python3_Interpreter_FOUND AND XVFB_RUN_EXECUTABLE AND XDOTOOL_EXECUTABLE)
+  execute_process(COMMAND ${Python3_EXECUTABLE} -c "import PIL" RESULT_VARIABLE LINBLUX_PIL_RESULT OUTPUT_QUIET ERROR_QUIET)
+  if(LINBLUX_PIL_RESULT EQUAL 0)
+    add_test(NAME linblux_engine_default_restart COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24"
+      ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/engine_default_restart.py
+      $<TARGET_FILE:linblux> $<TARGET_FILE:linblux_engine_default_tests>)
+    set_tests_properties(linblux_engine_default_restart PROPERTIES TIMEOUT 150 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
+  else()
+    message(WARNING "Teste de reinicializacao do Mundo Padrao requer python3-pil")
+  endif()
+endif()
+install(FILES packaging/linblux.desktop packaging/linblux-player.desktop DESTINATION share/applications COMPONENT Linblux)
+install(FILES packaging/linblux-mime.xml DESTINATION share/mime/packages COMPONENT Linblux)
+install(FILES midia/logo.png DESTINATION share/pixmaps COMPONENT Linblux RENAME linblux.png)

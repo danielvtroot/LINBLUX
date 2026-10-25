@@ -1,3 +1,4 @@
+#include "ui/Localization.h"
 // Real X11 events -> GLFW/raylib -> rlImGui -> EditorUI -> camera/gizmo/Bullet.
 // Run in a private Xvfb display, never against the user's desktop.
 #include <cstdio>
@@ -60,7 +61,7 @@ int main() {
     diag::configure(std::string(directory) + "/input.jsonl");
     setenv("LOBLOX_TRACE_INPUT", "1", 1);
     SetTraceLogLevel(LOG_WARNING);
-    InitWindow(1280, 800, "Loblox input regression");
+    InitWindow(1280, 800, "LINBLUX input regression");
     if (!IsWindowReady()) return 1;
     SetExitKey(KEY_NULL);
     SetTargetFPS(60);
@@ -109,11 +110,11 @@ int main() {
         std::sort(frameTimes.begin(), frameTimes.end());
         std::printf("Idle fixture (1280x800, llvmpipe, cap 60): median %.2fms; p95 %.2fms\n",
                     frameTimes[30], frameTimes[57]);
-        command("search --name '^Loblox input regression$' windowfocus --sync");
+        command("search --name '^LINBLUX input regression$' windowfocus --sync");
         camera.setOrbit(part->position(), 22, 0.75f, 0.4f);
         frames();
         const auto viewport = [&]() {
-            ImGuiWindow* window = ImGui::FindWindowByName("Viewport");
+            ImGuiWindow* window = ImGui::FindWindowByName(loblox::i18n::Label("Viewport"));
             return Rectangle{window->InnerRect.Min.x, window->InnerRect.Min.y,
                 window->InnerRect.GetWidth(), window->InnerRect.GetHeight()};
         };
@@ -173,7 +174,7 @@ int main() {
         frames(4);
         CHECK(!camera.cursorCaptured());
         command("mouseup 3");
-        command("search --name '^Loblox input regression$' windowfocus --sync");
+        command("search --name '^LINBLUX input regression$' windowfocus --sync");
         frames(4);
         CHECK(NearlyEqual(camera.position(), beforeCameraFocusLoss));
 
@@ -249,7 +250,7 @@ int main() {
         CHECK(Vector3Distance(target, camera.target()) < 0.001f);
 
         // A docked Properties window is not the focused viewport.
-        ImGui::FocusWindow(ImGui::FindWindowByName("Properties"));
+        ImGui::FocusWindow(ImGui::FindWindowByName(loblox::i18n::Label("Properties")));
         frames();
         command("keydown 3");
         command("keyup 3");
@@ -267,7 +268,7 @@ int main() {
         CHECK(NearlyEqual(camera.target(), blockedTarget));
 
         // The same keys work only after the viewport itself owns focus.
-        ImGui::FocusWindow(ImGui::FindWindowByName("Viewport"));
+        ImGui::FocusWindow(ImGui::FindWindowByName(loblox::i18n::Label("Viewport")));
         frames();
         const Vector3 beforeViewportW = camera.target();
         command("keydown w");
@@ -288,10 +289,12 @@ int main() {
             command(std::string("keyup ") + name);
         };
         const auto toolbar = [&](ToolMode mode, int index) {
-            ImGuiWindow* window = ImGui::FindWindowByName("##Toolbar");
-            // Fixture: 1280x800, default 13px ImGui font, Home ribbon.
-            const float x[] = {40, 104, 165, 229};
-            mouse({window->Pos.x + x[index], window->Pos.y + 66});
+            ImGuiWindow* window = ImGui::FindWindowByName(loblox::i18n::Label("##Toolbar"));
+            // Use the translated captions and current font to locate the actual buttons.
+            const char* captions[]={"Select","Move","Scale","Rotate"};float x=window->DC.CursorStartPos.x;
+            for(int i=0;i<index;++i)x+=std::max(ImGui::CalcTextSize(loblox::i18n::Label(captions[i])).x+16.f,54.f)+ImGui::GetStyle().ItemSpacing.x;
+            const float width=std::max(ImGui::CalcTextSize(loblox::i18n::Label(captions[index])).x+16.f,54.f);
+            mouse({x+width*.5f,window->Pos.y+66});
             command("mousedown 1");
             command("mouseup 1");
             CHECK(ui.tool() == mode);
@@ -527,7 +530,7 @@ int main() {
         CHECK(!EditorUITestAccess::dragging(ui));
         CHECK(!physics.isPartEditing(part->id()));
         command("mouseup 1");
-        command("search --name '^Loblox input regression$' windowfocus --sync");
+        command("search --name '^LINBLUX input regression$' windowfocus --sync");
         beginMove();
         command("mouseup 1");
 
@@ -552,7 +555,7 @@ int main() {
         CHECK(scene.parts().size() == modalPartCount);
         command("mouseup 1");
         // Close through the real Cancel button in the modal.
-        ImGuiWindow* modal = ImGui::FindWindowByName("Abrir projeto");
+        ImGuiWindow* modal = ImGui::FindWindowByName(loblox::i18n::Label("Abrir projeto"));
         CHECK(modal != nullptr);
         if (modal) {
             mouse({modal->Pos.x + 195, modal->Pos.y + modal->Size.y - 18});
@@ -562,7 +565,7 @@ int main() {
         CHECK(!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopup));
 
         // Properties Name really receives typing; editor shortcuts stay blocked.
-        ImGuiWindow* properties = ImGui::FindWindowByName("Properties");
+        ImGuiWindow* properties = ImGui::FindWindowByName(loblox::i18n::Label("Properties"));
         // Two-column Properties: Data/Name value, after title/search/category.
         mouse({properties->InnerRect.Min.x + properties->InnerRect.GetWidth()*.7f,
                properties->InnerRect.Min.y + 76});

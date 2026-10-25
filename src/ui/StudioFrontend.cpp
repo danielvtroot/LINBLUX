@@ -41,8 +41,8 @@ std::string Button(const std::string& action,const std::string& label,const std:
 }
 bool Within(Vector2 p,Rectangle r){return r.width>0 && CheckCollisionPointRec(p,r);}
 std::filesystem::path LayoutPath() {
-    if(const char* p=std::getenv("XDG_CONFIG_HOME"))return std::filesystem::path(p)/"loblox/ui-layout.json";
-    if(const char* p=std::getenv("HOME"))return std::filesystem::path(p)/".config/loblox/ui-layout.json";
+    if(const char* p=std::getenv("XDG_CONFIG_HOME"))return std::filesystem::path(p)/"linblux/ui-layout.json";
+    if(const char* p=std::getenv("HOME"))return std::filesystem::path(p)/".config/linblux/ui-layout.json";
     return {};
 }
 }
@@ -727,7 +727,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
 };
 
 StudioFrontend::StudioFrontend(EditorUI& e):impl_(std::make_unique<Impl>(e)){}
-StudioFrontend::~StudioFrontend(){rlImGuiSetExternalTextInput(false);rlImGuiDeferPopupRendering(false);auto& p=*impl_;if(p.context)Rml::RemoveContext("loblox");if(p.initialized)Rml::Shutdown();p.renderer.reset();RmlGL3::Shutdown();}
+StudioFrontend::~StudioFrontend(){rlImGuiSetExternalTextInput(false);rlImGuiDeferPopupRendering(false);auto& p=*impl_;if(p.context)Rml::RemoveContext("linblux");if(p.initialized)Rml::Shutdown();p.renderer.reset();RmlGL3::Shutdown();}
 bool StudioFrontend::initialize(std::string& error) {
     auto& p=*impl_;Rml::String message;
     if(!RmlGL3::Initialize(&message)){error=message;return false;}
@@ -753,7 +753,7 @@ bool StudioFrontend::initialize(std::string& error) {
         break;
     }
     if(!font){error="A TrueType sans-serif font is required";return false;}
-    p.context=Rml::CreateContext("loblox",{GetScreenWidth(),GetScreenHeight()});if(!p.context){error="RmlUi context creation failed";return false;}
+    p.context=Rml::CreateContext("linblux",{GetScreenWidth(),GetScreenHeight()});if(!p.context){error="RmlUi context creation failed";return false;}
     auto root=std::filesystem::path(GetApplicationDirectory())/"share/linblux/ui";
     if(!std::filesystem::exists(root))root=std::filesystem::path(GetApplicationDirectory()).parent_path()/"share/linblux/ui";
     if(!std::filesystem::exists(root))root=LINBLUX_UI_DIR;
@@ -801,7 +801,7 @@ void StudioFrontend::draw() {
     const double beforeScene=GetTime();p.ui.drawViewport();p.documents();const double afterScene=GetTime();p.syncGame();p.updateTooltip();
     p.display("dialog-overlay",p.dialogOpen,"flex");
     p.text("project",p.experiences?p.experiences->documentTitle():std::filesystem::path(p.ui.projectPath_).filename().string());p.text("message",p.ui.status_);
-    p.text("scene-count",std::to_string(p.ui.scene_.parts().size())+" parts · "+std::to_string(p.ui.scene_.objects().size())+" instances");
+    p.text("scene-count",std::to_string(p.ui.scene_.parts().size())+" "+i18n::Text("parts")+" · "+std::to_string(p.ui.scene_.objects().size())+" "+i18n::Text("instances"));
     p.el("snap")->SetAttribute("type","checkbox");if(p.ui.snapEnabled_)p.el("snap")->SetAttribute("checked","");else p.el("snap")->RemoveAttribute("checked");
     if(auto* space=dynamic_cast<Rml::ElementFormControl*>(p.el("transform-space"));space&&p.context->GetFocusElement()!=space) {
         const std::string value=p.ui.gizmoLocalSpace_?"local":"world";

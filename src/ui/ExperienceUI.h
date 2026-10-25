@@ -28,6 +28,7 @@ public:
     bool blocksStudioInput() const {return overlayActive()||!confirm_.empty()||fileMenu_||chooser_.active();}
     void chooseAsset();
     bool save(std::string& error);
+    bool editingEngineDefault() const {return manager_.active()&&manager_.isEngineDefault(*manager_.active());}
     bool handlesSave() const {return manager_.active().has_value();}
     std::string documentTitle() const;
     void requestPlay();
@@ -40,7 +41,7 @@ private:
     Rml::ElementDocument& document_;
     ui::NativeFileDialog chooser_;
     media::VideoBackground background_;
-    std::string page_="home",markup_,error_,savedWorld_,dialogPurpose_,confirm_,pendingPath_,helpText_,filter_,cardMenu_;
+    std::string page_="home",renderedPage_,markup_,error_,savedWorld_,dialogPurpose_,confirm_,pendingPath_,helpText_,filter_,cardMenu_;
     size_t libraryPage_=0;
     std::vector<std::pair<std::string,std::string>> commands_;
     std::vector<experiences::Experience> entries_;

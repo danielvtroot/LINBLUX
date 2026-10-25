@@ -62,7 +62,7 @@ void ExperienceUI::open(const experiences::Experience& experience) {
     if(manager_.active()&&manager_.active()->root==experience.root){home_=false;return;}
     if(manager_.active()&&unsaved())throw std::runtime_error("Save your current work or return Home with Discard before opening another experience.");
     editor_.endGizmoSession(true,"experience_open");editor_.cancelRigGizmo();
-    manager_.open(experience,editor_.scene_);resetDocument();editor_.physics_.rebuildAll(editor_.scene_);
+    manager_.open(experience,editor_.scene_);resetDocument();editor_.physics_.setGravity({0,-editor_.scene_.gameAssets().player.gravity,0});editor_.physics_.rebuildAll(editor_.scene_);
     editor_.setProjectPath(manager_.activePlace().string());documentOpened();home_=false;selected_=manager_.active();fileMenu_=false;error_.clear();
     if(auto* rig=editor_.scene_.gameAssets().findRig(editor_.scene_.gameAssets().defaultRig))editor_.camera_.focusOn(rig->authoringPivot().position,8);
     else editor_.camera_.focusOn({0,3,0},18);
@@ -81,7 +81,7 @@ void ExperienceUI::requestHome() {
     closeDocument();
 }
 bool ExperienceUI::save(std::string& error) {
-    try{manager_.save(editor_.scene_);if(editingDefault_)manager_.saveEngineWorld(editor_.scene_);if(editingCharacter_)manager_.saveEngineCharacter(editor_.scene_,editor_.scene_.gameAssets().defaultRig);editor_.setProjectPath(manager_.activePlace().string());documentOpened();return true;}
+    try{manager_.save(editor_.scene_);editor_.setProjectPath(manager_.activePlace().string());documentOpened();return true;}
     catch(const std::exception& e){error=e.what();return false;}
 }
 void ExperienceUI::choose(const std::string& purpose,bool saveFile,bool directory,bool images) {
@@ -96,7 +96,10 @@ void ExperienceUI::releaseLoadingImages() {
     Rml::ReleaseTextures();
 }
 void ExperienceUI::selectedFile(const std::string& purpose,const std::string& path) {
-    if(purpose=="import") {
+    if(purpose=="character") {
+        const auto id=manager_.importCharacter(path,editor_.scene_);editor_.selectRig(id);editor_.frontend_->invalidateImageLibrary();
+        editor_.setStatus("Personagem importado. Configure-o e confirme Salvar como padrão da engine.");
+    } else if(purpose=="import") {
         const fs::path file(path);experiences::Experience experience;
         if(file.extension()==".lo")experience=manager_.importPackage(file);
         else if(file.filename()=="experience.json")experience=manager_.inspect(file.parent_path());
@@ -129,6 +132,7 @@ void ExperienceUI::dispatch(const std::string& action,const std::string& v) {
     if(action=="file"){fileMenu_=!fileMenu_;return;}
     if(action=="back-home"){requestHome();return;}
     if(action=="return-studio"){home_=false;return;}
+    if(action=="import-character"){choose("character");return;}
     if(action=="save"){if(!editor_.saveCurrentProject())throw std::runtime_error(editor_.status_);fileMenu_=false;return;}
     if(editor_.runtime_.active())throw std::runtime_error("Stop Play before managing experience files.");
     if(action!="card-menu"&&!cardMenu_.empty()){cardMenu_.clear();dirty_=true;}
@@ -157,6 +161,7 @@ void ExperienceUI::dispatch(const std::string& action,const std::string& v) {
         else if(action=="card-menu"){cardMenu_=cardMenu_==v?"":v;dirty_=true;}
         else{page_="details";dirty_=true;}
     } else if(action=="current-details") {
+        if(manager_.active()&&manager_.isEngineDefault(*manager_.active()))throw std::runtime_error("Este é um recurso protegido da engine; use Salvar como padrão da engine.");
         if(!manager_.active())throw std::runtime_error("Import this legacy project as an experience first (Home > Open / Import)");
         selected_=manager_.active();home_=true;page_="details";returnToStudio_=true;fileMenu_=false;dirty_=true;
     } else if(action=="save-details") {
@@ -177,6 +182,7 @@ void ExperienceUI::dispatch(const std::string& action,const std::string& v) {
         selected_=manager_.active();fileMenu_=false;choose("export",true);}
     else if(action=="export") {if(selected_)choose("export",true);}
     else if(action=="archive"||action=="delete"||action=="restore-factory") {
+        if(action!="restore-factory"&&selected_&&manager_.isEngineDefault(*selected_))throw std::runtime_error("O Mundo Padrão da Engine é protegido contra exclusão e arquivamento");
         confirm_=selected_&&manager_.active()&&selected_->root==manager_.active()->root&&unsaved()?"unsaved":action;fileMenu_=false;
     }
     else if(action=="restore") {if(selected_){manager_.setArchived(*selected_,false);page_="archive";dirty_=true;}}
@@ -185,28 +191,36 @@ void ExperienceUI::dispatch(const std::string& action,const std::string& v) {
     else if(action=="confirm") {
         const auto previous=confirm_;const bool selectedActive=selected_&&manager_.active()&&selected_->root==manager_.active()->root;
         if(previous=="unsaved"){if(!editor_.saveCurrentProject())throw std::runtime_error(editor_.status_);closeDocument();}
-        else if(previous=="restore-factory")manager_.restoreFactoryDefaults();
-        else if(selected_){if(previous=="delete")manager_.deletePermanently(*selected_);else manager_.setArchived(*selected_,true);if(selectedActive)closeDocument();page_=previous=="delete"?"home":"archive";selected_.reset();dirty_=true;editor_.setStatus(previous=="delete"?"Experiência excluída permanentemente.":"Experiência arquivada.");}
+        else if(previous=="restore-factory") {manager_.restoreFactoryDefaults();dirty_=true;editor_.setStatus("Padrão de fábrica restaurado. Backup preservado em "+manager_.lastDefaultsBackup().string());}
+        else if(previous=="save-default-world"||previous=="save-default-character") {
+            if(!editor_.saveCurrentProject())throw std::runtime_error(editor_.status_);
+            const auto rigId=previous=="save-default-character"?pendingPath_:editor_.scene_.gameAssets().defaultRig;
+            manager_.saveEngineDefaults(editor_.scene_,rigId);editor_.scene_.gameAssets().defaultRig=rigId;
+            documentOpened();editor_.setStatus("Mundo e personagem padrão salvos em "+manager_.engineDefaultsRoot().string()+". Backup da revisão anterior preservado.");
+        }
+        else if(selected_&&(previous=="archive"||previous=="delete")){if(previous=="delete")manager_.deletePermanently(*selected_);else manager_.setArchived(*selected_,true);if(selectedActive)closeDocument();page_=previous=="delete"?"home":"archive";selected_.reset();dirty_=true;editor_.setStatus(previous=="delete"?"Experiência excluída permanentemente.":"Experiência arquivada.");}
         confirm_.clear();
-    } else if(action=="default-map") {if(home_||!manager_.active())throw std::runtime_error("Abra o mundo que deseja salvar como padrão da engine");
-        if(!editor_.saveCurrentProject())throw std::runtime_error(editor_.status_);
-        manager_.saveEngineWorld(editor_.scene_);fileMenu_=false;editor_.setStatus("Mundo padrão salvo em "+manager_.engineDefaultsRoot().string()+". Faça commit para protegê-lo no GitHub.");}
-    else if(action=="default-r6") {if(editor_.selectedRig_.empty())throw std::runtime_error("Selecione um personagem no Explorador");
-        manager_.saveEngineCharacter(editor_.scene_,editor_.selectedRig_);fileMenu_=false;editor_.setStatus("Personagem padrão da engine salvo. Faça commit dos recursos versionados.");}
+    } else if(action=="default-map"||action=="default-r6") {
+        if(home_||!manager_.active())throw std::runtime_error("Abra o Mundo Padrão da Engine ou uma experiência para salvar o padrão");
+        const auto id=action=="default-r6"?editor_.selectedRig_:editor_.scene_.gameAssets().defaultRig;
+        if(!editor_.scene_.gameAssets().findRig(id))throw std::runtime_error("Selecione e configure um personagem de jogador antes de salvar o padrão");
+        pendingPath_=id;confirm_=action=="default-r6"?"save-default-character":"save-default-world";fileMenu_=false;
+    }
     else if(action=="edit-default"||action=="edit-character") {
         if(manager_.active()&&unsaved())throw std::runtime_error("Salve o trabalho atual antes de editar os padrões da engine.");
         open(manager_.editEngineDefault(action=="edit-character"));editingDefault_=action=="edit-default";editingCharacter_=action=="edit-character";
     }
-    else if(action=="help") {const auto path=game::BuiltinAssetPath("docs/"+v);if(path.empty())helpText_="Build with Parts, select a tool, then press F5 to play.\nScripts run only during Play.\nUse File > Export Experience to share a .lo package.";
+    else if(action=="help") {const auto path=game::BuiltinAssetPath("docs/"+v);if(path.empty())helpText_="Construa com peças, selecione uma ferramenta e pressione F5 para executar.\nScripts executam somente durante o teste.\nUse Arquivo > Exportar experiência para compartilhar um pacote .lo.";
         else {std::ifstream file(path);helpText_={std::istreambuf_iterator<char>(file),{}};if(helpText_.size()>65536)helpText_.resize(65536);}page_="help";dirty_=true;}
 }
 void ExperienceUI::buildPage() {
-    std::string html;
+    std::string html,footer;
     const auto title=[&](const std::string& name,const std::string& description){return "<div class=\"experience-title\"><div><h1>"+esc(i18n::Text(name))+"</h1><p>"+esc(i18n::Text(description))+"</p></div><div>"+(manager_.active()?button("return-studio","Return to Studio"):"")+button("new","New Experience",{},"exp-new-main",true)+"</div></div>";};
     const bool archive=page_=="archive";
     if(page_=="home"||page_=="library"||archive||page_=="templates") {
         if(page_=="home")html+="<div class=\"home-intro\"><small>LINBLUX STUDIO</small><h1>Dê forma ao seu próximo mundo.</h1><p>Crie, programe e explore experiências 3D com liberdade.</p><div class=\"home-actions\">"+button("new","Criar experiência",{},"exp-new-main",true)+button("import","Abrir experiência",{},"exp-import")+"</div></div>";
         else html+=title(archive?"Archive":page_=="library"?"My Experiences":page_=="templates"?"Templates":"Início",archive?"Archived and deleted experiences can be restored.":"Create, build and share experiences on your computer.");
+        if(page_=="home")html+="<div id=\"engine-default-card\" class=\"home-default-card\"><img src=\"linblux-logo\"/><div><h2>Mundo Padrão da Engine</h2><p>Edite o mundo e o personagem que dão origem às novas experiências.</p><small>RECURSO PROTEGIDO · LINBLUX ENGINE</small></div>"+button("edit-default","Editar padrão",{},"exp-edit-default")+"</div>";
         if(page_!="templates") {
             entries_=manager_.list(archive);
             if(page_!="home") {
@@ -257,11 +271,15 @@ void ExperienceUI::buildPage() {
         const std::string refs[]={m.icon,m.banner};
         for(int i=0;i<2;++i){const auto path=selected_&&!create&&!refs[i].empty()?(selected_->root/refs[i]).string():"icon-image";
             html+="<div class=\"experience-media-block\"><b>"+std::string(names[i])+"</b><div class=\"experience-media-preview\"><img id=\"exp-preview-"+ids[i]+"\" src=\""+esc(path)+"\"/></div><input id=\"exp-"+ids[i]+"\" value=\""+esc(refs[i])+"\" placeholder=\"Optional image path\"/>"+button("choose-media","Choose image…",ids[i],"exp-choose-"+std::string(ids[i]))+button("remove-media","Remove",ids[i])+"<small>"+std::string(i==0?"Square recommended · 512 × 512":i==1?"16:9 recommended · 1920 × 1080":"Any aspect ratio · cover crop during entry")+"</small></div>";}
-        html+="</div></div><div class=\"experience-form-footer\">"+button("cancel-form",returnToStudio_?"Back to Studio":"Cancel")+button(create?"create":"save-details",create?"Create & Open":"Save Details",{},create?"exp-create":"exp-save-details",true)+"</div>";
+        html+="</div></div>";
+        footer=button("cancel-form",returnToStudio_?"Back to Studio":"Cancel")+button(create?"create":"save-details",create?"Create & Open":"Save Details",{},create?"exp-create":"exp-save-details",true);
     } else if(page_=="settings") {
         html+=title("Configurações","Padrões editáveis e biblioteca local da engine.")+"<div class=\"experience-settings\">"+button("library-location","Local da biblioteca…")+button("edit-default","Editar mundo padrão")+button("edit-character","Editar personagem padrão")+button("restore-factory","Restaurar mundo e personagem de fábrica…")+"<p>Os padrões são recursos versionados. Projetos existentes são preservados.</p></div>";
     } else if(page_=="help")html+=title("Ajuda do LINBLUX","Local documentation for implemented features")+"<pre class=\"experience-help\">"+esc(helpText_)+"</pre>";
     document_.GetElementById("experience-content")->SetInnerRML(i18n::Markup(html));
+    if(auto* actions=document_.GetElementById("experience-form-actions")){actions->SetInnerRML(i18n::Markup(footer));actions->SetProperty("display",footer.empty()?"none":"flex");}
+    if(auto* main=document_.GetElementById("experience-main"))main->SetProperty("bottom",footer.empty()?"0px":"76px");
+    if(renderedPage_!=page_) {if(auto* main=document_.GetElementById("experience-main"))main->SetScrollTop(0);renderedPage_=page_;}
     // Release old page thumbnails at navigation boundaries, never per frame.
     Rml::ReleaseTextures();markup_=std::move(html);dirty_=false;
 }
@@ -322,10 +340,14 @@ void ExperienceUI::frame() {
     show(document_,"experience-confirm",!confirm_.empty(),"flex");
     if(!confirm_.empty()) {
         const bool unsaved=confirm_=="unsaved";
-        text(document_,"exp-confirm-title",unsaved?"Save your changes?":confirm_=="restore-factory"?"Restore factory defaults?":confirm_=="delete"?"Excluir permanentemente: "+(selected_?selected_->manifest.name:std::string{})+"?":"Archive experience?");
-        text(document_,"exp-confirm-description",unsaved?"Your map, scripts or animation has unsaved changes. Save before returning Home, discard them, or cancel.":confirm_=="restore-factory"?"New projects will use factory templates and character. Your experiences and previous snapshots are preserved.":confirm_=="delete"?"Todos os arquivos desta experiência serão apagados do disco. Esta operação não pode ser desfeita. Outras experiências serão preservadas.":"The selected experience and its assets remain in its own directory. It will leave My Experiences and can be restored from Archive. No external files are deleted.");
-        text(document_,"exp-confirm-ok",unsaved?"Save & Home":confirm_=="restore-factory"?"Restore defaults":confirm_=="delete"?"Excluir permanentemente":"Move to Archive");show(document_,"exp-confirm-discard",unsaved);
+        const bool saveDefault=confirm_=="save-default-world"||confirm_=="save-default-character";
+        text(document_,"exp-confirm-title",saveDefault?"Salvar como padrão da engine?":unsaved?"Save your changes?":confirm_=="restore-factory"?"Restore factory defaults?":confirm_=="delete"?"Excluir permanentemente: "+(selected_?selected_->manifest.name:std::string{})+"?":"Archive experience?");
+        text(document_,"exp-confirm-description",saveDefault?"O mundo, o personagem de jogador, suas animações, imagens e configurações serão publicados juntos no recurso-base versionado. Novas experiências receberão cópias. Projetos existentes serão preservados. Uma cópia do índice anterior será guardada em backups/.":unsaved?"Your map, scripts or animation has unsaved changes. Save before returning Home, discard them, or cancel.":confirm_=="restore-factory"?"Um backup do índice atual será criado antes da restauração. Novas experiências usarão o mundo e personagem de fábrica. Projetos existentes e revisões anteriores serão preservados.":confirm_=="delete"?"Todos os arquivos desta experiência serão apagados do disco. Esta operação não pode ser desfeita. Outras experiências serão preservadas.":"The selected experience and its assets remain in its own directory. It will leave My Experiences and can be restored from Archive. No external files are deleted.");
+        text(document_,"exp-confirm-ok",saveDefault?"Salvar padrão":unsaved?"Save & Home":confirm_=="restore-factory"?"Restore defaults":confirm_=="delete"?"Excluir permanentemente":"Move to Archive");show(document_,"exp-confirm-discard",unsaved);
     }
+    const bool special=manager_.active()&&manager_.isEngineDefault(*manager_.active());
+    show(document_,"exp-header-default-save",special);
+    text(document_,"exp-save-experience",special?"Salvar rascunho":"Salvar experiência");
     text(document_,"experience-error",error_);show(document_,"experience-error",!error_.empty());
     document_.SetClass("experience-compact",GetScreenWidth()<1400);
     for(const char* page:{"home","library","templates","archive"})if(auto* el=document_.GetElementById(std::string("exp-nav-")+page))el->SetClass("active",page_==page);

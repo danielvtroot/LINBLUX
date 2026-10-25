@@ -82,7 +82,7 @@ bool Application::initialize() {
     const bool home=config_.modernUI&&config_.startupProjectPath.empty();
     if(config_.modernUI) {
         try{experiences_=std::make_unique<experiences::ExperienceManager>();}
-        catch(const std::exception& error){std::fprintf(stderr,"Experience library unavailable: %s\n",error.what());}
+        catch(const std::exception& error){std::fprintf(stderr,"Biblioteca de experiências indisponível: %s\n",error.what());}
     }
 
     // Politica de inicializacao:
@@ -136,8 +136,8 @@ bool Application::initialize() {
     if(config_.modernUI) {
         std::string error;
         if(!ui_->enableModernFrontend(error)) {
-            std::fprintf(stderr,"RmlUi unavailable; using diagnostic legacy UI: %s\n",error.c_str());
-            ui_->setStatus("RmlUi initialization failed: "+error,true);
+            std::fprintf(stderr,"RmlUi indisponível; usando interface de diagnóstico: %s\n",error.c_str());
+            ui_->setStatus("Falha ao iniciar RmlUi: "+error,true);
         }
         if(ui_->frontend()&&experiences_)ui_->frontend()->enableExperiences(*experiences_,home);
     }
@@ -154,7 +154,7 @@ bool Application::initialize() {
                            "': " + projectLoadError + ". Cena padrao preservada.",
                        true);
     } else {
-        ui_->setStatus("LINBLUX Engine pronto. Toolbox a esquerda para construir.");
+        ui_->setStatus("LINBLUX Studio pronto. Use as ferramentas para construir.");
     }
     diag::Event ready;
     ready.subsystem = "app";

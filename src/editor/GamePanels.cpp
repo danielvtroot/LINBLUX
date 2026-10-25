@@ -1,4 +1,5 @@
 #include "ui/Localization.h"
+#include "ui/ExperienceUI.h"
 #include "editor/EditorUI.h"
 #include "ui/ExperienceUI.h"
 #include "editor/StudioTheme.h"
@@ -22,12 +23,12 @@ namespace {
 bool EditTransform(const char* id, game::RigidTransform& transform, bool position = true) {
     const auto before = transform;
     ImGui::PushID(id);
-    bool changed = position && ImGui::DragFloat3("Position", &transform.position.x, .02f, -10000, 10000);
+    bool changed = position && ImGui::DragFloat3(i18n::Label("Position"), &transform.position.x, .02f, -10000, 10000);
     // Round-trip pair (ZYX). raylib's ToEuler/FromEuler use different orders,
     // so converting through them changes the orientation whenever more than
     // one axis is used; an edit here must never silently rotate the joint.
     auto degrees = EulerDegreesZYXFromQuat(transform.rotation);
-    if (ImGui::DragFloat3("Rotation (degrees)", &degrees.x, .5f, -360, 360)) {
+    if (ImGui::DragFloat3(i18n::Label("Rotation (degrees)"), &degrees.x, .5f, -360, 360)) {
         transform.rotation = QuatFromEulerDegreesZYX(degrees); changed = true;
     }
     if (changed && !game::Valid(transform)) {
@@ -42,7 +43,7 @@ bool EditTransform(const char* id, game::RigidTransform& transform, bool positio
 void CameraSettings(game::PlayerSettings& p, float* sensitivityRect = nullptr) {
     const auto previous = p;
     int mode = static_cast<int>(p.cameraMode);
-    if (ImGui::Combo("Camera mode", &mode, "Classic\0Follow\0First Person\0")) p.cameraMode = static_cast<game::CameraMode>(mode);
+    if (ImGui::Combo(i18n::Label("Camera mode"), &mode, "Livre\0Acompanhar\0Primeira pessoa\0")) p.cameraMode = static_cast<game::CameraMode>(mode);
     ImGui::SliderFloat(i18n::Label("Mouse sensitivity"), &p.sensitivity, .0001f, .02f, "%.4f");
     if (sensitivityRect) {
         const auto mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
@@ -52,7 +53,7 @@ void CameraSettings(game::PlayerSettings& p, float* sensitivityRect = nullptr) {
     ImGui::Checkbox(i18n::Label("Camera lock"), &p.cameraLock);
     ImGui::Checkbox(i18n::Label("Enable Shift Lock (Left Shift toggles during Play)"), &p.enableShiftLock);
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Toggle pelo Left Shift durante o Play. Suspenso no menu Esc e liberado no Stop");
+        ImGui::SetTooltip(i18n::Label("Toggle pelo Left Shift durante o Play. Suspenso no menu Esc e liberado no Stop"));
     ImGui::Checkbox(i18n::Label("Allow zoom to first person"), &p.allowFirstPerson);
     ImGui::SliderFloat(i18n::Label("Min zoom"), &p.minZoom, .1f, 10);
     ImGui::SliderFloat(i18n::Label("Max zoom"), &p.maxZoom, std::max(p.minZoom, 5.f), 100);
@@ -155,7 +156,7 @@ void EditorUI::startPlay() {
 void EditorUI::finishPlayStart() {
     for (const auto& message:runtime_.scripts().messages()) if (message.error) showOutput_=true;
     pausePage_ = 0; gameplaySkipDelta_ = true; gameMaximized_=false; gameFullscreen_=false;
-    ImGui::SetWindowFocus("Viewport");
+    ImGui::SetWindowFocus(i18n::Label("Viewport"));
     setStatus("Play iniciado. F10 maximiza, F11 tela cheia; Esc abre o menu.");
 }
 void EditorUI::stopPlay() {
@@ -262,7 +263,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
         setGameplayCapture(false);
     } else if (route.owner == InputOwner::Back) pausePage_ = 0;
     else if (route.owner == InputOwner::Resume) {
-        runtime_.resume(); ImGui::SetWindowFocus("Viewport");
+        runtime_.resume(); ImGui::SetWindowFocus(i18n::Label("Viewport"));
     }
     game::PlayerInput input;
     const bool owns = route.owner == InputOwner::Gameplay || route.owner == InputOwner::Resume;
@@ -306,7 +307,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     }
     for(int i=0;i<3;++i)dl->AddLine({menuButton.x+47,menuButton.y+12+i*7.f},
         {menuButton.x+65,menuButton.y+12+i*7.f},IM_COL32(238,243,250,255),2);
-    if(menuHovered)ImGui::SetTooltip("Game menu (Esc)");
+    if(menuHovered)ImGui::SetTooltip(i18n::Label("Game menu (Esc)"));
     // Software cursor for the captured virtual pointer, never a world marker.
     if (gameplayCursor().visual==GameCursorVisual::MouseLock) {
         const auto cursor=gameplayCursor().position;const float cx=cursor.x,cy=cursor.y;
@@ -378,7 +379,7 @@ void EditorUI::drawPauseMenu() {
     const ImVec2 center{origin.x+extent.x*.5f, origin.y+extent.y*.5f};
     // Dim only the gameplay image, on its own draw list (not the desktop or
     // modal dim layer). The panel uses the same current-frame screen rect.
-    if (auto* viewport = ImGui::FindWindowByName("Viewport")) {
+    if (auto* viewport = ImGui::FindWindowByName(i18n::Label("Viewport"))) {
         auto* draw = viewport->DrawList;
         draw->PushClipRect(origin, {origin.x+extent.x,origin.y+extent.y}, true);
         draw->AddRectFilled(origin,{origin.x+extent.x,origin.y+extent.y},
@@ -425,7 +426,7 @@ void EditorUI::drawPauseMenu() {
     for(int i=0;i<4;++i) {
         if(i) ImGui::SameLine(0,6);
         if(pausePage_==i) ImGui::PushStyleColor(ImGuiCol_Button,p.selected);
-        const bool clicked=ImGui::Button(tabs[i],{tabWidth,32});
+        const bool clicked=ImGui::Button(i18n::Label(tabs[i]),{tabWidth,32});
         if(pausePage_==i) ImGui::PopStyleColor();
         if(i==1) remember(pauseTabRect_);
         if(clicked) pausePage_=i;
@@ -458,7 +459,7 @@ void EditorUI::drawPauseMenu() {
                 ImGui::TextWrapped(i18n::Label("%s"),label);ImGui::TableNextColumn();ImGui::SetNextItemWidth(-1);
             };
             row("Camera mode"); int mode=static_cast<int>(settings.cameraMode);
-            if(ImGui::Combo("##mode",&mode,"Classic\0Follow\0First Person\0")) settings.cameraMode=static_cast<game::CameraMode>(mode);
+            if(ImGui::Combo(i18n::Label("##mode"),&mode,"Livre\0Acompanhar\0Primeira pessoa\0")) settings.cameraMode=static_cast<game::CameraMode>(mode);
             row("Mouse sensitivity");
             ImGui::SliderFloat(i18n::Label("##sensitivity"),&settings.sensitivity,.0001f,.02f,"%.4f");
             remember(pauseSensitivityRect_);
@@ -475,7 +476,7 @@ void EditorUI::drawPauseMenu() {
         const char* keys[]{"W A S D","Space","Right mouse","Scroll","Left Shift","Esc","Shift + F5"};
         const char* help[]{"Move relative to the camera","Jump from the ground","Orbit the camera","Zoom / first person",
             "Toggle Shift Lock when enabled","Pause / resume","Stop and return to Studio"};
-        for(int i=0;i<7;++i) { ImGui::TextUnformatted(keys[i]);ImGui::SameLine(120);ImGui::TextWrapped(i18n::Label("%s"),help[i]); }
+        for(int i=0;i<7;++i) { ImGui::TextUnformatted(keys[i]);ImGui::SameLine(120);ImGui::TextWrapped(i18n::Label("%s"),i18n::Label(help[i])); }
     } else {
         if(logo.ok) ImGui::Image(static_cast<ImTextureID>(logo.id),{80.f*logo.width/logo.height,80});
         ImGui::TextUnformatted(i18n::Label("LINBLUX Studio"));
@@ -492,20 +493,20 @@ void EditorUI::drawPauseMenu() {
     const bool reset=ImGui::Button(i18n::Label("Respawn"),{buttonWidth,buttonHeight});
     remember(pauseResetRect_);
     if(!narrow) ImGui::SameLine(0,8);
-    ImGui::PushStyleColor(ImGuiCol_Button,{.10f,.37f,.76f,1});
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,{.16f,.46f,.88f,1});
+    ImGui::PushStyleColor(ImGuiCol_Button,studio::Colors().accent);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,studio::Colors().hover);
     const bool resume=ImGui::Button(i18n::Label("Resume"),{buttonWidth,buttonHeight});
     ImGui::PopStyleColor(2);
     ImGui::End();
     ImGui::PopStyleVar(3);ImGui::PopStyleColor(11);
     if(stop) stopPlay();
     else if(reset) { std::string error; if(!runtime_.resetCharacter(error)) setStatus(error,true); }
-    else if(resume) { runtime_.resume();ImGui::SetWindowFocus("Viewport"); }
+    else if(resume) { runtime_.resume();ImGui::SetWindowFocus(i18n::Label("Viewport")); }
 }
 
 void EditorUI::drawRigEditor() {
-    if (!ImGui::FindWindowByName("Rig Editor")) {
-        if (auto* properties = ImGui::FindWindowByName("Properties"))
+    if (!ImGui::FindWindowByName(i18n::Label("Rig Editor"))) {
+        if (auto* properties = ImGui::FindWindowByName(i18n::Label("Properties")))
             ImGui::SetNextWindowDockID(properties->DockId, ImGuiCond_FirstUseEver);
     }
     ImGui::SetNextWindowSize({390, 550}, ImGuiCond_FirstUseEver);
@@ -517,6 +518,7 @@ void EditorUI::drawRigEditor() {
         ImGui::PushItemWidth(std::max(90.f,ImGui::GetContentRegionAvail().x-45));
     }
     if (ImGui::Button(i18n::Label("Create R6"))) insertR6();
+    if(experienceUi_&&ImGui::Button("Importar personagem…"))experienceUi_->enqueue("import-character");
     auto* rig = scene_.gameAssets().findRig(selectedRig_);
     if (ImGui::BeginCombo(i18n::Label("Rig"), rig ? rig->name.c_str() : "Select a rig")) {
         for (const auto& r : scene_.gameAssets().rigs)
@@ -525,13 +527,15 @@ void EditorUI::drawRigEditor() {
     }
     rig = scene_.gameAssets().findRig(selectedRig_);
     if (!rig) { ImGui::TextWrapped(i18n::Label("Create an R6 or select one in Explorer."));if(integrated){ImGui::PopItemWidth();ImGui::EndChild();} ImGui::End(); return; }
-    ImGui::InputText("Name", &rig->name);
+    ImGui::InputText(i18n::Label("Name"), &rig->name);
     if (rig->name.empty()) rig->name = "R6Character";
+    ImGui::TextUnformatted("Controlador: LINBLUX · Movimento nativo");
     if (ImGui::Button(i18n::Label("Use as Player"))) scene_.gameAssets().defaultRig = rig->id;
+    if(experienceUi_&&ImGui::Button("Definir como padrão da engine"))experienceUi_->enqueue("default-r6");
     if(selectedRigBody_<0) {
         ImGui::TextUnformatted(i18n::Label("Whole rig · torso pivot · uniform scale"));
         if(ImGui::Button(i18n::Label("Center internal root"))){cancelRigGizmo();std::string error;if(!rig->recenterAuthoringRoot(error))setStatus(error,true);}
-        if(ImGui::IsItemHovered())ImGui::SetTooltip("Bakes a stale root translation without moving any visible body or rewriting animation keys.");
+        if(ImGui::IsItemHovered())ImGui::SetTooltip(i18n::Label("Bakes a stale root translation without moving any visible body or rewriting animation keys."));
     }
     ImGui::SameLine();
     if (ImGui::Button(i18n::Label("Focus rig"))) camera_.focusOn(rig->authoringPivot().position, 5);
@@ -553,7 +557,7 @@ void EditorUI::drawRigEditor() {
     if(ImGui::BeginCombo(i18n::Label("Gizmo Tool"),ToolModeName(tool_))) {
         for(int i=0;i<3;++i) {
             ImGui::BeginDisabled(toolModes[i]==ToolMode::Scale && rigContext_!=RigContext::Edit);
-            if(ImGui::Selectable(toolNames[i],tool_==toolModes[i]))setTool(toolModes[i],"rig_editor");
+            if(ImGui::Selectable(i18n::Label(toolNames[i]),tool_==toolModes[i]))setTool(toolModes[i],"rig_editor");
             ImGui::EndDisabled();
         }
         ImGui::EndCombo();
@@ -577,8 +581,10 @@ void EditorUI::drawRigEditor() {
         }
         if (selectedRigBody_ >= 0) {
             auto& body = rig->bodies[selectedRigBody_];
+            const auto previousName=body.name;
+            if(ImGui::InputText(i18n::Label("Nome do membro"),&body.name)&&body.name.empty())body.name=previousName;
             float color[]{body.color.r/255.f, body.color.g/255.f, body.color.b/255.f};
-            if (ImGui::ColorEdit3("Body color", color) && std::isfinite(color[0]) &&
+            if (ImGui::ColorEdit3(i18n::Label("Body color"), color) && std::isfinite(color[0]) &&
                 std::isfinite(color[1]) && std::isfinite(color[2])) body.color = {
                 static_cast<unsigned char>(color[0]*255), static_cast<unsigned char>(color[1]*255), static_cast<unsigned char>(color[2]*255), 255};
             {const auto lo=ImGui::GetItemRectMin(),hi=ImGui::GetItemRectMax();rigColorControl_={lo.x,lo.y,hi.x-lo.x,hi.y-lo.y};}
@@ -606,10 +612,10 @@ void EditorUI::drawRigEditor() {
                 const auto lo=ImGui::GetItemRectMin(),hi=ImGui::GetItemRectMax();
                 rigImageRemoveControl_={lo.x,lo.y,hi.x-lo.x,hi.y-lo.y};
             }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Single Front image. For multiple faces use Explorer > body > Properties > Add Decal.");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip(i18n::Label("Single Front image. For multiple faces use Explorer > body > Properties > Add Decal."));
             auto size = body.size;
             ImGui::BeginDisabled(rigContext_ != RigContext::Edit);
-            if (ImGui::DragFloat3("Dimensions", &size.x, .05f, .2f, 10, "%.2f", ImGuiSliderFlags_AlwaysClamp)) rig->resizeBody(selectedRigBody_, size);
+            if (ImGui::DragFloat3(i18n::Label("Dimensions"), &size.x, .05f, .2f, 10, "%.2f", ImGuiSliderFlags_AlwaysClamp)) rig->resizeBody(selectedRigBody_, size);
             if (ImGui::Button(i18n::Label("Reset member size/color"))) {
                 auto original = game::MakeR6().bodies[selectedRigBody_];
                 rig->resizeBody(selectedRigBody_, original.size); body.color = original.color; body.material = original.material;
@@ -626,6 +632,23 @@ void EditorUI::drawRigEditor() {
         }
         auto& joint = rig->joints[selectedJoint_];
         if (rigContext_ == RigContext::Edit) {
+            const auto previousName=joint.name;
+            if(ImGui::InputText(i18n::Label("Nome da articulação"),&joint.name)) {
+                std::string error;if(!rig->validate(error)){joint.name=previousName;setStatus(error,true);}
+            }
+            ImGui::BeginDisabled(selectedJoint_==0);
+            const char* parentName=joint.parent<0?"Raiz interna":rig->bodies[joint.parent].name.c_str();
+            if(ImGui::BeginCombo("Articulação ligada a",parentName)) {
+                for(int earlier=0;earlier<selectedJoint_;++earlier) {
+                    const int body=rig->joints[earlier].child;
+                    if(ImGui::Selectable(rig->bodies[body].name.c_str(),joint.parent==body)) {
+                        const int previous=joint.parent;joint.parent=body;std::string error;
+                        if(!rig->validate(error)){joint.parent=previous;setStatus(error,true);}
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::EndDisabled();
             EditTransform("parent anchor", joint.parentAnchor);
             ImGui::TextDisabled(i18n::Label("Child attachment")); EditTransform("child anchor", joint.childAnchor);
             ImGui::TextDisabled(i18n::Label("Rest orientation (not animation)")); EditTransform("rest", rig->restPose[selectedJoint_]);
@@ -816,8 +839,8 @@ bool EditorUI::updateRigGizmo(const EditorInput& input,const InputRoute& route,R
 }
 
 void EditorUI::drawGameSettings() {
-    if (!ImGui::FindWindowByName("Game Settings")) {
-        if (auto* properties = ImGui::FindWindowByName("Properties"))
+    if (!ImGui::FindWindowByName(i18n::Label("Game Settings"))) {
+        if (auto* properties = ImGui::FindWindowByName(i18n::Label("Properties")))
             ImGui::SetNextWindowDockID(properties->DockId, ImGuiCond_FirstUseEver);
     }
     ImGui::SetNextWindowSize({420, 540}, ImGuiCond_FirstUseEver);
@@ -850,26 +873,27 @@ void EditorUI::drawGameSettings() {
     p.health = std::clamp(p.health, 0.f, p.maxHealth);
     ImGui::SliderFloat(i18n::Label("Initial Health"), &p.health, 0, p.maxHealth);
     ImGui::SliderFloat(i18n::Label("Respawn delay (s)"),&p.respawnDelay,.1f,30);
-    ImGui::Combo("Overhead health",&p.healthDisplayType,"AlwaysOn\0DisplayWhenDamaged\0AlwaysOff\0");
+    ImGui::Combo(i18n::Label("Overhead health"),&p.healthDisplayType,"Sempre\0Ao sofrer dano\0Oculta\0");
     ImGui::SliderFloat(i18n::Label("Health display distance"),&p.healthDisplayDistance,0,500);
     ImGui::SliderFloat(i18n::Label("Name display distance"),&p.nameDisplayDistance,0,500);
     ImGui::SliderFloat(i18n::Label("Capsule radius"), &p.collisionRadius, .2f, 3);
     p.collisionHeight = std::max(p.collisionHeight, p.collisionRadius*2);
     ImGui::SliderFloat(i18n::Label("Capsule total height"), &p.collisionHeight, 2*p.collisionRadius, 15);
-    ImGui::SeparatorText("Project camera defaults"); CameraSettings(p);
+    ImGui::SeparatorText(i18n::Label("Project camera defaults")); CameraSettings(p);
     std::string error;
     if (!p.validate(error)) { p = previousSettings; setStatus(error, true); }
+    if(p.gravity!=previousSettings.gravity)physics_.setGravity({0,-p.gravity,0});
     if (ImGui::Button(i18n::Label("Save game settings"))) saveCurrentProject();
     ImGui::End();
 }
 
 void EditorUI::drawAnimationEditor() {
-    if (!ImGui::FindWindowByName("Animation Editor")) {
-        if (auto* view = ImGui::FindWindowByName("Viewport"); view && view->DockId != 0) {
+    if (!ImGui::FindWindowByName(i18n::Label("Animation Editor"))) {
+        if (auto* view = ImGui::FindWindowByName(i18n::Label("Viewport")); view && view->DockId != 0) {
             ImGuiID upper;
             const ImGuiID lower = ImGui::DockBuilderSplitNode(view->DockId, ImGuiDir_Down, .5f, nullptr, &upper);
-            ImGui::DockBuilderDockWindow("Viewport", upper);
-            ImGui::DockBuilderDockWindow("Animation Editor", lower);
+            ImGui::DockBuilderDockWindow(i18n::Label("Viewport"), upper);
+            ImGui::DockBuilderDockWindow(i18n::Label("Animation Editor"), lower);
             ImGui::DockBuilderFinish(ImGui::GetID("LinbluxDockspace"));
         }
     }
@@ -898,7 +922,7 @@ void EditorUI::drawAnimationEditor() {
     ImGui::SameLine();
     const std::string animationUri="anim://"+animationDraft_.id;
     if (ImGui::SmallButton(i18n::Label("Copy ID"))) { ImGui::SetClipboardText(animationUri.c_str());setStatus("ID copiado: "+animationUri); }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nRig: %s | %.3f s",animationUri.c_str(),animationDraft_.rigType.c_str(),animationDraft_.duration);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(i18n::Label("%s\nRig: %s | %.3f s"),animationUri.c_str(),animationDraft_.rigType.c_str(),animationDraft_.duration);
     if (ImGui::Button(i18n::Label("New"))) {
         if (animationDirty_) setStatus("Save or revert the current animation first.", true);
         else {
@@ -949,7 +973,7 @@ void EditorUI::drawAnimationEditor() {
         ImGui::PushItemWidth(std::max(75.f,ImGui::GetContentRegionAvail().x*.45f));
     }
     if (integrated || !compact || ImGui::CollapsingHeader(i18n::Label("Clip settings: name / duration / FPS / loop / priority"))) {
-        animationDirty_ |= ImGui::InputText("Name", &animationDraft_.name);
+        animationDirty_ |= ImGui::InputText(i18n::Label("Name"), &animationDraft_.name);
         float duration = animationDraft_.duration;
         if (ImGui::DragFloat(i18n::Label("Duration (s)"), &duration, .05f, .05f, 120, "%.2f", ImGuiSliderFlags_AlwaysClamp) &&
             std::isfinite(duration) && duration >= .05f && duration <= 120) {
@@ -957,11 +981,11 @@ void EditorUI::drawAnimationEditor() {
             for (auto& track : animationDraft_.tracks) for (auto& key : track) key.time *= scale;
             previewTime_ *= scale; animationDraft_.duration = duration; animationDirty_ = true;
         }
-        if (ImGui::SliderInt("Authoring FPS", &animationDraft_.fps, 1, 120)) animationDirty_ = true;
+        if (ImGui::SliderInt(i18n::Label("Authoring FPS"), &animationDraft_.fps, 1, 120)) animationDirty_ = true;
         animationDraft_.fps = std::clamp(animationDraft_.fps, 1, 240);
         if (ImGui::Checkbox(i18n::Label("Loop"), &animationDraft_.loop)) animationDirty_ = true;
         int priority = static_cast<int>(animationDraft_.priority);
-        if (ImGui::Combo("Priority", &priority, "Idle\0Movement\0Action\0")) {
+        if (ImGui::Combo(i18n::Label("Priority"), &priority, "Repouso\0Movimento\0Ação\0")) {
             animationDraft_.priority = static_cast<game::AnimationPriority>(priority); animationDirty_ = true;
         }
     }
@@ -1049,14 +1073,14 @@ void EditorUI::drawAnimationEditor() {
     if (!trackActive) timelineDragJoint_ = -1;
     ImGui::SeparatorText(rig->joints[selectedJoint_].name.c_str());
     if (EditTransform("animation pose", previewPose_[selectedJoint_])) { previewPlaying_ = false; rigContext_ = RigContext::Animation; }
-    ImGui::Combo("Interpolation", &keyInterpolation_, "Linear\0Ease in/out\0Constant\0");
+    ImGui::Combo(i18n::Label("Interpolation"), &keyInterpolation_, "Linear\0Suave\0Constante\0");
     if (ImGui::Button(i18n::Label("Insert / Update key"))) {
         animationDraft_.setKey(selectedJoint_, {previewTime_, previewPose_[selectedJoint_], static_cast<game::Interpolation>(keyInterpolation_)});
         applyAuthoredArc(selectedJoint_, previewTime_);
         animationDirty_ = true;
     }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Start from a keyed pose, drag more than 180 degrees, then insert the next key: the long way round is kept.");
+        ImGui::SetTooltip(i18n::Label("Start from a keyed pose, drag more than 180 degrees, then insert the next key: the long way round is kept."));
     ImGui::SameLine(); if (ImGui::Button(i18n::Label("Remove key"))) animationDirty_ |= animationDraft_.eraseKey(selectedJoint_, previewTime_);
     ImGui::SameLine(); if (ImGui::Button(i18n::Label("Copy pose/key"))) { copiedKey_ = previewPose_[selectedJoint_]; hasCopiedKey_ = true; }
     ImGui::SameLine(); ImGui::BeginDisabled(!hasCopiedKey_);

@@ -1,3 +1,4 @@
+#include "ui/Localization.h"
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -50,7 +51,7 @@ int main() {
     char temp[]="/tmp/loblox-rig-input-XXXXXX";const char* dir=mkdtemp(temp);if(!dir)return 1;
     std::filesystem::current_path(dir);
     diag::configure(std::string(dir)+"/events.jsonl");
-    SetTraceLogLevel(LOG_WARNING);InitWindow(1366,768,"Loblox rig regression");SetWindowPosition(0,0);
+    SetTraceLogLevel(LOG_WARNING);InitWindow(1366,768,"LINBLUX rig regression");SetWindowPosition(0,0);
     SetExitKey(KEY_NULL);SetTargetFPS(60);rlImGuiSetup(true);
     ImGui::GetIO().ConfigFlags|=ImGuiConfigFlags_DockingEnable;ImGui::GetIO().IniFilename=nullptr;
     ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly=true;studio::Apply();
@@ -68,17 +69,17 @@ int main() {
         // ImGui coordinates belong to this client window, not the X root.
         // A tiling compositor may ignore SetWindowPosition or center a window
         // wider than its output; XTest must translate the client coordinates.
-        auto mouse=[&](Vector2 p){event("search --name '^Loblox rig regression$' mousemove --window %1 "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));};
+        auto mouse=[&](Vector2 p){event("search --name '^LINBLUX rig regression$' mousemove --window %1 "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));};
         auto click=[&](Vector2 p){mouse(p);event("mousedown 1");event("mouseup 1");};
-        auto viewport=[&](){auto* w=ImGui::FindWindowByName("Viewport");return Rectangle{w->InnerRect.Min.x,w->InnerRect.Min.y,w->InnerRect.GetWidth(),w->InnerRect.GetHeight()};};
+        auto viewport=[&](){auto* w=ImGui::FindWindowByName(loblox::i18n::Label("Viewport"));return Rectangle{w->InnerRect.Min.x,w->InnerRect.Min.y,w->InnerRect.GetWidth(),w->InnerRect.GetHeight()};};
         auto screenshot=[&](const std::string& name){TakeScreenshot((std::string(dir)+"/"+name+".png").c_str());};
-        frames(5);event("search --name '^Loblox rig regression$' windowfocus --sync");
+        frames(5);event("search --name '^LINBLUX rig regression$' windowfocus --sync");
         const auto originalClips=scene.gameAssets().animations;
         for(auto mode:{ToolMode::Move,ToolMode::Rotate,ToolMode::Scale}) {
             EditorUITestAccess::setup(ui,id,mode);frames();
             EditorUITestAccess::showPanel(ui);frames();
-            ImGui::SetWindowDock(ImGui::FindWindowByName("Rig Editor"),0,ImGuiCond_Always);
-            ImGui::SetWindowPos("Rig Editor",{3,145});ImGui::SetWindowSize("Rig Editor",{295,610});frames();
+            ImGui::SetWindowDock(ImGui::FindWindowByName(loblox::i18n::Label("Rig Editor")),0,ImGuiCond_Always);
+            ImGui::SetWindowPos(loblox::i18n::Label("Rig Editor"),{3,145});ImGui::SetWindowSize(loblox::i18n::Label("Rig Editor"),{295,610});frames();
             const auto combo=EditorUITestAccess::toolControl(ui);click({combo.x+35,combo.y+combo.height/2});
             CHECK(!GImGui->OpenPopupStack.empty());
             if(!GImGui->OpenPopupStack.empty()) {
@@ -210,7 +211,7 @@ int main() {
         CHECK(ExportImage(image,imageFile.c_str()));UnloadImage(image);
         EditorUITestAccess::setup(ui,id,ToolMode::Rotate);
         EditorUITestAccess::showPanel(ui);frames();
-        ImGui::SetWindowPos("Rig Editor",{3,145});ImGui::SetWindowSize("Rig Editor",{360,700});frames();
+        ImGui::SetWindowPos(loblox::i18n::Label("Rig Editor"),{3,145});ImGui::SetWindowSize(loblox::i18n::Label("Rig Editor"),{360,700});frames();
         click(EditorUITestAccess::bodyRow(ui,game::Torso));frames();
         const auto imageCombo=EditorUITestAccess::imageControl(ui);
         CHECK(imageCombo.width>0 && imageCombo.height>0);

@@ -28,7 +28,7 @@ int main(){
         editor.frontend()->enableExperiences(manager,true);auto* home=EditorUITestAccess::experiences(editor);
         const auto frame=[&]{BeginDrawing();ClearBackground(BLACK);rlImGuiBegin();editor.draw();rlImGuiEnd();editor.renderModernFrontend();EndDrawing();};
         const auto frames=[&](int count){for(int i=0;i<count;++i)frame();};
-        frames(100);if(!home->videoRunning()||home->videoDecodedFrames()<5)throw std::runtime_error("Vídeo não iniciou");
+        frames(100);if(editor.frontend()->elementBounds("engine-default-card").height<=0||editor.frontend()->elementBounds("exp-edit-default").width<=0)throw std::runtime_error("Cartão fixo do Mundo Padrão ausente");if(!home->videoRunning()||home->videoDecodedFrames()<5)throw std::runtime_error("Vídeo não iniciou");
         Image a=LoadImageFromScreen();const auto decoded=home->videoDecodedFrames();frames(80);Image b=LoadImageFromScreen();
         int changed=0;for(int y:{5,650,710})for(int x:{5,400,800,1270}){auto p=GetImageColor(a,x,y),q=GetImageColor(b,x,y);changed+=abs(int(p.r)-q.r)+abs(int(p.g)-q.g)+abs(int(p.b)-q.b)>8;}
         UnloadImage(a);UnloadImage(b);if(changed<4||home->videoDecodedFrames()<=decoded)throw std::runtime_error("Fundo não se move nas bordas");
@@ -45,11 +45,11 @@ int main(){
         home->enqueue("delete");frames(3);TakeScreenshot((root/"confirmar-exclusao.png").c_str());home->enqueue("confirm");frames(5);
         if(fs::exists(experience.root)||!manager.list().empty())throw std::runtime_error("Exclusão pela interface falhou");
         home->enqueue("edit-default");frames(5);if(home->homeVisible()||!manager.active())throw std::runtime_error("Edição de mundo padrão não abriu");
-        scene.createPart(PartShape::Block,{3,5,2},{2,2,2},"Padrão pela interface");home->enqueue("default-map");frames(5);
+        scene.createPart(PartShape::Block,{3,5,2},{2,2,2},"Padrão pela interface");home->enqueue("default-map");frames(3);if(editor.frontend()->elementBounds("exp-confirm-ok").width<=0)throw std::runtime_error("Salvar padrão sem confirmação");home->enqueue("confirm");frames(5);
         home->requestHome();frames(4);home->enqueue("edit-character");frames(5);
         const auto rigId=scene.gameAssets().defaultRig;auto* rig=scene.gameAssets().findRig(rigId);
         if(!rig)throw std::runtime_error("Edição de personagem padrão não abriu");rig->bodies[game::Torso].color={201,31,62,255};
-        home->enqueue("save");frames(5);home->requestHome();frames(4);
+        home->enqueue("save");frames(3);home->enqueue("default-map");frames(3);home->enqueue("confirm");frames(5);home->requestHome();frames(4);
         experiences::CreateOptions inherited;inherited.name="Padrões pela interface";auto inheritedProject=manager.create(inherited);Scene inheritedScene;manager.open(inheritedProject,inheritedScene);
         bool found=false;for(auto* part:inheritedScene.parts())found|=part->name()=="Padrão pela interface";
         if(!found||inheritedScene.gameAssets().findRig(rigId)->bodies[game::Torso].color.r!=201)throw std::runtime_error("Padrões da UI não persistiram");manager.close();

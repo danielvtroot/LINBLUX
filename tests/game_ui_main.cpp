@@ -1,3 +1,4 @@
+#include "ui/Localization.h"
 // Real events exercise the production UI/router/renderer/runtime. Asset setup
 // and inspections use a friend fixture, not a second gameplay implementation.
 #include <cstdio>
@@ -77,7 +78,7 @@ int main() {
     char temporary[] = "/tmp/loblox-game-ui-XXXXXX";
     const char* directory = mkdtemp(temporary); if (!directory) return 1;
     diag::configure(std::string(directory)+"/game.jsonl");
-    SetTraceLogLevel(LOG_WARNING); InitWindow(1280, 800, "Loblox game regression");
+    SetTraceLogLevel(LOG_WARNING); InitWindow(1280, 800, "LINBLUX game regression");
     if (!IsWindowReady()) return 1;
     SetExitKey(KEY_NULL); SetTargetFPS(60); rlImGuiSetup(true);
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -120,15 +121,15 @@ int main() {
             command(std::string("type --delay 0 ")+text); key("Return");
         };
         auto viewport = [&]() {
-            auto* w = ImGui::FindWindowByName("Viewport");
+            auto* w = ImGui::FindWindowByName(loblox::i18n::Label("Viewport"));
             return Rectangle{w->InnerRect.Min.x,w->InnerRect.Min.y,w->InnerRect.GetWidth(),w->InnerRect.GetHeight()};
         };
-        frames(5); command("search --name '^Loblox game regression$' windowfocus --sync");
+        frames(5); command("search --name '^LINBLUX game regression$' windowfocus --sync");
         EditorUITestAccess::rigPanel(ui); frames();
-        ImGui::SetWindowDock(ImGui::FindWindowByName("Rig Editor"),0,ImGuiCond_Always);
-        ImGui::SetWindowSize("Rig Editor",{390,550});
-        ImGui::SetWindowPos("Rig Editor", {80,180}); frames();
-        auto* panel = ImGui::FindWindowByName("Rig Editor");
+        ImGui::SetWindowDock(ImGui::FindWindowByName(loblox::i18n::Label("Rig Editor")),0,ImGuiCond_Always);
+        ImGui::SetWindowSize(loblox::i18n::Label("Rig Editor"),{390,550});
+        ImGui::SetWindowPos(loblox::i18n::Label("Rig Editor"), {80,180}); frames();
+        auto* panel = ImGui::FindWindowByName(loblox::i18n::Label("Rig Editor"));
         click({panel->DC.CursorStartPos.x+35, panel->DC.CursorStartPos.y+9});
         CHECK(scene.gameAssets().rigs.size() == 1);
         if (scene.gameAssets().rigs.empty()) { TakeScreenshot((std::string(directory)+"/insert-failed.png").c_str()); return 1; }
@@ -160,10 +161,10 @@ int main() {
         // Real numeric editing, track selection and Insert/Update button.
         EditorUITestAccess::animation(ui); frames();
         TakeScreenshot((std::string(directory)+"/animation-docked.png").c_str());
-        ImGui::SetWindowDock(ImGui::FindWindowByName("Animation Editor"),0,ImGuiCond_Always);
-        ImGui::SetWindowPos("Animation Editor",{20,160});
-        ImGui::SetWindowSize("Animation Editor",{960,620}); frames();
-        auto* animation = ImGui::FindWindowByName("Animation Editor");
+        ImGui::SetWindowDock(ImGui::FindWindowByName(loblox::i18n::Label("Animation Editor")),0,ImGuiCond_Always);
+        ImGui::SetWindowPos(loblox::i18n::Label("Animation Editor"),{20,160});
+        ImGui::SetWindowSize(loblox::i18n::Label("Animation Editor"),{960,620}); frames();
+        auto* animation = ImGui::FindWindowByName(loblox::i18n::Label("Animation Editor"));
         const Vector2 animationOrigin{animation->DC.CursorStartPos.x,animation->DC.CursorStartPos.y};
         TakeScreenshot((std::string(directory)+"/animation-before.png").c_str());
         number(Vector2Add(animationOrigin,{60,216}),"0.25");
@@ -185,7 +186,7 @@ int main() {
         EditorUITestAccess::hidePanels(ui); frames();
         const std::string copyPath = std::string(directory)+"/authored-copy.json";
         EditorUITestAccess::saveAsDialog(ui,copyPath); frames();
-        auto* saveDialog = ImGui::FindWindowByName("Salvar projeto");
+        auto* saveDialog = ImGui::FindWindowByName(loblox::i18n::Label("Salvar projeto"));
         click({saveDialog->DC.CursorStartPos.x+40,saveDialog->DC.CursorStartPos.y+53});
         Scene copy; std::string copyError;
         CHECK(projectio::load(copy,copyPath,copyError));
@@ -221,7 +222,7 @@ int main() {
         auto paused = runtime.position(); command("keydown w"); frames(10); command("keyup w");
         CHECK(NearlyEqual(runtime.position(),paused));
         TakeScreenshot((std::string(directory)+"/pause.png").c_str());
-    auto* menu = ImGui::FindWindowByName("Play paused");
+    auto* menu = ImGui::FindWindowByName(loblox::i18n::Label("Play paused"));
     const float pausedZoom = runtime.playerCamera().distance();
     command("click 4"); CHECK(NearlyEqual(runtime.playerCamera().distance(), pausedZoom));
     // O próprio menu captura os rects reais (aba/slider/botão) durante o
@@ -268,7 +269,7 @@ int main() {
         command("windowfocus "+std::to_string(InputTestRootWindow()));
         CHECK(runtime.state() == game::RuntimeState::Paused);
         CHECK(!EditorUITestAccess::captured(ui));
-        command("search --name '^Loblox game regression$' windowfocus --sync");
+        command("search --name '^LINBLUX game regression$' windowfocus --sync");
         key("Escape"); CHECK(runtime.state() == game::RuntimeState::Playing);
         command("keydown shift"); key("F5"); command("keyup shift");
         CHECK(!ui.playing()); CHECK(!EditorUITestAccess::captured(ui)); CHECK(runtime.validate(error));

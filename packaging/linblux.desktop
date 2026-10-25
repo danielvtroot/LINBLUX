@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=LINBLUX Studio
+GenericName=Editor de experiências 3D
+Comment=Crie mundos, personagens e experiências 3D com LINBLUX
+Exec=linblux
+Icon=linblux
+Terminal=false
+Categories=Development;Graphics;3DGraphics;
+Keywords=LINBLUX;engine;3D;mundos;Lua;
+StartupNotify=false

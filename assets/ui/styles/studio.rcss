@@ -1,4 +1,4 @@
-/* Loblox desktop system: dense Studio chrome, separate Player composition.
+/* LINBLUX desktop system: dense Studio chrome, separate Player composition.
    Shared graphite palette with the embedded code, rig and timeline controls. */
 body { display: block; margin: 0; font-family: DejaVu Sans; font-size: 12px; color: #e7e9ed; background-color: transparent; }
 div, p, h1, h2, h3 { display: block; }

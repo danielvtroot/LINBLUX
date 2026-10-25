@@ -26,3 +26,6 @@ __pycache__/
 # Referencias pessoais e duplicata do video oficial; midia/ e versionado.
 /referencias/
 /careditfullhd.mp4
+
+# Imagens pessoais importadas: preservadas localmente; fora da distribuição.
+/assets/*.png

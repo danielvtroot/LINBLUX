@@ -400,6 +400,7 @@ void DrawIcon(ImDrawList* drawList, ImVec2 center, float size, Icon icon, ImU32 
 
 bool IconButton(const char* id, Icon icon, const char* label, bool active, const char* tooltip,
                 bool enabled = true) {
+    label=i18n::Label(label);if(tooltip)tooltip=i18n::Label(tooltip);
     ImGui::PushID(id);
     const ImVec2 textSize = ImGui::CalcTextSize(label);
     const float width = std::max(textSize.x + 16.0f, 54.0f);
@@ -433,7 +434,7 @@ bool IconButton(const char* id, Icon icon, const char* label, bool active, const
                                position.y + size.y - textSize.y - 7.0f);
     drawList->AddText(labelPosition, foreground, label);
     if (hovered && tooltip != nullptr) {
-        ImGui::SetTooltip("%s", tooltip);
+        ImGui::SetTooltip(i18n::Label("%s"), tooltip);
     }
     ImGui::PopID();
     return clicked;
@@ -899,7 +900,7 @@ void EditorUI::drawTransformReadout(const EditorInput& input, Vector2 imagePosit
         }
         ImGui::SetNextItemWidth(126.0f);
         const bool submitted = ImGui::InputText(
-            "##value", readout_.text, sizeof(readout_.text),
+            i18n::Label("##value"), readout_.text, sizeof(readout_.text),
             ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsDecimal |
                 ImGuiInputTextFlags_AutoSelectAll);
         const bool deactivated = ImGui::IsItemDeactivated();
@@ -965,7 +966,7 @@ void EditorUI::setOnSceneLoaded(std::function<void()> callback) {
 }
 
 void EditorUI::setStatus(std::string message, bool error) {
-    status_ = std::move(message);
+    status_ = i18n::Text(message);
     statusIsError_ = error;
     statusUntil_ = ImGui::GetTime() + 5.0;
 }
@@ -1061,11 +1062,11 @@ void EditorUI::buildDockLayout() {
     const ImGuiID rightTop =
         ImGui::DockBuilderSplitNode(right, ImGuiDir_Up, 0.42f, nullptr, &right);
 
-    ImGui::DockBuilderDockWindow("##Toolbar", top);
-    ImGui::DockBuilderDockWindow("Toolbox", left);
-    ImGui::DockBuilderDockWindow("Viewport", center);
-    ImGui::DockBuilderDockWindow("Explorer", rightTop);
-    ImGui::DockBuilderDockWindow("Properties", right);
+    ImGui::DockBuilderDockWindow(i18n::Label("##Toolbar"), top);
+    ImGui::DockBuilderDockWindow(i18n::Label("Toolbox"), left);
+    ImGui::DockBuilderDockWindow(i18n::Label("Viewport"), center);
+    ImGui::DockBuilderDockWindow(i18n::Label("Explorer"), rightTop);
+    ImGui::DockBuilderDockWindow(i18n::Label("Properties"), right);
     ImGui::DockBuilderFinish(dockId);
     layoutBuilt_ = true;
 }
@@ -1141,7 +1142,7 @@ bool EditorUI::saveProjectAt(const std::string& path, std::string& error) {
 bool EditorUI::saveCurrentProject() {
     std::string error;
     if (saveProjectAt(projectPath_, error)) {
-        setStatus("Projeto salvo em " + projectPath_);
+        setStatus(experienceUi_&&experienceUi_->editingEngineDefault()?"Rascunho salvo. Use Salvar como padrão da engine para publicar as alterações.":"Projeto salvo em " + projectPath_);
         return true;
     } else {
         setStatus("Falha ao salvar '" + projectPath_ + "': " + error, true);
@@ -1173,7 +1174,7 @@ void EditorUI::draw() {
     ImGui::BeginDisabled(runtime_.active());
     drawToolbar();
     const auto visibleInPlay=[&](const char* name) {
-        const auto* window=ImGui::FindWindowByName(name);
+        const auto* window=ImGui::FindWindowByName(i18n::Label(name));
         return !runtime_.active() || (window && window->DockId!=0);
     };
     if (showToolbox_ && visibleInPlay("Toolbox")) {
@@ -1295,7 +1296,7 @@ void EditorUI::drawMainMenuBar() {
     const float projectX=ImGui::GetWindowWidth()-ImGui::CalcTextSize(projectName.c_str()).x-16;
     if(projectX>ImGui::GetCursorPosX()+20) {
         ImGui::SameLine(projectX);ImGui::TextDisabled(i18n::Label("%s"),projectName.c_str());
-        if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s",projectPath_.c_str());
+        if(ImGui::IsItemHovered()) ImGui::SetTooltip(i18n::Label("%s"),projectPath_.c_str());
     }
     ImGui::EndMainMenuBar();
 }
@@ -1327,7 +1328,7 @@ void EditorUI::drawToolbar() {
     if(ImGui::Checkbox(i18n::Label("Snap"),&snapEnabled_)) {endGizmoSession(true,"snap_toggle");cancelRigGizmo();}
     const auto snapMin=ImGui::GetItemRectMin(),snapMax=ImGui::GetItemRectMax();
     snapControl_={snapMin.x,snapMin.y,snapMax.x-snapMin.x,snapMax.y-snapMin.y};
-    if(ImGui::IsItemHovered())ImGui::SetTooltip("OFF: continuous fine movement. ON: increments from the drag's initial transform.");
+    if(ImGui::IsItemHovered())ImGui::SetTooltip(i18n::Label("OFF: continuous fine movement. ON: increments from the drag's initial transform."));
     for(auto control:{std::pair<const char*,float*>{"Move",&moveSnap_},{"Scale",&scaleSnap_},{"Rotate",&rotateSnapDegrees_}}) {
         ImGui::SameLine();ImGui::SetNextItemWidth(52);
         if(ImGui::DragFloat(control.first,control.second,.01f,.001f,control.second==&rotateSnapDegrees_?180.f:128.f,"%.2f",ImGuiSliderFlags_AlwaysClamp)) {
@@ -1359,9 +1360,9 @@ void EditorUI::drawToolbar() {
         for (int spaceIndex = 0; spaceIndex < 2; ++spaceIndex) {
             const bool active = (spaceIndex == 1) == gizmoLocalSpace_;
             if (active) {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.44f, 0.72f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.19f, 0.51f, 0.82f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.13f, 0.38f, 0.64f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Button, studio::Colors().accent);
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, studio::Colors().hover);
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, studio::Colors().selected);
             }
             if (ImGui::Button(spaceIndex == 0 ? "World" : "Local", ImVec2(52.0f, 0.0f))) {
                 if (!active) {
@@ -1631,7 +1632,7 @@ void EditorUI::drawToolbox() {
     }
 
     ImGui::Spacing();
-    ImGui::SeparatorText("Scene");
+    ImGui::SeparatorText(i18n::Label("Scene"));
     ImGui::TextDisabled(i18n::Label("%d objects"), static_cast<int>(scene_.objects().size()));
     ImGui::SameLine();
     ImGui::TextDisabled(i18n::Label("%d parts"), static_cast<int>(scene_.parts().size()));
@@ -2159,35 +2160,35 @@ void EditorUI::drawPartProperties(Part& part) {
 
     char name[128];
     std::snprintf(name, sizeof(name), "%s", part.name().c_str());
-    if (ImGui::InputText("Name", name, sizeof(name))) {
+    if (ImGui::InputText(i18n::Label("Name"), name, sizeof(name))) {
         part.setName(name);
     }
 
     ImGui::BeginDisabled();
     char className[64];
     std::snprintf(className, sizeof(className), "%s", part.className());
-    ImGui::InputText("ClassName", className, sizeof(className));
+    ImGui::InputText(i18n::Label("ClassName"), className, sizeof(className));
     ImGui::EndDisabled();
 
-    ImGui::SeparatorText("Transform");
+    ImGui::SeparatorText(i18n::Label("Transform"));
     {
         Vector3 position = part.position();
         float values[3] = {position.x, position.y, position.z};
-        if (ImGui::DragFloat3("Position", values, 0.1f, 0.0f, 0.0f, "%.3f")) {
+        if (ImGui::DragFloat3(i18n::Label("Position"), values, 0.1f, 0.0f, 0.0f, "%.3f")) {
             part.setPosition(Vector3{values[0], values[1], values[2]});
         }
     }
     {
         Vector3 euler = part.rotationEulerDegrees();
         float values[3] = {euler.x, euler.y, euler.z};
-        if (ImGui::DragFloat3("Rotation", values, 0.5f, -360.0f, 360.0f, "%.1f")) {
+        if (ImGui::DragFloat3(i18n::Label("Rotation"), values, 0.5f, -360.0f, 360.0f, "%.1f")) {
             part.setRotationEulerDegrees(Vector3{values[0], values[1], values[2]});
         }
     }
     {
         Vector3 size = part.size();
         float values[3] = {size.x, size.y, size.z};
-        if (ImGui::DragFloat3("Size", values, 0.05f, kMinPartSize, 512.0f, "%.2f")) {
+        if (ImGui::DragFloat3(i18n::Label("Size"), values, 0.05f, kMinPartSize, 512.0f, "%.2f")) {
             part.setSize(Vector3{values[0], values[1], values[2]});
         }
     }
@@ -2195,11 +2196,11 @@ void EditorUI::drawPartProperties(Part& part) {
         ImGui::TextDisabled(i18n::Label("Peca dinamica: a fisica controla o movimento."));
     }
 
-    ImGui::SeparatorText("Appearance");
+    ImGui::SeparatorText(i18n::Label("Appearance"));
     {
         float color[4] = {part.color().r / 255.0f, part.color().g / 255.0f,
                           part.color().b / 255.0f, part.color().a / 255.0f};
-        if (ImGui::ColorEdit4("Color", color)) {
+        if (ImGui::ColorEdit4(i18n::Label("Color"), color)) {
             part.setColor(Color{
                 static_cast<unsigned char>(std::lround(color[0] * 255.0f)),
                 static_cast<unsigned char>(std::lround(color[1] * 255.0f)),
@@ -2222,10 +2223,10 @@ void EditorUI::drawPartProperties(Part& part) {
     ImGui::BeginDisabled();
     char shape[32];
     std::snprintf(shape, sizeof(shape), "%s", PartShapeName(part.shape()));
-    ImGui::InputText("Shape", shape, sizeof(shape));
+    ImGui::InputText(i18n::Label("Shape"), shape, sizeof(shape));
     ImGui::EndDisabled();
 
-    ImGui::SeparatorText("Spawn");
+    ImGui::SeparatorText(i18n::Label("Spawn"));
     const bool legacySpawn=part.instanceClass()==InstanceClass::SpawnLocation;
     bool spawnEnabled=legacySpawn||game::IsSpawnPart(part);
     if(legacySpawn) {
@@ -2241,7 +2242,7 @@ void EditorUI::drawPartProperties(Part& part) {
         ImGui::TextDisabled(i18n::Label("Highest priority wins; ties use the oldest instance."));
     }
 
-    ImGui::SeparatorText("Physics");
+    ImGui::SeparatorText(i18n::Label("Physics"));
     bool anchored = part.anchored();
     if (ImGui::Checkbox(i18n::Label("Anchored"), &anchored)) {
         part.setAnchored(anchored);
@@ -2277,13 +2278,13 @@ void EditorUI::drawLightingProperties() {
 
     char name[128];
     std::snprintf(name, sizeof(name), "%s", lighting->name().c_str());
-    if (ImGui::InputText("Name", name, sizeof(name))) {
+    if (ImGui::InputText(i18n::Label("Name"), name, sizeof(name))) {
         lighting->setName(name);
     }
 
     float sky[3] = {lighting->skyColor().r / 255.0f, lighting->skyColor().g / 255.0f,
                     lighting->skyColor().b / 255.0f};
-    if (ImGui::ColorEdit3("SkyColor", sky)) {
+    if (ImGui::ColorEdit3(i18n::Label("SkyColor"), sky)) {
         lighting->setSkyColor(Color{static_cast<unsigned char>(std::lround(sky[0] * 255.0f)),
                                     static_cast<unsigned char>(std::lround(sky[1] * 255.0f)),
                                     static_cast<unsigned char>(std::lround(sky[2] * 255.0f)),
@@ -2292,7 +2293,7 @@ void EditorUI::drawLightingProperties() {
     float ambient[3] = {lighting->ambientColor().r / 255.0f,
                         lighting->ambientColor().g / 255.0f,
                         lighting->ambientColor().b / 255.0f};
-    if (ImGui::ColorEdit3("Ambient", ambient)) {
+    if (ImGui::ColorEdit3(i18n::Label("Ambient"), ambient)) {
         lighting->setAmbientColor(
             Color{static_cast<unsigned char>(std::lround(ambient[0] * 255.0f)),
                   static_cast<unsigned char>(std::lround(ambient[1] * 255.0f)),
@@ -2300,7 +2301,7 @@ void EditorUI::drawLightingProperties() {
     }
     Vector3 sun = lighting->sunDirection();
     float sunValues[3] = {sun.x, sun.y, sun.z};
-    if (ImGui::DragFloat3("SunDirection", sunValues, 0.02f, -1.0f, 1.0f, "%.2f")) {
+    if (ImGui::DragFloat3(i18n::Label("SunDirection"), sunValues, 0.02f, -1.0f, 1.0f, "%.2f")) {
         lighting->setSunDirection(Vector3{sunValues[0], sunValues[1], sunValues[2]});
     }
     float intensity = lighting->sunIntensity();
@@ -2311,10 +2312,10 @@ void EditorUI::drawLightingProperties() {
     if (ImGui::SliderFloat(i18n::Label("Brightness"), &brightness, 0.2f, 2.0f, "%.2f")) {
         lighting->setBrightness(brightness);
     }
-    ImGui::SeparatorText("Fog");
+    ImGui::SeparatorText(i18n::Label("Fog"));
     float fog[3] = {lighting->fogColor().r / 255.0f, lighting->fogColor().g / 255.0f,
                     lighting->fogColor().b / 255.0f};
-    if (ImGui::ColorEdit3("FogColor", fog)) {
+    if (ImGui::ColorEdit3(i18n::Label("FogColor"), fog)) {
         lighting->setFogColor(Color{static_cast<unsigned char>(std::lround(fog[0] * 255.0f)),
                                     static_cast<unsigned char>(std::lround(fog[1] * 255.0f)),
                                     static_cast<unsigned char>(std::lround(fog[2] * 255.0f)), 255});
@@ -2324,18 +2325,18 @@ void EditorUI::drawLightingProperties() {
         lighting->setFogDensity(fogDensity);
     }
 
-    ImGui::SeparatorText("Sky");
+    ImGui::SeparatorText(i18n::Label("Sky"));
     bool skyEnabled = lighting->skyEnabled();
     if (ImGui::Checkbox(i18n::Label("Sky Enabled"), &skyEnabled)) {
         lighting->setSkyEnabled(skyEnabled);
         if (!skyEnabled)
-            ImGui::SetTooltip("O fundo volta para a cor sólida do SkyColor");
+            ImGui::SetTooltip(i18n::Label("O fundo volta para a cor sólida do SkyColor"));
     }
 
     float zenith[3] = {lighting->skyZenithColor().r / 255.0f,
                        lighting->skyZenithColor().g / 255.0f,
                        lighting->skyZenithColor().b / 255.0f};
-    if (ImGui::ColorEdit3("Zenith Color", zenith)) {
+    if (ImGui::ColorEdit3(i18n::Label("Zenith Color"), zenith)) {
         lighting->setSkyZenithColor(Color{static_cast<unsigned char>(std::lround(zenith[0] * 255.0f)),
                                           static_cast<unsigned char>(std::lround(zenith[1] * 255.0f)),
                                           static_cast<unsigned char>(std::lround(zenith[2] * 255.0f)), 255});
@@ -2344,7 +2345,7 @@ void EditorUI::drawLightingProperties() {
     float horizon[3] = {lighting->skyHorizonColor().r / 255.0f,
                         lighting->skyHorizonColor().g / 255.0f,
                         lighting->skyHorizonColor().b / 255.0f};
-    if (ImGui::ColorEdit3("Horizon Color", horizon)) {
+    if (ImGui::ColorEdit3(i18n::Label("Horizon Color"), horizon)) {
         lighting->setSkyHorizonColor(Color{static_cast<unsigned char>(std::lround(horizon[0] * 255.0f)),
                                            static_cast<unsigned char>(std::lround(horizon[1] * 255.0f)),
                                            static_cast<unsigned char>(std::lround(horizon[2] * 255.0f)), 255});
@@ -2353,7 +2354,7 @@ void EditorUI::drawLightingProperties() {
     float ground[3] = {lighting->skyGroundColor().r / 255.0f,
                        lighting->skyGroundColor().g / 255.0f,
                        lighting->skyGroundColor().b / 255.0f};
-    if (ImGui::ColorEdit3("Ground Color", ground)) {
+    if (ImGui::ColorEdit3(i18n::Label("Ground Color"), ground)) {
         lighting->setSkyGroundColor(Color{static_cast<unsigned char>(std::lround(ground[0] * 255.0f)),
                                           static_cast<unsigned char>(std::lround(ground[1] * 255.0f)),
                                           static_cast<unsigned char>(std::lround(ground[2] * 255.0f)), 255});
@@ -2362,7 +2363,7 @@ void EditorUI::drawLightingProperties() {
     float sunCol[3] = {lighting->sunColor().r / 255.0f,
                        lighting->sunColor().g / 255.0f,
                        lighting->sunColor().b / 255.0f};
-    if (ImGui::ColorEdit3("Sun Color", sunCol)) {
+    if (ImGui::ColorEdit3(i18n::Label("Sun Color"), sunCol)) {
         lighting->setSunColor(Color{static_cast<unsigned char>(std::lround(sunCol[0] * 255.0f)),
                                     static_cast<unsigned char>(std::lround(sunCol[1] * 255.0f)),
                                     static_cast<unsigned char>(std::lround(sunCol[2] * 255.0f)), 255});
@@ -2378,7 +2379,7 @@ void EditorUI::drawLightingProperties() {
         lighting->setAtmosphereStrength(atmoStrength);
     }
 
-    ImGui::SeparatorText("Clouds");
+    ImGui::SeparatorText(i18n::Label("Clouds"));
     float cloudDensity = lighting->cloudDensity();
     if (ImGui::SliderFloat(i18n::Label("Cloud Density"), &cloudDensity, 0.0f, 1.0f, "%.2f")) {
         lighting->setCloudDensity(cloudDensity);
@@ -2414,13 +2415,13 @@ void EditorUI::drawWorkspaceProperties() {
     ImGui::Separator();
     char name[128];
     std::snprintf(name, sizeof(name), "%s", scene_.workspace()->name().c_str());
-    if (ImGui::InputText("Name", name, sizeof(name))) {
+    if (ImGui::InputText(i18n::Label("Name"), name, sizeof(name))) {
         scene_.workspace()->setName(name);
     }
     float height=scene_.workspace()->fallenPartsDestroyHeight();
     if(ImGui::InputFloat(i18n::Label("FallenPartsDestroyHeight"),&height,10,100,"%.1f",ImGuiInputTextFlags_EnterReturnsTrue) &&
         !scene_.workspace()->setFallenPartsDestroyHeight(height))setStatus("Void height invalido.",true);
-    ImGui::SeparatorText("Projeto");
+    ImGui::SeparatorText(i18n::Label("Projeto"));
     ImGui::Text(i18n::Label("Objetos: %d"), static_cast<int>(scene_.objects().size()));
     ImGui::Text(i18n::Label("Pecas: %d"), static_cast<int>(scene_.parts().size()));
     ImGui::Text(i18n::Label("Corpos fisicos: %d"), static_cast<int>(physics_.bodyCount()));
@@ -2459,7 +2460,7 @@ void EditorUI::drawDialogs() {
     if (renameId_ || !renameRigId_.empty()) ImGui::OpenPopup("Rename instance");
     if (ImGui::BeginPopupModal("Rename instance",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
         if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
-        const bool enter=ImGui::InputText("Name",renameBuffer_,sizeof(renameBuffer_),ImGuiInputTextFlags_EnterReturnsTrue);
+        const bool enter=ImGui::InputText(i18n::Label("Name"),renameBuffer_,sizeof(renameBuffer_),ImGuiInputTextFlags_EnterReturnsTrue);
         if (enter || ImGui::Button(i18n::Label("Rename"))) {
             if (auto* node=scene_.find(renameId_); node && renameBuffer_[0]) node->setName(renameBuffer_);
             if(auto* rig=scene_.gameAssets().findRig(renameRigId_);rig && renameBuffer_[0])rig->name=renameBuffer_;
@@ -2491,7 +2492,7 @@ void EditorUI::drawDialogs() {
     if (ImGui::BeginPopupModal("Salvar projeto", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted(i18n::Label("Caminho do arquivo (.json):"));
         ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::InputText("##save_path", pathBuffer_, sizeof(pathBuffer_));
+        ImGui::InputText(i18n::Label("##save_path"), pathBuffer_, sizeof(pathBuffer_));
         if (!dialogError_.empty()) {
             ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.40f, 1.0f), "%s", dialogError_.c_str());
         }
@@ -2504,7 +2505,7 @@ void EditorUI::drawDialogs() {
             if (saveProjectAt(savePath, error)) {
                 projectPath_ = savePath;
                 dialogError_.clear();
-                setStatus("Projeto salvo em " + projectPath_);
+                setStatus(experienceUi_&&experienceUi_->editingEngineDefault()?"Rascunho salvo. Use Salvar como padrão da engine para publicar as alterações.":"Projeto salvo em " + projectPath_);
                 ImGui::CloseCurrentPopup();
             } else {
                 dialogError_ = "Falha ao salvar '" + savePath + "': " + error;
@@ -2522,7 +2523,7 @@ void EditorUI::drawDialogs() {
     if (ImGui::BeginPopupModal("Abrir projeto", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted(i18n::Label("Caminho do arquivo (.json):"));
         ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::InputText("##open_path", pathBuffer_, sizeof(pathBuffer_));
+        ImGui::InputText(i18n::Label("##open_path"), pathBuffer_, sizeof(pathBuffer_));
         ImGui::TextDisabled(i18n::Label("Carregar substitui a cena atual."));
         if (!dialogError_.empty()) {
             ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.40f, 1.0f), "%s", dialogError_.c_str());
@@ -2562,7 +2563,7 @@ void EditorUI::drawDialogs() {
     if (ImGui::BeginPopupModal("Exportar cena Lua", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted(i18n::Label("Exportar cena declarativa (.lua):"));
         ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::InputText("##lua_export_path", pathBuffer_, sizeof(pathBuffer_));
+        ImGui::InputText(i18n::Label("##lua_export_path"), pathBuffer_, sizeof(pathBuffer_));
         ImGui::TextDisabled(i18n::Label("Contem apenas dados da cena; nenhum script e executado."));
         if (!dialogError_.empty()) ImGui::TextColored(ImVec4(0.78f, 0.12f, 0.10f, 1), "%s", dialogError_.c_str());
         if (ImGui::Button(i18n::Label("Exportar"), ImVec2(120, 0))) {
@@ -2584,7 +2585,7 @@ void EditorUI::drawDialogs() {
     if (ImGui::BeginPopupModal("Importar cena Lua", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted(i18n::Label("Importar cena declarativa (.lua):"));
         ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::InputText("##lua_import_path", pathBuffer_, sizeof(pathBuffer_));
+        ImGui::InputText(i18n::Label("##lua_import_path"), pathBuffer_, sizeof(pathBuffer_));
         ImGui::TextWrapped(i18n::Label("Aceita somente `return` seguido por tabelas literais do formato loblox-scene. O arquivo nunca e executado."));
         ImGui::TextDisabled(i18n::Label("Uma importacao valida substitui a cena atual."));
         if (!dialogError_.empty()) ImGui::TextColored(ImVec4(0.78f, 0.12f, 0.10f, 1), "%s", dialogError_.c_str());

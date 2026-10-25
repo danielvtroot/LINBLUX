@@ -146,7 +146,7 @@ int main() {
 
     // ---- Rendered R6 skin ------------------------------------------------
     SetTraceLogLevel(LOG_WARNING);
-    InitWindow(512, 512, "Loblox R6 image regression");
+    InitWindow(512, 512, "LINBLUX R6 image regression");
     SetTargetFPS(60);
     CHECK(!BuiltinAssetPath("rosto1.png").empty());
 

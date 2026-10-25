@@ -1,8 +1,8 @@
-// Reproducible graphics-quality fixture for the Loblox frontend.
+// Reproducible graphics-quality fixture for the LINBLUX frontend.
 //
 // It renders the two rendering paths with the production code:
 //
-//   Layer A/B - the RmlUi interface: the Loblox logo at four sizes, the
+//   Layer A/B - the RmlUi interface: the LINBLUX logo at four sizes, the
 //   interface icons at the sizes the stylesheet uses, small and medium text,
 //   a PNG with transparency, a gradient and rounded corners.
 //
@@ -54,7 +54,7 @@ std::string FixtureDocument() {
     // Inline styles keep the fixture self contained: it exercises the same
     // renderer and the same texture policy as the Studio document without
     // adding another stylesheet to the shipped assets.
-    return R"(<rml><head><title>Loblox graphics quality</title><style>
+    return R"(<rml><head><title>LINBLUX graphics quality</title><style>
 body { display:block; margin:0; font-family: DejaVu Sans; font-size: 12px; color:#e7e9ed; background-color:#22252b; }
 .row { display:flex; align-items:center; margin: 8px 10px; }
 .label { width: 190px; font-size: 11px; color:#aeb4c1; }
@@ -63,10 +63,10 @@ body { display:block; margin:0; font-family: DejaVu Sans; font-size: 12px; color
 .cell { margin-right: 12px; }
 </style></head><body>
 <div class="row"><span class="label">logo 16 / 24 / 32 / 64</span><div class="panel" id="logo-row">
- <img class="cell" id="logo-16" src="loblox-logo" style="width:16px;height:16px;"/>
- <img class="cell" id="logo-24" src="loblox-logo" style="width:24px;height:24px;"/>
- <img class="cell" id="logo-32" src="loblox-logo" style="width:32px;height:32px;"/>
- <img class="cell" id="logo-64" src="loblox-logo" style="width:64px;height:64px;"/>
+ <img class="cell" id="logo-16" src="linblux-logo" style="width:16px;height:16px;"/>
+ <img class="cell" id="logo-24" src="linblux-logo" style="width:24px;height:24px;"/>
+ <img class="cell" id="logo-32" src="linblux-logo" style="width:32px;height:32px;"/>
+ <img class="cell" id="logo-64" src="linblux-logo" style="width:64px;height:64px;"/>
 </div></div>
 <div class="row"><span class="label">icons 9 / 15 / 16 / 25 / 29</span><div class="panel" id="icon-row">
  <img class="cell" id="icon-9" src="icon-part" style="width:9px;height:9px;"/>
@@ -85,11 +85,11 @@ body { display:block; margin:0; font-family: DejaVu Sans; font-size: 12px; color
  <span class="cell" style="font-size:10px;">Part 0.5</span>
  <span class="cell" style="font-size:11px;">PreciseWall</span>
  <span class="cell" style="font-size:12px;">Explorer</span>
- <b class="cell" style="font-size:15px;">LOBLOX</b>
+ <b class="cell" style="font-size:15px;">LINBLUX</b>
 </div></div>
 <div class="row"><span class="label">gradient</span><div class="panel"><div id="gradient" style="width:180px;height:40px;background-color:#4f9dcc;decorator: linear-gradient(to right, #e56e70, #4f9dcc);"></div></div></div>
 <div class="row"><span class="label">rounded corners</span><div class="panel"><div id="rounded" style="width:140px;height:56px;background-color:#4f9dcc;border-radius:14px;"></div></div></div>
-<div class="row"><span class="label">png with transparency</span><div class="panel" id="logo-panel"><img id="logo-alpha" src="loblox-logo" style="width:48px;height:48px;"/></div></div>
+<div class="row"><span class="label">png with transparency</span><div class="panel" id="logo-panel"><img id="logo-alpha" src="linblux-logo" style="width:48px;height:48px;"/></div></div>
 </body></rml>)";
 }
 
@@ -108,7 +108,7 @@ std::string ReadTextFile(const std::string& path) {
 // measured at another resolution without touching the production stylesheet.
 std::string HudFixtureDocument(const std::string& productionCss, int width, int height) {
     std::ostringstream document;
-    document << "<rml><head><title>Loblox HUD antialiasing</title><style>" << productionCss
+    document << "<rml><head><title>LINBLUX HUD antialiasing</title><style>" << productionCss
              << "\n        #game-layer { left: 0px; top: 0px; width: " << width << "px; height: " << height
              << "px; }" << R"(
         .probe-row { position: absolute; left: 20px; top: 104px; display: flex; align-items: center; }
@@ -125,13 +125,13 @@ std::string HudFixtureDocument(const std::string& productionCss, int width, int 
         .probe-56 img { width: 38px; height: 38px; }
     )" << R"(</style></head><body>
     <div id="game-layer">
-      <div id="game-topbar"><button id="game-menu" class="logo-button" title="Loblox menu"><img id="game-menu-image" src="loblox-logo"/></button><div id="game-capsule"><button id="game-controls" title="Pause"><img id="game-controls-image" src="icon-player-menu"/></button><button><img src="icon-player-settings"/></button></div></div>
+      <div id="game-topbar"><button id="game-menu" class="logo-button" title="LINBLUX menu"><img id="game-menu-image" src="linblux-logo"/></button><div id="game-capsule"><button id="game-controls" title="Pause"><img id="game-controls-image" src="icon-player-menu"/></button><button><img src="icon-player-settings"/></button></div></div>
       <div id="health"><div class="health-track"><div id="health-trail"/><div id="health-fill"/></div></div>
       <div class="probe-row">
-        <div id="probe-42-logo" class="probe probe-42"><img src="loblox-logo"/></div>
+        <div id="probe-42-logo" class="probe probe-42"><img src="linblux-logo"/></div>
         <div id="probe-42-menu" class="probe probe-42"><img src="icon-menu"/></div>
-        <div id="probe-44-logo" class="probe probe-44"><img src="loblox-logo"/></div>
-        <div id="probe-48-logo" class="probe probe-48"><img src="loblox-logo"/></div>
+        <div id="probe-44-logo" class="probe probe-44"><img src="linblux-logo"/></div>
+        <div id="probe-48-logo" class="probe probe-48"><img src="linblux-logo"/></div>
         <div id="probe-56-menu" class="probe probe-56"><img src="icon-menu"/></div>
       </div>
     </div>
@@ -218,7 +218,7 @@ double EdgeEnergy(const Image& capture, const Bounds& bounds, int threshold) {
     return pairs ? static_cast<double>(jumps) / pairs : 1e9;
 }
 
-// Highest magenta excess (min(r,b) - g) inside a region. The Loblox logo
+// Highest magenta excess (min(r,b) - g) inside a region. The LINBLUX logo
 // stores magenta under alpha = 0; a straight alpha mip chain drags that
 // colour into the visible artwork.
 int MagentaExcess(const Image& capture, const Bounds& bounds) {
@@ -254,7 +254,7 @@ struct CoverageProbe {
 // lands on one of those two endpoints; MSAA produces intermediate levels.
 CoverageProbe MeasureArcCoverage(const Image& capture, float centerX, float centerY, float radius,
                                  float innerBand, float outerBand, Color background, bool brightEdge,
-                                 int hemisphere = 0, const Color* fullyCovered = nullptr) {
+                                 int hemisphere = 0, const Color* fullyCovered = nullptr,bool topOnly=false) {
     CoverageProbe probe;
     probe.background_luma = PixelLuma(background);
 
@@ -267,7 +267,7 @@ CoverageProbe MeasureArcCoverage(const Image& capture, float centerX, float cent
         for (int x = std::max(0, static_cast<int>(std::floor(centerX - radius - 1.0f)));
              x <= std::min(capture.width - 1, static_cast<int>(std::ceil(centerX + radius + 1.0f))); ++x) {
             const float dx = (x + 0.5f) - centerX, dy = (y + 0.5f) - centerY;
-            if ((hemisphere < 0 && dx > 0.0f) || (hemisphere > 0 && dx < 0.0f)) continue;
+            if ((hemisphere < 0 && dx > 0.0f) || (hemisphere > 0 && dx < 0.0f)||(topOnly&&dy>0)) continue;
             const float distance = std::sqrt(dx * dx + dy * dy);
             if (distance < radius - 1.0f || distance > radius - 0.1f) continue;
             const int luma = PixelLuma(GetImageColor(capture, x, y));
@@ -289,7 +289,7 @@ CoverageProbe MeasureArcCoverage(const Image& capture, float centerX, float cent
         for (int x = std::max(0, static_cast<int>(std::floor(centerX - radius - 1.0f)));
              x <= std::min(capture.width - 1, static_cast<int>(std::ceil(centerX + radius + 1.0f))); ++x) {
             const float dx = (x + 0.5f) - centerX, dy = (y + 0.5f) - centerY;
-            if ((hemisphere < 0 && dx > 0.0f) || (hemisphere > 0 && dx < 0.0f)) continue;
+            if ((hemisphere < 0 && dx > 0.0f) || (hemisphere > 0 && dx < 0.0f)||(topOnly&&dy>0)) continue;
             const float distance = std::sqrt(dx * dx + dy * dy);
             if (distance < radius - 1.0f || distance > radius - 0.1f) continue;
             const Color color = GetImageColor(capture, x, y);
@@ -321,7 +321,7 @@ CoverageProbe MeasureArcCoverage(const Image& capture, float centerX, float cent
         for (int x = std::max(0, static_cast<int>(std::floor(centerX - radius - 2.0f)));
              x <= std::min(capture.width - 1, static_cast<int>(std::ceil(centerX + radius + 2.0f))); ++x) {
             const float dx = (x + 0.5f) - centerX, dy = (y + 0.5f) - centerY;
-            if ((hemisphere < 0 && dx > 0.0f) || (hemisphere > 0 && dx < 0.0f)) continue;
+            if ((hemisphere < 0 && dx > 0.0f) || (hemisphere > 0 && dx < 0.0f)||(topOnly&&dy>0)) continue;
             const float distance = std::sqrt(dx * dx + dy * dy);
             if (distance < radius - innerBand || distance > radius + outerBand) continue;
             const Color color = GetImageColor(capture, x, y);
@@ -349,12 +349,12 @@ public:
         if (name.rfind("icon-", 0) == 0) {
             image = ui::IconImage(name.substr(5), 48);
         } else {
-            const std::string path = name == "loblox-logo" ? game::BuiltinAssetPath("loblox.png") : source;
+            const std::string path = name == "linblux-logo" ? game::BuiltinAssetPath("logo.png") : source;
             if (path.empty() || !ui::SafeImageFile(path)) return 0;
             image = LoadImage(path.c_str());
         }
         if (!image.data) return 0;
-        if (name == "loblox-logo" && image.width > 256) ImageResize(&image, 256, 256 * image.height / image.width);
+        if (name == "linblux-logo" && image.width > 256) ImageResize(&image, 256, 256 * image.height / image.width);
         ImageFormat(&image, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
         ImageAlphaPremultiply(&image);
         dimensions = {image.width, image.height};
@@ -399,7 +399,7 @@ int main(int argc, char** argv) {
 
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(1366, 768, "Loblox graphics quality fixture");
+    InitWindow(1366, 768, "LINBLUX graphics quality fixture");
     SetWindowSize(1366, 768);
     SetWindowPosition(0, 0);
     SetExitKey(KEY_NULL);
@@ -494,8 +494,11 @@ int main(int argc, char** argv) {
                         }
                     const int width = maxX - minX + 1, height = maxY - minY + 1;
                     Check(width > 0 && height > 0, "logo silhouette is visible");
-                    Check(std::abs(width - height) <= 3,
-                          "logo silhouette keeps its aspect ratio (" + std::to_string(width) + "x" + std::to_string(height) + ")");
+                    Image original=LoadImage(game::BuiltinAssetPath("logo.png").c_str());
+                    const auto artwork=GetImageAlphaBorder(original,.05f);
+                    Check(artwork.height>0&&std::fabs(float(width)/height-artwork.width/artwork.height)<.08f,
+                          "official logo artwork keeps its source aspect ratio (" + std::to_string(width) + "x" + std::to_string(height) + ")");
+                    UnloadImage(original);
                 }
                 const Color panel{43, 47, 54, 255};
                 for (const auto& icon : kIconCases) {
@@ -507,7 +510,7 @@ int main(int argc, char** argv) {
                     Check(error < 18.0, std::string(icon.id) + " matches the filtered reference (mean error " + std::to_string(error) + ")");
                     UnloadImage(reference);
                 }
-                // The Loblox logo keeps magenta under alpha = 0. A straight
+                // The LINBLUX logo keeps magenta under alpha = 0. A straight
                 // alpha mip chain drags that colour into the artwork.
                 const Bounds alpha = ElementBounds(document, "logo-alpha");
                 Check(alpha.w > 0, "transparent logo is laid out");
@@ -552,7 +555,7 @@ int main(int argc, char** argv) {
         Check(!stylesheetPath.empty(), "the production gameplay stylesheet is reachable");
         const std::string playerStylesheetPath = game::BuiltinAssetPath("assets/ui/styles/player.rcss");
         Check(!playerStylesheetPath.empty(), "the Player stylesheet is reachable");
-        const std::string productionCss = ReadTextFile(stylesheetPath)+"\n"+ReadTextFile(playerStylesheetPath);
+        const std::string productionCss = ReadTextFile(stylesheetPath)+"\n"+ReadTextFile(playerStylesheetPath)+"\n"+ReadTextFile(game::BuiltinAssetPath("assets/ui/styles/theme.rcss"));
         Check(!productionCss.empty(), "the production gameplay stylesheet is readable");
         // Replay the HUD at the requested viewport. raylib can only present a
         // framebuffer the window actually has, so resize it once here, after
@@ -658,11 +661,11 @@ int main(int argc, char** argv) {
                         const Color logoInk=GetImageColor(capture,menu.x+3,menu.y+menu.h/2);
                         const Color capsuleInk=GetImageColor(capture,capsule.x+3,capsule.y+capsule.h/2);
                         const auto logoCoverage = MeasureArcCoverage(
-                            capture, menu.x + menu.w * 0.5f, menu.y + menu.h * 0.5f, menu.w * 0.5f-1.f,
-                            0.85f, 1.45f, background.color, brightEdge,0,&logoInk);
+                            capture, menu.x+8.f,menu.y+8.f,7.f,
+                            .85f,1.45f,background.color,brightEdge,-1,&logoInk,true);
                         const auto menuCoverage = MeasureArcCoverage(
-                            capture, capsule.x + capsule.h * 0.5f, capsule.y + capsule.h * 0.5f,
-                            capsule.h * 0.5f, 0.85f, 1.45f, background.color, brightEdge,-1,&capsuleInk);
+                            capture,capsule.x+8.f,capsule.y+8.f,8.f,
+                            .85f,1.45f,background.color,brightEdge,-1,&capsuleInk,true);
                         const float healthRadius = health.h*.5f;
                         const float corner=healthRadius;
                         const Color healthInk=GetImageColor(capture,health.x+1,health.y+health.h/2);
@@ -682,10 +685,10 @@ int main(int argc, char** argv) {
                             healthLeft.levels, healthRight.levels);
 
                         const std::string page = std::string(" (") + background.name + " background)";
-                        Check(logoCoverage.partial >= 20 && logoCoverage.levels >= 2,
-                              "game logo circle has antialiased edge coverage" + page);
-                        Check(menuCoverage.partial >= 20 && menuCoverage.levels >= 2,
-                              "shared menu capsule has antialiased edge coverage" + page);
+                        Check(logoCoverage.partial >= 3 && logoCoverage.levels >= 2,
+                              "LINBLUX logo rounded corner has antialiased edge coverage" + page);
+                        Check(menuCoverage.partial >= 3 && menuCoverage.levels >= 2,
+                              "LINBLUX controls rounded corner has antialiased edge coverage" + page);
                         Check(healthLeft.partial >= 8 && healthLeft.levels >= 2,
                               "health bar left cap has antialiased edge coverage" + page);
                         Check(healthRight.partial >= 8 && healthRight.levels >= 2,
@@ -735,9 +738,9 @@ int main(int argc, char** argv) {
     // Layer C: the 3D scene.
     // ---------------------------------------------------------------------
     {
-        const std::string logoPath = game::BuiltinAssetPath("loblox.png");
-        const std::string snakePath = game::BuiltinAssetPath("assets/bd49464336ae6306.png");
-        Check(!logoPath.empty(), "the Loblox logo asset is reachable");
+        const std::string logoPath = game::BuiltinAssetPath("logo.png");
+        const std::string snakePath = game::BuiltinAssetPath("tests/fixtures/surface-test.png");
+        Check(!logoPath.empty(), "the LINBLUX logo asset is reachable");
         Scene scene;
         scene.lighting()->setSkyEnabled(false);
         scene.lighting()->setBrightness(1.0f);

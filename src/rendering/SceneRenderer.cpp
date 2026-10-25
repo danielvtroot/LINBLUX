@@ -16,7 +16,6 @@
 #include "objects/SpawnLocation.h"
 #include "scene/Scene.h"
 #include "game/ImageAssets.h"
-#include "rendering/EditorCamera.h"
 
 namespace loblox {
 
@@ -946,10 +945,6 @@ void SceneRenderer::drawSelection(const Part& part) const {
     rlDrawRenderBatchActive();rlEnableDepthMask();rlEnableDepthTest();
 }
 
-void SceneRenderer::drawScene(const Scene& scene, const EditorCamera& camera, int width,
-                              int height, InstanceId selectedId, const RigRenderState* rig) {
-    drawScene(scene, camera.camera(), width, height, selectedId, rig);
-}
 
 void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float intensity, float brightness) {
     if (!state.rig) return;
@@ -1096,8 +1091,8 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
 }
 
 void SceneRenderer::drawCollisionShapes(const Scene& scene,const PhysicsWorld& physics,
-                                        const EditorCamera& camera,InstanceId selection) const {
-    BeginMode3D(camera.camera());rlDrawRenderBatchActive();rlDisableDepthTest();rlDisableDepthMask();
+                                        Camera3D camera,InstanceId selection) const {
+    BeginMode3D(camera);rlDrawRenderBatchActive();rlDisableDepthTest();rlDisableDepthMask();
     for(auto* part:scene.parts()) {
         CollisionGeometry geometry;if(!physics.collisionGeometry(part->id(),geometry))continue;
         float error=0;const auto visual=part->bounds().corners(),actual=geometry.box.corners();

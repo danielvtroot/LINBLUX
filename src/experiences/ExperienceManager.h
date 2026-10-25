@@ -53,6 +53,7 @@ public:
     Experience duplicate(const Experience& source, const std::string& name);
     Experience inspect(const std::filesystem::path& root) const;
     void open(const Experience& experience, Scene& destination);
+    void loadReadOnly(const Experience& experience,Scene& destination) const;
     void save(const Scene& scene);
     void updateMetadata(Manifest manifest);
     void updateMetadata(const Experience& experience, Manifest manifest);
@@ -65,7 +66,11 @@ public:
     void restoreFactoryDefaults();
     void saveEngineWorld(const Scene& scene);
     void saveEngineCharacter(const Scene& scene,const std::string& rigId);
+    void saveEngineDefaults(const Scene& scene,const std::string& rigId);
+    std::string importCharacter(const std::filesystem::path& source,Scene& destination);
     Experience editEngineDefault(bool character);
+    bool isEngineDefault(const Experience& experience) const;
+    const std::filesystem::path& lastDefaultsBackup() const {return lastDefaultsBackup_;}
     const std::filesystem::path& engineDefaultsRoot() const {return defaults_;}
 
     std::string importImage(const std::filesystem::path& file);
@@ -79,11 +84,12 @@ public:
     // never into an installed user's defaults or personal project.
     static void writeFactoryResources(const std::filesystem::path& destination);
 private:
-    std::filesystem::path data_, factory_, library_, defaults_;
+    std::filesystem::path data_, factory_, library_, defaults_, lastDefaultsBackup_;
     std::optional<Experience> active_;
     std::vector<std::string> warnings_;
     std::filesystem::path loadEngineResource(const std::string& key,Scene& scene) const;
     void saveEngineResource(const std::string& key,const Scene& scene);
+    void backupDefaultsIndex(const std::string& index);
     void registerRoot(const std::filesystem::path& root);
     Experience snapshot(const Scene& scene, const std::filesystem::path& sourceRoot,
                         const std::filesystem::path& parent, Manifest manifest, bool registerExperience,

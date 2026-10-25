@@ -3,7 +3,7 @@
 #include "nlohmann/json.hpp"
 #include <fstream>
 #include <map>
-#include <regex>
+#include <vector>
 namespace loblox::i18n {
 namespace {
 const std::map<std::string,std::string>& catalog() {
@@ -18,12 +18,22 @@ const std::map<std::string,std::string>& catalog() {
 }
 std::string Text(const std::string& source) {
     auto found=catalog().find(source);if(found!=catalog().end())return found->second;
+    static const auto prefixes=[] {std::vector<std::pair<std::string,std::string>> values;for(const auto& entry:catalog())if(entry.first.size()>2&&entry.first.compare(entry.first.size()-2,2,": ")==0)values.push_back(entry);return values;}();
+    for(const auto& entry:prefixes)if(source.rfind(entry.first,0)==0)return entry.second+source.substr(entry.first.size());
     const auto a=source.find_first_not_of(" \n\t\r"),b=source.find_last_not_of(" \n\t\r");
     if(a==std::string::npos)return source;
     found=catalog().find(source.substr(a,b-a+1));
     return found==catalog().end()?source:source.substr(0,a)+found->second+source.substr(b+1);
 }
-const char* Label(const char* source) {auto found=catalog().find(source);return found==catalog().end()?source:found->second.c_str();}
+const char* Label(const char* source) {
+    auto found=catalog().find(source);if(found!=catalog().end())return found->second.c_str();
+    const std::string value=source;const auto hidden=value.find("##");
+    if(hidden!=std::string::npos) {
+        found=catalog().find(value.substr(0,hidden));
+        if(found!=catalog().end()){thread_local std::map<std::string,std::string> labels;return labels.emplace(value,found->second+value.substr(hidden)).first->second.c_str();}
+    }
+    return source;
+}
 std::string Markup(const std::string& source) {
     std::string out;size_t pos=0;
     // Only display text and user-facing attributes are translated. IDs, data

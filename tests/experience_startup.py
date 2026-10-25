@@ -21,7 +21,7 @@ home.mkdir()
 environment = dict(os.environ, HOME=str(home), XDG_DATA_HOME=str(home / "data"),
                    XDG_CONFIG_HOME=str(home / "config"), XDG_STATE_HOME=str(home / "state"),
                    LIBGL_ALWAYS_SOFTWARE="1", LP_NUM_THREADS="2")
-trace = home / "state/loblox/loblox.jsonl"
+trace = home / "state/linblux/linblux.jsonl"
 
 def xdo(*arguments):
     return subprocess.run(["xdotool", *map(str, arguments)], capture_output=True,
@@ -45,7 +45,7 @@ with (root / "application.log").open("w") as output:
     try:
         def visible_window():
             result = subprocess.run(["xdotool", "search", "--onlyvisible", "--pid",
-                                     str(process.pid), "--name", "^Loblox Studio$"],
+                                     str(process.pid), "--name", "^LINBLUX Studio$"],
                                     capture_output=True, text=True, timeout=2)
             return result.stdout.strip().splitlines()[-1] if result.returncode == 0 else None
         window = wait(visible_window)
@@ -55,7 +55,7 @@ with (root / "application.log").open("w") as output:
         # Initial font/viewport uploads occur after startup_ready. Input must
         # target a painted, mapped window, in its own coordinate system.
         time.sleep(2)
-        manifests = list((home / "data/loblox/experiences").glob("*/experience.json"))
+        manifests = list((home / "data/linblux/experiences").glob("*/experience.json"))
         assert len(manifests) == 1
         manifest = json.loads(manifests[0].read_text())
         place = manifests[0].parent / manifest["mainPlace"]

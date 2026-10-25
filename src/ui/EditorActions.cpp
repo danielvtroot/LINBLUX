@@ -106,6 +106,7 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                 (field=="Idle"?settings.idleAnimation:field=="Walk"?settings.walkAnimation:field=="Jump"?settings.jumpAnimation:settings.fallAnimation)=c.value;
             }else if(!known)throw std::runtime_error("Unknown Game Config field");
             std::string error;if(!settings.validate(error))throw std::runtime_error(error);e.scene_.gameAssets().player=settings;
+            if(field=="Gravity")e.physics_.setGravity({0,-settings.gravity,0});
         }
         else if(c.action.rfind("property:",0)==0) {
             auto* node=e.scene_.find(c.instance);if(!node)return false;const auto name=c.action.substr(9);

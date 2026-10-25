@@ -1,3 +1,4 @@
+#include "ui/Localization.h"
 // Actual RML document, GL3 renderer, engine actions and X11 input, not mock UI.
 #include "editor/EditorUI.h"
 #include "editor/StudioTheme.h"
@@ -64,7 +65,7 @@ int main() {
     setenv("XDG_CONFIG_HOME",directory,1);diag::configure(std::string(directory)+"/events.jsonl");
     std::filesystem::current_path(directory);
     SetTraceLogLevel(LOG_WARNING);SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(1366,768,"Loblox RML integration");SetWindowPosition(0,0);SetExitKey(KEY_NULL);SetTargetFPS(60);
+    InitWindow(1366,768,"LINBLUX RML integration");SetWindowPosition(0,0);SetExitKey(KEY_NULL);SetTargetFPS(60);
     rlImGuiSetup(true);ImGui::GetIO().ConfigFlags|=ImGuiConfigFlags_DockingEnable;ImGui::GetIO().IniFilename=nullptr;studio::Apply();
     {
         Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();scene.gameAssets().player.enableShiftLock=true;
@@ -91,9 +92,9 @@ int main() {
             clickAt({b.x+b.width/2,b.y+b.height/2});
         };
         auto capture=[&](const std::string& name){frames();TakeScreenshot((std::string(directory)+"/"+name+".png").c_str());};
-        frames(6);event("search --name '^Loblox RML integration$' windowfocus --sync");
+        frames(6);event("search --name '^LINBLUX RML integration$' windowfocus --sync");
         std::string windowId;
-        {FILE* pipe=popen("xdotool search --name '^Loblox RML integration$' | head -1","r");char buffer[64]{};if(pipe&&std::fgets(buffer,sizeof(buffer),pipe))windowId=buffer;if(pipe)pclose(pipe);while(!windowId.empty()&&(windowId.back()=='\n'||windowId.back()=='\r'))windowId.pop_back();}
+        {FILE* pipe=popen("xdotool search --name '^LINBLUX RML integration$' | head -1","r");char buffer[64]{};if(pipe&&std::fgets(buffer,sizeof(buffer),pipe))windowId=buffer;if(pipe)pclose(pipe);while(!windowId.empty()&&(windowId.back()=='\n'||windowId.back()=='\r'))windowId.pop_back();}
         // Resize like a user/window manager would instead of calling raylib's
         // SetWindowSize between GL frames; llvmpipe can otherwise expose a
         // half-resized back buffer to the immediate screenshot.
@@ -325,7 +326,7 @@ int main() {
         CHECK(ui.frontend()->viewport().x>0);CHECK(scene.selection()==part);
         // RML owns the pointer in the editor: hovering a panel must not leave
         // stale ImGui viewport focus driving WASD into the 3D camera.
-        auto* viewportWindow=ImGui::FindWindowByName("Viewport");
+        auto* viewportWindow=ImGui::FindWindowByName(loblox::i18n::Label("Viewport"));
         CHECK(viewportWindow!=nullptr);
         if(viewportWindow)ImGui::FocusWindow(viewportWindow);
         frames(3);
@@ -336,6 +337,8 @@ int main() {
         event("mousemove "+std::to_string(int(view.x+view.width*.5f))+" "+std::to_string(int(view.y+view.height*.5f)));
         const auto beforeViewportW=camera.target();
         event("keydown w");frames(5);event("keyup w");frames(2);
+        CHECK(NearlyEqual(camera.target(),beforeViewportW));
+        event("mousedown 3");event("keydown w");frames(5);event("keyup w");event("mouseup 3");frames(2);
         CHECK(Vector3Distance(camera.target(),beforeViewportW)>0.01f);
         const auto title=ui.frontend()->elementBounds("property-title");
         CHECK(title.width>0);
@@ -437,12 +440,12 @@ int main() {
             key("Escape");event("mouseup 1");CHECK(!EditorUITestAccess::dragging(ui));CHECK(projectio::toJson(scene)==before);
         }
         click("advanced-animation");capture("animation-editor");
-        if(auto* window=ImGui::FindWindowByName("Animation Editor")) {
+        if(auto* window=ImGui::FindWindowByName(loblox::i18n::Label("Animation Editor"))) {
             const auto start=window->DC.CursorStartPos;float x=start.x;
             for(const char* label:{"New","Duplicate","Save Animation + Project","Revert","Use as Walk"})x+=ImGui::CalcTextSize(label).x+2*ImGui::GetStyle().FramePadding.x+ImGui::GetStyle().ItemSpacing.x;
             const float buttonY=start.y+ImGui::GetFrameHeightWithSpacing()+ImGui::GetFrameHeight()/2;
             clickAt({x+ImGui::CalcTextSize("Delete").x/2+ImGui::GetStyle().FramePadding.x,buttonY});
-            auto* popup=ImGui::FindWindowByName("Delete assigned animation?");CHECK(popup&&popup->Active);
+            auto* popup=ImGui::FindWindowByName(loblox::i18n::Label("Delete assigned animation?"));CHECK(popup&&popup->Active);
             capture("animation-delete-confirmation");
             if(popup&&popup->Active) {
                 const auto cursor=popup->DC.CursorStartPos;
@@ -514,7 +517,7 @@ int main() {
             auto checkReticle=[&](const char* phase){
                 auto viewport=ui.frontend()->viewport();auto reticle=ui.frontend()->elementBounds("mouse-lock-cursor");
                 CHECK(reticle.width==28&&reticle.height==28);
-                CHECK(ui.frontend()->elementText("mouse-lock-cursor").find("loblox-lock")!=std::string::npos);
+                CHECK(ui.frontend()->elementText("mouse-lock-cursor").find("icon-focus")!=std::string::npos);
                 CHECK(std::fabs((reticle.x+reticle.width*.5f)-(viewport.x+viewport.width*.5f))<1.5f);
                 CHECK(std::fabs((reticle.y+reticle.height*.5f)-(viewport.y+viewport.height*.5f))<1.5f);
                 if(std::string(phase)=="jump")capture("reticle-jump-"+std::to_string(int(size.x)));

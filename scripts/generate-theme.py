@@ -27,8 +27,18 @@ css+=f".pause-panel {{ background-color: {p['panel']}; border-color: {p['border'
 css+=f".pause-tabs button.active {{ border-color: {p['accent']}; }}\n"
 css+='.pause-tabs button { border-radius: 6px; }\n'
 css+='#game-topbar button { border-radius: 7px; }\n'
-outputs={root/'src/editor/StudioPalette.generated.h':cpp,root/'assets/ui/styles/theme.rcss':css}
+css+=f".group-tools button.active {{ background-color: {p['selected']}; border-color: {p['accent']}; }}\n"
+css+=f".group-tools button:hover, #experience-file-menu button:hover {{ background-color: {p['hover']}; border-color: {p['accent']}; }}\n"
+css+='.group-tools button, .compact .group-tools button { width: auto; min-width: 60px; flex: 0 0 auto; padding: 3px 8px; }\n'
+
+ray='#pragma once\n#include "raylib.h"\nnamespace loblox::ui::theme {\n'
+for name,value in p.items():
+ h=value.lstrip('#');values=[int(h[i:i+2],16) for i in range(0,len(h),2)]
+ if len(values)==3:values.append(255)
+ ray+='inline constexpr Color '+name+'{'+','.join(map(str,values))+'};\n'
+ray+='}\n'
+outputs={root/'src/editor/StudioPalette.generated.h':cpp,root/'assets/ui/styles/theme.rcss':css,root/'src/ui/ThemeColors.generated.h':ray}
 for path,text in outputs.items():
  if '--check' in sys.argv:
   if not path.exists() or path.read_text()!=text:raise SystemExit(f'Tema desatualizado: {path}')
- else:path.write_text(text)
+ elif not path.exists() or path.read_text()!=text:path.write_text(text)
