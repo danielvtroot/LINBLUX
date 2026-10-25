@@ -109,9 +109,9 @@ void main() {
 // Marca do projeto: carregada uma unica vez, a partir da raiz (caminhos
 // relativos; sem caminho absoluto da maquina). Falha permanece !ok e a UI
 // usa o fallback vetorial existente.
-const LobloxLogo& LoadLobloxLogo() {
-    static LobloxLogo logo;
-    static const std::string path=game::BuiltinAssetPath("loblox.png");
+const LinbluxLogo& LoadLinbluxLogo() {
+    static LinbluxLogo logo;
+    static const std::string path=game::BuiltinAssetPath("logo.png");
     const Texture2D texture=game::AssetTexture(path);
     logo.id=texture.id;logo.width=static_cast<float>(texture.width);
     logo.height=static_cast<float>(texture.height);logo.ok=texture.id!=0;
@@ -1040,7 +1040,7 @@ void EditorUI::unloadViewport() {
 
 void EditorUI::buildDockLayout() {
     const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
-    const ImGuiID dockId = ImGui::GetID("LobloxDockspace");
+    const ImGuiID dockId = ImGui::GetID("LinbluxDockspace");
     if (ImGui::DockBuilderGetNode(dockId) != nullptr) {
         layoutBuilt_ = true;
         return;
@@ -1167,7 +1167,7 @@ void EditorUI::draw() {
     if (!layoutBuilt_) {
         buildDockLayout();
     }
-    ImGui::DockSpaceOverViewport(ImGui::GetID("LobloxDockspace"), ImGui::GetMainViewport());
+    ImGui::DockSpaceOverViewport(ImGui::GetID("LinbluxDockspace"), ImGui::GetMainViewport());
 
     ImGui::BeginDisabled(runtime_.active());
     drawToolbar();
@@ -1202,11 +1202,11 @@ bool EditorUI::experienceOverlay() const {return experienceUi_&&experienceUi_->o
 
 void EditorUI::drawMainMenuBar() {
     if (!ImGui::BeginMainMenuBar()) return;
-    const auto& headerLogo=LoadLobloxLogo();
+    const auto& headerLogo=LoadLinbluxLogo();
     if(headerLogo.ok)ImGui::Image(static_cast<ImTextureID>(headerLogo.id),{18.f*headerLogo.width/headerLogo.height,18});
     else ImGui::TextUnformatted("L");
     ImGui::SameLine(0.0f, 4.0f);
-    ImGui::TextUnformatted("Loblox");
+    ImGui::TextUnformatted("LINBLUX");
     ImGui::SameLine(0.0f, 18.0f);
     ImGui::BeginDisabled(runtime_.active());
     if (ImGui::BeginMenu("File")) {
@@ -1272,7 +1272,7 @@ void EditorUI::drawMainMenuBar() {
         ImGui::MenuItem("Rig Editor", nullptr, &showRigEditor_);
         ImGui::MenuItem("Animation Editor", nullptr, &showAnimationEditor_);
         if (ImGui::MenuItem("Reset Layout")) {
-            ImGui::DockBuilderRemoveNode(ImGui::GetID("LobloxDockspace"));
+            ImGui::DockBuilderRemoveNode(ImGui::GetID("LinbluxDockspace"));
             layoutBuilt_ = false; showExplorer_ = showProperties_ = showToolbox_ = true;
         }
         bool light=studio::Light();
@@ -1305,7 +1305,7 @@ void EditorUI::drawToolbar() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 7.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(7.0f, 6.0f));
     ImGui::Begin("##Toolbar", nullptr, flags);
-    const LobloxLogo& logo = LoadLobloxLogo();
+    const LinbluxLogo& logo = LoadLinbluxLogo();
     if (logo.ok) {
         // Proporcao preservada (1600x1600 => quadrado); nao estica nem deforma.
         const float brandHeight = 24.0f;
@@ -1320,7 +1320,7 @@ void EditorUI::drawToolbar() {
     }
     ImGui::SameLine(0.0f, 3.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(120, 185, 255, 255));
-    ImGui::TextUnformatted("LOBLOX");
+    ImGui::TextUnformatted("LINBLUX");
     ImGui::PopStyleColor();
     ImGui::SameLine(0.0f, 14.0f);
     if(ImGui::Checkbox("Snap",&snapEnabled_)) {endGizmoSession(true,"snap_toggle");cancelRigGizmo();}
@@ -2016,12 +2016,12 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
     }
     if (ImGui::BeginDragDropSource()) {
         const auto id = instance->id();
-        ImGui::SetDragDropPayload("LOBLOX_INSTANCE",&id,sizeof(id));
+        ImGui::SetDragDropPayload("LINBLUX_INSTANCE",&id,sizeof(id));
         ImGui::Text("%s (%s)",instance->name().c_str(),instance->className());
         ImGui::EndDragDropSource();
     }
     if (ImGui::BeginDragDropTarget()) {
-        if (const auto* payload = ImGui::AcceptDragDropPayload("LOBLOX_INSTANCE")) {
+        if (const auto* payload = ImGui::AcceptDragDropPayload("LINBLUX_INSTANCE")) {
             endGizmoSession(true,"explorer_reparent");
             pendingReparent_ = {*static_cast<const InstanceId*>(payload->Data),instance->id()};
         }

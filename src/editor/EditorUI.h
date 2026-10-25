@@ -30,14 +30,14 @@ class StudioFrontend;
 class EditorActions;
 class ExperienceUI;
 
-// Marca Loblox: textura carregada lazy na raiz do projeto (nunca caminho
+// Marca LINBLUX: textura carregada lazy na raiz do projeto (nunca caminho
 // absoluto da máquina). ok=false = usar o fallback vetorial da toolbar.
-struct LobloxLogo {
+struct LinbluxLogo {
     unsigned long long id = 0;
     float width = 0, height = 0;
     bool ok = false;
 };
-const LobloxLogo& LoadLobloxLogo();
+const LinbluxLogo& LoadLinbluxLogo();
 
 enum class GameCursorVisual { System, Hidden, MouseLock };
 struct GameplayCursorState {

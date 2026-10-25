@@ -753,9 +753,9 @@ bool StudioFrontend::initialize(std::string& error) {
     }
     if(!font){error="A TrueType sans-serif font is required";return false;}
     p.context=Rml::CreateContext("loblox",{GetScreenWidth(),GetScreenHeight()});if(!p.context){error="RmlUi context creation failed";return false;}
-    auto root=std::filesystem::path(GetApplicationDirectory())/"share/loblox/ui";
-    if(!std::filesystem::exists(root))root=std::filesystem::path(GetApplicationDirectory()).parent_path()/"share/loblox/ui";
-    if(!std::filesystem::exists(root))root=LOBLOX_UI_DIR;
+    auto root=std::filesystem::path(GetApplicationDirectory())/"share/linblux/ui";
+    if(!std::filesystem::exists(root))root=std::filesystem::path(GetApplicationDirectory()).parent_path()/"share/linblux/ui";
+    if(!std::filesystem::exists(root))root=LINBLUX_UI_DIR;
     p.document=p.context->LoadDocument((root/"documents/studio.rml").string());if(!p.document){error="Failed to load studio.rml";return false;}
     std::ifstream ribbonFile(root/"documents/ribbon.rml");
     if(!ribbonFile){error="Failed to load ribbon.rml";return false;}
@@ -835,9 +835,9 @@ std::string StudioFrontend::elementText(const std::string& id)const{auto* e=impl
 bool StudioFrontend::textFocused()const{return impl_->editing();}
 void StudioFrontend::enableExperiences(experiences::ExperienceManager& manager,bool home) {
     auto& p=*impl_;
-    auto root=std::filesystem::path(GetApplicationDirectory())/"share/loblox/ui";
-    if(!std::filesystem::exists(root))root=std::filesystem::path(GetApplicationDirectory()).parent_path()/"share/loblox/ui";
-    if(!std::filesystem::exists(root))root=LOBLOX_UI_DIR;
+    auto root=std::filesystem::path(GetApplicationDirectory())/"share/linblux/ui";
+    if(!std::filesystem::exists(root))root=std::filesystem::path(GetApplicationDirectory()).parent_path()/"share/linblux/ui";
+    if(!std::filesystem::exists(root))root=LINBLUX_UI_DIR;
     std::ifstream file(root/"documents/home.rml");if(!file)throw std::runtime_error("Missing home.rml");
     const std::string html((std::istreambuf_iterator<char>(file)),{});p.el("experience-host")->SetInnerRML(html);
     p.experiences=std::make_unique<ExperienceUI>(p.ui,manager,*p.context,*p.document);p.experiences->initialize(home);

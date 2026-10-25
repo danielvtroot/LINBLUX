@@ -103,7 +103,7 @@ float MaterialGloss(PartMaterial material) {
 }
 
 // Hemispheric ambient + warm directional sun + a small per-face sheen.
-// Flat faces stay flat like classic Roblox parts, but the light now has
+// Flat faces stay flat like solid scene geometry, but the light now has
 // colour and the shadow side is darker than the sky-facing side.
 Color LitSurface(Color color, Vector3 normal, Vector3 point, Vector3 lightDirection,
                  float sunIntensity, float brightness, float gloss, bool unlit) {

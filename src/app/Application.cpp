@@ -31,7 +31,7 @@ bool Application::initialize() {
         flags |= FLAG_VSYNC_HINT;
     }
     SetConfigFlags(flags);
-    InitWindow(config_.windowWidth, config_.windowHeight, "Loblox Studio");
+    InitWindow(config_.windowWidth, config_.windowHeight, "LINBLUX Studio");
 
     if (!IsWindowReady()) {
         diag::Event event;
@@ -47,7 +47,7 @@ bool Application::initialize() {
         return false;
     }
     windowReady_ = true;
-    const auto iconPath=game::BuiltinAssetPath("loblox.png");
+    const auto iconPath=game::BuiltinAssetPath("logo.png");
     if(!iconPath.empty()) {
         Image icon=LoadImage(iconPath.c_str());
         if(icon.data){SetWindowIcon(icon);UnloadImage(icon);}
@@ -73,7 +73,7 @@ bool Application::initialize() {
         }
     }
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    io.IniFilename = "loblox_imgui.ini";
+    io.IniFilename = "linblux_imgui.ini";
     io.ConfigWindowsMoveFromTitleBarOnly = true;
 
     studio::Apply();
@@ -154,7 +154,7 @@ bool Application::initialize() {
                            "': " + projectLoadError + ". Cena padrao preservada.",
                        true);
     } else {
-        ui_->setStatus("Loblox Open-Source pronto. Toolbox a esquerda para construir.");
+        ui_->setStatus("LINBLUX Engine pronto. Toolbox a esquerda para construir.");
     }
     diag::Event ready;
     ready.subsystem = "app";

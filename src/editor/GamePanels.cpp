@@ -298,7 +298,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     auto* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled({menuButton.x,menuButton.y},{menuButton.x+menuButton.width,menuButton.y+menuButton.height},
         menuHovered?IM_COL32(54,68,88,245):IM_COL32(20,25,33,235),8);
-    const LobloxLogo& brand = LoadLobloxLogo();
+    const LinbluxLogo& brand = LoadLinbluxLogo();
     if (brand.ok) {
         dl->AddImage(static_cast<ImTextureID>(brand.id),
                      {menuButton.x+5,menuButton.y+4},{menuButton.x+5+30.f*brand.width/brand.height,menuButton.y+34});
@@ -401,13 +401,13 @@ void EditorUI::drawPauseMenu() {
         ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
     ImGui::Begin("Play paused",nullptr,flags);
-    const auto& logo=LoadLobloxLogo();
+    const auto& logo=LoadLinbluxLogo();
     if(logo.ok) {
         ImGui::Image(static_cast<ImTextureID>(logo.id),{34.f*logo.width/logo.height,34});
         ImGui::SameLine(0,10);
     }
     ImGui::BeginGroup();
-    ImGui::TextUnformatted("LOBLOX");
+    ImGui::TextUnformatted("LINBLUX");
     ImGui::TextDisabled("Local playtest paused");
     ImGui::EndGroup();
     ImGui::Spacing();
@@ -473,7 +473,7 @@ void EditorUI::drawPauseMenu() {
         for(int i=0;i<7;++i) { ImGui::TextUnformatted(keys[i]);ImGui::SameLine(120);ImGui::TextWrapped("%s",help[i]); }
     } else {
         if(logo.ok) ImGui::Image(static_cast<ImTextureID>(logo.id),{80.f*logo.width/logo.height,80});
-        ImGui::TextUnformatted("Loblox Studio");
+        ImGui::TextUnformatted("LINBLUX Studio");
         ImGui::TextWrapped("An open-source editor and local game engine.");
         ImGui::Spacing();ImGui::TextDisabled("C++17 / Lua 5.4 / Bullet / raylib");
     }
@@ -865,7 +865,7 @@ void EditorUI::drawAnimationEditor() {
             const ImGuiID lower = ImGui::DockBuilderSplitNode(view->DockId, ImGuiDir_Down, .5f, nullptr, &upper);
             ImGui::DockBuilderDockWindow("Viewport", upper);
             ImGui::DockBuilderDockWindow("Animation Editor", lower);
-            ImGui::DockBuilderFinish(ImGui::GetID("LobloxDockspace"));
+            ImGui::DockBuilderFinish(ImGui::GetID("LinbluxDockspace"));
         }
     }
     ImGui::SetNextWindowSize({800, 600}, ImGuiCond_FirstUseEver);

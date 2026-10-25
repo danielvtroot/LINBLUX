@@ -81,7 +81,7 @@ struct LuaRuntime::Impl {
     template<int(*Function)(lua_State*)> static int Safe(lua_State* L) {
         try { return Function(L); }
         catch(const std::exception& e) { lua_pushstring(L,e.what()); }
-        catch(...) { lua_pushliteral(L,"Loblox native API failure"); }
+        catch(...) { lua_pushliteral(L,"Falha na API nativa LINBLUX"); }
         return lua_error(L);
     }
     static void Hook(lua_State* L,lua_Debug*) {
@@ -90,7 +90,7 @@ struct LuaRuntime::Impl {
     }
     Handle& handle(lua_State* L,int index) {
         auto* h=static_cast<Handle*>(luaL_testudata(L,index,"Loblox.Handle"));
-        Require(h && h->generation==generation,"invalid or expired Loblox handle");
+        Require(h && h->generation==generation,"Referência LINBLUX inválida ou expirada");
         if(h->kind==Kind::Character || h->kind==Kind::Humanoid || h->kind==Kind::Animator)
             Require(h->id==runtime->characterGeneration(),"character was respawned; use the new CharacterAdded handle");
         if(h->kind==Kind::Signal && h->avatar)Require(h->avatar==runtime->characterGeneration(),"expired character signal");

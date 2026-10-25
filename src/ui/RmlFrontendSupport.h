@@ -1,12 +1,12 @@
 #pragma once
 
 // Shared plumbing between the Studio frontend and the graphics-quality
-// fixture: the RmlUi system interface, the Loblox icon artwork and the
+// fixture: the RmlUi system interface, the LINBLUX icon artwork and the
 // texture policy used by the OpenGL renderer.
 //
 // The policy is deliberate and per texture class:
 //
-//   * Interface images (icons, the Loblox logo, imported PNGs) are uploaded
+//   * Interface images (icons, the LINBLUX logo, imported PNGs) are uploaded
 //     with a full mip chain and trilinear filtering. RmlUi's own GL3 backend
 //     uploads every texture with GL_TEXTURE_MIN_FILTER = GL_LINEAR and no
 //     mipmaps, so anything drawn below its native size is minified with a
@@ -18,7 +18,7 @@
 // Images are uploaded premultiplied because both renderers blend with
 // (GL_ONE, GL_ONE_MINUS_SRC_ALPHA). Premultiplication also makes the mip
 // chain alpha-correct: source PNGs keep arbitrary colour under alpha = 0
-// (the Loblox logo stores magenta there), and filtering that colour would
+// (the LINBLUX logo stores magenta there), and filtering that colour would
 // bleed fringes into the visible artwork.
 
 #include <RmlUi/Core.h>
@@ -32,7 +32,7 @@
 
 namespace loblox::ui {
 
-// The Loblox line-art icons are authored on a 48x48 grid.
+// The LINBLUX line-art icons are authored on a 48x48 grid.
 inline constexpr int kIconGrid = 48;
 // Icons are rasterised at twice the authoring grid so the mip chain has real
 // detail to filter when the interface draws them at 9..34 px.
@@ -63,8 +63,8 @@ struct RmlPlatform final : Rml::SystemInterface {
     }
     void JoinPath(Rml::String& result, const Rml::String& document, const Rml::String& path) override {
         // RmlUi's default treats '/image.png' as a virtual web-root path and
-        // strips '/'. Loblox resources use actual Linux filesystem paths.
-        if (path.rfind("icon-", 0) == 0 || path.rfind("experience-full:",0)==0 || path == "loblox-logo" || path=="loblox-lock") {
+        // strips '/'. LINBLUX resources use actual Linux filesystem paths.
+        if (path.rfind("icon-", 0) == 0 || path.rfind("experience-full:",0)==0 || path == "linblux-logo" || path=="loblox-lock") {
             result = path;
             return;
         }
@@ -73,7 +73,7 @@ struct RmlPlatform final : Rml::SystemInterface {
     }
 };
 
-// Original Loblox line-art icons, rasterised at `resolution` pixels.
+// Original LINBLUX line-art icons, rasterised at `resolution` pixels.
 Image IconImage(const std::string& name, int resolution = kIconResolution);
 
 // Area-average (box) downscale performed in premultiplied space. raylib's

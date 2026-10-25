@@ -104,7 +104,7 @@ public:
         : Instance(id,std::move(name)), type_(type) {}
     const char* className() const override { return InstanceClassName(type_); }
     InstanceClass instanceClass() const override { return type_; }
-    std::string source = "print(\"Hello from Loblox\")\n";
+    std::string source = "print(\"Olá do LINBLUX\")\n";
     bool enabled = true;
 private:
     InstanceClass type_;

@@ -277,7 +277,7 @@ std::string toLua(const Scene& scene) {
         throw std::runtime_error("Lua declarativo v1 nao suporta hierarquia; salve JSON v3");
     document["format"] = "loblox-scene";
     std::ostringstream out;
-    out << "-- Loblox declarative scene v1. Literal data only; never executed.\nreturn ";
+    out << "-- LINBLUX declarative scene v1. Literal data only; never executed.\nreturn ";
     Emit(document, out, 0);
     out << '\n';
     return out.str();

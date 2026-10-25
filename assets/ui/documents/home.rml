@@ -1,6 +1,6 @@
 <div id="experience-root">
  <div id="experience-home">
-  <div class="experience-sidebar"><div class="experience-brand"><img src="loblox-logo"/><b>LOBLOX</b><small>STUDIO</small></div>
+  <div class="experience-sidebar"><div class="experience-brand"><img src="linblux-logo"/><b>LINBLUX</b><small>STUDIO</small></div>
    <button id="exp-nav-home" data-experience="page" data-value="home"><img src="icon-home"/><span>Home</span></button>
    <button id="exp-nav-library" data-experience="page" data-value="library"><img src="icon-folder"/><span>My Experiences</span></button>
    <button id="exp-nav-templates" data-experience="page" data-value="templates"><img src="icon-part"/><span>Templates</span></button>

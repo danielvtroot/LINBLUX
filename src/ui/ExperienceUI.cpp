@@ -85,7 +85,7 @@ bool ExperienceUI::save(std::string& error) {
 }
 void ExperienceUI::choose(const std::string& purpose,bool saveFile,bool directory,bool images) {
     const auto initial=directory?manager_.libraryRoot().string()+"/":saveFile?(manager_.libraryRoot()/"Experience.lo").string():std::string(std::getenv("HOME")?std::getenv("HOME"):"/")+"/";
-    if(!chooser_.begin(images?"Choose an image":directory?"Choose experience library":saveFile?"Export Loblox Experience":"Open / Import Experience",initial,saveFile,directory,images)){error_=chooser_.error();return;}
+    if(!chooser_.begin(images?"Choose an image":directory?"Choose experience library":saveFile?"Export Experiência LINBLUX":"Open / Import Experience",initial,saveFile,directory,images)){error_=chooser_.error();return;}
     dialogPurpose_=purpose;editor_.camera_.releaseCapture();editor_.setGameplayCapture(false);
 }
 void ExperienceUI::chooseAsset(){choose("asset",false,false,true);}
@@ -221,7 +221,7 @@ void ExperienceUI::buildPage() {
             libraryPage_=std::min(libraryPage_,pages-1);const size_t start=page_=="home"?0:libraryPage_*limit;
             for(size_t i=start;i<std::min(entries_.size(),start+limit);++i) {
                 const auto& entry=entries_[i];fs::path thumb;try{thumb=manager_.thumbnail(entry);}catch(const std::exception&){}
-                html+="<div class=\"experience-card\" data-experience-card=\""+entry.manifest.installationId+"\"><div class=\"experience-cover\"><img class=\""+std::string(thumb.empty()?"experience-placeholder":"")+"\" src=\""+esc(thumb.empty()?"icon-part":thumb.string())+"\"/></div><div class=\"experience-card-body\"><h3>"+esc(entry.manifest.name)+"</h3><p>"+esc(entry.manifest.description.empty()?"A local Loblox experience":entry.manifest.description)+"</p><small>Local · "+esc(entry.manifest.modified.substr(0,10))+"</small><div class=\"experience-card-actions\">"+button(archive?"details":"open",archive?"Manage":"Open",entry.manifest.installationId,"exp-open-"+std::to_string(i),true)+button("card-menu","…",entry.manifest.installationId,"exp-details-"+std::to_string(i))+"</div></div>";
+                html+="<div class=\"experience-card\" data-experience-card=\""+entry.manifest.installationId+"\"><div class=\"experience-cover\"><img class=\""+std::string(thumb.empty()?"experience-placeholder":"")+"\" src=\""+esc(thumb.empty()?"icon-part":thumb.string())+"\"/></div><div class=\"experience-card-body\"><h3>"+esc(entry.manifest.name)+"</h3><p>"+esc(entry.manifest.description.empty()?"Uma experiência LINBLUX local":entry.manifest.description)+"</p><small>Local · "+esc(entry.manifest.modified.substr(0,10))+"</small><div class=\"experience-card-actions\">"+button(archive?"details":"open",archive?"Manage":"Open",entry.manifest.installationId,"exp-open-"+std::to_string(i),true)+button("card-menu","…",entry.manifest.installationId,"exp-details-"+std::to_string(i))+"</div></div>";
                 if(cardMenu_==entry.manifest.installationId)html+="<div class=\"experience-card-menu\">"+button("details","Rename / Edit Details…",entry.manifest.installationId,"exp-card-details")+button("duplicate","Duplicate")+button("export","Export .lo…")+button(archive?"restore":"archive",archive?"Restore":"Archive")+button("delete","Delete…")+button("dismiss-card","Close")+"</div>";
                 html+="</div>";
             }
@@ -235,7 +235,7 @@ void ExperienceUI::buildPage() {
             for(const auto& item:available)html+="<button id=\"exp-template-"+item.id+"\" class=\"experience-template\" data-experience=\"new\" data-value=\""+item.id+"\"><img src=\"icon-"+std::string(item.id=="classic"?"rig":item.id=="my-default"?"folder":"part")+"\"/><b>"+esc(item.name)+"</b><small>Local template</small></button>";
             html+="</div>";
         }
-        if(page_=="home")html+="<div class=\"experience-section\"><h2>Discover Loblox</h2></div><div class=\"experience-discover\"><button data-experience=\"help\" data-value=\"STUDIO2_GUIDE.md\"><b>Start building</b><small>Tools, Explorer and local projects</small></button><button data-experience=\"help\" data-value=\"LUA_API.md\"><b>Game scripting</b><small>Lua APIs implemented by Loblox</small></button><button data-experience=\"help\" data-value=\"EXPERIENCES.md\"><b>Share an experience</b><small>Portable files and your own templates</small></button></div>";
+        if(page_=="home")html+="<div class=\"experience-section\"><h2>Conheça o LINBLUX</h2></div><div class=\"experience-discover\"><button data-experience=\"help\" data-value=\"STUDIO2_GUIDE.md\"><b>Start building</b><small>Tools, Explorer and local projects</small></button><button data-experience=\"help\" data-value=\"LUA_API.md\"><b>Game scripting</b><small>Lua APIs implemented by Loblox</small></button><button data-experience=\"help\" data-value=\"EXPERIENCES.md\"><b>Share an experience</b><small>Portable files and your own templates</small></button></div>";
     } else if(page_=="new"||page_=="details") {
         const bool create=page_=="new";const auto m=!create&&selected_?selected_->manifest:experiences::Manifest{};
         html+=title(create?"New Experience":"Experience Details",create?"Start from a real template. Your source files stay untouched.":"Presentation images are independent from your map and character.");
@@ -258,7 +258,7 @@ void ExperienceUI::buildPage() {
         for(int i=0;i<3;++i){const auto path=selected_&&!create&&!refs[i].empty()?(selected_->root/refs[i]).string():"icon-image";
             html+="<div class=\"experience-media-block\"><b>"+std::string(names[i])+"</b><div class=\"experience-media-preview\"><img id=\"exp-preview-"+ids[i]+"\" src=\""+esc(path)+"\"/></div><input id=\"exp-"+ids[i]+"\" value=\""+esc(refs[i])+"\" placeholder=\"Optional image path\"/>"+button("choose-media","Choose image…",ids[i],"exp-choose-"+std::string(ids[i]))+button("remove-media","Remove",ids[i])+"<small>"+std::string(i==0?"Square recommended · 512 × 512":i==1?"16:9 recommended · 1920 × 1080":"Any aspect ratio · cover crop during entry")+"</small></div>";}
         html+="</div></div><div class=\"experience-form-footer\">"+button("cancel-form",returnToStudio_?"Back to Studio":"Cancel")+button(create?"create":"save-details",create?"Create & Open":"Save Details",{},create?"exp-create":"exp-save-details",true)+"</div>";
-    } else if(page_=="help")html+=title("Loblox Help","Local documentation for implemented features")+"<pre class=\"experience-help\">"+esc(helpText_)+"</pre>";
+    } else if(page_=="help")html+=title("Ajuda do LINBLUX","Local documentation for implemented features")+"<pre class=\"experience-help\">"+esc(helpText_)+"</pre>";
     document_.GetElementById("experience-content")->SetInnerRML(html);
     // Release old page thumbnails at navigation boundaries, never per frame.
     Rml::ReleaseTextures();markup_=std::move(html);dirty_=false;
@@ -269,9 +269,9 @@ void ExperienceUI::requestPlay() {
     std::string error;if(!editor_.commitScriptDrafts(error)){error_=error;return;}
     pendingPath_=projectio::toJson(editor_.scene_);cancelLoad_=false;load_=LoadState::Paint;readyTime_=0;
     const auto* m=manager_.active()?&manager_.active()->manifest:nullptr;
-    text(document_,"exp-loading-title",m?m->name:"Loblox Experience");text(document_,"exp-loading-description",m?m->description:"Local playtest");
+    text(document_,"exp-loading-title",m?m->name:"Experiência LINBLUX");text(document_,"exp-loading-description",m?m->description:"Local playtest");
     text(document_,"exp-loading-status","Preparing assets and local runtime…");
-    auto* icon=document_.GetElementById("exp-loading-icon");icon->SetAttribute("src",m&&!m->icon.empty()?(manager_.active()->root/m->icon).string():"loblox-logo");
+    auto* icon=document_.GetElementById("exp-loading-icon");icon->SetAttribute("src",m&&!m->icon.empty()?(manager_.active()->root/m->icon).string():"linblux-logo");
     auto* background=document_.GetElementById("exp-loading-background");
     const auto ref=m?(m->loadingBackground.empty()?m->banner:m->loadingBackground):std::string{};
     if(m&&!ref.empty()) {

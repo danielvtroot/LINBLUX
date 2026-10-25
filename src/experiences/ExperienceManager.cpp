@@ -162,15 +162,15 @@ std::string Manifest::serialize() const {
         {"faceImage",faceImage},{"archived",archived},{"trashed",trashed}}.dump(2);
 }
 Manifest Manifest::parse(const std::string& text) {
-    const auto j=boundedJson(text);if(j.at("format")!="loblox-experience")throw std::runtime_error("Not a Loblox experience");
+    const auto j=boundedJson(text);if(j.at("format")!="loblox-experience")throw std::runtime_error("Não é uma experiência LINBLUX compatível");
     Manifest m;m.version=j.at("version").get<int>();m.id=j.at("id");m.installationId=j.at("installationId");m.name=j.at("name");
     m.description=j.value("description","");m.created=j.at("created");m.modified=j.at("modified");m.lastOpened=j.value("lastOpened","");
     m.sourceTemplate=j.value("sourceTemplate","");m.mainPlace=j.at("mainPlace");m.icon=j.value("icon","");m.banner=j.value("banner","");
     m.loadingBackground=j.value("loadingBackground","");m.faceImage=j.value("faceImage","");m.archived=j.value("archived",false);m.trashed=j.value("trashed",false);m.validate();return m;
 }
 fs::path ExperienceManager::defaultDataRoot() {
-    if(const char* x=std::getenv("XDG_DATA_HOME");x&&x[0]=='/')return fs::path(x)/"loblox";
-    if(const char* h=std::getenv("HOME");h&&h[0]=='/')return fs::path(h)/".local/share/loblox";
+    if(const char* x=std::getenv("XDG_DATA_HOME");x&&x[0]=='/')return (fs::exists(fs::path(x)/"linblux")||!fs::exists(fs::path(x)/"loblox")?fs::path(x)/"linblux":fs::path(x)/"loblox");
+    if(const char* h=std::getenv("HOME");h&&h[0]=='/')return fs::path(h)/".local/share/linblux";
     throw std::runtime_error("Set HOME or XDG_DATA_HOME to an absolute directory");
 }
 ExperienceManager::ExperienceManager(fs::path dataRoot,fs::path factoryRoot)
@@ -179,7 +179,7 @@ ExperienceManager::ExperienceManager(fs::path dataRoot,fs::path factoryRoot)
     library_=config.value("library",(data_/"experiences").string());fs::create_directories(library_);
     if(factory_.empty()) {
         const auto executable=fs::path(GetApplicationDirectory());
-        for(const auto& candidate:{executable/"share/loblox/templates",executable.parent_path()/"share/loblox/templates",fs::path(LOBLOX_FACTORY_DIR)})
+        for(const auto& candidate:{executable/"share/linblux/templates",executable.parent_path()/"share/linblux/templates",fs::path(LINBLUX_FACTORY_DIR)})
             if(fs::is_regular_file(candidate/"baseplate.loblox.json")){factory_=candidate;break;}
     }
 }
@@ -306,7 +306,7 @@ fs::path ExperienceManager::activePlace() const {return active_?active_->root/ac
 void ExperienceManager::save(const Scene& scene) {
     if(!active_)throw std::runtime_error("No active experience");
     const auto current=inspect(active_->root);
-    if(current.manifest.mainPlace!=active_->manifest.mainPlace||current.manifest.installationId!=active_->manifest.installationId)throw std::runtime_error("Experience changed outside Loblox; reopen before saving");
+    if(current.manifest.mainPlace!=active_->manifest.mainPlace||current.manifest.installationId!=active_->manifest.installationId)throw std::runtime_error("Experience changed outside LINBLUX; reopen before saving");
     auto next=current.manifest;next.mainPlace="places/"+newId()+".loblox.json";next.modified=now();
     const auto text=relocateWorld(scene,active_->root,active_->root);
     Scene validated;std::string error;if(!projectio::fromJson(validated,text,error))throw std::runtime_error("Cannot save invalid place: "+error);

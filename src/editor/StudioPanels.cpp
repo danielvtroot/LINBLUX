@@ -653,7 +653,7 @@ void EditorUI::drawScriptEditor() {
         if(auto* view=ImGui::FindWindowByName("Viewport");view && view->DockId) {
             ImGuiID upper;auto lower=ImGui::DockBuilderSplitNode(view->DockId,ImGuiDir_Down,.5f,nullptr,&upper);
             ImGui::DockBuilderDockWindow("Viewport",upper);ImGui::DockBuilderDockWindow("Script Editor",lower);
-            ImGui::DockBuilderFinish(ImGui::GetID("LobloxDockspace"));
+            ImGui::DockBuilderFinish(ImGui::GetID("LinbluxDockspace"));
         }
     }
     ImGui::SetNextWindowSize({750,440},ImGuiCond_FirstUseEver);

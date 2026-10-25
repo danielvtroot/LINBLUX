@@ -17,7 +17,7 @@
 #if defined(__has_include)
 #  if __has_include(<GL/gl.h>)
 #    include <GL/gl.h>
-#    define LOBLOX_GL_HEADER 1
+#    define LINBLUX_GL_HEADER 1
 #  endif
 #endif
 
@@ -48,7 +48,7 @@ std::string LowerExt(const std::filesystem::path& path) {
 // GL_MAX_ANISOTROPY_EXT on a driver without it is a GL error, so the
 // extension is probed once before any texture asks for anisotropic filtering.
 bool AnisotropicFilteringSupported() {
-#if defined(LOBLOX_GL_HEADER)
+#if defined(LINBLUX_GL_HEADER)
     static const bool supported = []() {
         const char* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
         return extensions && std::strstr(extensions, "GL_EXT_texture_filter_anisotropic") != nullptr;
@@ -78,10 +78,14 @@ std::string ImageReference(const std::string& path) {
 }
 
 std::string BuiltinAssetPath(const std::string& relativePath) {
+    if(relativePath=="loblox.png")return BuiltinAssetPath("logo.png"); // legacy resource alias
+    if(relativePath=="rosto1.png")return BuiltinAssetPath("character-face.png"); // original LINBLUX replacement
+    if(relativePath=="logo.png") {auto p=BuiltinAssetPath("midia/logo.png");if(!p.empty())return p;}
+    if(relativePath=="character-face.png") {auto p=BuiltinAssetPath("assets/builtin/character-face.png");if(!p.empty())return p;}
     std::vector<std::filesystem::path> roots{std::filesystem::current_path()};
     char buffer[4096]{};const auto count=readlink("/proc/self/exe",buffer,sizeof(buffer)-1);
     if(count>0) { buffer[count]=0;const auto executable=std::filesystem::path(buffer).parent_path();
-        for(const auto& base:{executable/"share/loblox/builtin",executable.parent_path()/"share/loblox/builtin",executable/"share/loblox",executable.parent_path()/"share/loblox"}) {
+        for(const auto& base:{executable/"share/linblux/builtin",executable.parent_path()/"share/linblux/builtin",executable/"share/linblux",executable.parent_path()/"share/linblux"}) {
             const auto installed=base/relativePath;
             if(std::filesystem::is_regular_file(installed))return installed.string();
         }
@@ -213,10 +217,10 @@ Texture2D AssetTexture(const std::string& relativePath) {
                 // The quads that sample these textures blend with premultiplied
                 // alpha, so the stored colour has to be premultiplied as well.
                 // Otherwise the mip chain averages the arbitrary colour that
-                // source PNGs keep under alpha = 0 (the Loblox logo stores
+                // source PNGs keep under alpha = 0 (the LINBLUX logo stores
                 // magenta there) into the visible artwork.
                 ImageAlphaPremultiply(&image);
-#if defined(LOBLOX_GL_HEADER)
+#if defined(LINBLUX_GL_HEADER)
                 GLint maximum=0;glGetIntegerv(GL_MAX_TEXTURE_SIZE,&maximum);
                 if(maximum>0&&(image.width>maximum||image.height>maximum)) {
                     const float scale=std::min(float(maximum)/image.width,float(maximum)/image.height);

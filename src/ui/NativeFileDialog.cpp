@@ -33,13 +33,13 @@ bool NativeFileDialog::begin(const std::string& title,const std::string& initial
     std::vector<std::string> args{helper};
     if(kde) {
         args.push_back(directory?"--getexistingdirectory":save?"--getsavefilename":"--getopenfilename");args.push_back(initial);
-        if(!directory)args.push_back(images?"*.png *.jpg *.jpeg|Images":"*.lo *.json|Loblox projects");
+        if(!directory)args.push_back(images?"*.png *.jpg *.jpeg|Images":"*.lo *.json|Projetos LINBLUX");
         args.insert(args.end(),{"--title",title});
     } else {
         args.insert(args.end(),{"--file-selection","--title="+title,"--filename="+initial});
         if(directory)args.push_back("--directory");
         if(save)args.insert(args.end(),{"--save","--confirm-overwrite"});
-        if(!directory)args.push_back(images?"--file-filter=Images | *.png *.jpg *.jpeg":"--file-filter=Loblox | *.lo *.json");
+        if(!directory)args.push_back(images?"--file-filter=Images | *.png *.jpg *.jpeg":"--file-filter=LINBLUX | *.lo *.json");
     }
     // Allocate argv before fork: Mesa may have worker threads, so the child
     // must go straight through async-signal-safe syscalls to exec.

@@ -11,25 +11,25 @@ int main(int argc, char** argv) {
         const char* argument = argv[i];
         if(std::strcmp(argument,"--ui")==0 && i+1<argc) {
             const std::string mode=argv[++i];
-            if(mode!="legacy" && mode!="rml") {std::fprintf(stderr,"UI must be rml or legacy\n");return 2;}
+            if(mode!="legacy" && mode!="rml") {std::fprintf(stderr,"A interface deve ser rml ou legacy\n");return 2;}
             config.modernUI=mode=="rml";continue;
         }
         if (std::strcmp(argument, "--project") == 0) {
             if (i + 1 >= argc || argv[i + 1][0] == '\0') {
-                std::fprintf(stderr, "Uso: loblox [--project CAMINHO]\n");
+                std::fprintf(stderr, "Uso: linblux [--project CAMINHO]\n");
                 return 2;
             }
             config.startupProjectPath = argv[++i];
             continue;
         }
         if (std::strcmp(argument, "-h") == 0 || std::strcmp(argument, "--help") == 0) {
-            std::printf("Uso: loblox [--project CAMINHO] [--ui rml|legacy]\n"
-                        "  sem argumentos    abre Home e a biblioteca local.\n"
+            std::printf("Uso: linblux [--project CAMINHO] [--ui rml|legacy]\n"
+                        "  sem argumentos    abre o Início e a biblioteca local.\n"
                         "  --project CAMINHO  abre JSON legado, pasta de experiencia ou .lo;\n"
                         "                     se invalido, mantem a cena padrao.\n");
             return 0;
         }
-        std::fprintf(stderr, "Argumento desconhecido: %s\nUso: loblox [--project CAMINHO]\n",
+        std::fprintf(stderr, "Argumento desconhecido: %s\nUso: linblux [--project CAMINHO]\n",
                      argument);
         return 2;
     }

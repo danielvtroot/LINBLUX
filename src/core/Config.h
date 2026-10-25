@@ -10,11 +10,11 @@ inline std::string DefaultProjectPath() {
     namespace fs = std::filesystem;
     const char* dataHome = std::getenv("XDG_DATA_HOME");
     if (dataHome != nullptr && dataHome[0] == '/') {
-        return (fs::path(dataHome) / "loblox/projects/default.loblox.json").string();
+        return (fs::path(dataHome) / "linblux/projects/default.loblox.json").string();
     }
     const char* home = std::getenv("HOME");
     if (home != nullptr && home[0] != '\0') {
-        return (fs::path(home) / ".local/share/loblox/projects/default.loblox.json").string();
+        return (fs::path(home) / ".local/share/linblux/projects/default.loblox.json").string();
     }
     std::error_code error;
     const fs::path current = fs::current_path(error);
