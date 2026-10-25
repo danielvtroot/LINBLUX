@@ -273,7 +273,6 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error,const Prog
         npcs_.reset(); // controladores de NPC sao sempre recriados por Play
         scripts_.start(*this); // errors are reported; safe native gameplay remains available
         npcs_.attachAuthored(*this,error); // NPCs autorados ganham controlador
-        error.clear();
         if(spawnedDead && health_<=0)scripts_.healthChanged(health_,true);
         Event("runtime", "start", correlation_, {{"bodies", bodyCount()}, {"rig", rig_.id}});
         return true;
