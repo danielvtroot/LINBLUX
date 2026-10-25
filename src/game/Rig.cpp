@@ -356,7 +356,7 @@ bool PlayerSettings::validate(std::string& error) const {
         !Range(healthDisplayDistance,0,500) || !Range(nameDisplayDistance,0,500) ||
         !Range(collisionRadius, .2f, 3) || !Range(collisionHeight, 2 * collisionRadius, 15) ||
         !Range(minZoom, .1f, 10) || !Range(maxZoom, minZoom, 100) ||
-        !Range(cameraDistance, minZoom, maxZoom) || !Range(sensitivity, .0001f, .03f) ||
+        !Range(cameraDistance, minZoom, maxZoom) || !Range(cameraFov,1,170) || !Range(sensitivity, .0001f, .03f) ||
         static_cast<int>(cameraMode) < 0 || static_cast<int>(cameraMode) > 2) {
         error = "player: settings out of range"; return false;
     }
