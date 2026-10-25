@@ -506,8 +506,8 @@ end)
     const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;
     CHECK(runtime.start(author,error));
     CHECK(runtime.npcs().attached(sentinelId));
-    if(runtime.npcs().count()!=1)std::printf("DEBUG npc count=%zu\n",runtime.npcs().count());
-    CHECK(runtime.npcs().count()==1);
+    // O script de autoria roda no Play e cria tres NPCs independentes.
+    CHECK(runtime.npcs().count()==4);
     for(int i=0;i<300;++i){
         runtime.update(1.f/60,{});
         for(auto it=runtime.scene().parts().begin();it!=runtime.scene().parts().end();++it){
