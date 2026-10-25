@@ -403,6 +403,18 @@ end)
             click("dialog-confirm");frames(3);
             CHECK(!std::filesystem::exists(std::filesystem::path("assets")/importedImage));
             CHECK(rig()->findDecal(second)!=nullptr);
+            // Componente Surface independente: selecionar pelo Explorador,
+            // aplicar imagem, editar propriedades, salvar e limpar só o vínculo.
+            click("tree-search");key("ctrl+a");key("BackSpace");key("Return");
+            auto* surface=scene.createSurface(InstanceClass::Decal,part,"Placa original");CHECK(surface);frames(2);
+            clickVisible("node-"+std::to_string(surface->id()));
+            clickVisible("image-query-surface-front.png");CHECK(surface->properties().image=="assets/front.png");
+            clickVisible("prop-Surface.Transparency");key("ctrl+a");event("type --clearmodifiers 0.5");key("Return");
+            CHECK(NearlyEqual(surface->properties().transparency,.5f));
+            CHECK(projectio::save(scene,config.defaultProjectPath,error));CHECK(projectio::load(roundTrip,config.defaultProjectPath,error));
+            CHECK(static_cast<Surface*>(roundTrip.find(surface->id()))->properties().image=="assets/front.png");
+            capture("surface-properties");clickVisible("cmd-clear-image-surface");CHECK(surface->properties().image.empty());
+            CHECK(scene.find(surface->id())==surface);
             CHECK(scene.validate(error));capture("rig-decals-deleted");
         } else {
         const auto cameraStart=camera.camera();
