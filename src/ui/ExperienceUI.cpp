@@ -13,6 +13,8 @@
 #include "imgui.h"
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <cctype>
 #include <fstream>
 #include <stdexcept>
