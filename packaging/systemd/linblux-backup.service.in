@@ -7,9 +7,10 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=@PYTHON@ @PROJECT@/tools/backup/backup.py run --project @PROJECT@ --state-dir @STATE@
-Restart=always
+Restart=on-failure
 RestartSec=20
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=LINBLUX_BACKUP_STATE=@STATE@
 NoNewPrivileges=yes
 PrivateTmp=yes

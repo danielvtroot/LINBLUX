@@ -48,6 +48,7 @@
     "**/.agents/**",
     "**/.opencode/**",
     "**/.gnupg/**",
+    "third_party/**",
     "projects/**",
     "referencias/**",
     "midia/**",
