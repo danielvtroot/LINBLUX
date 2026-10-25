@@ -231,6 +231,26 @@ agenda uma chamada. Intervalos aceitos: 0 a 3600 segundos. Uma espera zero cede
 até o próximo passe. Pausa da sessão pausa o relógio. Temporizadores pertencem
 ao script que os criou e são liberados ao parar.
 
+`spawn` e `after` retornam uma tarefa. `tarefa.active` consulta se ainda existe
+trabalho executável; `tarefa:cancel()` ou `linblux.time.cancel(tarefa)` cancela
+a execução/espera pendente e retorna true se alterou seu estado. Repetir o
+cancelamento ou usar um handle já concluído retorna false; ele não cancela uma
+tarefa nova mesmo quando Lua reutiliza registros internos. Uma função que já
+executa pode terminar até retornar ou ceder; o scheduler libera a tarefa num
+ponto seguro. `task.spawn` legado mantém seu retorno anterior.
+
+`every(segundos, função, ...)` retorna uma tarefa periódica cancelável, com
+intervalo maior que zero e no máximo 3600 s. Aguarda antes do primeiro pulso e
+antes de cada repetição, sem criar uma tarefa nova por pulso. Não acumula pulsos
+atrasados; callback lento ou que aguarda alonga o período. Erro encerra o intervalo
+e é reportado com traceback. Compartilha cotas, pausa e descarregamento das outras
+tarefas. [temporizadores.lua](../assets/examples/lua/temporizadores.lua) é um exemplo
+executado nos testes de salvar/reabrir e no Player independente.
+
+`linblux_player --validate caminho` simula 2 segundos e descarrega a experiência;
+falhas de Lua durante esse período, inclusive no stop, retornam saída 1 com
+arquivo/linha. Saída 0 valida somente essa janela, não todas as ações futuras.
+
 ## Persistência e física
 
 Código, vínculo pai/filho, atributos e transformações de autoria usam a

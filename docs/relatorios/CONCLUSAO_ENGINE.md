@@ -15,7 +15,7 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 
 | Fase | Estado | Implementação/evidência atual | Próximo requisito obrigatório |
 | --- | --- | --- | --- |
-| 0 AutoBackup | TESTADO | Monitor de labubu ativo via cron, @reboot/watchdog, checkpoints e push automático em branch isolada. Clone remoto recuperou 315 arquivos; índice/main intactos; watchdog reiniciou em 20,005 s. Testes offline 20/20 e IMPACT 17/17 com cobertura global parcial. Relatório 13. | Registrar commit publicado; destino externo privado não informado (cópia externa não configurada). Backend systemd não executável neste host. |
+| 0 AutoBackup | PUBLICADO | cd4fb406cfccc6b030e56eadbede0c3965ef66f3, push main confirmado. Monitor labubu ativo via cron, @reboot/watchdog, checkpoints e push automático isolados. Clone remoto recuperou 315 arquivos; índice/main intactos; reinício em 20,005 s. Offline 20/20 e IMPACT 17/17, cobertura global parcial. Relatório 13. | Destino externo privado não informado (cópia externa não configurada). Backend systemd não executável neste host. |
 | 1 Lua/scripting | EM DESENVOLVIMENTO | Commits 5139c20, 5380967, cf53b09; guia SCRIPTING_LUA e testes studio/script_input_ui existentes. | Componentes/transformações/câmera/tempo/persistência restantes; áudio e UI integrados nas fases dependentes; novos testes. |
 | 2 NPCs/navegação | PENDENTE | Não se declara sistema implementado. | Entidades, rig/animações, vida/movimento, navegação física, oito demonstrações reais. |
 | 3 Áudio | PENDENTE | Nenhuma API de áudio anunciada como pronta. | Importação MP3/WAV/OGG, streaming, Editor/Player/Lua, referências, persistência/exportação. |
