@@ -49,3 +49,5 @@ Interrupção solicitada pelo usuário por limite de créditos: nenhuma fase nov
 iniciada. Commit/push desta unidade registrados no relatório central e resposta
 final após confirmação remota. Dados privados externos continuam sem destino de
 backup configurado; o monitor de código permanece ativo.
+
+PUBLICADO: 4ce62e2b980bbb92ee7d9174ff56ec57a7bcf5f5; push e hash remoto main confirmados.
