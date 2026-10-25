@@ -21,8 +21,9 @@ namespace loblox {
 namespace fs=std::filesystem;
 namespace {
 std::string esc(const std::string& s){std::string out;for(char c:s)out+=c=='&'?"&amp;":c=='<'?"&lt;":c=='>'?"&gt;":c=='\"'?"&quot;":std::string(1,c);return out;}
-std::string button(const std::string& action,const std::string& label,const std::string& value={},const std::string& id={},bool primary=false) {
-    return "<button "+(id.empty()?"":"id=\""+id+"\" ")+"data-experience=\""+action+"\" data-value=\""+esc(value)+"\" class=\""+(primary?"experience-primary":"")+"\">"+esc(i18n::Text(label))+"</button>";
+std::string button(const std::string& action,const std::string& label,const std::string& value={},const std::string& id={},bool primary=false,const std::string& classes={}) {
+    const std::string kind=(primary?"experience-primary ":"")+classes;
+    return "<button "+(id.empty()?"":"id=\""+id+"\" ")+"data-experience=\""+action+"\" data-value=\""+esc(value)+"\" class=\""+kind+"\">"+esc(i18n::Text(label))+"</button>";
 }
 void show(Rml::ElementDocument& doc,const char* id,bool visible,const char* layout="block") {if(auto* e=doc.GetElementById(id))e->SetProperty("display",visible?layout:"none");}
 void text(Rml::ElementDocument& doc,const char* id,const std::string& value) {if(auto* e=doc.GetElementById(id);e&&e->GetInnerRML()!=esc(i18n::Text(value)))e->SetInnerRML(esc(i18n::Text(value)));}
@@ -176,7 +177,7 @@ void ExperienceUI::dispatch(const std::string& action,const std::string& v) {
     else if(action=="choose-media")choose("media-"+v,false,false,true);
     else if(action=="import") {if(!home_&&unsaved()){requestHome();return;}choose("import");}
     else if(action=="library-location")choose("library",false,true);
-    else if(action=="duplicate") {if(selected_){selected_=manager_.duplicate(*selected_,selected_->manifest.name+" copy");page_="details";dirty_=true;}}
+    else if(action=="duplicate") {if(selected_){selected_=manager_.duplicate(*selected_,selected_->manifest.name+" (cópia)");page_="details";dirty_=true;}}
     else if(action=="export-current") {if(!manager_.active())throw std::runtime_error("Import the legacy project as an experience before exporting");
         if(!editor_.saveCurrentProject())throw std::runtime_error(editor_.status_);
         selected_=manager_.active();fileMenu_=false;choose("export",true);}
@@ -220,7 +221,7 @@ void ExperienceUI::buildPage() {
     if(page_=="home"||page_=="library"||archive||page_=="templates") {
         if(page_=="home")html+="<div class=\"home-intro\"><small>LINBLUX STUDIO</small><h1>Dê forma ao seu próximo mundo.</h1><p>Crie, programe e explore experiências 3D com liberdade.</p><div class=\"home-actions\">"+button("new","Criar experiência",{},"exp-new-main",true)+button("import","Abrir experiência",{},"exp-import")+"</div></div>";
         else html+=title(archive?"Archive":page_=="library"?"My Experiences":page_=="templates"?"Templates":"Início",archive?"Archived and deleted experiences can be restored.":"Create, build and share experiences on your computer.");
-        if(page_=="home")html+="<div id=\"engine-default-card\" class=\"home-default-card\"><img src=\"linblux-logo\"/><div><h2>Mundo Padrão da Engine</h2><p>Edite o mundo e o personagem que dão origem às novas experiências.</p><small>RECURSO PROTEGIDO · LINBLUX ENGINE</small></div>"+button("edit-default","Editar padrão",{},"exp-edit-default")+"</div>";
+        if(page_=="home")html+="<div id=\"engine-default-card\" class=\"home-default-card\"><div class=\"home-default-icon\"><img src=\"linblux-logo\"/></div><div class=\"home-default-copy\"><h2>Mundo Padrão da Engine</h2><p>Edite o mundo e o personagem que dão origem às novas experiências.</p><small>RECURSO PROTEGIDO · LINBLUX ENGINE</small></div><div class=\"home-default-actions\">"+button("edit-default","Editar padrão",{},"exp-edit-default")+"</div></div>";
         if(page_!="templates") {
             entries_=manager_.list(archive);
             if(page_!="home") {
@@ -228,15 +229,16 @@ void ExperienceUI::buildPage() {
                 auto lower=[](std::string s){for(char& c:s)c=char(std::tolower(static_cast<unsigned char>(c)));return s;};
                 const auto query=lower(filter_);entries_.erase(std::remove_if(entries_.begin(),entries_.end(),[&](const auto& e){return lower(e.manifest.name+" "+e.manifest.description).find(query)==std::string::npos;}),entries_.end());
             }
-            html+="<div class=\"experience-section\"><h2>"+std::string(archive?"Archived Experiences":page_=="library"?"All Experiences":"Experiências recentes")+"</h2>"+button("page","View all","library")+"</div><div class=\"experience-grid\">";
+            html+="<div class=\"experience-section\"><div class=\"experience-section-title\"><h2>"+std::string(archive?"Archived Experiences":page_=="library"?"All Experiences":"Experiências recentes")+"</h2>"+(page_=="home"?"<span class=\"experience-section-count\">"+std::to_string(entries_.size())+"</span>":"")+"</div>"+button("page","View all","library")+"</div><div class=\"experience-grid"+(page_=="home"?" home-recent":"")+"\">";
             if(entries_.empty())html+="<div class=\"experience-empty\">"+std::string(archive?"Your archive is empty.":"Seu próximo mundo começa aqui. Crie uma experiência ou abra um projeto existente.")+"</div>";
             const size_t limit=page_=="home"?8:24;
             const size_t pages=std::max(size_t(1),(entries_.size()+limit-1)/limit);
             libraryPage_=std::min(libraryPage_,pages-1);const size_t start=page_=="home"?0:libraryPage_*limit;
             for(size_t i=start;i<std::min(entries_.size(),start+limit);++i) {
                 const auto& entry=entries_[i];fs::path thumb;try{thumb=manager_.thumbnail(entry);}catch(const std::exception&){}
-                html+="<div class=\"experience-card\" data-experience-card=\""+entry.manifest.installationId+"\"><div class=\"experience-cover\"><img class=\""+std::string(thumb.empty()?"experience-placeholder":"")+"\" src=\""+esc(thumb.empty()?"linblux-logo":thumb.string())+"\"/></div><div class=\"experience-card-body\"><h3>"+esc(entry.manifest.name)+"</h3><p>"+esc(entry.manifest.description.empty()?"Uma experiência LINBLUX local":entry.manifest.description)+"</p><small>Local · "+esc(entry.manifest.modified.substr(0,10))+"</small><div class=\"experience-card-actions\">"+button(archive?"details":"open",archive?"Manage":"Open",entry.manifest.installationId,"exp-open-"+std::to_string(i),true)+button("card-menu","…",entry.manifest.installationId,"exp-details-"+std::to_string(i))+"</div></div>";
-                if(cardMenu_==entry.manifest.installationId)html+="<div class=\"experience-card-menu\">"+button("details","Rename / Edit Details…",entry.manifest.installationId,"exp-card-details")+button("duplicate","Duplicate")+button("export","Export .lo…")+button(archive?"restore":"archive",archive?"Restore":"Archive")+button("delete","Delete…")+button("dismiss-card","Close")+"</div>";
+                const auto& id=entry.manifest.installationId;
+                html+=std::string("<div class=\"experience-card")+(page_=="home"?" home-card":"")+(cardMenu_==id?" menu-open":"")+"\" id=\"exp-card-"+std::to_string(i)+"\" data-experience-card=\""+id+"\"><div class=\"experience-cover\"><img class=\""+std::string(thumb.empty()?"experience-placeholder":"")+"\" src=\""+esc(thumb.empty()?"linblux-logo":thumb.string())+"\"/></div><div class=\"experience-card-body\"><h3>"+esc(entry.manifest.name)+"</h3><p>"+esc(entry.manifest.description.empty()?"Uma experiência LINBLUX local":entry.manifest.description)+"</p><div class=\"experience-card-meta\"><small>Local</small><span class=\"experience-card-dot\"/><small>"+esc(entry.manifest.modified.substr(0,10))+"</small></div></div><div class=\"experience-card-actions\">"+button(archive?"details":"open",archive?"Manage":"Open",id,"exp-open-"+std::to_string(i),true)+button("card-menu","…",id,"exp-details-"+std::to_string(i),false,std::string("experience-more")+(cardMenu_==id?" active":""))+"</div>";
+                if(cardMenu_==id)html+="<div id=\"experience-card-menu\" class=\"experience-card-menu\">"+button("details","Rename / Edit Details…",id,"exp-card-details")+button("duplicate","Duplicar",{},"exp-card-duplicate")+button("export","Exportar .lo…",{},"exp-card-export")+"<div class=\"experience-menu-rule\"/>"+button(archive?"restore":"archive",archive?"Restaurar":"Arquivar")+"<div class=\"experience-menu-rule\"/>"+button("delete","Excluir…",{},"exp-card-delete",false,"experience-menu-danger")+"<div class=\"experience-menu-rule\"/>"+button("dismiss-card","Fechar",{},"exp-card-close")+"</div>";
                 html+="</div>";
             }
             html+="</div>";
