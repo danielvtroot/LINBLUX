@@ -290,11 +290,15 @@ class CacheTests(unittest.TestCase):
     def test_reused_result_is_not_passed_now(self):
         old = self._last()
         old["tests"] = {"unit": {"status": "PASSED"}}
+        old["build"] = {"status": "PASSED", "duration_seconds": 1.2}
         reused = cache.reused_result(old, fingerprint="abc", run_id="new")
         self.assertEqual(reused["status"], "REUSED")
         self.assertNotEqual(reused["status"], "PASSED")
         self.assertEqual(reused["tests"]["unit"]["status"], "REUSED")
-        self.assertIn("REUTILIZADO", report.format_result(reused))
+        text = report.format_result(reused)
+        self.assertIn("REUTILIZADO", text)
+        self.assertIn("REUTILIZADA", text)
+        self.assertNotIn("PASSOU AGORA", text)
 
     def test_fingerprint_changes_with_worktree_content(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -55,14 +55,19 @@ def format_result(result: dict, *, detail: bool = False) -> str:
         lines.append(f"Cobertura: {plan.get('coverage', '?')}")
     build = result.get("build") or {}
     if build:
+        build_label = (
+            "REUTILIZADA (não executada agora)"
+            if result.get("reused")
+            else status_label(build.get("status", "?"))
+        )
         lines.append(
-            f"Compilação: {status_label(build.get('status', '?'))}"
+            f"Compilação: {build_label}"
             + (f" ({build.get('duration_seconds', 0):.1f}s)" if build.get("duration_seconds") else "")
         )
     test = result.get("test") or {}
     counts = test.get("counts") or {}
     if counts:
-        lines.append("Testes:")
+        lines.append("Testes (histórico reutilizado):" if result.get("reused") else "Testes:")
         lines.append(f"  executados: {counts.get('executed', 0)}")
         lines.append(f"  aprovados: {counts.get('passed', 0)}")
         lines.append(f"  falhas: {counts.get('failed', 0)}")
