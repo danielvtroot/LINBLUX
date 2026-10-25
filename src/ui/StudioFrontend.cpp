@@ -203,7 +203,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             any=true;
             const auto path=std::filesystem::absolute(std::filesystem::path(assets)/image.filename).string();
             const bool selected=!currentFile.empty()&&currentFile==image.filename;
-            s+="<button class=\"image-option"+(selected?" selected":"")+"\" data-action=\""+apply+"\" data-value=\""+Escape(path)+"\" title=\""+Escape("ID: "+image.id)+"\"><img src=\""+Escape(path)+"\"/><span class=\"image-option-name\">"+Escape(image.name)+"</span><span class=\"image-option-type\">"+ImageTypeLabel(image.filename)+"</span></button>";
+            s+=std::string("<button class=\"image-option")+(selected?" selected":"")+"\" data-action=\""+apply+"\" data-value=\""+Escape(path)+"\" title=\""+Escape("ID: "+image.id)+"\"><img src=\""+Escape(path)+"\"/><span class=\"image-option-name\">"+Escape(image.name)+"</span><span class=\"image-option-type\">"+ImageTypeLabel(image.filename)+"</span></button>";
         }
         if(!any)s+="<div class=\"image-empty\">"+(images.empty()?"Nenhuma imagem importada.":"Nenhuma imagem encontrada.")+"</div>";
         s+="</div><div class=\"image-picker-actions\">"+Button("import-dialog","Importar imagem","folder")+"</div></div>";
@@ -407,7 +407,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             ui.endGizmoSession(true,"dialog");ui.cancelRigGizmo();ui.camera_.releaseCapture();
             dialogOpen=true;text("dialog-error","");el("appearance-controls")->SetInnerRML("");
             auto* field=dynamic_cast<Rml::ElementFormControl*>(el("dialog-value"));
-            const auto display=game::ImageDisplayName(game::AssetsDir(),v);
+            const auto displayName=game::ImageDisplayName(game::AssetsDir(),v);
             if(action=="delete-image") {
                 std::vector<std::string> uses;
                 for(const auto& use:game::DescribeImageUsage(ui.scene_,v))uses.push_back(use.where);
@@ -420,13 +420,13 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                     report+=". Remova ou substitua essas referências (Incluindo apresentação) e tente novamente.";
                 }
                 dialog="delete-image:"+v;text("dialog-title","Excluir imagem");text("dialog-description",report);
-                field->SetDisabled(true);field->SetValue(display);display("dialog-overlay",true,"flex");context->GetRootElement()->Focus();return;
+                field->SetDisabled(true);field->SetValue(displayName);display("dialog-overlay",true,"flex");context->GetRootElement()->Focus();return;
             }
             field->SetDisabled(false);
             if(action=="rename-image") {
                 dialog="rename-image:"+v;text("dialog-title","Renomear imagem");
                 text("dialog-description","Só o nome exibido muda: o arquivo e o ID técnico continuam iguais, então nenhuma referência quebra. Nomes repetidos são permitidos.");
-                field->SetValue(display);focusValue=display;
+                field->SetValue(displayName);focusValue=displayName;
             } else {
                 dialog="replace-image:"+v;text("dialog-title","Substituir imagem");
                 text("dialog-description","Informe o caminho de um PNG/JPEG. Peças, adesivos, ícone, banner e rosto passam a usar a nova imagem; o arquivo antigo continua na biblioteca até ser excluído.");
