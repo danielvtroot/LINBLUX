@@ -122,6 +122,12 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                 auto& p=*static_cast<Part*>(node);e.endGizmoSession(true,"property");
                 if(name=="Anchored")p.setAnchored(c.value=="true");
                 else if(name=="CanCollide")p.setCanCollide(c.value=="true");
+                else if(name=="Density"||name=="Friction"||name=="Restitution"||name=="LinearDamping"||name=="AngularDamping") {
+                    auto body=p.bodyProperties();const float value=Number(c.value);
+                    if(name=="Density")body.density=value;else if(name=="Friction")body.friction=value;
+                    else if(name=="Restitution")body.restitution=value;else if(name=="LinearDamping")body.linearDamping=value;else body.angularDamping=value;
+                    std::string error;if(!p.setBodyProperties(body,error))throw std::runtime_error(error);
+                }
                 else if(name=="Spawn") {
                     if(c.value=="true"||c.value=="1") {if(!p.setAttribute("spawn",true))throw std::runtime_error("Attribute limit reached");}
                     else p.removeAttribute("spawn");

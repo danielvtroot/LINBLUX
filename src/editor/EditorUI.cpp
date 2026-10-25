@@ -2257,7 +2257,7 @@ void EditorUI::drawPartProperties(Part& part) {
     bodyChanged|=ImGui::DragFloat(i18n::Label("Restitution"),&body.restitution,.01f,0,1,"%.2f",ImGuiSliderFlags_AlwaysClamp);
     bodyChanged|=ImGui::DragFloat(i18n::Label("Linear damping"),&body.linearDamping,.01f,0,1,"%.2f",ImGuiSliderFlags_AlwaysClamp);
     bodyChanged|=ImGui::DragFloat(i18n::Label("Angular damping"),&body.angularDamping,.01f,0,1,"%.2f",ImGuiSliderFlags_AlwaysClamp);
-    if(bodyChanged){std::string error;if(!part.setBodyProperties(body,error))setStatus(error);}
+    if(bodyChanged){std::string error;if(!part.setBodyProperties(body,error))setStatus(error,true);}
 
     ImGui::Separator();
     if (ImGui::Button(i18n::Label("Focar (F)"), ImVec2(-FLT_MIN, 0.0f))) {

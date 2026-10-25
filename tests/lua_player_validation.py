@@ -17,6 +17,8 @@ def main():
     example = (root / "assets/examples/lua/temporizadores.lua").read_text()
     example += '\nlinblux.events.on("stop", function() assert(linblux.scene.root:get_attribute("timer_concluido")) end)\n'
     cases = [
+        ("CorposRigidos.lua",(root / "assets/examples/lua/corpos_rigidos.lua").read_text()+'\nlinblux.events.on("stop",function() assert(linblux.scene.root:get_attribute("corpos_rigidos_concluido")) end)',0,"erros Lua: 0"),
+        ("CorpoInvalido.lua","linblux.scene.create('part',{body={density=-1}})",1,"Propriedades físicas fora dos limites"),
         ("ConsultasControle.lua",(root / "assets/examples/lua/consultas_controle.lua").read_text()+'\nlinblux.events.on("stop",function() assert(linblux.scene.root:get_attribute("consultas_controle_concluido")) end)',0,"erros Lua: 0"),
         ("ConsultaLimite.lua","for i=1,9 do linblux.physics.overlap_sphere(linblux.vec3(0,10,0),1) end",1,"Limite de consultas espaciais"),
         ("MovimentoInvalido.lua","linblux.player:move(linblux.vec3(0,1,0))",1,"direção horizontal"),

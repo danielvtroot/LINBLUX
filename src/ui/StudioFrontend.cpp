@@ -454,6 +454,8 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                 s+="<option value=\""+std::to_string(i)+"\" "+(i==int(p.material())?"selected=\"selected\"":"")+">"+PartMaterialName(PartMaterialFromIndex(i))+"</option>";
             }
             s+="</select></div>";group("PHYSICS");check("Anchored",p.anchored());check("CanCollide",p.canCollide());
+            const auto& body=p.bodyProperties();input("Density",Num(body.density));input("Friction",Num(body.friction));
+            input("Restitution",Num(body.restitution));input("LinearDamping",Num(body.linearDamping),"Linear damping");input("AngularDamping",Num(body.angularDamping),"Angular damping");
             group("SPAWN");
             const bool legacySpawn=p.instanceClass()==InstanceClass::SpawnLocation;
             const bool spawnEnabled=legacySpawn||game::IsSpawnPart(p);
