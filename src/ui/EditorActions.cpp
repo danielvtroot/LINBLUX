@@ -5,10 +5,14 @@
 #include "scene/Scene.h"
 #include "objects/Lighting.h"
 #include "objects/Workspace.h"
+#include "game/Audio.h"
 #include "game/ImageAssets.h"
+#include "ui/ExperienceUI.h"
 #include "serialization/ProjectIO.h"
 #include "core/Diagnostics.h"
+#include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <stdexcept>
 namespace loblox {
 namespace {
@@ -80,6 +84,32 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             if(!ui::SafeImageFile(c.value))throw std::runtime_error("Use a PNG/JPEG within the 32 MiB file / 64 MiB decoded budget");
             std::string asset,error;if(!game::ImportImageTo(game::AssetsDir(),c.value,asset,error))throw std::runtime_error(error);
             e.setStatus("Image imported: "+asset);
+        }
+        else if(c.action=="import-sound") {
+            std::string asset,error;
+            if(!game::ImportMediaTo(game::AssetsDir(),c.value,game::MediaKind::Audio,asset,error))throw std::runtime_error(error);
+            double seconds=0;
+            if(!game::ProbeAudio(asset,seconds,error))throw std::runtime_error(error);
+            const std::string reference="assets/"+std::filesystem::path(asset).filename().string();
+            auto& sound=e.scene_.gameAssets().addSound(reference);
+            e.setStatus("Sound imported: "+sound.name);
+        }
+        else if(c.action=="remove-sound") {
+            auto& sounds=e.scene_.gameAssets().sounds;
+            const auto it=std::find_if(sounds.begin(),sounds.end(),[&](const game::SoundAsset& sound){
+                return sound.reference==c.value||std::filesystem::path(sound.reference).filename().string()==c.value;});
+            if(it==sounds.end())throw std::runtime_error("Sound is no longer in this project's library");
+            const std::string reference=it->reference;
+            e.scene_.gameAssets().removeSound(it->id);
+            if(game::SoundInUse(e.scene_,reference))throw std::runtime_error("Sound is still used by a script or attribute");
+            if(e.experienceUi_)e.experienceUi_->removeAsset(reference,false);
+            else {std::string error;if(!game::RemoveAssetFile(game::AssetsDir(),std::filesystem::path(reference).filename().string(),false,error))throw std::runtime_error(error);}
+            e.setStatus("Sound removed: "+reference);
+        }
+        else if(c.action=="remove-image"||c.action=="remove-asset") {
+            if(!e.experienceUi_)throw std::runtime_error("Abra uma experiência antes de remover imagens importadas");
+            e.experienceUi_->removeAsset(c.value,game::ImageInUse(e.scene_,c.value)||game::SoundInUse(e.scene_,c.value));
+            e.setStatus("Asset removido: "+c.value);
         }
         else if(c.action=="apply-image"||c.action=="apply-texture") {
             auto* part=e.scene_.selection();if(!part||!part->isPart())throw std::runtime_error("Select a Part before applying an image");

@@ -27,6 +27,9 @@ public:
     bool nativeDialogActive() const {return chooser_.active();}
     bool blocksStudioInput() const {return overlayActive()||!confirm_.empty()||fileMenu_||chooser_.active();}
     void chooseAsset();
+    // Remove um asset importado da experiência ativa, recusando arquivos que
+    // ainda estejam em uso na cena ou na apresentação.
+    void removeAsset(const std::string& reference, bool usedByScene);
     bool save(std::string& error);
     bool editingEngineDefault() const {return manager_.active()&&manager_.isEngineDefault(*manager_.active());}
     bool handlesSave() const {return manager_.active().has_value();}

@@ -290,7 +290,7 @@ void RuntimeSession::stop(bool saveProgress) {
     state_ = RuntimeState::StoppingPlay;
     if (!activeAnimation_.empty()) Event("animation", "stop", correlation_, {{"clip", activeAnimation_}});
     activeAnimation_.clear();
-    scripts_.stop();npcs_.reset();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
+    scripts_.stop();npcs_.reset();audio_.stopAll();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
     if(saveProgress)try{progress_.flush();}catch(const std::exception& e){scripts_.hostError(e.what());}
     progress_.close();
     destroyCharacter(); physics_.reset(); scene_.reset();
@@ -688,7 +688,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     const bool jumpPressed = input.jump && !lastJumpDown_ && !suppressJump_;
     lastJumpDown_ = input.jump;
     previousScriptInput_=scriptInput_;scriptInput_=input.script;
-    scripts_.update(dt);
+    scripts_.update(dt);audio_.update(dt);
     physics_->syncScene(*scene_);
     damageCooldown_=std::max(0.f,damageCooldown_-dt);
     if(health_<=0) {

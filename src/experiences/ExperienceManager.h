@@ -76,6 +76,10 @@ public:
 
     std::string importImage(const std::filesystem::path& file);
     std::string importImage(const Experience& experience,const std::filesystem::path& file);
+    std::string importAsset(const std::filesystem::path& file);
+    // Remove um asset importado da experiência ativa. Recusa arquivos usados
+    // pela apresentação (ícone/banner/rosto) e nunca apaga fora de assets/.
+    void removeAsset(const std::string& reference, bool usedByScene = false);
     std::filesystem::path thumbnail(const Experience& experience) const;
     const std::optional<Experience>& active() const { return active_; }
     void close();

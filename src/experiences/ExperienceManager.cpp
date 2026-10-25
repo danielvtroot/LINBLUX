@@ -3,6 +3,7 @@
 #include "core/Config.h"
 #include "core/Diagnostics.h"
 #include "core/ImageInfo.h"
+#include "game/Audio.h"
 #include "game/ImageAssets.h"
 #include "serialization/ProjectIO.h"
 #include "nlohmann/json.hpp"
@@ -124,14 +125,20 @@ struct Stage {
     ~Stage(){if(!committed){std::error_code error;fs::remove_all(path,error);}}
     fs::path publish(const std::string& id){const auto target=path.parent_path()/id;if(fs::exists(target))throw std::runtime_error("Installation ID already exists");fs::rename(path,target);committed=true;return target;}
 };
-std::string imageImport(const fs::path& root,const fs::path& source) {
+std::string assetImport(const fs::path& root,const fs::path& source,game::MediaKind kind) {
     std::string path,error;
-    if(!game::ImportImageTo((root/"assets").string(),source.string(),path,error))throw std::runtime_error(error);
+    if(!game::ImportMediaTo((root/"assets").string(),source.string(),kind,path,error))throw std::runtime_error(error);
     return "assets/"+fs::path(path).filename().string();
+}
+std::string imageImport(const fs::path& root,const fs::path& source) {
+    return assetImport(root,source,game::MediaKind::Image);
 }
 bool isImageKey(const std::string& key) {
     return key=="image"||key=="decal_image"||key=="texture_image"||key=="FaceTexture"||
-        key=="skyFront"||key=="skyBack"||key=="skyLeft"||key=="skyRight"||key=="skyUp"||key=="skyDown";
+        key=="skyFront"||key=="skyBack"||key=="skyLeft"||key=="skyRight"||key=="skyUp"||key=="skyDown"||
+        // Biblioteca de áudio e atributos de som: a mesma normalização de
+        // caminho, mas o arquivo é copiado como áudio.
+        key=="reference"||key=="sound"||key=="music";
 }
 // Only known image fields are relocated. Script source and arbitrary string
 // attributes are never rewritten by a substring replacement.
@@ -141,31 +148,61 @@ void walkImages(json& node,const std::function<std::string(const std::string&)>&
         else walkImages(it.value(),visit);
     } else if(node.is_array())for(auto& item:node)walkImages(item,visit);
 }
+// A referencia canonica e `assets/<arquivo>`. Referencias herdadas (nome solto
+// gravado pela UI antiga, caminho absoluto interno ou arquivo externo) sao
+// normalizadas aqui, entao projetos antigos continuam abrindo e salvando.
 std::string relocateWorld(const Scene& scene,const fs::path& from,const fs::path& target) {
     auto j=json::parse(projectio::toJson(scene));
     std::map<std::string,std::string> copied;
-    walkImages(j,[&](const std::string& ref){
+    walkImages(j,[&](const std::string& raw){
+        const std::string ref=game::NormalizeImageReference(raw);
         if(const auto it=copied.find(ref);it!=copied.end())return it->second;
+        const bool audio=game::IsAudioReference(ref);
         fs::path source;
-        if(safeRelativePath(ref)&&fs::is_regular_file(target/ref)) {
-            ImageInfo info;if(!ReadSafeImageInfo(containedFile(target,ref).string(),info))throw std::runtime_error("Invalid project image: "+ref);
+        if(!ref.empty()&&safeRelativePath(ref)&&fs::is_regular_file(target/ref)) {
+            if(audio) {double seconds;std::string probeError;
+                if(!game::ProbeAudio(containedFile(target,ref).string(),seconds,probeError))throw std::runtime_error(probeError);}
+            else {ImageInfo info;if(!ReadSafeImageInfo(containedFile(target,ref).string(),info))throw std::runtime_error("Invalid project image: "+ref);}
             copied[ref]=ref;return ref;
         }
-        else if(fs::path(ref).is_absolute())source=ref;
-        else if(!from.empty()&&safeRelativePath(ref)&&fs::is_regular_file(from/ref))source=containedFile(from,ref);
-        else if(fs::is_regular_file(ref))source=ref;
-        else source=game::BuiltinAssetPath(ref);
-        if(source.empty())throw std::runtime_error("Missing image asset: "+ref+". Original project was not changed.");
-        const auto result=imageImport(target,source);copied[ref]=result;return result;
+        if(fs::path(ref).is_absolute())source=ref;
+        else if(!from.empty()&&safeRelativePath(ref)) {
+            const auto name=fs::path(ref).filename();
+            for(const auto& candidate:{from/ref,from/"assets"/ref,from/"assets"/name,from/name})
+                if(fs::is_regular_file(candidate)){source=candidate;break;}
+        }
+        if(source.empty()&&!ref.empty()&&fs::is_regular_file(ref))source=ref;
+        if(source.empty()&&!audio)source=game::BuiltinAssetPath(ref);
+        if(source.empty())throw std::runtime_error(std::string(audio?"Missing audio asset: ":"Missing image asset: ")+raw+". Original project was not changed.");
+        const auto result=assetImport(target,source,audio?game::MediaKind::Audio:game::MediaKind::Image);
+        copied[ref]=result;return result;
     });
     return j.dump(2);
 }
 Scene& loadWorld(Scene& scene,const Experience& e) {
     const auto world=read(containedFile(e.root,e.manifest.mainPlace));
     auto j=boundedJson(world);
-    walkImages(j,[&](const std::string& ref){mediaPath(ref);const auto file=containedFile(e.root,ref);ImageInfo info;
-        if(!ReadSafeImageInfo(file.string(),info))throw std::runtime_error("Invalid/missing image asset: "+ref);
-        return ref;});
+    walkImages(j,[&](const std::string& raw){const std::string ref=game::NormalizeImageReference(raw);
+        const bool audio=game::IsAudioReference(ref);
+        if(!ref.empty()&&safeRelativePath(ref)) {
+            const auto file=containedFile(e.root,ref);ImageInfo info;
+            if(audio) {
+                double seconds;std::string probeError;
+                if(fs::is_regular_file(file)&&game::ProbeAudio(file.string(),seconds,probeError))return ref;
+            } else if(fs::is_regular_file(file)&&ReadSafeImageInfo(file.string(),info))return ref;
+            // Legado: nome solto guardado em assets/.
+            const auto legacyName=fs::path(ref).filename().string();
+            const auto legacy=containedFile(e.root,"assets/"+legacyName);
+            if(audio) {
+                double seconds;std::string probeError;
+                if(fs::is_regular_file(legacy)&&game::ProbeAudio(legacy.string(),seconds,probeError))return "assets/"+legacyName;
+            } else if(fs::is_regular_file(legacy)&&ReadSafeImageInfo(legacy.string(),info))return "assets/"+legacyName;
+        }
+        if(!audio) {
+            const auto builtin=game::BuiltinAssetPath(ref);ImageInfo info;
+            if(!builtin.empty()&&ReadSafeImageInfo(builtin,info))return ref;
+        }
+        throw std::runtime_error(std::string(audio?"Invalid/missing audio asset: ":"Invalid/missing image asset: ")+raw);});
     for(const auto& ref:{e.manifest.icon,e.manifest.banner,e.manifest.loadingBackground,e.manifest.faceImage})if(!ref.empty()) {
         ImageInfo info;if(!ReadSafeImageInfo(containedFile(e.root,ref).string(),info))throw std::runtime_error("Invalid presentation image: "+ref);
     }
@@ -182,6 +219,11 @@ void writeNumber(FILE* out,uint64_t value,int bytes) {
 }
 bool packagePath(const std::string& path) {
     return safeRelativePath(path)&&(path=="experience.json"||path.rfind("places/",0)==0||path.rfind("assets/",0)==0);
+}
+bool isImageAsset(const std::string& path) {
+    auto ext=fs::path(path).extension().string();
+    for(auto& c:ext)c=char(std::tolower(static_cast<unsigned char>(c)));
+    return ext==".png"||ext==".jpg"||ext==".jpeg";
 }
 } // namespace
 
@@ -351,11 +393,15 @@ Experience ExperienceManager::snapshot(const Scene& scene,const fs::path& source
     manifest.mainPlace="places/"+newId()+".loblox.json";manifest.modified=now();
     if(manifest.faceImage.empty()&&fs::is_regular_file(sourceRoot/"experience.json"))manifest.faceImage=inspect(sourceRoot).manifest.faceImage;
     if(!manifest.faceImage.empty())manifest.faceImage=imageImport(stage.path,containedFile(sourceRoot,manifest.faceImage));
-    else if(const auto face=game::BuiltinAssetPath("rosto1.png");!face.empty())manifest.faceImage=imageImport(stage.path,face);
+    // Sem rosto imposto de fabrica: uma experiencia sem imagem de apresentacao
+    // continua valida; o rig padrao nao depende de arquivo externo.
     if(fs::is_regular_file(sourceRoot/"experience.json")&&fs::is_directory(sourceRoot/"assets"))
         for(const auto& file:fs::directory_iterator(containedFile(sourceRoot,"assets"))) {
             if(file.is_symlink())throw std::runtime_error("Symlink asset in snapshot");
-            if(file.is_regular_file())imageImport(stage.path,file.path());
+            if(!file.is_regular_file())continue;
+            std::string path,error;
+            if(!game::ImportMediaTo((stage.path/"assets").string(),file.path().string(),game::MediaKind::Any,path,error))
+                throw std::runtime_error(error);
         }
     for(auto* reference:{&manifest.icon,&manifest.banner,&manifest.loadingBackground})if(!reference->empty())*reference=imageImport(stage.path,containedFile(sourceRoot,*reference));
     Scene merged;
@@ -535,6 +581,26 @@ void ExperienceManager::deletePermanently(const Experience& experience) {
 void ExperienceManager::close(){active_.reset();game::SetProjectAssetRoot({});}
 std::string ExperienceManager::importImage(const fs::path& file) {if(!active_)throw std::runtime_error("Open an experience first");return imageImport(active_->root,file);}
 std::string ExperienceManager::importImage(const Experience& e,const fs::path& file) {return imageImport(inspect(e.root).root,file);}
+std::string ExperienceManager::importAsset(const fs::path& file) {
+    if(!active_)throw std::runtime_error("Open an experience first");
+    const auto root=inspect(active_->root).root;
+    std::string path,error;
+    if(!game::ImportMediaTo((root/"assets").string(),file.string(),game::MediaKind::Any,path,error))throw std::runtime_error(error);
+    return "assets/"+fs::path(path).filename().string();
+}
+void ExperienceManager::removeAsset(const std::string& reference,bool usedByScene) {
+    if(!active_)throw std::runtime_error("Abra uma experiência antes de remover assets");
+    const auto root=inspect(active_->root).root;
+    const auto normalized=game::NormalizeImageReference(reference);
+    const auto tail=normalized.rfind("assets/",0)==0?normalized.substr(7):std::string();
+    if(tail.empty()||tail.find('/')!=std::string::npos||tail.find('\\')!=std::string::npos)
+        throw std::runtime_error("Selecione um asset importado da experiência");
+    for(const auto& ref:{active_->manifest.icon,active_->manifest.banner,active_->manifest.loadingBackground,active_->manifest.faceImage})
+        if(!ref.empty()&&ref==normalized)throw std::runtime_error("O asset é usado na apresentação da experiência; troque a imagem antes de removê-lo");
+    std::string error;
+    if(!game::RemoveAssetFile((root/"assets").string(),tail,usedByScene,error))throw std::runtime_error(error);
+    event("asset_removed",root);
+}
 void ExperienceManager::setDefaultTemplate(const Scene& scene) {
     Manifest m;m.id=newId();m.installationId=newId();m.name="My Default";m.created=m.modified=now();m.sourceTemplate="user-snapshot";
     auto e=snapshot(scene,active_?active_->root:fs::path{},data_/"templates",m,false);
@@ -714,7 +780,7 @@ void ExperienceManager::exportPackage(const Experience& experience,const fs::pat
     }
     if(paths.size()>maxEntries)throw std::runtime_error("Too many files in experience");
     uint64_t total=0,decodedTotal=0;for(const auto& path:paths){const auto file=containedFile(e.root,path);const auto size=fs::file_size(file);if(size>maxFile||total+size>maxTotal)throw std::runtime_error("Package exceeds 256 MiB budget");total+=size;
-        if(path.rfind("assets/",0)==0){ImageInfo info;if(!ReadSafeImageInfo(file.string(),info))throw std::runtime_error("Invalid asset in export: "+path);decodedTotal+=uint64_t(info.width)*info.height*4;if(decodedTotal>maxTotal)throw std::runtime_error("Image decoded budget exceeds 256 MiB");}
+        if(path.rfind("assets/",0)==0&&isImageAsset(path)){ImageInfo info;if(!ReadSafeImageInfo(file.string(),info))throw std::runtime_error("Invalid asset in export: "+path);decodedTotal+=uint64_t(info.width)*info.height*4;if(decodedTotal>maxTotal)throw std::runtime_error("Image decoded budget exceeds 256 MiB");}
     }
     const auto target=fs::absolute(destination);fs::create_directories(target.parent_path());
     const auto temporary=target.parent_path()/(".lo-export-"+newId());
@@ -761,7 +827,7 @@ Experience ExperienceManager::importPackage(const fs::path& package) {
     if(in.peek()!=EOF)throw std::runtime_error("Trailing data in .lo package");
     auto e=inspect(stage.path);Scene probe;loadWorld(probe,e);
     uint64_t decodedBudget=0;
-    for(const auto& name:names)if(name.rfind("assets/",0)==0) {
+    for(const auto& name:names)if(name.rfind("assets/",0)==0&&isImageAsset(name)) {
         ImageInfo info;const auto file=stage.path/name;
         if(!ReadSafeImageInfo(file.string(),info))throw std::runtime_error("Invalid packaged image: "+name);
         decodedBudget+=uint64_t(info.width)*info.height*4;

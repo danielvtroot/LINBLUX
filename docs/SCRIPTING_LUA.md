@@ -397,8 +397,8 @@ A cota de instruções também não mede todo o trabalho interno de funções C.
 
 Copie cada exemplo para o editor de scripts. O importador de cena declarativa
 `.lua` não executa esses scripts e não deve ser usado para importá-los como cenas.
-NPCs e navegação estão implementados (ver a última seção). Áudio, decals e UI na
-API nova continuam dependências em desenvolvimento.
+NPCs, navegação, imagens/decals e áudio estão implementados (ver as últimas
+seções). UI por Lua continua dependência em desenvolvimento.
 Entrada e dano já estão disponíveis conforme as seções acima.
 
 ## Consultas de volumes e controle do jogador
@@ -527,3 +527,63 @@ Exemplos reais, salvos e executados pelos testes Studio e pelo Player:
 - [npc_monstro.lua](../assets/examples/lua/npc_monstro.lua): persegue, ataca por
   proximidade com intervalo, aplica dano na vida real do jogador e recebe dano
   pelo evento `atacar_monstro`.
+
+## Imagens, decals e assets da experiência
+
+A referência canônica de mídia é sempre `assets/<arquivo>` relativa à raiz da
+experiência. `game::NormalizeImageReference` é a única regra de normalização:
+UI, persistência (`ProjectIO`/`GameAssetsIO`) e `walkImages` a usam, então
+projetos antigos que gravaram apenas o nome do arquivo são migrados ao abrir e
+regravados canônicos ao salvar. Nenhum caminho absoluto do computador é
+gravado.
+
+- Importar imagem: `game::ImportMediaTo(dir, origem, MediaKind::Image, ...)`
+  valida PNG/JPEG (32 MiB de arquivo, 64 MiB decodificado), copia com ID FNV-1a
+  do conteúdo e devolve `assets/<id>.<ext>`. Reimportar o mesmo arquivo reusa o
+  destino.
+- Aplicar em peça: atributos `decal_image` / `texture_image` (mais
+  `decal_face`, `decal_transparency`, `texture_*`). Em rigs: `bodies[i].image`
+  ou `rig:add_decal`.
+- Remover: `ExperienceManager::removeAsset(ref, usado)` recusa assets citados
+  pelo manifesto (ícone/banner/rosto) e o editor recusa quando
+  `ImageInUse`/`SoundInUse` encontram a referência na cena, em atributos, na
+  biblioteca de sons ou no código de um Script.
+- O rosto da fábrica não é mais obrigatório: uma experiência sem `faceImage`
+  é válida; o rig do personagem é a fonte visual e o render só usa o rosto
+  embutido quando o projeto não define nenhum.
+
+## Áudio MP3, WAV e OGG
+
+Importe em **Studio → Imagens/Sons**; o arquivo vai para `assets/` da
+experiência e a biblioteca do projeto (`GameAssets.sounds`) guarda
+`id/nome/referência/volume/loop/kind`. O MP3/WAV/OGG é validado pelo container
+e decodificado (`LoadWave`) na importação, então um arquivo renomeado é
+recusado antes de ser gravado.
+
+```lua
+local handle = linblux.audio.play("musica_fundo", { volume = 0.4, loop = true })
+linblux.audio.play("assets/<id>.ogg", { volume = 1 })
+linblux.audio.pause(handle)      linblux.audio.resume(handle)
+linblux.audio.set_volume(handle, 0.6)   linblux.audio.volume(handle)
+linblux.audio.set_loop(handle, false)   linblux.audio.looping(handle)
+linblux.audio.is_playing(handle)        linblux.audio.is_paused(handle)
+linblux.audio.duration(handle)       -- segundos reais decodificados
+linblux.audio.duration("musica_fundo")
+linblux.audio.stop(handle)       linblux.audio.stop_all()
+for _, som in ipairs(linblux.audio.list()) do print(som.id, som.kind) end
+```
+
+Reprodução 2D global, sem atenuação por distância; cada `play` devolve um
+handle independente (até 64 vozes simultâneas). `Studio` e `Player` chamam
+`InitAudioDevice` depois da janela; sem dispositivo (CI/headless) o runtime
+mantém o mesmo contrato de handles/pause/stop e conduz o término pela duração
+decodificada, sem fingir um stream. `stop()` da sessão encerra todas as vozes.
+Limitação real: não há áudio 3D/espacial, mixer por categoria nem streaming
+parcial — o arquivo inteiro é decodificado na importação.
+
+Exemplos reais:
+
+- [audio_musica_fundo.lua](../assets/examples/lua/audio_musica_fundo.lua):
+  música em loop com controle de volume e pausa por teclas.
+- [audio_som_interacao.lua](../assets/examples/lua/audio_som_interacao.lua):
+  som ao entrar/sair do contato com uma peça.

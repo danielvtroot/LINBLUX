@@ -1,6 +1,8 @@
 #include "game/GameAssetsIO.h"
+#include "game/ImageAssets.h"
 
 #include <cmath>
+#include <filesystem>
 #include <stdexcept>
 
 namespace loblox::game {
@@ -31,6 +33,11 @@ RigidTransform ReadTransform(const json& v) {
 }
 nlohmann::json EncodeAssets(const GameAssets& a) {
     json j{{"version", 1}, {"defaultRig", a.defaultRig}, {"rigs", json::array()}, {"animations", json::array()}};
+    if(!a.sounds.empty()) {
+        j["sounds"]=json::array();
+        for(const auto& sound:a.sounds)j["sounds"].push_back({{"id",sound.id},{"name",sound.name},
+            {"reference",sound.reference},{"volume",sound.volume},{"loop",sound.loop},{"kind",sound.kind}});
+    }
     for (const auto& r : a.rigs) {
         json rig{{"id", r.id}, {"name", r.name}, {"root", Transform(r.root)},
                  {"bodies", json::array()}, {"joints", json::array()}};
@@ -39,11 +46,14 @@ nlohmann::json EncodeAssets(const GameAssets& a) {
             json body{{"name", b.name}, {"size", Vec(b.size)},
                       {"color", {b.color.r, b.color.g, b.color.b, b.color.a}},
                       {"material", PartMaterialName(b.material)}};
-            if (!b.image.empty()) body["image"] = b.image;
+            // Normalização única na persistência: qualquer referência solta
+            // vira assets/<arquivo>, então a UI não consegue gravar caminho
+            // quebrado nem depender do diretório de trabalho.
+            if (!b.image.empty()) body["image"] = game::NormalizeImageReference(b.image);
             if(!b.decals.empty()) {
                 body["decals"]=json::array();
                 for(const auto& d:b.decals)body["decals"].push_back({{"id",d.id},{"name",d.name},
-                    {"image",d.surface.image},{"face",d.surface.face},{"transparency",d.surface.transparency}});
+                    {"image",game::NormalizeImageReference(d.surface.image)},{"face",d.surface.face},{"transparency",d.surface.transparency}});
             }
             rig["bodies"].push_back(std::move(body));
         }
@@ -114,12 +124,12 @@ bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& erro
                 for (int ch = 0; ch < 4; ++ch) rgba[ch] = static_cast<unsigned char>(ReadInt(c.at(ch), 0, 255));
                 body.color = {rgba[0], rgba[1], rgba[2], rgba[3]};
                 Require(PartMaterialFromName(b.at("material").get<std::string>(), body.material), "unknown body material");
-                body.image = b.value("image", std::string());
+                body.image = game::NormalizeImageReference(b.value("image", std::string()));
                 if(b.contains("decals")) {
                     Require(b["decals"].is_array()&&b["decals"].size()<=64,"invalid rig decals array");
                     for(const auto& d:b["decals"]) {
                         RigDecal decal;decal.id=d.at("id").get<std::string>();decal.name=d.at("name").get<std::string>();
-                        decal.surface.image=d.at("image").get<std::string>();decal.surface.face=ReadInt(d.at("face"),0,5);
+                        decal.surface.image=game::NormalizeImageReference(d.at("image").get<std::string>());decal.surface.face=ReadInt(d.at("face"),0,5);
                         decal.surface.transparency=d.value("transparency",0.f);body.decals.push_back(std::move(decal));
                     }
                 }
@@ -153,6 +163,19 @@ bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& erro
                 }
             }
             a.animations.push_back(std::move(c));
+        }
+        if(j.contains("sounds")) {
+            const auto& sounds=j.at("sounds");
+            Require(sounds.is_array()&&sounds.size()<=256,"invalid sound library");
+            for(const auto& value:sounds) {
+                SoundAsset sound;
+                sound.id=value.at("id").get<std::string>();sound.name=value.at("name").get<std::string>();
+                sound.reference=value.at("reference").get<std::string>();
+                sound.filename=std::filesystem::path(sound.reference).filename().string();
+                sound.volume=value.value("volume",1.f);sound.loop=value.value("loop",false);
+                sound.kind=value.value("kind",std::string("sound"));
+                a.sounds.push_back(std::move(sound));
+            }
         }
         const auto& p = j.at("player"); auto& out = a.player;
 #define READ_FLOAT(field) out.field = p.at(#field).get<float>()

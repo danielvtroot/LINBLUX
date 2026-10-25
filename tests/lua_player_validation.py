@@ -3,6 +3,7 @@ import argparse
 import copy
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 
@@ -37,11 +38,16 @@ def main():
         ("NpcDano.lua", "local npc=linblux.npc.create{name='Alvo',position=linblux.vec3(10,2.6,10),max_health=10}\nlinblux.npc.damage(npc,15)\nassert(linblux.npc.state(npc)=='dead' and linblux.npc.health(npc)==0)", 0, "erros Lua: 0"),
         ("NpcInvalido.lua", "linblux.npc.create{size=linblux.vec3(-1,2,3)}", 1, "Tamanho mínimo do NPC"),
         ("NpcSemComponente.lua", "local p=linblux.scene.create('part',{name='SemNpc',position=linblux.vec3(5,5,5)})\nlinblux.npc.move_to(p, linblux.vec3(0,2,0))", 1, "não possui componente de NPC"),
+        ("Audio.lua", "local h = linblux.audio.play('assets/tone.ogg',{volume=0.5,loop=true})\nassert(h and linblux.audio.is_playing(h))\nassert(linblux.audio.duration(h) > 0.1)\nlinblux.audio.pause(h)\nassert(linblux.audio.is_paused(h))\nlinblux.audio.resume(h)\nlinblux.audio.set_volume(h,0.25)\nassert(math.abs(linblux.audio.volume(h)-0.25) < 0.001)\nlinblux.audio.set_loop(h,false)\nassert(not linblux.audio.looping(h))\nlinblux.audio.stop(h)\nassert(not linblux.audio.is_playing(h))\nlinblux.scene.root:set_attribute('audio_ok', true)", 0, "erros Lua: 0"),
+        ("AudioAusente.lua", "linblux.audio.play('assets/nao-existe.ogg')", 1, "não encontrado no projeto"),
         ("FalhaDeScript.lua", "error('probe validation failure')", 1, "FalhaDeScript.lua:1"),
         ("FalhaNoStop.lua", "linblux.events.on('stop', function() error('probe stop failure') end)", 1, "probe stop failure"),
         ("ErroEvicto.lua", "error('old error evicted by output')", 1, "erros Lua: 1"),
     ]
     with tempfile.TemporaryDirectory(prefix="linblux-lua-player-") as temporary:
+        audio_dir = Path(temporary) / "assets"
+        audio_dir.mkdir()
+        shutil.copy(root / "tests/fixtures/audio/tone.ogg", audio_dir / "tone.ogg")
         for name, source, expected, diagnostic in cases:
             scene = copy.deepcopy(base)
             identifier = scene["nextId"]

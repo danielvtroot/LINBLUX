@@ -614,6 +614,76 @@ struct LuaRuntime::Impl {
         for(const auto& point:path.points){ModernVector(L,point);lua_rawseti(L,-2,++index);}
         lua_pushboolean(L,path.reachable);return 2;
     }
+    // ---- Audio -------------------------------------------------------------
+    // Reproducao 2D global (som nao posicional). Aceita a referencia
+    // assets/<arquivo> ou o id da biblioteca do projeto (Game Config).
+    static const game::SoundAsset* FindSound(const game::RuntimeSession& runtime,const std::string& id) {
+        for(const auto& sound:runtime.scene().gameAssets().sounds)if(sound.id==id)return &sound;
+        return nullptr;
+    }
+    static int AudioHandle(lua_State* L,int index) {
+        Require(lua_isinteger(L,index),"handle de audio invalido");
+        const auto handle=lua_tointeger(L,index);Require(handle>0&&handle<=0x7fffffff,"handle de audio invalido");return int(handle);
+    }
+    static int AudioPlay(lua_State* L) {
+        auto& self=Host(L);Require(lua_type(L,1)==LUA_TSTRING,"linblux.audio.play requer referencia ou id");
+        std::string reference=Text(L,1);float volume=1;bool loop=false;
+        if(const auto* library=FindSound(*self.runtime,reference)){reference=library->reference;volume=library->volume;loop=library->loop;}
+        if(lua_gettop(L)>1&&!lua_isnil(L,2)) {
+            Require(lua_istable(L,2),"volume/loop do audio devem estar em tabela");
+            Field(L,2,"volume");if(!lua_isnil(L,-1))volume=float(Number(L,-1));lua_pop(L,1);
+            Field(L,2,"loop");if(!lua_isnil(L,-1)){Require(lua_isboolean(L,-1),"loop requer booleano");loop=lua_toboolean(L,-1);}lua_pop(L,1);
+            lua_pushnil(L);while(lua_next(L,2)){const char* key=Text(L,-2);Require(Eq(key,"volume")||Eq(key,"loop"),"Opcao de audio desconhecida");lua_pop(L,1);}
+        }
+        std::string error;const int handle=self.runtime->audio().play(reference,volume,loop,error);
+        Require(handle>0,error.c_str());lua_pushinteger(L,handle);return 1;
+    }
+    static int AudioStop(lua_State* L) {
+        auto& self=Host(L);Require(self.runtime->audio().stop(AudioHandle(L,1)),"handle de audio invalido");return 0;
+    }
+    static int AudioPause(lua_State* L) {
+        auto& self=Host(L);Require(self.runtime->audio().pause(AudioHandle(L,1)),"handle de audio invalido");return 0;
+    }
+    static int AudioResume(lua_State* L) {
+        auto& self=Host(L);Require(self.runtime->audio().resume(AudioHandle(L,1)),"handle de audio invalido");return 0;
+    }
+    static int AudioSetVolume(lua_State* L) {
+        auto& self=Host(L);const int handle=AudioHandle(L,1);const double volume=Number(L,2);std::string error;
+        Require(self.runtime->audio().setVolume(handle,float(volume),error),error.c_str());return 0;
+    }
+    static int AudioSetLoop(lua_State* L) {
+        auto& self=Host(L);Require(lua_isboolean(L,2),"loop requer booleano");
+        Require(self.runtime->audio().setLoop(AudioHandle(L,1),lua_toboolean(L,2)),"handle de audio invalido");return 0;
+    }
+    static int AudioVolume(lua_State* L) { auto& self=Host(L);lua_pushnumber(L,self.runtime->audio().volume(AudioHandle(L,1)));return 1; }
+    static int AudioIsPlaying(lua_State* L) { auto& self=Host(L);lua_pushboolean(L,self.runtime->audio().playing(AudioHandle(L,1)));return 1; }
+    static int AudioIsPaused(lua_State* L) { auto& self=Host(L);lua_pushboolean(L,self.runtime->audio().isPaused(AudioHandle(L,1)));return 1; }
+    static int AudioIsLooping(lua_State* L) { auto& self=Host(L);lua_pushboolean(L,self.runtime->audio().looping(AudioHandle(L,1)));return 1; }
+    static int AudioDuration(lua_State* L) {
+        auto& self=Host(L);
+        // Aceita handle (voz já tocando) ou referência/id da biblioteca.
+        if(lua_isinteger(L,1)){lua_pushnumber(L,self.runtime->audio().duration(AudioHandle(L,1)));return 1;}
+        Require(lua_type(L,1)==LUA_TSTRING,"duracao requer handle, referencia ou id");
+        std::string reference=Text(L,1);if(const auto* library=FindSound(*self.runtime,reference))reference=library->reference;
+        double seconds=0;std::string error;Require(self.runtime->audio().probe(reference,seconds,error),error.c_str());
+        lua_pushnumber(L,seconds);return 1;
+    }
+    static int AudioStopAll(lua_State* L) { auto& self=Host(L);self.runtime->audio().stopAll();return 0; }
+    static int AudioList(lua_State* L) {
+        auto& self=Host(L);const auto& sounds=self.runtime->scene().gameAssets().sounds;
+        lua_createtable(L,int(sounds.size()),0);int index=0;
+        for(const auto& sound:sounds) {
+            lua_createtable(L,0,6);
+            lua_pushstring(L,sound.id.c_str());lua_setfield(L,-2,"id");
+            lua_pushstring(L,sound.name.c_str());lua_setfield(L,-2,"name");
+            lua_pushstring(L,sound.reference.c_str());lua_setfield(L,-2,"reference");
+            lua_pushnumber(L,sound.volume);lua_setfield(L,-2,"volume");
+            lua_pushboolean(L,sound.loop);lua_setfield(L,-2,"loop");
+            lua_pushstring(L,sound.kind.c_str());lua_setfield(L,-2,"kind");
+            lua_rawseti(L,-2,++index);
+        }
+        return 1;
+    }
     static int ModernFind(lua_State* L) {
         auto& self=Host(L);
         if(lua_isinteger(L,1)){const auto id=lua_tointeger(L,1);Require(id>0,"ID deve ser positivo");self.pushInstance(L,self.runtime->scene().find(InstanceId(id)),true);}
@@ -1116,6 +1186,21 @@ struct LuaRuntime::Impl {
         lua_pushcfunction(L,Safe<NpcFindPath>);lua_setfield(L,-2,"find_path");
         lua_pushcfunction(L,Safe<NpcNavigation>);lua_setfield(L,-2,"navigation");
         lua_setfield(L,-2,"npc");
+        lua_newtable(L);
+        lua_pushcfunction(L,Safe<AudioPlay>);lua_setfield(L,-2,"play");
+        lua_pushcfunction(L,Safe<AudioStop>);lua_setfield(L,-2,"stop");
+        lua_pushcfunction(L,Safe<AudioPause>);lua_setfield(L,-2,"pause");
+        lua_pushcfunction(L,Safe<AudioResume>);lua_setfield(L,-2,"resume");
+        lua_pushcfunction(L,Safe<AudioSetVolume>);lua_setfield(L,-2,"set_volume");
+        lua_pushcfunction(L,Safe<AudioSetLoop>);lua_setfield(L,-2,"set_loop");
+        lua_pushcfunction(L,Safe<AudioVolume>);lua_setfield(L,-2,"volume");
+        lua_pushcfunction(L,Safe<AudioIsPlaying>);lua_setfield(L,-2,"is_playing");
+        lua_pushcfunction(L,Safe<AudioIsPaused>);lua_setfield(L,-2,"is_paused");
+        lua_pushcfunction(L,Safe<AudioIsLooping>);lua_setfield(L,-2,"looping");
+        lua_pushcfunction(L,Safe<AudioDuration>);lua_setfield(L,-2,"duration");
+        lua_pushcfunction(L,Safe<AudioStopAll>);lua_setfield(L,-2,"stop_all");
+        lua_pushcfunction(L,Safe<AudioList>);lua_setfield(L,-2,"list");
+        lua_setfield(L,-2,"audio");
         lua_setglobal(L,"linblux");return 0;
     }
     static int Emit(lua_State* L) {

@@ -90,6 +90,7 @@ add_library(linblux_engine STATIC
   src/game/Runtime.cpp
   src/game/Navigation.cpp
   src/game/Npc.cpp
+  src/game/Audio.cpp
   src/game/ProgressStore.cpp
   src/game/Spawn.cpp
   src/core/Diagnostics.cpp
@@ -215,6 +216,14 @@ add_test(NAME linblux_studio COMMAND linblux_studio_tests)
 add_executable(linblux_game_tests tests/game_main.cpp)
 target_link_libraries(linblux_game_tests PRIVATE linblux_core)
 add_test(NAME linblux_game COMMAND linblux_game_tests)
+add_executable(linblux_image_assets_tests tests/image_assets_main.cpp)
+target_link_libraries(linblux_image_assets_tests PRIVATE linblux_core)
+add_test(NAME linblux_image_assets COMMAND linblux_image_assets_tests)
+set_tests_properties(linblux_image_assets PROPERTIES TIMEOUT 90)
+add_executable(linblux_audio_tests tests/audio_main.cpp)
+target_link_libraries(linblux_audio_tests PRIVATE linblux_core)
+add_test(NAME linblux_audio COMMAND linblux_audio_tests)
+set_tests_properties(linblux_audio PROPERTIES TIMEOUT 120)
 add_executable(linblux_tests tests/test_main.cpp)
 target_link_libraries(linblux_tests PRIVATE linblux_core)
 add_test(NAME linblux_tests COMMAND linblux_tests)
