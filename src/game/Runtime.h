@@ -5,6 +5,7 @@
 #include <set>
 #include "game/Rig.h"
 #include "game/ScriptInput.h"
+#include "game/ProgressStore.h"
 #include "scripting/LuaRuntime.h"
 #include "scene/Scene.h"
 #include "physics/PhysicsWorld.h"
@@ -79,8 +80,8 @@ public:
     ~RuntimeSession();
     RuntimeSession(const RuntimeSession&) = delete;
     RuntimeSession& operator=(const RuntimeSession&) = delete;
-    bool start(const Scene& authoring, std::string& error);
-    void stop();
+    bool start(const Scene& authoring, std::string& error,const ProgressOptions& progress={});
+    void stop(bool saveProgress=true);
     void pause();
     void resume();
     bool respawn(std::string& error);
@@ -91,6 +92,7 @@ public:
     Scene& mutableScene() { return *scene_; } // validated native bindings, runtime only
     scripting::LuaRuntime& scripts() { return scripts_; }
     const scripting::LuaRuntime& scripts() const { return scripts_; }
+    ProgressStore& storage(){return progress_;}
     const ScriptInput& scriptInput() const { return scriptInput_; }
     const ScriptInput& previousScriptInput() const { return previousScriptInput_; }
     unsigned characterGeneration() const { return respawns_; }
@@ -174,6 +176,7 @@ private:
     std::string correlation_;
     std::string activeAnimation_;
     scripting::LuaRuntime scripts_;
+    ProgressStore progress_;
     std::set<std::pair<InstanceId,InstanceId>> activeContacts_;
     ScriptInput scriptInput_,previousScriptInput_;
     float health_=100, deadTime_=0, damageCooldown_=0;

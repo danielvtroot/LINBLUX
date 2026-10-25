@@ -388,6 +388,49 @@ end, sensor)
         CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);
     }
 }
+void LinbluxProgress() {
+    const auto root=std::filesystem::path(__FILE__).parent_path().parent_path();
+    const auto directory=root/".turbo"/("progress-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(directory);
+    Scene author;author.buildDefaultScene();std::string error;
+    std::ifstream file(root/"assets/examples/lua/persistencia.lua");CHECK(file.good());
+    author.createScript(InstanceClass::Script,nullptr,"Persistencia.lua")->source=std::string(std::istreambuf_iterator<char>(file),{});
+    const game::ProgressOptions options{"test-experience",directory.string(),true};
+    const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;
+    const auto visits=[&]{return std::get<double>(runtime.scene().workspace()->attributes().at("visitas_persistidas"));};
+    CHECK(runtime.start(author,error,options));CHECK(visits()==1);CHECK(runtime.storage().persistent()&&runtime.storage().pending());
+    runtime.stop(false); // canceled startup must not save its writes or stop callback
+    CHECK(runtime.start(author,error,options));CHECK(visits()==1);
+    runtime.update(1.f/60,{});CHECK(!runtime.storage().pending());
+    game::RuntimeSession competing;CHECK(!competing.start(author,error,options));
+    runtime.stop();CHECK(runtime.start(author,error,options));CHECK(visits()==2);CHECK(runtime.storage().get("encerrado")=="true");
+    runtime.pause();CHECK(!runtime.storage().pending());runtime.stop();
+    CHECK(runtime.start(author,error,{options.identity,options.directory,false}));CHECK(visits()==1);CHECK(!runtime.storage().persistent());runtime.stop();
+    CHECK(runtime.start(author,error,options));CHECK(visits()==3);runtime.stop();
+    CHECK(projectio::toJson(author)==baseline);
+    std::filesystem::path data;
+    for(const auto& item:std::filesystem::recursive_directory_iterator(directory))if(item.path().filename()=="progress.json")data=item.path();
+    CHECK(!data.empty());
+    if(!data.empty()){
+        const auto original=[&]{std::ifstream input(data);return std::string(std::istreambuf_iterator<char>(input),{});}();
+        CHECK((std::filesystem::status(data).permissions()&std::filesystem::perms::others_read)==std::filesystem::perms::none);
+        {std::ofstream out(data);out<<"corrupted progress";}
+        CHECK(!runtime.start(author,error,options));
+        {std::ifstream input(data);CHECK(std::string(std::istreambuf_iterator<char>(input),{})=="corrupted progress");}
+        {std::ofstream out(data);out<<original;}
+        const auto external=directory/"outside.json";{std::ofstream out(external);out<<original;}
+        std::filesystem::remove(data);std::filesystem::create_symlink(external,data);
+        CHECK(!runtime.start(author,error,options));
+        runtime.stop(false);
+        {std::ifstream input(external);CHECK(std::string(std::istreambuf_iterator<char>(input),{})==original);}
+    }
+    game::ProgressStore store;store.open({});bool rejected=false;
+    try{store.set("oversized",std::string(65537,'x'));}catch(const std::exception&){rejected=true;}CHECK(rejected);
+    rejected=false;try{store.set("bad","{invalid");}catch(const std::exception&){rejected=true;}CHECK(rejected);
+    for(int i=0;i<62;++i)store.set("limited",std::to_string(i));
+    rejected=false;try{store.set("limited","99");}catch(const std::exception&){rejected=true;}CHECK(rejected);
+    store.tick(0);CHECK(store.get("limited")=="61");store.close();std::filesystem::remove_all(directory);
+}
 void LinbluxTransformValidation() {
     Scene author;author.buildDefaultScene();std::string error;
     auto* target=author.createPart(PartShape::Block,{70,10,0},{3,3,3},"AlvoValidacao");target->setAnchored(true);
@@ -1046,6 +1089,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

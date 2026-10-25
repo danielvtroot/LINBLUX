@@ -1,4 +1,5 @@
 #include "scripting/LuaRuntime.h"
+#include <nlohmann/json.hpp>
 #include "game/Runtime.h"
 #include "scene/Scene.h"
 #include "core/Diagnostics.h"
@@ -339,6 +340,58 @@ struct LuaRuntime::Impl {
     static int Components(lua_State* L) {
         auto& self=Host(L);auto& owner=self.instance(L,1);lua_newtable(L);int index=0;
         for(const auto* child:owner.children())if(IsScriptClass(child->instanceClass())||IsSurfaceClass(child->instanceClass())){self.pushInstance(L,child,true);lua_rawseti(L,-2,++index);}return 1;
+    }
+    static nlohmann::json ReadStoredValue(lua_State* L,int index,int depth,std::size_t& nodes,std::size_t& bytes) {
+        Require(depth<=8&&++nodes<=1024,"Estado excede profundidade ou quantidade de valores");index=lua_absindex(L,index);
+        switch(lua_type(L,index)){
+        case LUA_TNIL:return nullptr;
+        case LUA_TBOOLEAN:return bool(lua_toboolean(L,index));
+        case LUA_TNUMBER:if(lua_isinteger(L,index))return int64_t(lua_tointeger(L,index));return Number(L,index);
+        case LUA_TSTRING:{const auto length=lua_rawlen(L,index);bytes+=length;Require(bytes<=65536,"Estado excede 64 KiB");return std::string(Text(L,index),length);}
+        case LUA_TTABLE:break;
+        default:throw std::runtime_error("Persistência aceita somente dados JSON, sem funções ou referências nativas");
+        }
+        if(lua_getmetatable(L,index)){lua_pop(L,1);throw std::runtime_error("Persistência requer tabelas sem metatabela");}
+        auto result=nlohmann::json::object();int kind=0;std::size_t count=0,maximum=0;
+        lua_pushnil(L);while(lua_next(L,index)){
+            ++count;
+            if(lua_isinteger(L,-2)){
+                Require(kind!=2,"Não misture índices e chaves em dados persistentes");if(kind==0){kind=1;result=nlohmann::json::array();}
+                const auto key=lua_tointeger(L,-2);Require(key>0&&key<=1024,"Índice persistente fora do intervalo");maximum=std::max(maximum,std::size_t(key));
+                result[std::size_t(key-1)]=ReadStoredValue(L,lua_gettop(L),depth+1,nodes,bytes);
+            }else{
+                Require(kind!=1,"Não misture índices e chaves em dados persistentes");kind=2;
+                const auto length=lua_rawlen(L,-2);const char* key=Text(L,-2);Require(length>0&&length<=128&&std::strlen(key)==length,"Chave persistente inválida");bytes+=length;Require(bytes<=65536,"Estado excede 64 KiB");
+                result[std::string(key,length)]=ReadStoredValue(L,lua_gettop(L),depth+1,nodes,bytes);
+            }
+            lua_pop(L,1);
+        }
+        Require(kind!=1||maximum==count,"Arrays persistentes devem ser contínuos desde 1");return result;
+    }
+    static void PushStoredValue(lua_State* L,const nlohmann::json& value) {
+        if(value.is_null())lua_pushnil(L);
+        else if(value.is_boolean())lua_pushboolean(L,value.get<bool>());
+        else if(value.is_number_integer())lua_pushinteger(L,value.get<lua_Integer>());
+        else if(value.is_number())lua_pushnumber(L,value.get<double>());
+        else if(value.is_string()){const auto& text=value.get_ref<const std::string&>();lua_pushlstring(L,text.data(),text.size());}
+        else if(value.is_array()){lua_createtable(L,int(value.size()),0);int index=0;for(const auto& item:value){PushStoredValue(L,item);lua_rawseti(L,-2,++index);}}
+        else {lua_createtable(L,0,int(value.size()));for(auto it=value.begin();it!=value.end();++it){PushStoredValue(L,it.value());lua_setfield(L,-2,it.key().c_str());}}
+    }
+    static int PushStored(lua_State* L){PushStoredValue(L,*static_cast<const nlohmann::json*>(lua_touserdata(L,1)));return 1;}
+    static std::string StorageKey(lua_State* L){const char* key=Text(L,1);const auto size=lua_rawlen(L,1);Require(size>0&&size<=128&&std::strlen(key)==size,"Chave de progresso inválida");return std::string(key,size);}
+    static int StorageGet(lua_State* L){
+        const auto encoded=Host(L).runtime->storage().get(StorageKey(L));
+        if(encoded.empty()){if(lua_gettop(L)>1)lua_pushvalue(L,2);else lua_pushnil(L);return 1;}
+        const auto value=nlohmann::json::parse(encoded);
+        // Keep C++ ownership outside the Lua allocation/error boundary.
+        lua_pushcfunction(L,Safe<PushStored>);lua_pushlightuserdata(L,const_cast<nlohmann::json*>(&value));
+        const int status=lua_pcall(L,1,1,0);Require(status==LUA_OK,"Memória Lua insuficiente para ler progresso");return 1;
+    }
+    static int StorageSet(lua_State* L){const auto key=StorageKey(L);std::size_t nodes=0,bytes=0;const auto value=ReadStoredValue(L,2,0,nodes,bytes);Host(L).runtime->storage().set(key,value.dump());return 0;}
+    static int StorageRemove(lua_State* L){lua_pushboolean(L,Host(L).runtime->storage().remove(StorageKey(L)));return 1;}
+    static int StorageStatus(lua_State* L){
+        const auto& store=Host(L).runtime->storage();lua_createtable(L,0,3);lua_pushboolean(L,store.persistent());lua_setfield(L,-2,"persistent");lua_pushboolean(L,store.pending());lua_setfield(L,-2,"pending");
+        if(!store.error().empty()){lua_pushstring(L,store.error().c_str());lua_setfield(L,-2,"error");}return 1;
     }
     static int RemoveComponent(lua_State* L) {
         auto& self=Host(L);auto& owner=self.instance(L,1);auto& child=self.instance(L,2);
@@ -829,6 +882,7 @@ struct LuaRuntime::Impl {
         lua_newtable(L);lua_pushcfunction(L,Safe<On>);lua_setfield(L,-2,"on");lua_pushcfunction(L,Safe<Publish>);lua_setfield(L,-2,"emit");lua_setfield(L,-2,"events");
         lua_newtable(L);lua_pushcfunction(L,Safe<Raycast>);lua_setfield(L,-2,"raycast");lua_pushcfunction(L,Safe<Nearby>);lua_setfield(L,-2,"nearby");lua_pushcfunction(L,Safe<Gravity>);lua_setfield(L,-2,"gravity");lua_pushcfunction(L,Safe<SetGravity>);lua_setfield(L,-2,"set_gravity");lua_setfield(L,-2,"physics");
         lua_newtable(L);lua_pushcfunction(L,Safe<InterpolatePose>);lua_setfield(L,-2,"interpolate");lua_setfield(L,-2,"transform");
+        lua_newtable(L);lua_pushcfunction(L,Safe<StorageGet>);lua_setfield(L,-2,"get");lua_pushcfunction(L,Safe<StorageSet>);lua_setfield(L,-2,"set");lua_pushcfunction(L,Safe<StorageRemove>);lua_setfield(L,-2,"remove");lua_pushcfunction(L,Safe<StorageStatus>);lua_setfield(L,-2,"status");lua_setfield(L,-2,"storage");
         lua_newtable(L);lua_pushcfunction(L,(Safe<InputButton<0,0>>));lua_setfield(L,-2,"key_down");lua_pushcfunction(L,(Safe<InputButton<0,1>>));lua_setfield(L,-2,"key_pressed");lua_pushcfunction(L,(Safe<InputButton<0,2>>));lua_setfield(L,-2,"key_released");
         lua_pushcfunction(L,(Safe<InputButton<1,0>>));lua_setfield(L,-2,"mouse_down");lua_pushcfunction(L,(Safe<InputButton<1,1>>));lua_setfield(L,-2,"mouse_pressed");lua_pushcfunction(L,(Safe<InputButton<1,2>>));lua_setfield(L,-2,"mouse_released");
         lua_pushcfunction(L,(Safe<InputButton<2,0>>));lua_setfield(L,-2,"gamepad_down");lua_pushcfunction(L,(Safe<InputButton<2,1>>));lua_setfield(L,-2,"gamepad_pressed");lua_pushcfunction(L,(Safe<InputButton<2,2>>));lua_setfield(L,-2,"gamepad_released");
@@ -1066,6 +1120,7 @@ void LuaRuntime::characterAdded(){impl_->characterAdded();}
 void LuaRuntime::healthChanged(float health,bool died){impl_->event(HealthChanged,health);if(died)impl_->event(Died);}
 const std::vector<Message>& LuaRuntime::messages()const{return impl_->output;}
 std::size_t LuaRuntime::errorCount()const{return impl_->errors;}
+void LuaRuntime::hostError(const std::string& text){impl_->message(true,0,text.c_str());}
 std::size_t LuaRuntime::memoryUsed()const{return impl_->memory;}
 std::size_t LuaRuntime::taskCount()const{return impl_->jobs.size();}
 bool LuaRuntime::active()const{return impl_->state!=nullptr;}

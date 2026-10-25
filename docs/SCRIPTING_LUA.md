@@ -316,6 +316,47 @@ arquivo/linha. Saída 0 valida somente essa janela, não todas as ações futura
 
 ## Persistência e física
 
+### Estado privado de execução
+
+`linblux.storage.get(chave, padrão?)`, `set(chave, valor)`, `remove(chave)` e
+`status()` operam somente o escopo definido pelo host para a experiência aberta.
+Não aceitam caminho ou nome de arquivo. Valores: nil/null, booleanos, números
+finitos, textos, tabelas de chaves textuais ou arrays contínuos desde 1. Funções,
+userdata, metatabelas, tabelas mistas/cíclicas e dados fora dos limites são recusados.
+`get` retorna uma cópia; alterá-la não grava até chamar set. remove retorna se
+uma chave existia. Nil armazenado é null, distinto de chave ausente com padrão.
+
+Limites: 128 chaves de 1..128 bytes, 64 KiB por valor JSON, 256 KiB no conjunto,
+profundidade 8 e 1024 nós por valor, 128 leituras e 64 alterações por quadro.
+Sem acesso livre a io/os/rede. O escopo, a pasta e o modo persistente são escolhas
+C++ do Studio/Player, não configurações confiadas ao mapa.
+
+`status()` informa persistent, pending e error (quando houve falha de gravação).
+Mudanças ficam imediatamente disponíveis em memória; gravação automática limitada
+a uma por 2 s e tentativa final ao pausar/parar. Um encerramento abrupto pode
+perder alterações ainda pendentes. Escrita usa temporário, fsync, rename e fsync
+do diretório. Pastas/arquivos recusam links; arquivo criado com modo 0600 e pasta
+privada 0700. Outra sessão simultânea do mesmo escopo é recusada por trava.
+Arquivo corrompido/versão incompatível não é sobrescrito: o erro é informado.
+
+Experiências gerenciadas usam installationId, preservado quando a instalação é
+movida; importar um pacote cria instalação nova e estado privado novo. Cenas
+JSON avulsas usam caminho canônico. Estado fica em
+`$XDG_STATE_HOME/linblux/progress` ou `~/.local/state/linblux/progress`, separado
+dos assets e da exportação `.lo`. Copie essa pasta junto à estratégia privada de
+backup; GitHub não protege esse progresso. Não copie dados privados para assets.
+
+Cenas não salvas, edição do padrão da engine e `--validate` usam somente memória,
+com persistent=false, sem ler/gravar o progresso real. Cancelar o carregamento
+descarta as alterações dessa tentativa, inclusive callbacks de Stop. O formato
+do mundo continua o mesmo: configurações autorais/objetos são persistidos pela
+experiência; storage é progresso/configuração privada do jogador, não exportado.
+
+O exemplo [persistencia.lua](../assets/examples/lua/persistencia.lua) é executado
+no runtime e no Player. A integração gráfica verifica dois processos independentes,
+reinício do Studio e validação sem modificar progresso. `--check-scripts` permite
+ao Player gráfico retornar saída 1 após encerrar se houve erros de script.
+
 Código, vínculo pai/filho, atributos e transformações de autoria usam a
 serialização existente; salve a experiência para persistir. O Mundo Padrão
 publicado inclui os scripts e novas experiências recebem cópias independentes.

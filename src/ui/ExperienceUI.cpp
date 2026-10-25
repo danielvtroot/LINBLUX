@@ -33,7 +33,7 @@ std::string field(const char* id,const char* name,const std::string& value,const
 }
 ExperienceUI::ExperienceUI(EditorUI& editor,experiences::ExperienceManager& manager,Rml::Context& context,Rml::ElementDocument& document)
     :editor_(editor),manager_(manager),context_(context),document_(document) {editor_.experienceUi_=this;}
-ExperienceUI::~ExperienceUI(){if(loadingJob_.valid())loadingJob_.wait();editor_.experienceUi_=nullptr;}
+ExperienceUI::~ExperienceUI(){if(loadingJob_.valid())loadingJob_.wait();if(load_!=LoadState::None)editor_.runtime_.stop(false);editor_.experienceUi_=nullptr;}
 bool ExperienceUI::overlayActive() const {return home_||load_!=LoadState::None;}
 bool ExperienceUI::loading() const {return load_!=LoadState::None;}
 void ExperienceUI::initialize(bool home) {home_=home;documentOpened();show(document_,"experience-menu",true);show(document_,"experience-root",true);dirty_=true;}
@@ -124,7 +124,7 @@ void ExperienceUI::dispatch(const std::string& action,const std::string& v) {
     if(action=="cancel-load") {
         cancelLoad_=true;
         if(load_==LoadState::Paint||load_==LoadState::Error) {load_=LoadState::None;pendingPath_.clear();error_.clear();releaseLoadingImages();}
-        else if(load_==LoadState::Fading){editor_.runtime_.stop();load_=LoadState::None;releaseLoadingImages();}
+        else if(load_==LoadState::Fading){editor_.runtime_.stop(false);load_=LoadState::None;releaseLoadingImages();}
         return;
     }
     if(loading())return;
@@ -317,15 +317,16 @@ void ExperienceUI::frame() {
         if(readyTime_==0)readyTime_=GetTime();
         else {
             auto snapshot=std::move(pendingPath_);load_=LoadState::Starting;
-            loadingJob_=std::async(std::launch::async,[this,snapshot=std::move(snapshot)] {
+            const auto identity=manager_.active()&&!editingEngineDefault()?"experience:"+manager_.active()->manifest.installationId:std::string();
+            loadingJob_=std::async(std::launch::async,[this,snapshot=std::move(snapshot),identity] {
                 try {Scene prepared;std::string error;if(!projectio::fromJson(prepared,snapshot,error))return error;
-                    return editor_.runtime_.start(prepared,error)?std::string{}:error;
+                    return editor_.runtime_.start(prepared,error,{identity})?std::string{}:error;
                 }catch(const std::exception& e){return std::string(e.what());}
             });
         }
     } else if(load_==LoadState::Starting&&loadingJob_.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
         const auto error=loadingJob_.get();
-        if(cancelLoad_){editor_.runtime_.stop();load_=LoadState::None;releaseLoadingImages();}
+        if(cancelLoad_){editor_.runtime_.stop(false);load_=LoadState::None;releaseLoadingImages();}
         else if(!error.empty()){load_=LoadState::Error;text(document_,"exp-loading-status",error);}
         else {load_=LoadState::Fading;readyTime_=GetTime();text(document_,"exp-loading-status","Ready");}
     } else if(load_==LoadState::Fading) {

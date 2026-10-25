@@ -151,7 +151,10 @@ void EditorUI::startPlay() {
     previewPlaying_ = false;
     std::string error;
     if (!commitScriptDrafts(error)) { setStatus(error,true); return; }
-    if (!runtime_.start(scene_, error)) { setStatus(error, true); return; }
+    game::ProgressOptions progress;std::error_code pathError;
+    const auto source=std::filesystem::weakly_canonical(config_.defaultProjectPath,pathError);
+    if(!pathError&&std::filesystem::is_regular_file(source,pathError))progress.identity="scene:"+source.string();
+    if (!runtime_.start(scene_, error,progress)) { setStatus(error, true); return; }
     finishPlayStart();
 }
 void EditorUI::finishPlayStart() {
