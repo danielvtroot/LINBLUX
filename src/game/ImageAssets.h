@@ -6,6 +6,7 @@
 
 namespace loblox {
 class Scene;
+namespace experiences { struct Manifest; }
 }
 
 namespace loblox::game {
@@ -25,6 +26,8 @@ struct ImageUsage {
     std::string where;   // descrição legível (Peça/Personagem/Adesivo)
     std::string kind;    // decal, texture, body, face, sky
     std::uint64_t object = 0;  // InstanceId da Part, quando aplicável
+    std::string rig, decal, property, reference;
+    int body = -1;
 };
 
 // assets/ padrão na raiz do executável (caminho relativo, portátil).
@@ -66,6 +69,11 @@ void ForgetImageAssetName(const std::string& assetsDir, const std::string& refer
 
 // Lista todos os usos da imagem na cena (peças, atributos, rigs e adesivos).
 std::vector<ImageUsage> DescribeImageUsage(const Scene& scene, const std::string& reference);
+std::vector<ImageUsage> DescribeImageUsage(const experiences::Manifest& manifest, const std::string& reference);
+bool ImageReferenceMatches(const std::string& a, const std::string& b);
+bool IsImageProperty(const std::string& property);
+// Altera só o vínculo identificado. Recusa descritores obsoletos; vazio remove a associação.
+bool SetImageUsage(Scene& scene,const ImageUsage& usage,const std::string& replacement,std::string& error);
 
 // Troca todas as referências de uma imagem por outra em peças e rigs.
 // Devolve quantas referências foram reescritas.

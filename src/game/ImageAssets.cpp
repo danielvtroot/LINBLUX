@@ -5,6 +5,7 @@
 #include "scene/Scene.h"
 #include "serialization/ProjectIO.h"
 #include "nlohmann/json.hpp"
+#include "experiences/ExperienceManager.h"
 
 #include <algorithm>
 #include <cctype>
@@ -162,25 +163,8 @@ std::string NormalizeImageReference(const std::string& reference) {
     return text;
 }
 
-bool ImageInUse(const Scene& scene, const std::string& reference) {
-    if(reference.empty())return false;
-    const auto wanted=std::filesystem::path(NormalizeImageReference(reference)).filename().string();
-    if(wanted.empty())return false;
-    const auto matches=[&](const std::string& value) {
-        return !value.empty()&&std::filesystem::path(value).filename().string()==wanted;
-    };
-    for(const Part* part:scene.parts()) {
-        if(!part)continue;
-        for(const auto& attribute:part->attributes()) {
-            if(attribute.first.find("image")==std::string::npos&&attribute.first!="FaceTexture")continue;
-            if(const auto* text=std::get_if<std::string>(&attribute.second))if(matches(*text))return true;
-        }
-    }
-    for(const auto& rig:scene.gameAssets().rigs) {
-        for(const auto& body:rig.bodies)if(matches(body.image))return true;
-        for(const auto& body:rig.bodies)for(const auto& decal:body.decals)if(matches(decal.surface.image))return true;
-    }
-    return false;
+bool ImageInUse(const Scene& scene,const std::string& reference) {
+    return !DescribeImageUsage(scene,reference).empty();
 }
 
 bool RemoveAssetFile(const std::string& assetsDir, const std::string& filename,
@@ -383,65 +367,84 @@ void ForgetImageAssetName(const std::string& assetsDir, const std::string& refer
     WriteImageNames(assetsDir, names, error);
 }
 
-std::vector<ImageUsage> DescribeImageUsage(const Scene& scene, const std::string& reference) {
-    std::vector<ImageUsage> usage;
-    const auto wanted = FileKey(reference);
-    if (wanted.empty()) return usage;
-    const auto matches = [&](const std::string& value) {
-        return !value.empty() && std::filesystem::path(value).filename().string() == wanted;
+bool ImageReferenceMatches(const std::string& a,const std::string& b) {
+    const auto key=[](const std::string& raw){
+        if(raw.empty())return std::string();
+        auto value=NormalizeImageReference(raw);
+        if(value.find('/')==std::string::npos&&value!="."&&value!="..")value="assets/"+value;
+        return std::filesystem::path(value).lexically_normal().generic_string();
     };
-    for (const Part* part : scene.parts()) {
-        if (!part) continue;
-        for (const auto& attribute : part->attributes()) {
-            const auto* text = std::get_if<std::string>(&attribute.second);
-            if (!text || !matches(*text)) continue;
-            const bool texture = attribute.first.rfind("texture", 0) == 0;
-            usage.push_back({"Peça \"" + part->name() + "\"", texture ? "texture" : "decal", part->id()});
-        }
-    }
-    for (const auto& rig : scene.gameAssets().rigs) {
-        for (int index = 0; index < static_cast<int>(rig.bodies.size()); ++index) {
-            const auto& body = rig.bodies[index];
-            if (matches(body.image))
-                usage.push_back({"Personagem \"" + rig.name + "\" · imagem de " + BodyDisplayName(body.name),
-                                 "body", 0});
-            for (const auto& decal : body.decals) {
-                if (!matches(decal.surface.image)) continue;
-                usage.push_back({"Personagem \"" + rig.name + "\" · adesivo \"" + decal.name + "\" em " +
-                                 BodyDisplayName(body.name), "decal", 0});
-            }
-        }
-    }
-    return usage;
+    return !a.empty()&&!b.empty()&&key(a)==key(b);
 }
-
-std::size_t ReplaceImageReferences(Scene& scene, const std::string& from, const std::string& to) {
-    const auto source = FileKey(from);
-    const auto target = NormalizeImageReference(to);
-    if (source.empty() || target.empty()) return 0;
-    std::size_t replaced = 0;
-    const auto swap = [&](std::string& value) {
-        if (value.empty() || std::filesystem::path(value).filename().string() != source) return;
-        value = target;
-        ++replaced;
-    };
-    for (Part* part : scene.parts()) {
-        if (!part) continue;
-        for (const auto& attribute : part->attributes()) {
-            const auto* text = std::get_if<std::string>(&attribute.second);
-            if (!text || attribute.first.find("image") == std::string::npos) continue;
-            std::string value = *text;
-            swap(value);
-            if (value != *text) part->setAttribute(attribute.first, value);
+bool IsImageProperty(const std::string& key) {
+    return key=="image"||key=="decal_image"||key=="texture_image"||key=="FaceTexture"||
+        key=="skyFront"||key=="skyBack"||key=="skyLeft"||key=="skyRight"||key=="skyUp"||key=="skyDown";
+}
+std::vector<ImageUsage> DescribeImageUsage(const Scene& scene,const std::string& reference) {
+    std::vector<ImageUsage> uses;
+    const auto add=[&](ImageUsage use){if(ImageReferenceMatches(use.reference,reference))uses.push_back(std::move(use));};
+    for(const auto& object:scene.objects()) {
+        for(const auto& [key,value]:object->attributes()) {
+            const auto* image=std::get_if<std::string>(&value);if(!image||!IsImageProperty(key))continue;
+            ImageUsage use;use.object=object->id();use.property=key;use.reference=*image;
+            use.kind=key.rfind("texture",0)==0?"texture":"decal";
+            use.where=object->name()+" · "+key;add(std::move(use));
+        }
+        if(IsSurfaceClass(object->instanceClass())) {
+            const auto& surface=static_cast<const Surface&>(*object);
+            ImageUsage use;use.object=surface.id();use.property="surface.image";use.reference=surface.properties().image;
+            use.kind=surface.instanceClass()==InstanceClass::Texture?"texture":"decal";
+            use.where=(surface.parent()?surface.parent()->name()+" / ":"")+surface.name()+" · imagem";add(std::move(use));
         }
     }
-    for (auto& rig : scene.gameAssets().rigs) {
-        for (auto& body : rig.bodies) {
-            swap(body.image);
-            for (auto& decal : body.decals) swap(decal.surface.image);
+    for(const auto& rig:scene.gameAssets().rigs)for(int i=0;i<kBodyCount;++i) {
+        const auto& body=rig.bodies[i];ImageUsage use;use.rig=rig.id;use.body=i;
+        use.where="Personagem \""+rig.name+"\" / "+BodyDisplayName(body.name);
+        use.kind="body";use.property="image";use.reference=body.image;add(use);
+        for(const auto& decal:body.decals){auto child=use;child.kind="decal";child.decal=decal.id;
+            child.property="surface.image";child.reference=decal.surface.image;child.where+=" / "+decal.name;add(std::move(child));}
+    }
+    return uses;
+}
+std::vector<ImageUsage> DescribeImageUsage(const experiences::Manifest& manifest,const std::string& reference) {
+    std::vector<ImageUsage> uses;
+    const std::string* values[]={&manifest.icon,&manifest.banner,&manifest.loadingBackground,&manifest.faceImage};
+    const char* fields[]={"icon","banner","loadingBackground","faceImage"};
+    const char* names[]={"Ícone da experiência","Banner da experiência","Fundo de carregamento","Rosto legado da experiência"};
+    for(int i=0;i<4;++i)if(ImageReferenceMatches(*values[i],reference)){
+        ImageUsage use;use.kind="presentation";use.property=fields[i];use.reference=*values[i];use.where=names[i];uses.push_back(std::move(use));}
+    return uses;
+}
+bool SetImageUsage(Scene& scene,const ImageUsage& use,const std::string& replacement,std::string& error) {
+    error="A referência foi alterada; consulte os usos da imagem novamente.";
+    const auto target=NormalizeImageReference(replacement);
+    if(target.size()>512||target.find('\0')!=std::string::npos){error="Referência de imagem inválida.";return false;}
+    if(!use.rig.empty()) {
+        auto* rig=scene.gameAssets().findRig(use.rig);if(!rig||use.body<0||use.body>=kBodyCount)return false;
+        auto& body=rig->bodies[use.body];
+        if(use.decal.empty()){if(use.property!="image"||body.image!=use.reference)return false;body.image=target;}
+        else {auto it=std::find_if(body.decals.begin(),body.decals.end(),[&](const RigDecal& d){return d.id==use.decal;});
+            if(it==body.decals.end()||it->surface.image!=use.reference)return false;it->surface.image=target;}
+    }else {
+        auto* object=scene.find(use.object);if(!object)return false;
+        if(IsSurfaceClass(object->instanceClass())&&use.property=="surface.image") {
+            auto& surface=static_cast<Surface&>(*object);auto value=surface.properties();if(value.image!=use.reference)return false;
+            value.image=target;if(!surface.setProperties(value))return false;
+        }else {
+            if(!IsImageProperty(use.property))return false;
+            const auto it=object->attributes().find(use.property);if(it==object->attributes().end())return false;
+            const auto* value=std::get_if<std::string>(&it->second);if(!value||*value!=use.reference)return false;
+            if(target.empty())object->removeAttribute(use.property);
+            else if(!object->setAttribute(use.property,target)){error="Limite de atributos atingido.";return false;}
         }
     }
-    return replaced;
+    error.clear();return true;
+}
+std::size_t ReplaceImageReferences(Scene& scene,const std::string& from,const std::string& to) {
+    const auto target=NormalizeImageReference(to);if(target.empty()||target.size()>512)return 0;
+    const auto uses=DescribeImageUsage(scene,from);std::size_t count=0;
+    for(const auto& use:uses){std::string error;if(!SetImageUsage(scene,use,target,error))throw std::runtime_error(error);++count;}
+    return count;
 }
 
 std::string BodyDisplayName(const std::string& bodyName) {
