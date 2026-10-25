@@ -472,6 +472,138 @@ struct LuaRuntime::Impl {
         if(part)static_cast<Part&>(*created).setBodyProperties(body,error);
         self.pushInstance(L,created,true);return 1;
     }
+    // ---- NPCs -------------------------------------------------------------
+    // NPC e uma Part comum com NpcProperties e um controlador de runtime. O
+    // comportamento vem dos scripts; nao ha personagem fixo no C++.
+    static Part& NpcObject(lua_State* L,int index) {
+        auto& part=PartObject(L,index);
+        Require(part.hasNpc(),"A peça não possui componente de NPC (use linblux.npc.create ou linblux.npc.attach)");
+        return part;
+    }
+    static NpcProperties ReadNpcOptions(lua_State* L,int index,NpcProperties base) {
+        Require(lua_istable(L,index),"Opções de NPC requerem tabela");index=lua_absindex(L,index);
+        lua_pushnil(L);while(lua_next(L,index)) {
+            const char* key=Text(L,-2);
+            if(Eq(key,"speed"))base.speed=float(Number(L,-1));
+            else if(Eq(key,"max_health"))base.maxHealth=float(Number(L,-1));
+            else if(Eq(key,"respawn_delay"))base.respawnDelay=float(Number(L,-1));
+            else if(Eq(key,"turn_speed"))base.turnSpeed=float(Number(L,-1));
+            else if(Eq(key,"enabled")){Require(lua_isboolean(L,-1),"enabled requer booleano");base.enabled=lua_toboolean(L,-1);}
+            else throw std::runtime_error("Opção de NPC desconhecida");
+            lua_pop(L,1);
+        }
+        std::string error;Require(base.validate(error),error.c_str());return base;
+    }
+    static int NpcCreate(lua_State* L) {
+        auto& self=Host(L);Require(lua_istable(L,1),"linblux.npc.create requer tabela de opções");
+        static const char* allowed[]{"name","parent","position","size","color","material","shape",
+            "speed","max_health","respawn_delay","turn_speed","enabled","script","script_name"};
+        lua_pushnil(L);while(lua_next(L,1)) {
+            const char* key=Text(L,-2);bool known=false;for(const char* option:allowed)known|=Eq(key,option);
+            Require(known,"Opção de criação de NPC desconhecida");lua_pop(L,1);
+        }
+        std::string name="NPC",scriptName="NPC.lua",source;
+        Vector3 position{},size{2,5,2},color{205,80,70};
+        PartShape shape=PartShape::Block;
+        PartMaterial material=PartMaterial::SmoothPlastic;
+        Instance* parent=self.runtime->mutableScene().workspace();
+        NpcProperties properties;
+        Field(L,1,"name");if(!lua_isnil(L,-1)){name=Text(L,-1);Require(!name.empty()&&name.size()<=128&&name.size()==lua_rawlen(L,-1),"Nome do NPC deve ter de 1 a 128 bytes, sem NUL");}lua_pop(L,1);
+        Field(L,1,"parent");if(!lua_isnil(L,-1))parent=&self.instance(L,-1);lua_pop(L,1);
+        Field(L,1,"position");if(!lua_isnil(L,-1))position=ReadVector(L,lua_gettop(L));lua_pop(L,1);
+        Field(L,1,"size");if(!lua_isnil(L,-1))size=ReadVector(L,lua_gettop(L));lua_pop(L,1);
+        Field(L,1,"color");if(!lua_isnil(L,-1))color=ReadVector(L,lua_gettop(L));lua_pop(L,1);
+        Field(L,1,"material");if(!lua_isnil(L,-1))material=Material(L,-1);lua_pop(L,1);
+        Field(L,1,"shape");if(!lua_isnil(L,-1)){const char* value=Text(L,-1);Require(Eq(value,"box")||Eq(value,"sphere"),"shape aceita box ou sphere");shape=Eq(value,"sphere")?PartShape::Sphere:PartShape::Block;}lua_pop(L,1);
+        Field(L,1,"script_name");if(!lua_isnil(L,-1)){scriptName=Text(L,-1);Require(!scriptName.empty()&&scriptName.size()<=128&&scriptName.size()==lua_rawlen(L,-1),"Nome do script do NPC inválido");}lua_pop(L,1);
+        Field(L,1,"script");if(!lua_isnil(L,-1)){Require(lua_type(L,-1)==LUA_TSTRING,"script requer o código Lua como texto");Require(lua_rawlen(L,-1)<=262144,"Script do NPC excede 256 KiB");source.assign(Text(L,-1),lua_rawlen(L,-1));}lua_pop(L,1);
+        properties=ReadNpcOptions(L,1,properties);
+        Require(size.x>=kMinPartSize&&size.y>=kMinPartSize&&size.z>=kMinPartSize,"Tamanho mínimo do NPC é 0,2");
+        Require(color.x>=0&&color.y>=0&&color.z>=0&&color.x<=255&&color.y<=255&&color.z<=255,"Cor do NPC requer canais de 0 a 255");
+        self.nativeBudget(1,size_t(name.size())+128);
+        auto& scene=self.runtime->mutableScene();
+        auto* created=scene.createPart(shape,position,size,name);Require(created,"Não foi possível criar o NPC");
+        std::string error;
+        if(!scene.reparent(created,parent,error)){scene.remove(created);throw std::runtime_error(error);}
+        created->setColor({static_cast<unsigned char>(color.x),static_cast<unsigned char>(color.y),static_cast<unsigned char>(color.z),255});
+        created->setMaterial(material);created->setAnchored(false);
+        Require(created->setNpcProperties(properties,error),error.c_str());
+        if(!source.empty()) {
+            self.nativeBudget(1,source.size()+scriptName.size()+128);
+            auto* script=scene.createScript(InstanceClass::Script,created,scriptName);
+            Require(script,"Não foi possível adicionar o script do NPC");script->source=source;
+        }
+        Require(self.runtime->npcs().attach(*self.runtime,created->id(),error),error.c_str());
+        self.pushInstance(L,created,true);return 1;
+    }
+    static int NpcAttach(lua_State* L) {
+        auto& self=Host(L);auto& part=PartObject(L,1);
+        auto properties=part.npcProperties().value_or(NpcProperties{});
+        if(lua_gettop(L)>1&&!lua_isnil(L,2))properties=ReadNpcOptions(L,2,properties);
+        std::string error;Require(part.setNpcProperties(properties,error),error.c_str());
+        Require(self.runtime->npcs().attach(*self.runtime,part.id(),error),error.c_str());return 0;
+    }
+    static int NpcDetach(lua_State* L) {
+        auto& self=Host(L);auto& part=PartObject(L,1);
+        self.runtime->npcs().detach(part.id());part.clearNpcProperties();return 0;
+    }
+    static int NpcMoveTo(lua_State* L) {
+        auto& self=Host(L);auto& part=NpcObject(L,1);const auto destination=ReadVector(L,2);std::string error;
+        const bool reachable=self.runtime->npcs().moveTo(*self.runtime,part.id(),destination,error);
+        Require(error.empty(),error.c_str());lua_pushboolean(L,reachable);return 1;
+    }
+    static int NpcStop(lua_State* L) {
+        auto& self=Host(L);auto& part=NpcObject(L,1);
+        Require(self.runtime->npcs().stopMoving(part.id()),"NPC não anexado a esta peça");return 0;
+    }
+    static int NpcState(lua_State* L) {
+        auto& part=NpcObject(L,1);lua_pushstring(L,game::NpcStateName(Host(L).runtime->npcs().state(part.id())));return 1;
+    }
+    static int NpcSpeed(lua_State* L) { auto& part=NpcObject(L,1);lua_pushnumber(L,Host(L).runtime->npcs().speed(part.id()));return 1; }
+    static int NpcSetSpeed(lua_State* L) {
+        auto& self=Host(L);auto& part=NpcObject(L,1);std::string error;
+        Require(self.runtime->npcs().setSpeed(part.id(),float(Number(L,2)),error),error.c_str());return 0;
+    }
+    static int NpcHealth(lua_State* L) { auto& part=NpcObject(L,1);lua_pushnumber(L,Host(L).runtime->npcs().health(part.id()));return 1; }
+    static int NpcMaxHealth(lua_State* L) { auto& part=NpcObject(L,1);lua_pushnumber(L,Host(L).runtime->npcs().maxHealth(part.id()));return 1; }
+    static int NpcSetHealth(lua_State* L) {
+        auto& self=Host(L);auto& part=NpcObject(L,1);std::string error;
+        Require(self.runtime->npcs().setHealth(*self.runtime,part.id(),float(Number(L,2)),error),error.c_str());return 0;
+    }
+    static int NpcDamage(lua_State* L) {
+        auto& self=Host(L);auto& part=NpcObject(L,1);std::string error;
+        Require(self.runtime->npcs().damage(*self.runtime,part.id(),float(Number(L,2)),error),error.c_str());return 0;
+    }
+    static int NpcHeal(lua_State* L) {
+        auto& self=Host(L);auto& part=NpcObject(L,1);std::string error;
+        Require(self.runtime->npcs().heal(*self.runtime,part.id(),float(Number(L,2)),error),error.c_str());return 0;
+    }
+    static int NpcTarget(lua_State* L) {
+        auto& part=NpcObject(L,1);const auto target=Host(L).runtime->npcs().target(part.id());
+        if(!target){lua_pushnil(L);return 1;}ModernVector(L,*target);return 1;
+    }
+    static int NpcPath(lua_State* L) {
+        auto& part=NpcObject(L,1);const auto points=Host(L).runtime->npcs().path(part.id());
+        lua_createtable(L,int(points.size()),0);int index=0;
+        for(const auto& point:points){ModernVector(L,point);lua_rawseti(L,-2,++index);}return 1;
+    }
+    static int NpcNavigation(lua_State* L) {
+        auto& self=Host(L);self.runtime->npcs().rebuildNavigation(*self.runtime);
+        const auto& grid=self.runtime->npcs().navigation();lua_createtable(L,0,5);
+        lua_pushboolean(L,grid.ready());lua_setfield(L,-2,"ready");
+        lua_pushinteger(L,lua_Integer(grid.cellCount()));lua_setfield(L,-2,"cells");
+        lua_pushinteger(L,lua_Integer(grid.walkableCells()));lua_setfield(L,-2,"walkable");
+        lua_pushnumber(L,grid.cellSize());lua_setfield(L,-2,"cell_size");
+        lua_pushinteger(L,lua_Integer(grid.columns()));lua_setfield(L,-2,"columns");
+        lua_pushinteger(L,lua_Integer(grid.rows()));lua_setfield(L,-2,"rows");return 1;
+    }
+    static int NpcFindPath(lua_State* L) {
+        auto& self=Host(L);const auto from=ReadVector(L,1),to=ReadVector(L,2);
+        NavPath path;self.runtime->npcs().findPath(*self.runtime,from,to,path);
+        lua_createtable(L,int(path.points.size()),0);int index=0;
+        for(const auto& point:path.points){ModernVector(L,point);lua_rawseti(L,-2,++index);}
+        lua_pushboolean(L,path.reachable);return 2;
+    }
     static int ModernFind(lua_State* L) {
         auto& self=Host(L);
         if(lua_isinteger(L,1)){const auto id=lua_tointeger(L,1);Require(id>0,"ID deve ser positivo");self.pushInstance(L,self.runtime->scene().find(InstanceId(id)),true);}
@@ -954,7 +1086,27 @@ struct LuaRuntime::Impl {
         lua_pushcfunction(L,(Safe<InputButton<1,0>>));lua_setfield(L,-2,"mouse_down");lua_pushcfunction(L,(Safe<InputButton<1,1>>));lua_setfield(L,-2,"mouse_pressed");lua_pushcfunction(L,(Safe<InputButton<1,2>>));lua_setfield(L,-2,"mouse_released");
         lua_pushcfunction(L,(Safe<InputButton<2,0>>));lua_setfield(L,-2,"gamepad_down");lua_pushcfunction(L,(Safe<InputButton<2,1>>));lua_setfield(L,-2,"gamepad_pressed");lua_pushcfunction(L,(Safe<InputButton<2,2>>));lua_setfield(L,-2,"gamepad_released");
         lua_pushcfunction(L,Safe<InputPointer>);lua_setfield(L,-2,"pointer");lua_pushcfunction(L,Safe<GamepadConnected>);lua_setfield(L,-2,"gamepad_connected");lua_pushcfunction(L,Safe<GamepadAxis>);lua_setfield(L,-2,"gamepad_axis");lua_setfield(L,-2,"input");
-        lua_newtable(L);lua_pushcfunction(L,Safe<Now>);lua_setfield(L,-2,"now");lua_pushcfunction(L,Safe<Wait>);lua_setfield(L,-2,"wait");lua_pushcfunction(L,Safe<After>);lua_setfield(L,-2,"after");lua_pushcfunction(L,Safe<ModernSpawn>);lua_setfield(L,-2,"spawn");lua_pushcfunction(L,Safe<Every>);lua_setfield(L,-2,"every");lua_pushcfunction(L,Safe<CancelTask>);lua_setfield(L,-2,"cancel");lua_setfield(L,-2,"time");lua_setglobal(L,"linblux");return 0;
+        lua_newtable(L);lua_pushcfunction(L,Safe<Now>);lua_setfield(L,-2,"now");lua_pushcfunction(L,Safe<Wait>);lua_setfield(L,-2,"wait");lua_pushcfunction(L,Safe<After>);lua_setfield(L,-2,"after");lua_pushcfunction(L,Safe<ModernSpawn>);lua_setfield(L,-2,"spawn");lua_pushcfunction(L,Safe<Every>);lua_setfield(L,-2,"every");lua_pushcfunction(L,Safe<CancelTask>);lua_setfield(L,-2,"cancel");lua_setfield(L,-2,"time");
+        lua_newtable(L);
+        lua_pushcfunction(L,Safe<NpcCreate>);lua_setfield(L,-2,"create");
+        lua_pushcfunction(L,Safe<NpcAttach>);lua_setfield(L,-2,"attach");
+        lua_pushcfunction(L,Safe<NpcDetach>);lua_setfield(L,-2,"detach");
+        lua_pushcfunction(L,Safe<NpcMoveTo>);lua_setfield(L,-2,"move_to");
+        lua_pushcfunction(L,Safe<NpcStop>);lua_setfield(L,-2,"stop");
+        lua_pushcfunction(L,Safe<NpcState>);lua_setfield(L,-2,"state");
+        lua_pushcfunction(L,Safe<NpcSpeed>);lua_setfield(L,-2,"speed");
+        lua_pushcfunction(L,Safe<NpcSetSpeed>);lua_setfield(L,-2,"set_speed");
+        lua_pushcfunction(L,Safe<NpcHealth>);lua_setfield(L,-2,"health");
+        lua_pushcfunction(L,Safe<NpcMaxHealth>);lua_setfield(L,-2,"max_health");
+        lua_pushcfunction(L,Safe<NpcSetHealth>);lua_setfield(L,-2,"set_health");
+        lua_pushcfunction(L,Safe<NpcDamage>);lua_setfield(L,-2,"damage");
+        lua_pushcfunction(L,Safe<NpcHeal>);lua_setfield(L,-2,"heal");
+        lua_pushcfunction(L,Safe<NpcTarget>);lua_setfield(L,-2,"target");
+        lua_pushcfunction(L,Safe<NpcPath>);lua_setfield(L,-2,"path");
+        lua_pushcfunction(L,Safe<NpcFindPath>);lua_setfield(L,-2,"find_path");
+        lua_pushcfunction(L,Safe<NpcNavigation>);lua_setfield(L,-2,"navigation");
+        lua_setfield(L,-2,"npc");
+        lua_setglobal(L,"linblux");return 0;
     }
     static int Emit(lua_State* L) {
         auto& self=Host(L);const int signal=int(lua_tointeger(L,1)),ref=int(lua_tointeger(L,2));
