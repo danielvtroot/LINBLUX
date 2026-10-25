@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #include "game/ImageAssets.h"
+#include "scene/Scene.h"
 
 namespace loblox::game {
 namespace {
@@ -32,6 +33,25 @@ std::mutex probeMutex;
 bool IsAudioReference(const std::string& reference) {
     const auto extension = LowerExtension(reference);
     return extension == ".wav" || extension == ".ogg" || extension == ".mp3";
+}
+
+bool SoundInUse(const Scene& scene, const std::string& reference) {
+    if (reference.empty()) return false;
+    const auto filename = std::filesystem::path(reference).filename().string();
+    if (filename.empty()) return false;
+    for (const auto& sound : scene.gameAssets().sounds)
+        if (std::filesystem::path(sound.reference).filename().string() == filename) return true;
+    for (const auto& owned : scene.objects()) {
+        const Instance* object = owned.get();
+        if (!object) continue;
+        for (const auto& attribute : object->attributes()) {
+            const auto* text = std::get_if<std::string>(&attribute.second);
+            if (text && text->find(filename) != std::string::npos) return true;
+        }
+        if (IsScriptClass(object->instanceClass()) &&
+            static_cast<const Script*>(object)->source.find(filename) != std::string::npos) return true;
+    }
+    return false;
 }
 
 std::vector<SoundAsset> ListAudioAssets(const std::string& assetsDir) {

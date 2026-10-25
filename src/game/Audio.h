@@ -8,6 +8,10 @@
 
 #include "raylib.h"
 
+namespace loblox {
+class Scene;
+}
+
 namespace loblox::game {
 
 // Áudio de projeto: o arquivo é copiado para `assets/` da experiência e a
@@ -25,6 +29,10 @@ struct SoundAsset {
 };
 
 bool IsAudioReference(const std::string& reference);
+
+// true quando a biblioteca de sons, um atributo de som ou o código de um
+// Script ainda cita o arquivo. A remoção consulta isto antes de apagar.
+bool SoundInUse(const Scene& scene, const std::string& reference);
 
 // Lista os áudios existentes em assets/ (usada pela UI de importação).
 std::vector<SoundAsset> ListAudioAssets(const std::string& assetsDir);

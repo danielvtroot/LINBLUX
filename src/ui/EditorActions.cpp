@@ -5,6 +5,7 @@
 #include "scene/Scene.h"
 #include "objects/Lighting.h"
 #include "objects/Workspace.h"
+#include "game/Audio.h"
 #include "game/ImageAssets.h"
 #include "ui/ExperienceUI.h"
 #include "serialization/ProjectIO.h"
@@ -84,7 +85,7 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         }
         else if(c.action=="remove-image"||c.action=="remove-asset") {
             if(!e.experienceUi_)throw std::runtime_error("Abra uma experiência antes de remover imagens importadas");
-            e.experienceUi_->removeAsset(c.value,game::ImageInUse(e.scene_,c.value));
+            e.experienceUi_->removeAsset(c.value,game::ImageInUse(e.scene_,c.value)||game::SoundInUse(e.scene_,c.value));
             e.setStatus("Asset removido: "+c.value);
         }
         else if(c.action=="apply-image"||c.action=="apply-texture") {
