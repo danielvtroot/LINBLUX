@@ -524,7 +524,7 @@ void RuntimeSession::step(float dt, Vector3 desired, bool jump) {
     if (!onGround) transition(velocity().y > 1 ? HumanoidState::Jumping : HumanoidState::Freefall);
     else if (!wasGrounded) transition(HumanoidState::Landing);
     else transition(horizontal > .2f ? HumanoidState::Walking : HumanoidState::Idle);
-    if (!(!camera_.scripted()&&settings_.cameraLock || shiftLockActive() || camera_.firstPerson()) && settings_.autoRotate && horizontal > .2f) {
+    if (!((!camera_.scripted()&&settings_.cameraLock) || shiftLockActive() || camera_.firstPerson()) && settings_.autoRotate && horizontal > .2f) {
         const float target = std::atan2(-actual.x, -actual.z);
         yaw_ += std::remainder(target-yaw_, 2*PI) * Response(settings_.turnSpeed, dt);
     }
@@ -672,7 +672,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     // Toggle do Shift Lock (Left Shift) detectado por borda; ignorado sem a
     // opção habilitada e nunca dispara no editor (route só roteia gameplay).
     const bool shiftDown = input.shiftKey;
-    if (settings_.enableShiftLock && shiftDown && !lastShiftKey_)
+    if (settings_.enableShiftLock && !camera_.scripted() && shiftDown && !lastShiftKey_)
         shiftLockRequested_ = !shiftLockRequested_;
     lastShiftKey_ = shiftDown ? 1 : 0;
     if (suppressJump_ && !input.jump) suppressJump_ = false;

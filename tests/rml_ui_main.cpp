@@ -111,11 +111,14 @@ int main() {
         // with X11 events, including dropdowns and independent child deletion.
         if(std::getenv("LINBLUX_SCRIPT_INPUT_ONLY")) {
             scene.createScript(InstanceClass::Script,nullptr,"EntradaReal.lua")->source=R"(
+linblux.camera.configure({locked=true, fov=85})
+linblux.camera.set_pose({position=linblux.vec3(15,10,15),target=linblux.vec3(0,2,0),fov=95})
 linblux.events.on("key_pressed", function(key)
     if key == "e" then
         local root = linblux.scene.root
         root:set_attribute("real_presses", (root:get_attribute("real_presses") or 0)+1)
         assert(linblux.input.key_down("e"))
+        if root:get_attribute("real_presses") == 2 then linblux.camera.release() end
     end
 end)
 linblux.events.on("mouse_pressed", function(button)
@@ -128,7 +131,10 @@ end)
 )";
             const auto original=projectio::toJson(scene);click("play");frames(6);
             auto& rt=EditorUITestAccess::runtime(ui);CHECK(rt.state()==game::RuntimeState::Playing);
+            CHECK(rt.playerCamera().scripted());CHECK(rt.playerCamera().camera().fovy==95);
+            CHECK(!EditorUITestAccess::captured(ui));CHECK(!IsCursorHidden());
             const auto viewport=ui.frontend()->viewport();clickAt({viewport.x+viewport.width*.5f,viewport.y+viewport.height*.5f});
+            event("mousedown 3");CHECK(!EditorUITestAccess::captured(ui));event("mouseup 3");
             CHECK(rt.scene().workspace()->attributes().count("real_clicks"));
             event("keydown e");frames(3);CHECK(rt.scriptInput().keys[KEY_E]);
             auto presses=[&]{const auto& attrs=rt.scene().workspace()->attributes();return attrs.count("real_presses")?std::get<double>(attrs.at("real_presses")):0.;};
@@ -136,6 +142,7 @@ end)
             key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);
             key("e");CHECK(presses()==1);key("Escape");CHECK(rt.state()==game::RuntimeState::Playing);
             key("e");CHECK(presses()==2);
+            CHECK(!rt.playerCamera().scripted());CHECK(rt.playerCamera().camera().fovy==85);
             for(const auto& message:rt.scripts().messages()){if(message.error)std::fprintf(stderr,"Input Lua: %s\n",message.text.c_str());CHECK(!message.error);}
             key("shift+F5");CHECK(!rt.active());CHECK(projectio::toJson(scene)==original);
         } else if(std::getenv("LOBLOX_MANIPULATION_ONLY")) {

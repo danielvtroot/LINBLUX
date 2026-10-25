@@ -386,6 +386,29 @@ end, sensor)
         CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);
     }
 }
+void LinbluxCameraControl() {
+    Scene author;author.buildDefaultScene();std::string error;
+    author.gameAssets().player.cameraFov=85;
+    const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+    auto& camera=runtime.playerCamera();CHECK(camera.camera().fovy==85);
+    Camera3D pose{{10,8,10},{0,3,0},{0,1,0},90,CAMERA_PERSPECTIVE};
+    CHECK(camera.setPose(pose,.2f,error));CHECK(camera.scripted());
+    runtime.update(.1f,{});CHECK(camera.transitioning());CHECK(camera.camera().position.x>0&&camera.camera().position.x<10);
+    runtime.pause();const auto paused=camera.camera();runtime.update(.1f,{});CHECK(NearlyEqual(paused.position,camera.camera().position));runtime.resume();
+    runtime.update(.1f,{});CHECK(!camera.transitioning());CHECK(NearlyEqual(pose.position,camera.camera().position));
+    CHECK(NearlyEqual(pose.target,camera.camera().target));CHECK(camera.camera().fovy==90);
+    const auto original=camera.camera();pose.up={0,0,0};CHECK(!camera.setPose(pose,0,error));CHECK(NearlyEqual(original.position,camera.camera().position));
+    pose=original;pose.fovy=NAN;CHECK(!camera.setPose(pose,0,error));pose=original;
+    // Opposite orientations must never interpolate to a zero look/up vector.
+    pose.target=Vector3Subtract(pose.position,Vector3Subtract(original.target,original.position));pose.up={0,-1,0};
+    CHECK(camera.setPose(pose,.2f,error));
+    for(int i=0;i<12;++i){runtime.update(1.f/60,{});const auto c=camera.camera();CHECK(Vector3Length(Vector3CrossProduct(Vector3Subtract(c.target,c.position),c.up))>.01f);}
+    camera.release(runtime.characterRoot().position,runtime.settings());runtime.update(1.f/60,{});CHECK(!camera.scripted());CHECK(camera.camera().fovy==85);
+    CHECK(projectio::toJson(author)==baseline);CHECK(runtime.validate(error));runtime.stop();
+    auto old=nlohmann::json::parse(baseline);old["game"]["player"].erase("cameraFov");Scene loaded;
+    CHECK(projectio::fromJson(loaded,old.dump(),error));CHECK(loaded.gameAssets().player.cameraFov==60);
+    old["game"]["player"]["cameraFov"]=180;CHECK(!projectio::fromJson(loaded,old.dump(),error));CHECK(loaded.gameAssets().player.cameraFov==60);
+}
 void LinbluxTaskCancellation() {
     Scene author;author.buildDefaultScene();std::string error;
     author.createScript(InstanceClass::Script,nullptr,"Tarefas.lua")->source=R"(
@@ -1002,6 +1025,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

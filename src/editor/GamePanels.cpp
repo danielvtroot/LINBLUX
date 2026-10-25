@@ -60,7 +60,7 @@ void CameraSettings(game::PlayerSettings& p, float* sensitivityRect = nullptr) {
     p.maxZoom = std::max(p.minZoom, p.maxZoom);
     p.cameraDistance = std::clamp(p.cameraDistance, p.minZoom, p.maxZoom);
     ImGui::SliderFloat(i18n::Label("Initial distance"), &p.cameraDistance, p.minZoom, p.maxZoom);
-    ImGui::SliderFloat("Campo de visão vertical", &p.cameraFov, 1,170,"%.1f°");
+    ImGui::SliderFloat(i18n::Label("Vertical field of view"), &p.cameraFov, 1,170,"%.1f°");
     std::string error;
     if (!p.validate(error)) {
         p = previous;
