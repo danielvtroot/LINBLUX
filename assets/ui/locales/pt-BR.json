@@ -632,5 +632,10 @@
   "Damage must be finite and nonnegative": "O dano deve ser finito e não negativo.",
   "Healing must be finite and nonnegative": "A cura deve ser finita e não negativa.",
   "Dead character must respawn before healing": "O personagem morto precisa renascer antes de receber cura.",
-  "Rig duplicated.": "Personagem duplicado."
+  "Rig duplicated.": "Personagem duplicado.",
+  "Density": "Densidade",
+  "Friction": "Atrito",
+  "Restitution": "Restituição",
+  "Linear damping": "Amortecimento linear",
+  "Angular damping": "Amortecimento angular"
 }

@@ -17,7 +17,7 @@ class btDefaultMotionState;
 namespace loblox::game {
 enum class RuntimeState { Editing, StartingPlay, Playing, Paused, StoppingPlay };
 enum class HumanoidState { Idle, Walking, Jumping, Freefall, Landing, Dead };
-enum class PartMotion { Velocity, Force, Impulse };
+enum class PartMotion { Velocity, Force, Impulse, AngularVelocity, Torque, AngularImpulse };
 struct SpatialQuery {
     Vector3 center{},size{1,1,1},rotation{};
     float radius=0; // zero selects an oriented box, positive selects sphere
@@ -123,7 +123,8 @@ public:
     bool validate(std::string& error) const;
     // Validated script operations; called only outside Bullet's simulation step.
     bool partMotion(InstanceId id,Vector3 value,PartMotion operation,std::string& error);
-    Vector3 partVelocity(InstanceId id);
+    Vector3 partVelocity(InstanceId id,bool angular=false);
+    float partMass(InstanceId id);
     bool setGravity(float magnitude,std::string& error);
     bool teleportPlayer(Vector3 position,std::string& error);
     bool setCheckpoint(Vector3 position,std::string& error);

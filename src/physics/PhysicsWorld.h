@@ -73,6 +73,7 @@ public:
     bool isDynamic(InstanceId id) const;
     Vector3 bodyPosition(InstanceId id) const;
     Vector3 linearVelocity(InstanceId id) const;
+    float bodyMass(InstanceId id) const;
     Quaternion bodyRotation(InstanceId id) const;
     // Read the ACTUAL Bullet shape, never reconstruct it from the Part.
     bool collisionGeometry(InstanceId id, CollisionGeometry& out) const;

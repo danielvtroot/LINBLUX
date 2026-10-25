@@ -2252,11 +2252,11 @@ void EditorUI::drawPartProperties(Part& part) {
         part.setCanCollide(canCollide);
     }
     auto body=part.bodyProperties();bool bodyChanged=false;
-    bodyChanged|=ImGui::DragFloat("Densidade",&body.density,.01f,.001f,1000,"%.3f",ImGuiSliderFlags_AlwaysClamp);
-    bodyChanged|=ImGui::DragFloat("Atrito",&body.friction,.01f,0,10,"%.2f",ImGuiSliderFlags_AlwaysClamp);
-    bodyChanged|=ImGui::DragFloat("Restituição",&body.restitution,.01f,0,1,"%.2f",ImGuiSliderFlags_AlwaysClamp);
-    bodyChanged|=ImGui::DragFloat("Amortecimento linear",&body.linearDamping,.01f,0,1,"%.2f",ImGuiSliderFlags_AlwaysClamp);
-    bodyChanged|=ImGui::DragFloat("Amortecimento angular",&body.angularDamping,.01f,0,1,"%.2f",ImGuiSliderFlags_AlwaysClamp);
+    bodyChanged|=ImGui::DragFloat(i18n::Label("Density"),&body.density,.01f,.001f,1000,"%.3f",ImGuiSliderFlags_AlwaysClamp);
+    bodyChanged|=ImGui::DragFloat(i18n::Label("Friction"),&body.friction,.01f,0,10,"%.2f",ImGuiSliderFlags_AlwaysClamp);
+    bodyChanged|=ImGui::DragFloat(i18n::Label("Restitution"),&body.restitution,.01f,0,1,"%.2f",ImGuiSliderFlags_AlwaysClamp);
+    bodyChanged|=ImGui::DragFloat(i18n::Label("Linear damping"),&body.linearDamping,.01f,0,1,"%.2f",ImGuiSliderFlags_AlwaysClamp);
+    bodyChanged|=ImGui::DragFloat(i18n::Label("Angular damping"),&body.angularDamping,.01f,0,1,"%.2f",ImGuiSliderFlags_AlwaysClamp);
     if(bodyChanged){std::string error;if(!part.setBodyProperties(body,error))setStatus(error);}
 
     ImGui::Separator();

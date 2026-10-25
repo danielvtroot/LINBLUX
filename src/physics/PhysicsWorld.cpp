@@ -428,6 +428,10 @@ bool PhysicsWorld::isDynamic(InstanceId id) const {
     const auto it = bodies_.find(id);
     return it != bodies_.end() && it->second.body->getInvMass() > 0.0f;
 }
+float PhysicsWorld::bodyMass(InstanceId id) const {
+    const auto found=bodies_.find(id);if(found==bodies_.end())return 0;
+    const float inverse=found->second.body->getInvMass();return inverse>0?1.f/inverse:0;
+}
 
 Vector3 PhysicsWorld::bodyPosition(InstanceId id) const {
     const auto it = bodies_.find(id);

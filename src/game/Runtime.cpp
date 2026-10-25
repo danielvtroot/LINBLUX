@@ -739,14 +739,20 @@ bool RuntimeSession::partMotion(InstanceId id,Vector3 value,PartMotion operation
         case PartMotion::Velocity:body->setLinearVelocity(Bt(value));break;
         case PartMotion::Force:body->applyCentralForce(Bt(value));break;
         case PartMotion::Impulse:body->applyCentralImpulse(Bt(value));break;
+        case PartMotion::AngularVelocity:body->setAngularVelocity(Bt(value));break;
+        case PartMotion::Torque:body->applyTorque(Bt(value));break;
+        case PartMotion::AngularImpulse:body->applyTorqueImpulse(Bt(value));break;
         default:error="Operação física desconhecida.";return false;
     }
     body->activate(true);error.clear();return true;
 }
-Vector3 RuntimeSession::partVelocity(InstanceId id) {
+Vector3 RuntimeSession::partVelocity(InstanceId id,bool angular) {
     if(!physics_||!scene_)return {};
-    physics_->syncScene(*scene_);return physics_->linearVelocity(id);
+    physics_->syncScene(*scene_);
+    if(angular){const auto found=physics_->bodies_.find(id);return found==physics_->bodies_.end()?Vector3{}:Vec(found->second.body->getAngularVelocity());}
+    return physics_->linearVelocity(id);
 }
+float RuntimeSession::partMass(InstanceId id){if(!physics_||!scene_)return 0;physics_->syncScene(*scene_);return physics_->bodyMass(id);}
 bool RuntimeSession::setGravity(float magnitude,std::string& error) {
     if(!physics_){error="Física da sessão indisponível.";return false;}
     auto candidate=settings_;candidate.gravity=magnitude;
