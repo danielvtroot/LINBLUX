@@ -389,6 +389,15 @@ end)
             CHECK(rig()->findDecal(second)!=nullptr);
             CHECK(rig()->findDecal(second)->surface.image.empty());
             CHECK(std::filesystem::exists(std::filesystem::path("assets")/importedImage));
+            // A antiga imagem direta do membro aparece no registro e pode ser
+            // localizada e removida sem tocar no rig ou no arquivo importado.
+            rig()->bodies[game::Head].image=game::ImageAssetReference(importedImage);frames(2);
+            clickVisible("cmd-delete-image-"+importedImage);
+            CHECK(ui.frontend()->elementText("appearance-controls").find("Cabeça")!=std::string::npos);
+            capture("image-references");click("usage-image-use-0");frames(2);
+            CHECK(ui.frontend()->elementBounds("rig-image-"+rigId+"-1").width>0);
+            clickVisible("cmd-clear-image-rig-body");CHECK(rig()->bodies[game::Head].image.empty());
+            CHECK(rig()->findDecal(second)!=nullptr);
             clickVisible("cmd-delete-image-"+importedImage);
             CHECK(ui.frontend()->elementText("dialog-description").find("Nenhuma referência")!=std::string::npos);
             click("dialog-confirm");frames(3);

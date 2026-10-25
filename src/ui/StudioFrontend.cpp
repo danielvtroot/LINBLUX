@@ -226,6 +226,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         text("viewport-hint",ui.activeDocument_==0?"RMB + WASD · Q / E":"Ctrl+S save · Ctrl+W close");
     }
     void prompt(const std::string& kind) {
+        if(auto* confirm=dynamic_cast<Rml::ElementFormControl*>(el("dialog-confirm")))confirm->SetDisabled(false);
         if(experiences&&kind=="import-image"){experiences->chooseAsset();return;}
         if(experiences&&kind=="open"){experiences->enqueue("import");return;}
         if(experiences&&kind=="save-as"&&experiences->handlesSave()){experiences->enqueue("export-current");return;}
@@ -436,16 +437,16 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(action=="delete-image") {
                 imageUses=game::DescribeImageUsage(ui.scene_,v);
                 if(experiences){const auto presentation=experiences->presentationReferences(v);imageUses.insert(imageUses.end(),presentation.begin(),presentation.end());}
-                std::string report=imageUses.empty()?"A cena será salva e a imagem será excluída apenas desta experiência. O arquivo original não será apagado.":"A imagem está em uso. Localize ou remova as associações abaixo antes de excluir; remover associação preserva o arquivo.";
+                std::string report=imageUses.empty()?"Nenhuma referência encontrada. A cena será salva e a imagem será excluída apenas desta experiência. O arquivo original não será apagado.":"A imagem está em uso. Localize ou remova as associações abaixo antes de excluir; remover associação preserva o arquivo.";
                 std::string rows="<div class=\"image-usages\">";
                 for(std::size_t i=0;i<imageUses.size();++i)rows+="<div class=\"image-usage\"><span>"+Escape(imageUses[i].where+" · "+imageUses[i].property)+"</span>"+Button("image-use","Localizar","focus",std::to_string(i),"usage")+Button("image-unlink","Remover associação","delete",std::to_string(i),"usage")+"</div>";
                 rows+="</div>";el("appearance-controls")->SetInnerRML(i18n::Markup(rows));
-                if(auto* confirm=dynamic_cast<Rml::ElementFormControl*>(el("confirm-dialog")))confirm->SetDisabled(!imageUses.empty());
+                if(auto* confirm=dynamic_cast<Rml::ElementFormControl*>(el("dialog-confirm")))confirm->SetDisabled(!imageUses.empty());
                 dialog="delete-image:"+v;text("dialog-title","Excluir imagem");text("dialog-description",report);
                 field->SetDisabled(true);field->SetValue(displayName);display("dialog-overlay",true,"flex");context->GetRootElement()->Focus();return;
             }
             field->SetDisabled(false);
-            if(auto* confirm=dynamic_cast<Rml::ElementFormControl*>(el("confirm-dialog")))confirm->SetDisabled(false);
+            if(auto* confirm=dynamic_cast<Rml::ElementFormControl*>(el("dialog-confirm")))confirm->SetDisabled(false);
             if(action=="rename-image") {
                 dialog="rename-image:"+v;text("dialog-title","Renomear imagem");
                 text("dialog-description","Só o nome exibido muda: o arquivo e o ID técnico continuam iguais, então nenhuma referência quebra. Nomes repetidos são permitidos.");
@@ -495,7 +496,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         for(const auto& n:ui.scene_.objects())hash^=std::hash<std::string>{}(n->name())+(n->id()*911)+(n->parent()?n->parent()->id()*235:0);
         for(const auto& rig:ui.scene_.gameAssets().rigs) {
             hash^=std::hash<std::string>{}(rig.id+rig.name+ui.selectedRig_+selectedRigDecal+std::to_string(ui.selectedRigBody_));
-            for(const auto& body:rig.bodies)for(const auto& d:body.decals)hash^=std::hash<std::string>{}(d.id+d.name);
+            for(const auto& body:rig.bodies){hash^=std::hash<std::string>{}(body.image);for(const auto& d:body.decals)hash^=std::hash<std::string>{}(d.id+d.name);}
         }
         if(treeHash==hash && hash!=0)return;
         treeHash=hash;
@@ -771,7 +772,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         // a blur cannot invalidate an iterator while an action changes focus.
         bool refreshImages=false;
         for(size_t i=0;i<commands.size();++i){const auto c=commands[i];actions.dispatch(c);if(c.action=="r6")showAdvanced("rig");
-            refreshImages|=c.action.rfind("apply-image",0)==0||c.action.rfind("apply-texture",0)==0||c.action=="remove-image"||c.action.rfind("delete-image:",0)==0||c.action.rfind("replace-image:",0)==0||c.action.rfind("rename-image:",0)==0;}
+            refreshImages|=c.action=="apply-surface-image"||c.action.rfind("apply-image",0)==0||c.action.rfind("apply-texture",0)==0||c.action=="remove-image"||c.action.rfind("delete-image:",0)==0||c.action.rfind("replace-image:",0)==0||c.action.rfind("rename-image:",0)==0;}
         commands.clear();if(refreshImages)invalidateImages();
     }
     void updateTooltip() {

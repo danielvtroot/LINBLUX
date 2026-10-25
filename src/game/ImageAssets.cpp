@@ -179,6 +179,7 @@ bool RemoveAssetFile(const std::string& assetsDir, const std::string& filename,
     if(name!=filename||name.empty()){error="Use apenas o nome do arquivo em assets/.";return false;}
     const std::filesystem::path root=std::filesystem::path(assetsDir).lexically_normal();
     const std::filesystem::path target=root/name;
+    if(std::filesystem::is_symlink(std::filesystem::symlink_status(root))){error="Diretório de assets não pode ser link simbólico.";return false;}
     std::error_code fsError;
     if(!std::filesystem::is_regular_file(target,fsError)){error="Asset não encontrado: "+name;return false;}
     if(std::filesystem::is_symlink(std::filesystem::symlink_status(target,fsError))){error="Symlink não pode ser removido como asset.";return false;}
@@ -291,17 +292,22 @@ bool ImportMediaTo(const std::string& assetsDir, const std::string& sourcePath,
     }
     const std::filesystem::path target =
         std::filesystem::path(assetsDir) / (id + ext);
+    const auto rememberName=[&] {
+        if(IsAudioExtension(ext)||source.stem()==target.stem())return;
+        const auto names=ReadImageNames(assetsDir);if(names.count(target.filename().string()))return;
+        std::string ignored;RenameImageAsset(assetsDir,target.filename().string(),source.stem().string(),ignored);
+    };
     // Mesmo arquivo => mesmo destino; reuso sem reescrever.
     if (std::filesystem::exists(target, fsError)) {
         if(std::filesystem::is_symlink(std::filesystem::symlink_status(target))){error="Asset destination is a symlink";return false;}
         std::ifstream existing(target,std::ios::binary);
         const std::string saved((std::istreambuf_iterator<char>(existing)),{});
         if(saved!=content){error="Image asset ID collision; existing image was preserved";return false;}
-        outAssetPath = target.string();
+        outAssetPath = target.string();rememberName();
         return true;
     }
     if(!projectio::writeFileAtomically(target.string(),content,error))return false;
-    outAssetPath = target.string();
+    outAssetPath = target.string();rememberName();
     return true;
 }
 

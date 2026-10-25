@@ -825,7 +825,7 @@ void DrawPartSkins(const Part& part, const std::string& assetsDir,
 Texture2D& FaceTexture() {
     static Texture2D tex{};
     // Sem rosto obrigatório: só desenha a face quando o projeto define uma
-    // imagem. Personagens novos usam os olhos mínimos desenhados na cabeça;
+    // imagem. Cabeças novas ficam sem marcas faciais impostas;
     // experiências antigas que já têm faceImage continuam intactas.
     const auto& reference=game::ProjectFaceImage();
     tex=reference.empty()?Texture2D{}:game::AssetTexture(reference);
@@ -989,17 +989,9 @@ void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float in
             rig.bodies[i].size, world[i].rotation, GOLD);
     }
     // Rosto do usuário quando existir; sem arquivo, mantém os olhos mínimos.
-    // The face and fallback eyes sit farther out than the body image decal so
-    // applying an image to the head never hides the default face.
-    if (FaceTexture().id != 0) {
-        DrawHeadFace(world[game::Head], rig.bodies[game::Head].size);
-    } else {
-        // Original minimal face marks the -Z front without external textures.
-        for (float side : {-1.f, 1.f}) {
-            const auto eye = game::Compose(world[game::Head], {{side*.35f, .08f, -rig.bodies[game::Head].size.z*.5f-.04f}});
-            DrawShadedBox(eye.position, {.13f, .15f, .035f}, eye.rotation, DARKGRAY, light, 0, 1);
-        }
-    }
+    // Preserva só a face explicitamente configurada por projetos legados.
+    // Imagens de corpo e adesivos são desenhados pelos componentes acima.
+    if (FaceTexture().id != 0) DrawHeadFace(world[game::Head],rig.bodies[game::Head].size);
     if (state.pivots) {
         for (const auto& joint : rig.joints) {
             const auto pivot = game::Compose(world[joint.child],joint.childAnchor);

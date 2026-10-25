@@ -187,7 +187,7 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             }
             else if(IsSurfaceClass(node->instanceClass())&&name.rfind("Surface.",0)==0) {
                 auto& surface=static_cast<Surface&>(*node);auto value=surface.properties();const float number=Number(c.value);
-                if(name=="Surface.Face"){if(std::floor(number)!=number)throw std::runtime_error("Face deve ser inteira de 0 a 5.");value.face=int(number);}
+                if(name=="Surface.Face"){if(number<0||number>5||std::floor(number)!=number)throw std::runtime_error("Face deve ser inteira de 0 a 5.");value.face=int(number);}
                 else if(name=="Surface.Transparency")value.transparency=number;else if(name=="Surface.Rotation")value.rotation=number;
                 else if(name=="Surface.OffsetU")value.offsetU=number;else if(name=="Surface.OffsetV")value.offsetV=number;
                 else if(name=="Surface.TileU")value.studsPerTileU=number;else if(name=="Surface.TileV")value.studsPerTileV=number;

@@ -8,6 +8,7 @@
 #include "nlohmann/json.hpp"
 
 #include <cstdio>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -156,6 +157,23 @@ int main() {
                     swapScene.gameAssets().rigs.front().bodies[game::Head].decals.front().surface.image == substitute,
                 "Substituição deixou referência para a imagem antiga");
 
+        // Componentes reais e atributos conhecidos compartilham o mesmo registro.
+        auto* surface=swapScene.createSurface(InstanceClass::Decal,swapPart,"Sinal");
+        auto properties=surface->properties();properties.image=substitute;require(surface->setProperties(properties),"Surface inválida");
+        swapPart->setAttribute("anotacao",substitute); // texto arbitrário não é referência
+        auto uses=game::DescribeImageUsage(swapScene,substitute);require(uses.size()==4,"Surface ausente ou falso positivo no registro");
+        require(game::ImageInUse(swapScene,substitute),"ImageInUse divergiu do registro");
+        auto child=std::find_if(uses.begin(),uses.end(),[&](const game::ImageUsage& use){return use.object==surface->id();});
+        require(child!=uses.end()&&child->property=="surface.image","Identidade/propriedade da Surface ausente");
+        auto selected=*child;require(game::SetImageUsage(swapScene,selected,"",nameError),nameError.c_str());
+        require(!game::SetImageUsage(swapScene,selected,"assets/outro.png",nameError),"Descritor obsoleto foi aceito");
+        require(surface->properties().image.empty()&&surface->parent()==swapPart,"Remover imagem destruiu componente");
+        require(game::ReplaceImageReferences(swapScene,substitute,"assets/nova.png")==3,"Substituição divergiu do registro");
+        require(attribute(*swapPart,"anotacao")==substitute,"Texto arbitrário alterado");
+        require(!game::ImageReferenceMatches("/externo/mesmo.png","assets/mesmo.png"),"Arquivo externo confundido com asset");
+        experiences::Manifest presentation;presentation.faceImage=reference;presentation.banner=reference;
+        require(game::DescribeImageUsage(presentation,reference).size()==2,"Referências do manifesto omitidas");
+
         // Legado: a UI antiga gravava o nome solto. Abrir, salvar e reabrir
         // precisa migrar para assets/<arquivo> sem erro de asset ausente.
         const std::string bare = fs::path(reference).filename().string();
@@ -223,17 +241,24 @@ int main() {
         manifest = library.active()->manifest;
         manifest.icon.clear();
         library.updateMetadata(manifest);
+        refused=false;try{library.removeAsset(reference,false);}catch(const std::exception&){refused=true;}
+        require(refused,"Arquivo ainda referenciado pela cena salva foi apagado");
+        library.save(derivedScene);
         library.removeAsset(reference, game::ImageInUse(derivedScene, reference));
         require(!fs::exists(derived.root / reference), "Remoção autorizada não apagou o arquivo");
 
         // Referência realmente ausente continua sendo erro, nunca aprovação.
         auto* broken = derivedScene.createPart(PartShape::Block, {0, 2, 0}, {1, 1, 1}, "SemImagem");
         broken->setAttribute("decal_image", "assets/0000000000000000.png");
+        const auto beforeManifest=read(derived.root/"experience.json");
+        const auto beforePlace=read(derived.root/library.inspect(derived.root).manifest.mainPlace);
         refused = false;
         try { library.save(derivedScene); } catch (const std::exception& error) {
             refused = std::string(error.what()).find("Missing image asset") != std::string::npos;
         }
         require(refused, "Salvar com imagem ausente deveria falhar com 'Missing image asset'");
+        require(read(derived.root/"experience.json")==beforeManifest,"Falha de salvamento alterou manifesto");
+        require(read(derived.root/library.inspect(derived.root).manifest.mainPlace)==beforePlace,"Falha de salvamento alterou autoria");
 
         std::printf("IMAGENS: importação, decal, rig, migração herdada, padrão da engine e remoção segura passaram. Fixture: %s\n",
                     root.c_str());
