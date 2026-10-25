@@ -332,20 +332,20 @@ end)
             // IDs técnicos não existe mais.
             clickVisible("image-query-front.png");frames(2);capture("rig-image-open");
             CHECK(rig()->findDecal(first)->surface.image=="assets/front.png");
-            click("cmd-rig-decal-add-");CHECK(rig()->bodies[game::Torso].decals.size()==2);
+            clickVisible("cmd-rig-decal-add-");CHECK(rig()->bodies[game::Torso].decals.size()==2);
             const auto second=rig()->bodies[game::Torso].decals.back().id;
-            click("rig-prop-Name");key("ctrl+a");event("type --clearmodifiers DecalBack");key("Return");
-            click("rig-prop-Face");key("Down");key("Return");
+            clickVisible("rig-prop-Name");key("ctrl+a");event("type --clearmodifiers DecalBack");key("Return");
+            clickVisible("rig-prop-Face");key("Down");key("Return");
             CHECK(rig()->findDecal(second)->surface.face==1);
             clickVisible("image-query-back.png");frames(2);
             CHECK(rig()->findDecal(second)->surface.image=="assets/back.png");
-            click("rig-prop-Transparency");key("ctrl+a");event("type --clearmodifiers 0.25");key("Return");
+            clickVisible("rig-prop-Transparency");key("ctrl+a");event("type --clearmodifiers 0.25");key("Return");
             CHECK(NearlyEqual(rig()->findDecal(second)->surface.transparency,.25f));
             capture("rig-decals-properties");
             // Import through the existing dialog; choose the imported image
             // for this child without replacing its sibling or face.
             image=GenImageColor(32,32,ORANGE);CHECK(ExportImage(image,"external.png"));UnloadImage(image);
-            click("cmd-import-dialog-");
+            clickVisible("cmd-import-dialog-");
             click("dialog-value");SetClipboardText((std::string(directory)+"/external.png").c_str());key("ctrl+a");key("ctrl+v");key("Return");
             auto imported=game::ListImages(game::AssetsDir());
             CHECK(imported.size()==3);
