@@ -183,10 +183,10 @@ void ExperienceUI::dispatch(const std::string& action,const std::string& v) {
     else if(action=="cancel-confirm")confirm_.clear();
     else if(action=="discard-home") {confirm_.clear();closeDocument();}
     else if(action=="confirm") {
-        const auto previous=confirm_;
+        const auto previous=confirm_;const bool selectedActive=selected_&&manager_.active()&&selected_->root==manager_.active()->root;
         if(previous=="unsaved"){if(!editor_.saveCurrentProject())throw std::runtime_error(editor_.status_);closeDocument();}
         else if(previous=="restore-factory")manager_.restoreFactoryDefaults();
-        else if(selected_){manager_.setArchived(*selected_,true,previous=="delete");if(manager_.active()&&manager_.active()->root==selected_->root)closeDocument();page_="archive";dirty_=true;}
+        else if(selected_){if(previous=="delete")manager_.deletePermanently(*selected_);else manager_.setArchived(*selected_,true);if(selectedActive)closeDocument();page_=previous=="delete"?"home":"archive";selected_.reset();dirty_=true;editor_.setStatus(previous=="delete"?"Experiência excluída permanentemente.":"Experiência arquivada.");}
         confirm_.clear();
     } else if(action=="default-map") {if(home_||!manager_.active())throw std::runtime_error("Open the experience you want to use as My Default");
         if(!editor_.saveCurrentProject())throw std::runtime_error(editor_.status_);
@@ -241,7 +241,7 @@ void ExperienceUI::buildPage() {
     } else if(page_=="new"||page_=="details") {
         const bool create=page_=="new";const auto m=!create&&selected_?selected_->manifest:experiences::Manifest{};
         html+=title(create?"New Experience":"Experience Details",create?"Start from a real template. Your source files stay untouched.":"Presentation images are independent from your map and character.");
-        html+="<div class=\"experience-form\"><div class=\"experience-fields\">"+field("exp-name","Name",create?"My Experience":m.name,"Rename without changing internal paths or IDs.");
+        html+="<div class=\"experience-form\"><div class=\"experience-fields\">"+field("exp-name","Name",create?"Minha experiência":m.name,"Rename without changing internal paths or IDs.");
         html+="<label class=\"experience-field\"><span>Description</span><textarea id=\"exp-description\">"+esc(m.description)+"</textarea></label>";
         if(create) {
             html+="<label class=\"experience-field\"><span>Template</span><select id=\"exp-template\">";
@@ -322,9 +322,9 @@ void ExperienceUI::frame() {
     show(document_,"experience-confirm",!confirm_.empty(),"flex");
     if(!confirm_.empty()) {
         const bool unsaved=confirm_=="unsaved";
-        text(document_,"exp-confirm-title",unsaved?"Save your changes?":confirm_=="restore-factory"?"Restore factory defaults?":confirm_=="delete"?"Move experience to Archive?":"Archive experience?");
-        text(document_,"exp-confirm-description",unsaved?"Your map, scripts or animation has unsaved changes. Save before returning Home, discard them, or cancel.":confirm_=="restore-factory"?"New projects will use factory templates and character. Your experiences and previous snapshots are preserved.":"The selected experience and its assets remain in its own directory. It will leave My Experiences and can be restored from Archive. No external files are deleted.");
-        text(document_,"exp-confirm-ok",unsaved?"Save & Home":confirm_=="restore-factory"?"Restore defaults":"Move to Archive");show(document_,"exp-confirm-discard",unsaved);
+        text(document_,"exp-confirm-title",unsaved?"Save your changes?":confirm_=="restore-factory"?"Restore factory defaults?":confirm_=="delete"?"Excluir permanentemente: "+(selected_?selected_->manifest.name:std::string{})+"?":"Archive experience?");
+        text(document_,"exp-confirm-description",unsaved?"Your map, scripts or animation has unsaved changes. Save before returning Home, discard them, or cancel.":confirm_=="restore-factory"?"New projects will use factory templates and character. Your experiences and previous snapshots are preserved.":confirm_=="delete"?"Todos os arquivos desta experiência serão apagados do disco. Esta operação não pode ser desfeita. Outras experiências serão preservadas.":"The selected experience and its assets remain in its own directory. It will leave My Experiences and can be restored from Archive. No external files are deleted.");
+        text(document_,"exp-confirm-ok",unsaved?"Save & Home":confirm_=="restore-factory"?"Restore defaults":confirm_=="delete"?"Excluir permanentemente":"Move to Archive");show(document_,"exp-confirm-discard",unsaved);
     }
     text(document_,"experience-error",error_);show(document_,"experience-error",!error_.empty());
     document_.SetClass("experience-compact",GetScreenWidth()<1400);

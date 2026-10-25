@@ -31,7 +31,7 @@ std::string Window(const char* name){FILE* p=popen((std::string("xdotool search 
 int main() {
     const auto directory=fs::temp_directory_path()/("loblox-experience-ui-"+experiences::newId());fs::create_directories(directory);
     setenv("XDG_DATA_HOME",directory.c_str(),1);setenv("XDG_CONFIG_HOME",directory.c_str(),1);diag::configure((directory/"events.jsonl").string());
-    SetTraceLogLevel(LOG_WARNING);SetConfigFlags(FLAG_WINDOW_RESIZABLE);InitWindow(1366,768,"Loblox Experiences UI");SetWindowPosition(0,0);SetExitKey(KEY_NULL);SetTargetFPS(60);
+    SetTraceLogLevel(LOG_WARNING);SetConfigFlags(FLAG_WINDOW_RESIZABLE);InitWindow(1366,768,"LINBLUX Experiences UI");SetWindowPosition(0,0);SetExitKey(KEY_NULL);SetTargetFPS(60);
     rlImGuiSetup(true);ImGui::GetIO().ConfigFlags|=ImGuiConfigFlags_DockingEnable;ImGui::GetIO().IniFilename=nullptr;studio::Apply();
     try {
         experiences::ExperienceManager manager(directory/"data",fs::path(__FILE__).parent_path().parent_path()/"assets/templates");
@@ -46,13 +46,13 @@ int main() {
             event("mousemove "+std::to_string(int(r.x+r.width*.5f))+" "+std::to_string(int(r.y+r.height*.5f)));event("mousedown 1");event("mouseup 1");frames(3);};
         auto fill=[&](const std::string& id,const std::string& value){click(id);key("ctrl+a");for(size_t i=0;i<value.size();i+=8)event("type --clearmodifiers "+Quote(value.substr(i,8)));};
         auto capture=[&](const std::string& name){frames();TakeScreenshot((directory/(name+".png")).c_str());};
-        frames(6);event("search --name '^Loblox Experiences UI$' windowfocus --sync");capture("home");
+        frames(6);event("search --name '^LINBLUX Experiences UI$' windowfocus --sync");capture("home");
         for(const auto size:std::initializer_list<Vector2>{{1280,720},{1600,900},{1920,1080},{1366,768}}) {
             SetWindowSize(int(size.x),int(size.y));frames(8);
             const auto r=editor.frontend()->elementBounds("exp-new-main");CHECK(r.width>60&&r.x+r.width<=size.x);CHECK(editor.frontend()->elementBounds("exp-nav-library").height>25);
             capture("home-"+std::to_string(int(size.x))+"x"+std::to_string(int(size.y)));
         }
-        const auto mainWindow=Window("^Loblox Experiences UI$");CHECK(!mainWindow.empty());
+        const auto mainWindow=Window("^LINBLUX Experiences UI$");CHECK(!mainWindow.empty());
         auto nativeFile=[&](const std::string& title,const fs::path& file,const std::string& shot) {
             std::string popup;for(int i=0;i<100&&popup.empty();++i){frames(1);popup=Window(title.c_str());}
             CHECK(!popup.empty());if(popup.empty())return;
@@ -67,16 +67,16 @@ int main() {
         };
         Image icon=GenImageChecked(96,96,12,12,{35,100,200,255},{90,190,230,255});CHECK(ExportImage(icon,(directory/"icon.png").c_str()));UnloadImage(icon);
         const auto banner=fs::path(__FILE__).parent_path()/"fixtures/image-test.jpg";
-        click("exp-new");CHECK(editor.frontend()->elementBounds("exp-name").width>0);capture("new-experience");
+        click("exp-new-main");CHECK(editor.frontend()->elementBounds("exp-name").width>0);capture("new-experience");
         fill("exp-name","Integration Obby");fill("exp-description","A portable local experience");
         click("exp-template");key("Down");key("Return");
-        click("exp-choose-icon");nativeFile("^Choose an image$",directory/"icon.png","native-icon");
-        click("exp-choose-banner");nativeFile("^Choose an image$",banner,"native-banner");
-        click("exp-choose-loading");nativeFile("^Choose an image$",directory/"icon.png","native-loading");
+        click("exp-choose-icon");nativeFile("^Escolher imagem$",directory/"icon.png","native-icon");
+        click("exp-choose-banner");nativeFile("^Escolher imagem$",banner,"native-banner");
+        CHECK(editor.frontend()->elementBounds("exp-choose-loading").width==0);
         capture("wizard-with-images");click("exp-create");
         CHECK(manager.active().has_value());if(!manager.active())throw std::runtime_error("Creation failed: "+editor.frontend()->elementText("experience-error"));
         CHECK(manager.active()->manifest.name=="Integration Obby");CHECK(manager.active()->manifest.description=="A portable local experience");
-        CHECK(!manager.active()->manifest.icon.empty());CHECK(!manager.active()->manifest.banner.empty());CHECK(!manager.active()->manifest.loadingBackground.empty());
+        CHECK(!manager.active()->manifest.icon.empty());CHECK(!manager.active()->manifest.banner.empty());CHECK(manager.active()->manifest.loadingBackground.empty());
         CHECK(!editor.experienceOverlay());CHECK(scene.parts().size()==2);CHECK(scene.gameAssets().rigs.size()==1);capture("studio");
         const auto rigId=scene.gameAssets().defaultRig;const auto* rig=scene.gameAssets().findRig(rigId);CHECK(rig!=nullptr);
         for(int i=0;i<18;++i){const auto row=editor.frontend()->elementBounds("rig-"+rigId),panel=editor.frontend()->elementBounds("explorer");if(row.y+row.height<panel.y+panel.height)break;event("mousemove "+std::to_string(int(panel.x+80))+" "+std::to_string(int(panel.y+80)));event("click 5");}
@@ -123,17 +123,24 @@ int main() {
         click("play");for(int i=0;i<240&&EditorUITestAccess::experiences(editor)->loading();++i)frames(1);observe={};
         CHECK(loadingPainted);CHECK(EditorUITestAccess::runtime(editor).active());CHECK(!EditorUITestAccess::experiences(editor)->loading());capture("play");
         key("shift+F5");CHECK(!EditorUITestAccess::runtime(editor).active());CHECK(projectio::toJson(scene)==authoring);
-        click("experience-menu");click("exp-export");nativeFile("^Export Loblox Experience$",directory/"Shared.lo","native-export");CHECK(fs::exists(directory/"Shared.lo"));
+        click("experience-menu");click("exp-export");nativeFile("^Exportar experiência LINBLUX$",directory/"Shared.lo","native-export");CHECK(fs::exists(directory/"Shared.lo"));
         experiences::ExperienceManager receiver(directory/"receiver",fs::path(__FILE__).parent_path().parent_path()/"assets/templates");auto received=receiver.importPackage(directory/"Shared.lo");
         Scene portable;receiver.open(received,portable);CHECK(portable.gameAssets().findRig(rigId));CHECK(projectio::toJson(portable)==authoring);CHECK(fs::exists(received.root/received.manifest.banner));receiver.close();
         game::SetProjectAssetRoot(manager.active()->root.string());game::SetProjectFaceImage(manager.active()->manifest.faceImage);
         click("experience-menu");click("exp-back-home");CHECK(editor.experienceOverlay());CHECK(!manager.active());capture("recent-experiences");
-        click("exp-template-my-default");fill("exp-name","From My Default");capture("default-wizard");click("exp-create");CHECK(manager.active());
+        EditorUITestAccess::experiences(editor)->enqueue("new","my-default");frames(3);fill("exp-name","From My Default");capture("default-wizard");click("exp-create");CHECK(manager.active());
         if(!manager.active()){capture("default-create-error");throw std::runtime_error("My Default creation failed: "+editor.frontend()->elementText("experience-error"));}
         CHECK(scene.gameAssets().findRig(rigId));
-        click("experience-menu");click("exp-back-home");click("exp-import");nativeFile("^Open / Import Experience$",directory/"Shared.lo","native-import");CHECK(manager.active());CHECK(scene.gameAssets().findRig(rigId));capture("imported-experience");
+        click("experience-menu");click("exp-back-home");click("exp-import");nativeFile("^Abrir / importar experiência$",directory/"Shared.lo","native-import");CHECK(manager.active());CHECK(scene.gameAssets().findRig(rigId));capture("imported-experience");
         click("experience-menu");click("exp-back-home");click("exp-details-0");capture("card-menu");click("exp-card-details");
-        EditorUITestAccess::experiences(editor)->enqueue("delete");frames(3);capture("delete-confirmation");click("exp-confirm-ok");capture("archive");CHECK(manager.list(true).size()==1);
+        const auto doomed=manager.list().front();const auto beforeDelete=manager.list().size();
+        EditorUITestAccess::experiences(editor)->enqueue("delete");frames(3);capture("delete-confirmation");
+        CHECK(editor.frontend()->elementText("exp-confirm-title").find(doomed.manifest.name)!=std::string::npos);
+        CHECK(editor.frontend()->elementText("exp-confirm-description").find("apagados do disco")!=std::string::npos);
+        click("exp-confirm-cancel");CHECK(fs::exists(doomed.root));
+        EditorUITestAccess::experiences(editor)->enqueue("delete");frames(3);click("exp-confirm-ok");
+        CHECK(!fs::exists(doomed.root));CHECK(manager.list().size()+1==beforeDelete);CHECK(manager.list(true).empty());
+        click("exp-details-0");click("exp-card-details");EditorUITestAccess::experiences(editor)->enqueue("archive");frames(3);click("exp-confirm-ok");capture("archive");CHECK(manager.list(true).size()==1);
         click("exp-details-0");click("exp-card-details");EditorUITestAccess::experiences(editor)->enqueue("restore");frames(3);CHECK(manager.list(true).empty());
         // No library entries disappear behind the thumbnail page limit.
         const auto shelfSource=manager.list().front();
@@ -144,7 +151,7 @@ int main() {
         fill("exp-filter","Shelf 24");click("exp-search");CHECK(editor.frontend()->elementBounds("exp-open-0").width>0);CHECK(editor.frontend()->elementBounds("exp-open-1").width==0);capture("library-search");
         click("exp-open-0");CHECK(manager.active());
         const auto validRig=scene.gameAssets().defaultRig;scene.gameAssets().defaultRig="missing-rig";click("play");
-        for(int i=0;i<180&&editor.frontend()->elementText("exp-loading-status").find("Preparing")!=std::string::npos;++i)frames(1);
+        for(int i=0;i<180&&editor.frontend()->elementText("exp-loading-status").find("Preparando")!=std::string::npos;++i)frames(1);
         CHECK(!EditorUITestAccess::runtime(editor).active());CHECK(EditorUITestAccess::experiences(editor)->loading());capture("loading-error");click("exp-loading-cancel");CHECK(!EditorUITestAccess::experiences(editor)->loading());scene.gameAssets().defaultRig=validRig;
         scene.createPart(PartShape::Block,{9,8,7},{1,1,1},"Unsaved");
         click("experience-menu");click("exp-back-home");CHECK(manager.active());CHECK(editor.frontend()->elementBounds("exp-confirm-ok").width>0);capture("unsaved-confirmation");click("exp-confirm-cancel");CHECK(!editor.experienceOverlay());

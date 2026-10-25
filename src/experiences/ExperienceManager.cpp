@@ -15,11 +15,16 @@
 #include <functional>
 #include <iomanip>
 #include <map>
+#include <memory>
 #include <random>
 #include <set>
 #include <stdexcept>
 #include <system_error>
 #include <fcntl.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <cerrno>
+#include <cstring>
 #include <unistd.h>
 #include <zlib.h>
 
@@ -347,6 +352,66 @@ void ExperienceManager::setArchived(const Experience& experience,bool archived,b
     e.manifest.archived=archived;e.manifest.trashed=trash;e.manifest.modified=now();write(e.root/"experience.json",e.manifest.serialize());
     if(active_&&active_->root==e.root)active_->manifest=e.manifest;
     event(trash?"trash":archived?"archive":"restore",e.root);
+}
+namespace {
+struct DirectoryHandle {
+    int fd;
+    explicit DirectoryHandle(int value):fd(value) {if(fd<0)throw std::runtime_error("Não foi possível abrir o diretório com segurança");}
+    ~DirectoryHandle(){::close(fd);}
+};
+void removeContents(int fd) {
+    DIR* raw=fdopendir(dup(fd));if(!raw)throw std::runtime_error("Falha ao listar arquivos para exclusão");
+    struct CloseDirectory {void operator()(DIR* value) const {closedir(value);}};
+    std::unique_ptr<DIR,CloseDirectory> directory(raw);
+    errno=0;
+    while(auto* item=readdir(directory.get())) {
+        const std::string name=item->d_name;if(name=="."||name=="..")continue;
+        struct stat st{};
+        if(fstatat(fd,name.c_str(),&st,AT_SYMLINK_NOFOLLOW)!=0)throw std::runtime_error("Falha ao verificar arquivo para exclusão");
+        if(S_ISDIR(st.st_mode)) {
+            DirectoryHandle child(openat(fd,name.c_str(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC));
+            removeContents(child.fd);
+            if(unlinkat(fd,name.c_str(),AT_REMOVEDIR)!=0)throw std::runtime_error("Falha ao excluir subdiretório");
+        } else if(unlinkat(fd,name.c_str(),0)!=0)throw std::runtime_error("Falha ao excluir arquivo");
+        errno=0;
+    }
+    if(errno)throw std::runtime_error("Falha durante a leitura do diretório");
+}
+}
+void ExperienceManager::deletePermanently(const Experience& experience) {
+    const auto library=fs::canonical(library_);
+    const auto root=fs::absolute(experience.root).lexically_normal();
+    const auto id=experience.manifest.installationId;
+    if(!identifier(id)||root!=library/id||root==library||fs::is_symlink(fs::symlink_status(root)))
+        throw std::runtime_error("Exclusão recusada: a experiência deve ser um diretório próprio dentro da biblioteca");
+    DirectoryHandle parent(::open(library.c_str(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC));
+    DirectoryHandle target(openat(parent.fd,id.c_str(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC));
+    DirectoryHandle manifestFile(openat(target.fd,"experience.json",O_RDONLY|O_NOFOLLOW|O_CLOEXEC));
+    struct stat fileStat{},original{};
+    if(fstat(manifestFile.fd,&fileStat)!=0||!S_ISREG(fileStat.st_mode)||fileStat.st_size<=0||fileStat.st_size>int64_t(MiB)||fstat(target.fd,&original)!=0)
+        throw std::runtime_error("Manifesto inválido para exclusão");
+    std::string text(size_t(fileStat.st_size),'\0');size_t offset=0;
+    while(offset<text.size()) {const auto count=::read(manifestFile.fd,text.data()+offset,text.size()-offset);if(count<=0)throw std::runtime_error("Falha ao ler manifesto");offset+=size_t(count);}
+    const auto current=Manifest::parse(text);
+    if(current.id!=experience.manifest.id||current.installationId!=id)
+        throw std::runtime_error("A identidade da experiência mudou; atualize a biblioteca");
+    const auto quarantine=".deleting-"+id+"-"+newId();
+    if(renameat(parent.fd,id.c_str(),parent.fd,quarantine.c_str())!=0)throw std::runtime_error("Não foi possível reservar a experiência para exclusão");
+    struct stat moved{};
+    if(fstatat(parent.fd,quarantine.c_str(),&moved,AT_SYMLINK_NOFOLLOW)!=0||moved.st_dev!=original.st_dev||moved.st_ino!=original.st_ino) {
+        renameat(parent.fd,quarantine.c_str(),parent.fd,id.c_str());
+        throw std::runtime_error("O diretório mudou durante a exclusão; operação interrompida");
+    }
+    try {removeContents(target.fd);if(unlinkat(parent.fd,quarantine.c_str(),AT_REMOVEDIR)!=0)throw std::runtime_error("Falha ao excluir diretório da experiência");}
+    catch(const std::exception& e) {throw std::runtime_error(std::string("Exclusão incompleta; arquivos restantes em ")+quarantine+": "+e.what());}
+    if(active_&&active_->root==root)close();
+    try {
+        auto config=settings(data_);auto& roots=config["roots"];
+        if(roots.is_array())roots.erase(std::remove(roots.begin(),roots.end(),json(root.string())),roots.end());
+        if(config.contains("catalog"))config["catalog"].erase(id);
+        saveSettings(data_,config);
+    } catch(const std::exception& e) {throw std::runtime_error(std::string("Arquivos excluídos, mas falhou a atualização da biblioteca: ")+e.what());}
+    event("delete_permanently",root);
 }
 void ExperienceManager::close(){active_.reset();game::SetProjectAssetRoot({});}
 std::string ExperienceManager::importImage(const fs::path& file) {if(!active_)throw std::runtime_error("Open an experience first");return imageImport(active_->root,file);}

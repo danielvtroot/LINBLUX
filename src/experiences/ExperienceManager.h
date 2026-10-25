@@ -57,6 +57,7 @@ public:
     void updateMetadata(Manifest manifest);
     void updateMetadata(const Experience& experience, Manifest manifest);
     void setArchived(const Experience& experience, bool archived, bool trash = false);
+    void deletePermanently(const Experience& experience);
     void exportPackage(const Experience& experience, const std::filesystem::path& destination) const;
     Experience importPackage(const std::filesystem::path& package);
     void setDefaultTemplate(const Scene& scene);

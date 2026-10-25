@@ -37,6 +37,13 @@ int main(){
         home->enqueue("create");frames(10);if(!manager.active()||home->overlayActive()||home->videoRunning())throw std::runtime_error("Editor não encerrou o vídeo: "+editor.frontend()->elementText("experience-error"));
         const auto before=projectio::toJson(scene);home->requestHome();frames(10);if(!home->videoRunning())throw std::runtime_error("Vídeo não reiniciou ao voltar");
         if(projectio::toJson(scene)==before)throw std::runtime_error("Experiência não fechou");
+        TakeScreenshot((root/"recentes.png").c_str());
+        const auto experience=manager.list().front();home->enqueue("details",experience.manifest.installationId);frames(3);
+        home->enqueue("delete");frames(3);
+        if(editor.frontend()->elementText("exp-confirm-title").find(experience.manifest.name)==std::string::npos)throw std::runtime_error("Nome ausente na confirmação");
+        home->enqueue("cancel-confirm");frames(3);if(!fs::exists(experience.root))throw std::runtime_error("Cancelar excluiu arquivos");
+        home->enqueue("delete");frames(3);TakeScreenshot((root/"confirmar-exclusao.png").c_str());home->enqueue("confirm");frames(5);
+        if(fs::exists(experience.root)||!manager.list().empty())throw std::runtime_error("Exclusão pela interface falhou");
         std::printf("Home: vídeo nas bordas, movimento, resize, duas imagens, criação e liberação no editor passaram. Capturas: %s\n",root.c_str());
     }catch(const std::exception& e){std::fprintf(stderr,"Home: %s\n",e.what());result=1;}
     rlImGuiShutdown();CloseWindow();return result;

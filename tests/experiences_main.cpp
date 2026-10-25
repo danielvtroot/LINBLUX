@@ -82,6 +82,20 @@ int main(int argc,char** argv) {
         CHECK(copy.manifest.icon==author.active()->manifest.icon);CHECK(fs::exists(copy.root/copy.manifest.icon));
         author.setArchived(copy,true);CHECK(author.list(true).size()==1);author.setArchived(copy,false);CHECK(author.list(true).empty());
         author.setArchived(copy,true,true);CHECK(author.inspect(copy.root).manifest.trashed);author.setArchived(copy,false);CHECK(!author.inspect(copy.root).manifest.trashed);
+        // Permanent deletion is confined to one verified direct library child.
+        auto doomed=author.duplicate(project,"Excluir com segurança");
+        auto sibling=author.duplicate(project,"Preservar");
+        auto forged=doomed;forged.manifest.id=ex::newId();CHECK(Throws([&]{author.deletePermanently(forged);}));CHECK(fs::exists(doomed.root));
+        auto outside=doomed;outside.root=base;CHECK(Throws([&]{author.deletePermanently(outside);}));
+        outside.root=author.libraryRoot();CHECK(Throws([&]{author.deletePermanently(outside);}));
+        const auto link=author.libraryRoot()/ex::newId();fs::create_directory_symlink(doomed.root,link);outside.root=link;
+        CHECK(Throws([&]{author.deletePermanently(outside);}));fs::remove(link);
+        fs::create_directories(base/"external-protected");{std::ofstream f(base/"external-protected/keep");f<<"keep";}
+        fs::create_directory_symlink(base/"external-protected",doomed.root/"external-link");
+        author.open(doomed,scene);author.deletePermanently(doomed);CHECK(!author.active());CHECK(!fs::exists(doomed.root));
+        CHECK(fs::exists(base/"external-protected/keep"));CHECK(fs::exists(sibling.root/"experience.json"));
+        CHECK(Throws([&]{author.deletePermanently(doomed);}));
+        CHECK(author.missing().empty());author.open(project,scene);
         author.setDefaultTemplate(reopened);author.setDefaultCharacter(reopened,rigId);
         auto customOptions=options;customOptions.name="From my default";customOptions.templateId="my-default";
         auto custom=author.create(customOptions);Scene customScene;author.open(custom,customScene);

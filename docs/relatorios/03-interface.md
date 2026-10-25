@@ -29,3 +29,8 @@ A localização cobre as superfícies principais e usa catálogo central; mensag
 adicionais dos painéis e erros serão auditados na manutenção final.
 Commit: consulte git log --grep='feat(ui)'. Push normal para origin/main.
 Próxima etapa: exclusão permanente segura e validação dos fluxos de experiências.
+
+Resultado posterior do perfil isolado do decodificador: 721 frames, 1 loop,
+24,22 s decorridos, 6,85 s de CPU user + 0,12 s de CPU system (aproximadamente
+29% de um núcleo), RSS máximo 70520 KiB. Teste gráfico dedicado passou em 19,37 s;
+nove testes de núcleo/inicialização/Home passaram. Push de `c703edc` confirmado.
