@@ -21,6 +21,8 @@ local middle=linblux.transform.interpolate(
     {position=child.position,rotation=v(0,-170,0),size=child.size},0.5)
 child.transform=middle
 assert(child:vector_to_world(v(1,0,0)).x < -0.99)
+local hit=linblux.physics.raycast(v(child.position.x,30,child.position.z),v(0,-1,0),20)
+assert(hit and hit.object==child and math.abs(hit.point.y-16.5)<0.01)
 local component=child:add_script("linblux.self:set_attribute('component_ran',true)","Componente gerado.lua")
 assert(#child:components()==1 and component.enabled)
 linblux.time.after(0.05,function()

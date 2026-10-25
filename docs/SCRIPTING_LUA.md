@@ -251,6 +251,41 @@ vibração nesta API inicial. Controle físico não é simulado como teclado.
 [interacao.lua](../assets/examples/lua/interacao.lua) alterna o sinal próprio das
 portas com E ou o botão sul. Os testes executam o arquivo real com a API pública.
 
+## Transformações e componentes de script
+
+Uma peça expõe `transform` como cópia `{position, rotation, size}`; rotação em
+graus. Atribuir essa tabela aplica a transformação mundial de uma vez. Campos
+omitidos preservam o valor anterior; valores inválidos não aplicam alterações
+parciais. `get_transform(referencial?)` e `set_transform(tabela, referencial?)`
+convertem posição/rotação para o espaço local de outra peça. Sem referencial,
+usam o mundo. `size` continua em unidades físicas, sem herdar escala do referencial.
+
+`point_to_world`, `point_to_local`, `vector_to_world`, `vector_to_local` recebem
+um vetor: pontos incluem translação, direções não. `scale_by(fator)` aceita
+número uniforme ou vetor de fatores positivos, respeitando tamanho mínimo 0,2
+e máximo 1 milhão por eixo. `linblux.transform.interpolate(a,b,t)` interpola
+posição/tamanho e usa quaternion para rotação (t entre 0 e 1); campos omitidos
+nesse cálculo usam posição/rotação zero e tamanho unitário.
+
+Não há mudança de semântica na hierarquia: grupos/modelos não são referenciais
+espaciais automáticos; mover um referencial não arrasta outras peças. Peças não
+são aceitas como filhas de peças pelo formato existente. Use referência explícita
+e reaplique a transformação quando desejar acompanhamento por script.
+
+`objeto:add_script(fonte, nome?)` adiciona um Script real, descoberto na próxima
+atualização se estiver na árvore executável. Fonte até 256 KiB, nome 1..128 bytes
+sem NUL, sujeito às cotas nativas. `components()` lista filhos Script/LocalScript/
+ModuleScript/Decal/Texture; `remove_component(componente)` remove apenas um desses
+filhos diretos, respeitando proteção. `type` identifica script/decal/texture.
+Adicionar/remover não apaga imagens ou arquivos do projeto. Interfaces de imagem
+e propriedades de decals são tratadas na fase de assets, não simuladas aqui.
+
+Componentes criados em Play pertencem à cópia de runtime. Salve o Script criador
+para reconstruí-los; a autoria não é alterada ao executar. Os scripts adicionados
+usam o mesmo ambiente controlado, cotas, eventos e descarregamento. Veja
+[transformacoes.lua](../assets/examples/lua/transformacoes.lua), executado após
+salvar/reabrir e no Player real.
+
 ## Tempo
 
 `linblux.time.now()` mede segundos de simulação; `wait(segundos?)` aguarda numa
