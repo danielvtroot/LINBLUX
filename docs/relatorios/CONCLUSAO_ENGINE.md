@@ -36,8 +36,8 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 | Jogador/vida/spawn/animações | PUBLICADO | Base cf53b09; LinbluxPlayer + game/spawn. | Um controlador nativo, rig compatível legado; NPCs e rigs arbitrários são pendências próprias. |
 | Câmera | PUBLICADO | Base cf53b09; configure/state em LuaRuntime; LinbluxPlayer. | Distância/modos/sensibilidade existentes. Posição/rotação/alvo/FOV/transições por Lua ainda precisam implementação e testes. |
 | Entrada/eventos | PUBLICADO | cf53b09; ScriptInput, Runtime, LuaRuntime; script_input_ui real. | Controle físico não testado; amostras de controle injetadas. Não expor Escape/atalhos de saída aos scripts. |
-| Tempo/cancelamento/intervalos | IMPLEMENTADO | Incremento atual: LuaRuntime; temporizadores.lua, LinbluxTaskCancellation/LinbluxExamples. | Aguardar validação final/publicação. every não recupera pulsos atrasados; um coroutine por intervalo. |
-| Diagnóstico no Player | IMPLEMENTADO | Incremento atual: Player --validate + contador LuaRuntime; lua_player_validation.py. | Validação simula 2 s e Stop, não prova todas as ações futuras. Recusa erros evictos do buffer de mensagens. Aguardar validação final/publicação. |
+| Tempo/cancelamento/intervalos | VALIDADO NO PLAYER | Relatório 14: LuaRuntime; temporizadores.lua, LinbluxTaskCancellation/LinbluxExamples e Player standalone. FAST 13/13, IMPACT 18/18 selecionados. | Registrar commit publicado. every não recupera pulsos atrasados; um coroutine por intervalo. |
+| Diagnóstico no Player | VALIDADO NO PLAYER | Relatório 14: Player --validate + contador LuaRuntime; lua_player_validation.py, quatro cenas reais. | Validação simula 2 s e Stop, não prova todas as ações futuras. Recusa erros evictos do buffer. Registrar commit publicado. |
 | Segurança/cotas/erros | PUBLICADO | Base cf53b09; limites host-only, finalizadores restritos, VM sem APIs de SO; testes studio. | É limite de confiabilidade em processo, não isolamento de SO; trabalho nativo também exige limites. |
 | Persistência de scripts/autoria | PUBLICADO | ProjectIO + LinbluxExamples: salvar/reabrir e executar. | Persistência de estado de gameplay/configurações via API controlada ainda PENDENTE. |
 | Áudio por Lua | PENDENTE | Não há namespace documentado como implementado. | Dependência da Fase 3: backend/importação/streaming/referências reais. |
@@ -68,3 +68,24 @@ novo precisa de implementação nativa, teste Lua e execução no Player corresp
 - PENDENTE: cópia privada externa e prova de recuperação nesse destino; solicitado
   ao proprietário, sem resposta até este checkpoint. Não há proteção física dos
   dados privados pelo simples fato de o monitor de código estar ativo.
+
+## Retomada após este incremento
+
+Não há trabalho de NPC/áudio/decals/HUD/menu escondido como pronto. A próxima ação
+concreta é `atlas.py locate "PlayerCamera PlayerSettings GameAssetsIO câmera"`
+para completar a câmera Lua e sua persistência com compatibilidade: o código
+atual fixa FOV em 60 e só expõe distância/modos/sensibilidade. Ler Runtime.h/cpp,
+Rig.h e GameAssetsIO.cpp nos trechos retornados. Implementar opções reais, validar
+antes de mutar, usar valores padrão quando ausentes em cenas antigas e testar
+salvar/reabrir/Player. Não iniciar outra refatoração global nem criar setters vazios.
+
+Depois, tratar transformações/componentes e a persistência controlada de estado.
+Armazenamento de progresso deve usar escopo definido pelo host, diretório privado
+fora de assets exportados, validação de caminhos e limites; não expor io/os/load.
+Áudio/UI continuam dependências reais a implementar, não métodos a documentar antes
+de existir backend. As fases 2–9 permanecem pendentes conforme a tabela.
+
+O monitor de backup deve permanecer ativo como labubu. Os diffs em .opencode,
+AGENTS.md, locales, EditorUI/GamePanels, engine_default_restart e ferramentas
+TURBO preexistentes foram preservados; não adicioná-los em lote à main. Apenas
+as duas linhas de mapeamento de backup do TURBO entraram no commit da Fase 0.
