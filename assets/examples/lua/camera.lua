@@ -1,0 +1,12 @@
+-- Script global de abertura. Não muda a câmera do editor nem a cena autoral.
+linblux.camera.configure({fov=75})
+linblux.camera.set_pose({position=linblux.vec3(18,12,18),target=linblux.vec3(0,2,0),fov=65,duration=0.2})
+linblux.time.after(0.3,function()
+    local state=linblux.camera.state()
+    assert(state.scripted and not state.transitioning and math.abs(state.fov-65)<0.01)
+    linblux.camera.set_pose({position=linblux.vec3(20,12,18),rotation=linblux.vec3(-15,45,0),duration=0.1})
+end)
+linblux.time.after(0.5,function()
+    linblux.camera.release()
+    linblux.scene.root:set_attribute("camera_concluida",true)
+end)

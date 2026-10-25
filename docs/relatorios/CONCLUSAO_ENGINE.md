@@ -34,7 +34,7 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 | Scripts por objeto/globais/clones | PUBLICADO | Base cf53b09; LuaRuntime + ProjectIO; DynamicScriptLifecycle e LinbluxExamples. | Scripts de runtime não gravam automaticamente na autoria; manter essa separação. |
 | Forças/impulsos/gravid./raycast/contatos | PUBLICADO | Base cf53b09; Runtime/PhysicsWorld/LuaRuntime; LinbluxPhysics/FixedContacts. | nearby usa centros; consultas de volumes, propriedades completas e regiões contínuas não estão prontas. |
 | Jogador/vida/spawn/animações | PUBLICADO | Base cf53b09; LinbluxPlayer + game/spawn. | Um controlador nativo, rig compatível legado; NPCs e rigs arbitrários são pendências próprias. |
-| Câmera | PUBLICADO | Base cf53b09; configure/state em LuaRuntime; LinbluxPlayer. | Distância/modos/sensibilidade existentes. Posição/rotação/alvo/FOV/transições por Lua ainda precisam implementação e testes. |
+| Câmera | VALIDADO NO PLAYER | Relatório 15: FOV persistente, set_pose por alvo/up ou Euler, quaternion, release. FAST 13/13, IMPACT 13/13 + gráfico pertinente/studio/Player 3/3. | Pose transitória reconstruída por Script; sem desvio de obstáculos. Publicação deste incremento em andamento. |
 | Entrada/eventos | PUBLICADO | cf53b09; ScriptInput, Runtime, LuaRuntime; script_input_ui real. | Controle físico não testado; amostras de controle injetadas. Não expor Escape/atalhos de saída aos scripts. |
 | Tempo/cancelamento/intervalos | PUBLICADO | 26066dff73dc128c50987de2f5f25dfcf71ff89b, push main confirmado; validado no Player. Relatório 14: LuaRuntime; temporizadores.lua, LinbluxTaskCancellation/LinbluxExamples. FAST 13/13, IMPACT 18/18 selecionados. | every não recupera pulsos atrasados; um coroutine por intervalo. |
 | Diagnóstico no Player | PUBLICADO | 26066dff73dc128c50987de2f5f25dfcf71ff89b, push main confirmado. Relatório 14: Player --validate + contador LuaRuntime; lua_player_validation.py, quatro cenas reais. | Validação simula 2 s e Stop, não prova todas as ações futuras. Recusa erros evictos do buffer. |
@@ -78,12 +78,11 @@ FULL ou nova validação gráfica neste incremento de scheduler/CLI. Nenhum buil
 ou teste ficou ativo; manter apenas o serviço de backup solicitado.
 
 Não há trabalho de NPC/áudio/decals/HUD/menu escondido como pronto. A próxima ação
-concreta é `atlas.py locate "PlayerCamera PlayerSettings GameAssetsIO câmera"`
-para completar a câmera Lua e sua persistência com compatibilidade: o código
-atual fixa FOV em 60 e só expõe distância/modos/sensibilidade. Ler Runtime.h/cpp,
-Rig.h e GameAssetsIO.cpp nos trechos retornados. Implementar opções reais, validar
-antes de mutar, usar valores padrão quando ausentes em cenas antigas e testar
-salvar/reabrir/Player. Não iniciar outra refatoração global nem criar setters vazios.
+concreta agora é continuar transformações/componentes. Câmera implementada e
+validada conforme relatório 15, incluindo compatibilidade e Player. Consultar
+ATLAS para Part::transform, RigidTransform/Compose/Inverse e Scene::createScript.
+Reutilizar a hierarquia e o formato serializado; não introduzir acompanhamento
+automático de filhos que altere a semântica mundial de projetos antigos.
 
 Depois, tratar transformações/componentes e a persistência controlada de estado.
 Armazenamento de progresso deve usar escopo definido pelo host, diretório privado

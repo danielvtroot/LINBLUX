@@ -36,3 +36,11 @@ por `PhysicsWorld`, não por acesso direto ao Bullet.
 **Limites:** rigs arbitrários (FBX/glTF) e esqueletos fora do R6 não estão
 implementados; multiplayer/Server não existe; a posição da câmera pode divergir
 do corpo em um frame por design.
+
+PlayerSettings.cameraFov é opcional no JSON antigo (padrão 60), validado em
+1..170 graus. PlayerCamera permite pose roteirizada/transição por quaternion;
+mouse/zoom não assumem a câmera durante a pose. release restaura a órbita;
+respawn reinicia o controlador, teleporte mantém uma pose roteirizada.
+Testes: LinbluxCameraControl/studio, lua_player_validation e script_input_ui
+(RmlUi real, pausa/cursor/retorno). Poses são transitórias; scripts e padrões
+persistem no formato existente.

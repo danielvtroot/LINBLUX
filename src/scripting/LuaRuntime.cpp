@@ -525,15 +525,38 @@ struct LuaRuntime::Impl {
     static int CameraState(lua_State* L) {
         auto& self=Host(L);const auto camera=self.runtime->playerCamera().camera();lua_createtable(L,0,5);
         ModernVector(L,camera.position);lua_setfield(L,-2,"position");ModernVector(L,camera.target);lua_setfield(L,-2,"target");
+        ModernVector(L,camera.up);lua_setfield(L,-2,"up");ModernVector(L,Vector3Scale(QuaternionToEuler(self.runtime->playerCamera().orientation()),RAD2DEG));lua_setfield(L,-2,"rotation");
+        lua_pushnumber(L,camera.fovy);lua_setfield(L,-2,"fov");lua_pushboolean(L,self.runtime->playerCamera().scripted());lua_setfield(L,-2,"scripted");lua_pushboolean(L,self.runtime->playerCamera().transitioning());lua_setfield(L,-2,"transitioning");
         lua_pushnumber(L,self.runtime->playerCamera().distance());lua_setfield(L,-2,"distance");lua_pushboolean(L,self.runtime->playerCamera().firstPerson());lua_setfield(L,-2,"first_person");
-        lua_pushboolean(L,self.runtime->settings().cameraLock||self.runtime->shiftLockActive());lua_setfield(L,-2,"locked");return 1;
+        lua_pushboolean(L,!self.runtime->playerCamera().scripted()&&(self.runtime->settings().cameraLock||self.runtime->shiftLockActive()));lua_setfield(L,-2,"locked");return 1;
     }
+    static int CameraPose(lua_State* L) {
+        auto& self=Host(L);Require(lua_istable(L,1),"set_pose requer tabela");
+        auto pose=self.runtime->playerCamera().camera();if(!self.runtime->playerCamera().scripted())pose.fovy=self.runtime->settings().cameraFov;
+        double seconds=0;bool position=false,target=false,rotation=false,up=false;Vector3 angles{};
+        lua_pushnil(L);while(lua_next(L,1)){
+            const char* key=Text(L,-2);
+            if(Eq(key,"position")){pose.position=ReadVector(L,lua_gettop(L));position=true;}
+            else if(Eq(key,"target")){pose.target=ReadVector(L,lua_gettop(L));target=true;}
+            else if(Eq(key,"rotation")){angles=ReadVector(L,lua_gettop(L));rotation=true;}
+            else if(Eq(key,"up")){pose.up=ReadVector(L,lua_gettop(L));up=true;}
+            else if(Eq(key,"fov"))pose.fovy=float(Number(L,-1));
+            else if(Eq(key,"duration"))seconds=Number(L,-1);
+            else throw std::runtime_error("Opção de pose de câmera desconhecida");
+            lua_pop(L,1);
+        }
+        Require(position&&(target!=rotation)&&!(rotation&&up),"Informe position e target ou rotation; up só acompanha target");
+        if(rotation){const auto q=QuaternionFromEuler(angles.x*DEG2RAD,angles.y*DEG2RAD,angles.z*DEG2RAD);pose.target=Vector3Add(pose.position,Vector3RotateByQuaternion({0,0,-1},q));pose.up=Vector3RotateByQuaternion({0,1,0},q);}
+        std::string error;if(!self.runtime->playerCamera().setPose(pose,float(seconds),error))throw std::runtime_error(error);return 0;
+    }
+    static int CameraRelease(lua_State* L){auto& self=Host(L);self.runtime->playerCamera().release(self.runtime->characterRoot().position,self.runtime->settings());return 0;}
     static int CameraConfigure(lua_State* L) {
         auto& self=Host(L);Require(lua_istable(L,1),"Configuração da câmera requer tabela");auto settings=self.runtime->settings();
         lua_pushnil(L);while(lua_next(L,1)) {
             const char* key=Text(L,-2);
             if(Eq(key,"distance"))settings.cameraDistance=float(Number(L,-1));
             else if(Eq(key,"sensitivity"))settings.sensitivity=float(Number(L,-1));
+            else if(Eq(key,"fov"))settings.cameraFov=float(Number(L,-1));
             else if(Eq(key,"min_distance"))settings.minZoom=float(Number(L,-1));
             else if(Eq(key,"max_distance"))settings.maxZoom=float(Number(L,-1));
             else if(Eq(key,"mode")){const char* mode=Text(L,-1);Require(Eq(mode,"orbit")||Eq(mode,"follow")||Eq(mode,"first_person"),"Modo de câmera desconhecido");settings.cameraMode=Eq(mode,"orbit")?game::CameraMode::Classic:Eq(mode,"follow")?game::CameraMode::Follow:game::CameraMode::FirstPerson;}
@@ -720,7 +743,7 @@ struct LuaRuntime::Impl {
         self.push(L,Kind::Game);lua_setglobal(L,"game");self.pushInstance(L,self.runtime->scene().workspace());lua_setglobal(L,"workspace");
         lua_newtable(L);lua_pushinteger(L,1);lua_setfield(L,-2,"api_version");lua_pushcfunction(L,Safe<ModernVec>);lua_setfield(L,-2,"vec3");
         self.push(L,Kind::Player,0,true);lua_setfield(L,-2,"player");
-        lua_newtable(L);lua_pushcfunction(L,Safe<CameraState>);lua_setfield(L,-2,"state");lua_pushcfunction(L,Safe<CameraConfigure>);lua_setfield(L,-2,"configure");lua_setfield(L,-2,"camera");
+        lua_newtable(L);lua_pushcfunction(L,Safe<CameraState>);lua_setfield(L,-2,"state");lua_pushcfunction(L,Safe<CameraConfigure>);lua_setfield(L,-2,"configure");lua_pushcfunction(L,Safe<CameraPose>);lua_setfield(L,-2,"set_pose");lua_pushcfunction(L,Safe<CameraRelease>);lua_setfield(L,-2,"release");lua_setfield(L,-2,"camera");
         lua_newtable(L);lua_pushcfunction(L,Safe<Animations>);lua_setfield(L,-2,"list");lua_setfield(L,-2,"animations");
         lua_newtable(L);lua_pushcfunction(L,Safe<ModernNew>);lua_setfield(L,-2,"create");lua_pushcfunction(L,Safe<ModernFind>);lua_setfield(L,-2,"find");self.pushInstance(L,self.runtime->scene().workspace(),true);lua_setfield(L,-2,"root");lua_setfield(L,-2,"scene");
         lua_newtable(L);lua_pushcfunction(L,Safe<On>);lua_setfield(L,-2,"on");lua_pushcfunction(L,Safe<Publish>);lua_setfield(L,-2,"emit");lua_setfield(L,-2,"events");

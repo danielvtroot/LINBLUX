@@ -47,6 +47,11 @@ public:
     float followDistance() const { return distance_; }
     // Camera-local X, in scene units. Independent of Humanoid/head offsets.
     bool setMouseLockShoulderOffset(float value);
+    bool setPose(Camera3D pose,float seconds,std::string& error);
+    void release(Vector3 root,const PlayerSettings& settings);
+    bool scripted() const { return scripted_; }
+    bool transitioning() const { return scripted_&&transitionElapsed_<transitionDuration_; }
+    Quaternion orientation() const;
 private:
     Camera3D camera_{};
     Vector3 target_{};
@@ -60,6 +65,10 @@ private:
     CameraMode previousMode_ = CameraMode::Classic;
     bool firstPerson_ = false;
     bool avatarOccluded_ = false; // geometry-derived visibility, not a control mode
+    bool scripted_=false;
+    Camera3D transitionSource_{},transitionTarget_{};
+    float transitionElapsed_=0,transitionDuration_=0;
+    float orbitYaw_=0,orbitPitch_=0,orbitDistance_=12;
 };
 
 // Owns its Scene, PhysicsWorld and one capsule. Lifetime: capsule -> physics -> scene.

@@ -79,7 +79,7 @@ nlohmann::json EncodeAssets(const GameAssets& a) {
         {"maxHealth", p.maxHealth}, {"health", p.health}, {"autoRotate", p.autoRotate},
         {"collisionHeight", p.collisionHeight}, {"collisionRadius", p.collisionRadius},
         {"cameraMode", static_cast<int>(p.cameraMode)}, {"minZoom", p.minZoom}, {"maxZoom", p.maxZoom},
-        {"cameraDistance", p.cameraDistance}, {"sensitivity", p.sensitivity},
+        {"cameraDistance", p.cameraDistance}, {"cameraFov",p.cameraFov}, {"sensitivity", p.sensitivity},
         {"allowFirstPerson", p.allowFirstPerson}, {"cameraLock", p.cameraLock},
         {"walkAnimation", p.walkAnimation}, {"idleAnimation", p.idleAnimation}};
     if (!p.jumpAnimation.empty()) j["player"]["jumpAnimation"]=p.jumpAnimation;
@@ -160,6 +160,7 @@ bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& erro
         READ_FLOAT(jumpHeight); READ_FLOAT(gravity); READ_FLOAT(maxHealth); READ_FLOAT(health);
         READ_FLOAT(collisionHeight); READ_FLOAT(collisionRadius); READ_FLOAT(minZoom); READ_FLOAT(maxZoom);
         READ_FLOAT(cameraDistance); READ_FLOAT(sensitivity);
+        out.cameraFov=p.value("cameraFov",60.f);
 #undef READ_FLOAT
         out.autoRotate = p.at("autoRotate").get<bool>();
         out.cameraMode = static_cast<CameraMode>(ReadInt(p.at("cameraMode"), 0, 2));

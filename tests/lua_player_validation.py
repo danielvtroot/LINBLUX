@@ -17,6 +17,8 @@ def main():
     example = (root / "assets/examples/lua/temporizadores.lua").read_text()
     example += '\nlinblux.events.on("stop", function() assert(linblux.scene.root:get_attribute("timer_concluido")) end)\n'
     cases = [
+        ("Camera.lua", (root / "assets/examples/lua/camera.lua").read_text()+'\nlinblux.events.on("stop",function() assert(linblux.scene.root:get_attribute("camera_concluida")) end)',0,"erros Lua: 0"),
+        ("CameraInvalida.lua","linblux.camera.set_pose({position=linblux.vec3(1,2,3),target=linblux.vec3(1,2,3)})",1,"Pose de câmera inválida"),
         ("Temporizadores.lua", example, 0, "erros Lua: 0"),
         ("FalhaDeScript.lua", "error('probe validation failure')", 1, "FalhaDeScript.lua:1"),
         ("FalhaNoStop.lua", "linblux.events.on('stop', function() error('probe stop failure') end)", 1, "probe stop failure"),

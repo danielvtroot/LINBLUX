@@ -60,6 +60,7 @@ void CameraSettings(game::PlayerSettings& p, float* sensitivityRect = nullptr) {
     p.maxZoom = std::max(p.minZoom, p.maxZoom);
     p.cameraDistance = std::clamp(p.cameraDistance, p.minZoom, p.maxZoom);
     ImGui::SliderFloat(i18n::Label("Initial distance"), &p.cameraDistance, p.minZoom, p.maxZoom);
+    ImGui::SliderFloat(i18n::Label("Vertical field of view"), &p.cameraFov, 1,170,"%.1f°");
     std::string error;
     if (!p.validate(error)) {
         p = previous;
@@ -282,7 +283,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     runtime_.update(GetFrameTime(), input);
     // The runtime consumes the Shift edge once. Capture follows its resulting
     // state in this same frame, including zoom to first person and respawn.
-    const bool wantsCapture=owns&&IsWindowFocused()&&runtime_.state()==game::RuntimeState::Playing&&
+    const bool wantsCapture=owns&&IsWindowFocused()&&runtime_.state()==game::RuntimeState::Playing&&!runtime_.playerCamera().scripted()&&
         (runtime_.playerCamera().firstPerson()||runtime_.settings().cameraLock||runtime_.shiftLockActive()||
          (context.hovered&&raw.rightPressed)||(gameplayCapture_&&raw.rightDown));
     setGameplayCapture(wantsCapture);

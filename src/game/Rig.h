@@ -148,6 +148,7 @@ struct PlayerSettings {
     float minZoom = 0.3f;
     float maxZoom = 30;
     float cameraDistance = 12;
+    float cameraFov = 60; // vertical degrees; optional in older project files
     float sensitivity = 0.003f;
     bool allowFirstPerson = true;
     bool cameraLock = false;

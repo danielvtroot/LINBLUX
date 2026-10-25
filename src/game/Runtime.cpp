@@ -99,6 +99,7 @@ const char* StateName(HumanoidState state) {
     return "Unknown";
 }
 void PlayerCamera::reset(Vector3 root, const PlayerSettings& settings) {
+    scripted_=false;transitionElapsed_=transitionDuration_=0;
     yaw_ = 0; pitch_ = .25f; followDelay_ = 0; shoulderOffset_ = 0;
     wasMouseLocked_=false;lockEntryOffset_={};
     requestedDistance_ = distance_ = settings.cameraDistance;
@@ -106,7 +107,29 @@ void PlayerCamera::reset(Vector3 root, const PlayerSettings& settings) {
     previousMode_ = settings.cameraMode;
     firstPerson_ = settings.cameraMode == CameraMode::FirstPerson;
     avatarOccluded_ = false;
-    camera_ = {Vector3Add(target_, {0, 3, distance_}), target_, {0, 1, 0}, 60, CAMERA_PERSPECTIVE};
+    camera_ = {Vector3Add(target_, {0, 3, distance_}), target_, {0, 1, 0}, settings.cameraFov, CAMERA_PERSPECTIVE};
+}
+Quaternion PlayerCamera::orientation() const {
+    return QuaternionNormalize(QuaternionFromMatrix(MatrixInvert(MatrixLookAt(camera_.position,camera_.target,camera_.up))));
+}
+bool PlayerCamera::setPose(Camera3D pose,float seconds,std::string& error) {
+    const auto valid=[](Vector3 v){return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z)&&std::fabs(v.x)<=1e6&&std::fabs(v.y)<=1e6&&std::fabs(v.z)<=1e6;};
+    const auto direction=Vector3Subtract(pose.target,pose.position);
+    if(!valid(pose.position)||!valid(pose.target)||!valid(pose.up)||Vector3Length(direction)<.001f||
+       Vector3Length(pose.up)<.001f||Vector3Length(Vector3CrossProduct(Vector3Normalize(direction),Vector3Normalize(pose.up)))<.001f||
+       !std::isfinite(pose.fovy)||pose.fovy<1||pose.fovy>170||!std::isfinite(seconds)||seconds<0||seconds>60){
+        error="Pose de câmera inválida: verifique posição, orientação, FOV e duração.";return false;
+    }
+    if(!scripted_){orbitYaw_=yaw_;orbitPitch_=pitch_;orbitDistance_=requestedDistance_;}
+    transitionSource_=camera_;transitionTarget_=pose;transitionTarget_.projection=CAMERA_PERSPECTIVE;
+    transitionElapsed_=0;transitionDuration_=seconds;scripted_=true;firstPerson_=avatarOccluded_=false;
+    if(seconds==0){camera_=transitionTarget_;target_=camera_.target;}
+    error.clear();return true;
+}
+void PlayerCamera::release(Vector3 root,const PlayerSettings& settings) {
+    if(!scripted_)return;
+    const auto yaw=orbitYaw_,pitch=orbitPitch_,distance=orbitDistance_;
+    reset(root,settings);yaw_=yaw;pitch_=pitch;requestedDistance_=std::clamp(distance,settings.minZoom,settings.maxZoom);
 }
 bool PlayerCamera::setMouseLockShoulderOffset(float value) {
     if(!std::isfinite(value)||std::fabs(value)>5)return false;
@@ -119,6 +142,7 @@ Vector3 PlayerCamera::moveDirection(Vector2 input) const {
             -std::sin(yaw_) * input.x - std::cos(yaw_) * input.y};
 }
 void PlayerCamera::processInput(float dt, const PlayerInput& input,const PlayerSettings& settings) {
+    if(scripted_)return;
     if (settings.cameraMode != previousMode_) {
         Event("camera", "mode_change", "", {{"mode", static_cast<int>(settings.cameraMode)}});
         previousMode_ = settings.cameraMode;
@@ -134,6 +158,20 @@ void PlayerCamera::processInput(float dt, const PlayerInput& input,const PlayerS
 }
 void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const PlayerInput&,
                          const PlayerSettings& settings, const RuntimeSession& runtime) {
+    if(scripted_){
+        transitionElapsed_=std::min(transitionDuration_,transitionElapsed_+dt);
+        const float t=transitionDuration_>0?transitionElapsed_/transitionDuration_:1;
+        const float blend=t*t*(3-2*t);
+        const auto orientationOf=[](const Camera3D& c){return QuaternionNormalize(QuaternionFromMatrix(MatrixInvert(MatrixLookAt(c.position,c.target,c.up))));};
+        const auto rotation=QuaternionSlerp(orientationOf(transitionSource_),orientationOf(transitionTarget_),blend);
+        camera_.position=Vector3Lerp(transitionSource_.position,transitionTarget_.position,blend);
+        const float distance=Lerp(Vector3Distance(transitionSource_.position,transitionSource_.target),Vector3Distance(transitionTarget_.position,transitionTarget_.target),blend);
+        camera_.target=Vector3Add(camera_.position,Vector3Scale(Vector3RotateByQuaternion({0,0,-1},rotation),distance));
+        camera_.up=Vector3RotateByQuaternion({0,1,0},rotation);
+        camera_.fovy=Lerp(transitionSource_.fovy,transitionTarget_.fovy,blend);target_=camera_.target;
+        if(t==1)camera_=transitionTarget_;
+        return;
+    }
     const float horizontal = std::hypot(velocity.x, velocity.z);
     if (settings.cameraMode == CameraMode::Follow && !firstPerson_ && !settings.cameraLock &&
         !runtime.shiftLockActive() && followDelay_ == 0 && horizontal > .5f) {
@@ -190,7 +228,7 @@ void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const Player
         if (InsideBox(local,Vector3Scale(runtime.rig().bodies[i].size,.5f),.08f)) avatarOccluded_ = true;
     }
     camera_.target = Vector3Subtract(camera_.position, back);
-    camera_.up = {0, 1, 0}; camera_.fovy = 60; camera_.projection = CAMERA_PERSPECTIVE;
+    camera_.up = {0, 1, 0}; camera_.fovy = settings.cameraFov; camera_.projection = CAMERA_PERSPECTIVE;
 }
 RuntimeSession::RuntimeSession() = default;
 RuntimeSession::~RuntimeSession() { stop(); }
@@ -343,7 +381,7 @@ bool RuntimeSession::respawn(std::string& error) {
 }
 Vector3 RuntimeSession::position() const { return body_ ? Vec(body_->getWorldTransform().getOrigin()) : Vector3{}; }
 bool RuntimeSession::shiftLockActive() const {
-    return settings_.enableShiftLock && shiftLockRequested_ && state_ == RuntimeState::Playing;
+    return !camera_.scripted()&&settings_.enableShiftLock && shiftLockRequested_ && state_ == RuntimeState::Playing;
 }
 Vector3 RuntimeSession::velocity() const { return body_ ? Vec(body_->getLinearVelocity()) : Vector3{}; }
 RigidTransform RuntimeSession::characterRoot() const {
@@ -486,7 +524,7 @@ void RuntimeSession::step(float dt, Vector3 desired, bool jump) {
     if (!onGround) transition(velocity().y > 1 ? HumanoidState::Jumping : HumanoidState::Freefall);
     else if (!wasGrounded) transition(HumanoidState::Landing);
     else transition(horizontal > .2f ? HumanoidState::Walking : HumanoidState::Idle);
-    if (!(settings_.cameraLock || shiftLockActive() || camera_.firstPerson()) && settings_.autoRotate && horizontal > .2f) {
+    if (!((!camera_.scripted()&&settings_.cameraLock) || shiftLockActive() || camera_.firstPerson()) && settings_.autoRotate && horizontal > .2f) {
         const float target = std::atan2(-actual.x, -actual.z);
         yaw_ += std::remainder(target-yaw_, 2*PI) * Response(settings_.turnSpeed, dt);
     }
@@ -634,7 +672,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     // Toggle do Shift Lock (Left Shift) detectado por borda; ignorado sem a
     // opção habilitada e nunca dispara no editor (route só roteia gameplay).
     const bool shiftDown = input.shiftKey;
-    if (settings_.enableShiftLock && shiftDown && !lastShiftKey_)
+    if (settings_.enableShiftLock && !camera_.scripted() && shiftDown && !lastShiftKey_)
         shiftLockRequested_ = !shiftLockRequested_;
     lastShiftKey_ = shiftDown ? 1 : 0;
     if (suppressJump_ && !input.jump) suppressJump_ = false;
@@ -665,7 +703,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     }
     // One facing owner in locked modes, at display frequency. A 144/240 Hz
     // camera must not wait for the next 60 Hz physics tick to turn the body.
-    if(settings_.cameraLock || shiftLockActive() || camera_.firstPerson())yaw_=camera_.yaw();
+    if((!camera_.scripted()&&settings_.cameraLock) || shiftLockActive() || camera_.firstPerson())yaw_=camera_.yaw();
     if(state_==RuntimeState::Playing)camera_.update(dt,renderCharacterRoot().position,velocity(),input,settings_,*this);
     std::vector<InstanceId> fallen;
     for(auto* part:scene_->parts()) if(!part->anchored() && part->deletable() && part->position().y<scene_->workspace()->fallenPartsDestroyHeight())fallen.push_back(part->id());
@@ -727,7 +765,7 @@ bool RuntimeSession::teleportPlayer(Vector3 position,std::string& error) {
     if(overlap.overlapping){error="Destino de teleporte obstruído.";return false;}
     body_->setWorldTransform(transform);body_->setInterpolationWorldTransform(transform);motion_->setWorldTransform(transform);
     body_->setLinearVelocity({0,0,0});body_->clearForces();body_->activate(true);physics_->world_->updateSingleAabb(body_.get());
-    previousCharacterPosition_=position;coyoteTime_=jumpBufferTime_=0;camera_.reset(characterRoot().position,settings_);
+    previousCharacterPosition_=position;coyoteTime_=jumpBufferTime_=0;if(!camera_.scripted())camera_.reset(characterRoot().position,settings_);
     error.clear();return true;
 }
 bool RuntimeSession::raycastParts(Vector3 origin,Vector3 direction,float distance,Part*& object,
