@@ -32,6 +32,9 @@ bool Application::initialize() {
     }
     SetConfigFlags(flags);
     InitWindow(config_.windowWidth, config_.windowHeight, "LINBLUX Studio");
+    // Áudio 2D do Play. Sem dispositivo (host sem servidor de som) o runtime
+    // continua funcionando: AudioSystem só abre streams quando o host responde.
+    if (IsWindowReady()) InitAudioDevice();
 
     if (!IsWindowReady()) {
         diag::Event event;
@@ -174,6 +177,7 @@ void Application::shutdown() {
         rlImGuiShutdown();
         imguiReady_ = false;
     }
+    if (IsAudioDeviceReady()) CloseAudioDevice();
     if (windowReady_) {
         CloseWindow();
         windowReady_ = false;

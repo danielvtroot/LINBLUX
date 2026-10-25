@@ -190,11 +190,11 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if((kind=="color"||kind=="material")&&(!selected||!selected->isPart())){ui.setStatus("Select a Part first",true);return;}
         if(kind.rfind("color:",0)==0&&!selected)return;
         ui.endGizmoSession(true,"dialog");ui.cancelRigGizmo();ui.camera_.releaseCapture();dialog=kind;dialogOpen=true;
-        text("dialog-title",kind=="rename"?"Rename object":kind=="open"?"Open project":kind=="import-image"?"Import image":"Save project as");
-        text("dialog-description",kind=="rename"?"Names are preserved with the object's stable ID.":kind=="import-image"?"PNG or JPEG · any aspect ratio within the image memory budget. Original preserved.":"Project files use the existing transactional JSON format.");text("dialog-error","");
+        text("dialog-title",kind=="rename"?"Rename object":kind=="open"?"Open project":kind=="import-image"?"Import image":kind=="import-sound"?"Import sound":"Save project as");
+        text("dialog-description",kind=="rename"?"Names are preserved with the object's stable ID.":kind=="import-image"?"PNG or JPEG · any aspect ratio within the image memory budget. Original preserved.":kind=="import-sound"?"MP3, WAV or OGG · copied into this experience; the original is preserved.":"Project files use the existing transactional JSON format.");text("dialog-error","");
         auto* field=dynamic_cast<Rml::ElementFormControl*>(el("dialog-value"));
         const auto* node=ui.scene_.selection();const auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);
-        std::string initial=kind=="rename"?(node?node->name():rig?rig->name:""):kind=="import-image"?"":ui.projectPath_;
+        std::string initial=kind=="rename"?(node?node->name():rig?rig->name:""):(kind=="import-image"||kind=="import-sound")?"":ui.projectPath_;
         el("appearance-controls")->SetInnerRML("");
         if(kind=="color"||kind.rfind("color:",0)==0) {
             const auto property=kind=="color"?std::string("Color"):kind.substr(6);
@@ -341,13 +341,14 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(action=="rename"){prompt("rename");return;}
         if(action=="open-dialog"||action=="save-dialog"){prompt(action=="open-dialog"?"open":"save-as");return;}
         if(action=="import-dialog"){prompt("import-image");return;}
+        if(action=="import-sound"){prompt("import-sound");return;}
         if(action=="color-dialog"||action=="material-dialog"){prompt(action=="color-dialog"?"color":"material");return;}
         if(action=="edit-color"){prompt("color:"+v);return;}
         if(action=="choose-color"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
         if(action=="insert-menu") {std::string menu;for(const auto& item:std::vector<std::pair<std::string,std::string>>{{"part","Part"},{"folder","Folder"},{"model","Model"},{"script","Script"},{"local-script","LocalScript"},{"module","ModuleScript"},{"r6","R6 rig"}})menu+=Button(item.first,item.second);el("context-menu")->SetInnerRML(i18n::Markup(menu));auto b=bounds("new-object");rect("context-menu",{b.x-160,b.y+23,184,183});display("context-menu",true);contextOpen=true;return;}
         if(action=="cancel-dialog") {dialogOpen=false;context->GetRootElement()->Focus();return;}
         if(action=="confirm-dialog") {const auto v=value(el("dialog-value"));const auto id=ui.scene_.selection()?ui.scene_.selection()->id():0;
-            if(actions.dispatch({dialog,v,id})) {if(dialog=="import-image")imageScan=-10;dialogOpen=false;context->GetRootElement()->Focus();treeHash=0;}else text("dialog-error",ui.status_);return;}
+            if(actions.dispatch({dialog,v,id})) {if(dialog=="import-image"||dialog=="import-sound")imageScan=-10;dialogOpen=false;context->GetRootElement()->Focus();treeHash=0;}else text("dialog-error",ui.status_);return;}
         if(action=="close-advanced"){showAdvanced("");return;}
         if(action=="toggle-toolbox"){ui.showToolbox_=!ui.showToolbox_;saveLayout();return;}
         if(action=="toggle-explorer"){ui.showExplorer_=!ui.showExplorer_;saveLayout();return;}
@@ -669,11 +670,18 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             s+="</select></label>";field("MinZoom",p.minZoom);field("MaxZoom",p.maxZoom);field("CameraDistance",p.cameraDistance);field("Sensitivity",p.sensitivity);toggle("ShiftLock",p.enableShiftLock);toggle("FirstPerson",p.allowFirstPerson);s+="</div>";
         } else {
             if(GetTime()-imageScan>2){images=game::ListImages(game::AssetsDir());imageScan=GetTime();}
+            const auto sounds=game::ListAudioAssets(game::AssetsDir());
             s="<h2>Local images</h2><p class=\"muted\">PNG / JPEG · select a Part, then apply a decal or repeating texture.</p>"+Button("import-dialog","Import image","folder");
             if(images.empty())s+="<p>No imported images yet.</p>";
             s+="<div class=\"asset-grid\">";
             for(const auto& image:images){const auto path=std::filesystem::path(game::AssetsDir())/image.filename;
                 s+="<div class=\"asset-card\"><img class=\"asset-preview\" src=\""+Escape(std::filesystem::absolute(path).string())+"\"/><span>"+Escape(image.id)+"</span>"+Button("apply-image","Decal","part",path.string())+Button("apply-texture","Texture","part",path.string())+Button("remove-image","Remove","delete",image.filename)+"</div>";}
+            s+="</div>";
+            s+="<h2>Local sounds</h2><p class=\"muted\">MP3 / WAV / OGG · use <code>linblux.audio.play(id)</code> in a Script.</p>"+Button("import-sound","Import sound","folder");
+            if(sounds.empty())s+="<p>No imported sounds yet.</p>";
+            s+="<div class=\"asset-grid\">";
+            for(const auto& sound:sounds)
+                s+="<div class=\"asset-card\"><span>"+Escape(sound.id)+"</span><span class=\"muted\">"+Escape(sound.reference)+"</span>"+Button("remove-sound","Remove","delete",sound.reference)+"</div>";
             s+="</div>";
         }
         html("advanced-content",s,advancedMarkup);
