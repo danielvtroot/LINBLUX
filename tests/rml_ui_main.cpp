@@ -360,6 +360,7 @@ end)
             clickVisible("cmd-rename-image-"+importedImage);
             CHECK(ui.frontend()->elementText("dialog-title")=="Renomear imagem");
             click("dialog-value");key("ctrl+a");event("type --clearmodifiers Textura importada");
+            capture("rename-dialog");
             click("dialog-confirm");frames(2);
             if(ui.frontend()->elementBounds("dialog-value").width>0)
                 std::fprintf(stderr,"rename dialog still open; error=%s desc=%s\n",ui.frontend()->elementText("dialog-error").c_str(),ui.frontend()->elementText("dialog-description").c_str());
