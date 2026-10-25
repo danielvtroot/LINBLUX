@@ -160,3 +160,29 @@ circular (7), menu lateral (8) e integração (9) permanecem pendentes. O destin
 externo privado do AutoBackup continua não configurado. Diffs preexistentes em
 `.opencode`, `AGENTS.md`, locales, `EditorUI/GamePanels`, `engine_default_restart`
 e ferramentas TURBO foram preservados e não entraram nestes commits.
+
+## Checkpoint mídia e NPCs animados — 25/10/2026
+
+Dois commits locais publicados nesta retomada (base remota anterior `7c305a4`):
+`00898e2` corrige a referência canônica de imagens/decals (a UI gravava nome
+solto e o salvamento só entendia `assets/<arquivo>`), migra projetos antigos ao
+abrir, remove o rosto obrigatório de fábrica e entrega áudio MP3/WAV/OGG com
+biblioteca persistida, API Lua 2D e remoção segura. `93fe7e5` entrega rig R6
+opcional para NPC (`rig = "player"` ou id/nome estável), clipes procedurais
+idle/walk/run/attack/hurt/death derivados do controlador, pose publicada em
+`Scene::npcVisuals()` e desenhada pelo renderer existente sem tocar no frontend.
+Rig ausente falha `validate`, nunca vira ponteiro órfão; id é serializado como texto.
+
+Fase 2 (NPCs) segue EM DESENVOLVIMENTO: rigs/animações desta entrega estão
+IMPLEMENTADOS, TESTADOS e validados no Player, mas combate com armas/projéteis e
+as oito demonstrações completas continuam pendentes. Fase 4 (imagens/decals) e
+Fase 3 (áudio) avançaram conforme os commits acima; a fase 5 removeu apenas a
+imposição do rosto de fábrica. **Inventário/hotbar/itens NÃO foram iniciados** —
+nada de `linblux.items` está implementado; permanece o próximo incremento.
+
+Evidência reexecutada nesta retomada: compilação completa OK; `git diff --check`
+limpo; `linblux_image_assets`, `linblux_audio`, `linblux_experiences`,
+`linblux_studio` (1892 verificações) e `linblux_lua_player_validation` (27 casos,
+inclui áudio e exemplos animados) passaram; nenhum FULL nem teste gráfico novo.
+Diffs preexistentes em `.opencode`, `AGENTS.md`, locales, `EditorUI/GamePanels`,
+`engine_default_restart` e ferramentas TURBO foram preservados e não entraram nos commits.
