@@ -63,6 +63,7 @@ int main() {
             }
         const auto factoryCharacterPath = game::BuiltinAssetPath("assets/defaults/factory/character.loblox.json");
         require(!factoryCharacterPath.empty(), "Personagem de fábrica não encontrado");
+        std::printf("factory character: %s size=%zu\n", factoryCharacterPath.c_str(), read(factoryCharacterPath).size());
         const auto factoryCharacter = json::parse(read(factoryCharacterPath));
         for (const auto& rig : factoryCharacter["game"]["rigs"])
             for (const auto& body : rig["bodies"]) {
