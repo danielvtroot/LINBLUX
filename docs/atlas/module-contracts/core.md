@@ -26,8 +26,8 @@ física, Lua ou ImGui.
 singleton de domínio. `diag` mantém estado de logging configurável; erros de
 arquivo/parse são retornados por valor/booleano e descrição.
 
-**Testes:** `linblux_tests`, `linblux_manipulation`, `linblux_defaults` e testes
-de câmera/gizmo que dependem de `Math`.
+**Testes:** `linblux_tests`, `linblux_manipulation`, `linblux_defaults`,
+`linblux_engine_default_paths` e testes de câmera/gizmo que dependem de `Math`.
 
 **Como estender:** prefira funções puras e determinísticas; adicione teste
 numérico antes de mudar convenções de euler/quaternion. Não introduza dependência

@@ -29,7 +29,8 @@ erros são exceções com mensagem legível. `close` encerra a experiência ativ
 backups de defaults são registrados em `lastDefaultsBackup_`.
 
 **Testes:** `linblux_experiences`, `linblux_defaults`, `linblux_player_validate`,
-`linblux_experience_ui`, `linblux_engine_default_lifecycle` e testes de restart.
+`linblux_experience_ui`, `linblux_engine_default_lifecycle`,
+`linblux_engine_default_paths` e testes de restart.
 
 **Como estender:** qualquer novo campo de manifesto precisa aceitar dados
 antigos, validar antes de gravar e manter cópia independente. Atualize contratos

@@ -76,7 +76,7 @@ A suíte completa usa software rendering e Xvfb. Para mudanças localizadas:
 
 ```bash
 ctest --test-dir build-linblux -R '^linblux_atlas$' --output-on-failure
-ctest --test-dir build-linblux -R '^linblux_(game|tests|defaults|engine_default_lifecycle)$' --output-on-failure
+ctest --test-dir build-linblux -R '^linblux_(game|tests|defaults|engine_default_lifecycle|engine_default_paths)$' --output-on-failure
 ```
 
 Não conclua que a suíte inteira passou sem executá-la quando o risco exigir.

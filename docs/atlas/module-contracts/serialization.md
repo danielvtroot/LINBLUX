@@ -25,7 +25,8 @@ filesystem. Não depende de ImGui/física concreta.
 estado global de sessão. Escrita é atômica e sincroniza o diretório.
 
 **Testes:** `linblux_defaults`, `linblux_experiences`, `linblux_engine_default_lifecycle`,
-`linblux_player_validate` e testes de importação/ciclo de vida.
+`linblux_engine_default_paths`, `linblux_player_validate` e testes de
+importação/ciclo de vida.
 
 **Como estender:** adicione campo com valor padrão, leitura tolerante a dados
 antigos, validação e teste de round-trip; incremente a versão se a

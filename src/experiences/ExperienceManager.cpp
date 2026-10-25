@@ -20,6 +20,7 @@
 #include <set>
 #include <stdexcept>
 #include <system_error>
+#include <vector>
 #include <fcntl.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -35,6 +36,46 @@ namespace {
 constexpr uint64_t MiB=1024*1024, maxTotal=256*MiB, maxFile=64*MiB;
 constexpr unsigned maxEntries=2048;
 constexpr char magic[8]={'L','O','E','X','P',1,'\r','\n'};
+fs::path normalizedDirectory(const fs::path& value) {
+    if(value.empty())return {};
+    auto result=fs::absolute(value);
+    // GetApplicationDirectory() and user-provided paths may end in '/'.  In
+    // std::filesystem an empty trailing filename makes parent_path() point to
+    // the same directory, not to its parent.
+    while(result.filename().empty()&&result.has_parent_path())result=result.parent_path();
+    return result;
+}
+fs::path applicationDirectory() {
+    return normalizedDirectory(GetApplicationDirectory());
+}
+void createDirectory(const fs::path& path,const char* description) {
+    std::error_code error;
+    fs::create_directories(path,error);
+    if(error)throw std::runtime_error(std::string("Não foi possível criar ")+description+" em '"+path.string()+"': "+error.message());
+}
+void requireWritableDirectory(const fs::path& path,const char* description) {
+    if(path.empty())throw std::runtime_error(std::string("Diretório inválido para ")+description);
+    std::error_code error;
+    const auto status=fs::symlink_status(path,error);
+    if(error&&error!=std::errc::no_such_file_or_directory)
+        throw std::runtime_error(std::string("Não foi possível verificar ")+description+" em '"+path.string()+"': "+error.message());
+    if(!error) {
+        if(fs::is_symlink(status))throw std::runtime_error(std::string(description)+" não pode ser um link simbólico: "+path.string());
+        if(!fs::is_directory(status))throw std::runtime_error(std::string(description)+" não é um diretório: "+path.string());
+    } else {
+        createDirectory(path,description);
+    }
+    // Check real write permission instead of relying on access(2): effective
+    // users, read-only mounts and ACLs do not agree with the permission bits.
+    std::string pattern=(path/".linblux-write-check-XXXXXX").string();
+    std::vector<char> name(pattern.begin(),pattern.end());name.push_back('\0');
+    const int descriptor=::mkstemp(name.data());
+    if(descriptor<0)throw std::runtime_error(std::string("Sem permissão de escrita em ")+description+" '"+path.string()+"': "+std::strerror(errno));
+    const int closeResult=::close(descriptor);
+    const int closeError=errno;
+    ::unlink(name.data());
+    if(closeResult!=0)throw std::runtime_error(std::string("Falha ao fechar a verificação de escrita em ")+description+" '"+path.string()+"': "+std::strerror(closeError));
+}
 json boundedJson(const std::string& text) {
     return json::parse(text,[](int depth,json::parse_event_t,json&){if(depth>64)throw std::runtime_error("JSON nesting exceeds 64 levels");return true;});
 }
@@ -73,9 +114,12 @@ void mediaPath(const std::string& path) {
 struct Stage {
     fs::path path;bool committed=false;
     explicit Stage(const fs::path& parent) {
-        fs::create_directories(parent);path=parent/(".staging-"+newId());
-        if(!fs::create_directory(path))throw std::runtime_error("Cannot reserve project staging directory");
-        fs::permissions(path,fs::perms::owner_all);
+        createDirectory(parent,"o diretório de destino");
+        path=parent/(".staging-"+newId());
+        std::error_code error;
+        if(!fs::create_directory(path,error))throw std::runtime_error("Não foi possível reservar o diretório temporário em '"+parent.string()+"': "+error.message());
+        fs::permissions(path,fs::perms::owner_all,error);
+        if(error)throw std::runtime_error("Não foi possível proteger o diretório temporário '"+path.string()+"': "+error.message());
     }
     ~Stage(){if(!committed){std::error_code error;fs::remove_all(path,error);}}
     fs::path publish(const std::string& id){const auto target=path.parent_path()/id;if(fs::exists(target))throw std::runtime_error("Installation ID already exists");fs::rename(path,target);committed=true;return target;}
@@ -185,20 +229,55 @@ fs::path ExperienceManager::defaultDataRoot() {
     throw std::runtime_error("Set HOME or XDG_DATA_HOME to an absolute directory");
 }
 ExperienceManager::ExperienceManager(fs::path dataRoot,fs::path factoryRoot,fs::path engineDefaultsRoot)
-    :data_(dataRoot.empty()?defaultDataRoot():fs::absolute(dataRoot)),factory_(std::move(factoryRoot)) {
-    fs::create_directories(data_);auto config=settings(data_);
-    library_=config.value("library",(data_/"experiences").string());fs::create_directories(library_);
-    if(factory_.empty()) {
-        const auto executable=fs::path(GetApplicationDirectory());
-        for(const auto& candidate:{executable/"share/linblux/templates",executable.parent_path()/"share/linblux/templates",fs::path(LINBLUX_FACTORY_DIR)})
+    :data_(normalizedDirectory(dataRoot.empty()?defaultDataRoot():dataRoot)),factory_(std::move(factoryRoot)) {
+    createDirectory(data_,"o diretório de dados do LINBLUX");
+    auto config=settings(data_);
+    library_=config.value("library",(data_/"experiences").string());
+    createDirectory(library_,"a biblioteca de experiências");
+    const auto executable=applicationDirectory();
+    const bool discoverFactory=factory_.empty();
+    if(discoverFactory) {
+        std::vector<fs::path> candidates;
+        if(!executable.empty()) {
+            candidates.push_back(executable/"share/linblux/templates");
+            candidates.push_back(executable.parent_path()/"share/linblux/templates");
+        }
+        candidates.push_back(fs::path(LINBLUX_FACTORY_DIR));
+        for(const auto& candidate:candidates)
             if(fs::is_regular_file(candidate/"baseplate.loblox.json")){factory_=candidate;break;}
     }
-    defaults_=engineDefaultsRoot.empty()?(dataRoot.empty()?factory_.parent_path()/"defaults":data_/"engine-defaults"):fs::absolute(engineDefaultsRoot);
-    if(dataRoot.empty()&&engineDefaultsRoot.empty()) {
-        const auto development=fs::path(GetApplicationDirectory()).parent_path()/"assets/defaults";
-        if(fs::is_directory(development))defaults_=development;
-        if(const char* path=std::getenv("LINBLUX_DEFAULTS_ROOT");path&&*path)defaults_=fs::absolute(path);
+    if(!factory_.empty()) {
+        factory_=normalizedDirectory(factory_);
+        const auto sibling=factory_.parent_path()/"defaults";
+        if(fs::is_directory(sibling))factoryDefaults_=sibling;
     }
+    if(discoverFactory&&factoryDefaults_.empty()) {
+        std::vector<fs::path> candidates;
+        if(!executable.empty()) {
+            candidates.push_back(executable/"share/linblux/defaults");
+            candidates.push_back(executable.parent_path()/"share/linblux/defaults");
+            candidates.push_back(executable.parent_path()/"assets/defaults");
+        }
+        candidates.push_back(fs::path(LINBLUX_FACTORY_DIR).parent_path()/"defaults");
+        for(const auto& candidate:candidates)
+            if(fs::is_directory(candidate)){factoryDefaults_=normalizedDirectory(candidate);break;}
+    }
+    // Runtime edits always belong to the user's data directory.  Build and
+    // install trees contain the read-only factory resources; writing there was
+    // the source of the Permission denied failure when the Studio ran from a
+    // root-owned build/share directory.
+    if(!engineDefaultsRoot.empty()) {
+        defaults_=normalizedDirectory(engineDefaultsRoot);
+    } else if(const char* path=std::getenv("LINBLUX_DEFAULTS_ROOT");path&&*path) {
+        const fs::path authoring(path);
+        if(!authoring.is_absolute())throw std::runtime_error("LINBLUX_DEFAULTS_ROOT deve ser um caminho absoluto");
+        defaults_=normalizedDirectory(authoring);
+    } else {
+        defaults_=data_/"engine-defaults";
+    }
+}
+void ExperienceManager::ensureDefaultsWritable() {
+    requireWritableDirectory(defaults_,"o diretório de padrões personalizados");
 }
 void ExperienceManager::setLibraryRoot(const fs::path& path) {
     if(!path.is_absolute())throw std::runtime_error("Choose an absolute library directory");
@@ -252,9 +331,11 @@ std::vector<Template> ExperienceManager::templates() const {
         const auto root=fs::path(config.at("defaultTemplate").get<std::string>());
         if(fs::exists(root/"experience.json"))result.push_back({"my-default","My Default","Your saved world and character",root});
     }
-    bool engineWorld=fs::exists(defaults_/"factory/world.loblox.json")||fs::exists(factory_.parent_path()/"defaults/factory/world.loblox.json");
-    if(fs::exists(defaults_/"index.json")) {
-        const auto index=boundedJson(read(defaults_/"index.json",MiB));
+    bool engineWorld=!factoryDefaults_.empty()&&fs::exists(factoryDefaults_/"factory/world.loblox.json");
+    engineWorld=engineWorld||fs::exists(defaults_/"factory/world.loblox.json");
+    for(const auto& root:{defaults_,factoryDefaults_}) {
+        if(root.empty()||!fs::exists(root/"index.json"))continue;
+        const auto index=boundedJson(read(root/"index.json",MiB));
         if(index.value("format","")!="linblux-engine-defaults"||index.value("version",0)!=1)throw std::runtime_error("Versão dos padrões da engine não suportada");
         engineWorld=engineWorld||index.contains("world");
     }
@@ -266,7 +347,7 @@ std::vector<Template> ExperienceManager::templates() const {
     return result;
 }
 Experience ExperienceManager::snapshot(const Scene& scene,const fs::path& sourceRoot,const fs::path& parent,Manifest manifest,bool registerExperience,const CreateOptions* creation) {
-    Stage stage(parent);fs::create_directories(stage.path/"places");
+    Stage stage(parent);createDirectory(stage.path/"places","o diretório de cenas da experiência");
     manifest.mainPlace="places/"+newId()+".loblox.json";manifest.modified=now();
     if(manifest.faceImage.empty()&&fs::is_regular_file(sourceRoot/"experience.json"))manifest.faceImage=inspect(sourceRoot).manifest.faceImage;
     if(!manifest.faceImage.empty())manifest.faceImage=imageImport(stage.path,containedFile(sourceRoot,manifest.faceImage));
@@ -468,19 +549,39 @@ void ExperienceManager::setDefaultCharacter(const Scene& source,const std::strin
     auto config=settings(data_);config["defaultCharacter"]=e.root.string();saveSettings(data_,config);event("default_character",e.root);
 }
 fs::path ExperienceManager::loadEngineResource(const std::string& key,Scene& scene) const {
-    const auto indexFile=defaults_/"index.json";
-    if(fs::exists(indexFile)) {
+    fs::path loaded;
+    const auto loadIndex=[&](const fs::path& root,const char* label)->bool {
+        const auto indexFile=root/"index.json";
+        if(root.empty()||!fs::exists(indexFile))return false;
         const auto index=boundedJson(read(indexFile,MiB));
-        if(index.value("format","")!="linblux-engine-defaults"||index.value("version",0)!=1)throw std::runtime_error("Versão dos padrões da engine não suportada");
-        if(index.contains(key)) {const auto root=containedFile(defaults_,index.at(key).get<std::string>());auto e=inspect(root);loadWorld(scene,e);return root;}
+        if(index.value("format","")!="linblux-engine-defaults"||index.value("version",0)!=1)
+            throw std::runtime_error("Versão dos padrões da engine não suportada");
+        if(!index.contains(key))return false;
+        if(!index.at(key).is_string())throw std::runtime_error(std::string(label)+" inválido: referência de "+key+" não é texto");
+        try {
+            const auto rootFile=containedFile(root,index.at(key).get<std::string>());
+            const auto experience=inspect(rootFile);
+            loadWorld(scene,experience);
+            loaded=rootFile;
+            return true;
+        } catch(const std::exception& error) {
+            throw std::runtime_error(std::string(label)+" inválido em '"+indexFile.string()+"': "+error.what()+" O arquivo anterior foi preservado.");
+        }
+    };
+    if(loadIndex(defaults_,"Padrão personalizado"))return loaded;
+    if(factoryDefaults_!=defaults_&&loadIndex(factoryDefaults_,"Padrão de fábrica"))return loaded;
+    for(const auto& root:{defaults_,factoryDefaults_}) {
+        if(root.empty())continue;
+        const auto file=root/"factory"/(key+".loblox.json");
+        if(!fs::is_regular_file(file))continue;
+        std::string error;
+        if(!projectio::load(scene,file.string(),error))throw std::runtime_error("Padrão de fábrica inválido: "+error);
+        return file.parent_path();
     }
-    auto file=defaults_/"factory"/(key+".loblox.json");
-    if(!fs::exists(file))file=factory_.parent_path()/"defaults/factory"/(key+".loblox.json");
-    if(!fs::exists(file))return {};
-    std::string error;if(!projectio::load(scene,file.string(),error))throw std::runtime_error("Padrão de fábrica inválido: "+error);
-    return file.parent_path();
+    return {};
 }
 void ExperienceManager::saveEngineResource(const std::string& key,const Scene& scene) {
+    ensureDefaultsWritable();
     auto index=json{{"format","linblux-engine-defaults"},{"version",1}};
     if(fs::exists(defaults_/"index.json")) {
         index=boundedJson(read(defaults_/"index.json",MiB));
@@ -499,6 +600,7 @@ void ExperienceManager::backupDefaultsIndex(const std::string& index) {
 }
 void ExperienceManager::saveEngineDefaults(const Scene& source,const std::string& rigId) {
     if(!source.gameAssets().findRig(rigId))throw std::runtime_error("Defina um personagem de jogador antes de salvar o padrão");
+    ensureDefaultsWritable();
     auto index=json{{"format","linblux-engine-defaults"},{"version",1}};
     if(fs::exists(defaults_/"index.json"))index=boundedJson(read(defaults_/"index.json",MiB));
     if(index.value("format","")!="linblux-engine-defaults"||index.value("version",0)!=1)throw std::runtime_error("Versão dos padrões não suportada; recurso preservado");
@@ -575,6 +677,7 @@ bool ExperienceManager::isEngineDefault(const Experience& experience) const {
         fs::absolute(experience.root).lexically_normal().parent_path()==fs::absolute(data_/"engine-workspaces").lexically_normal();
 }
 void ExperienceManager::restoreFactoryDefaults() {
+    ensureDefaultsWritable();
     auto index=json{{"format","linblux-engine-defaults"},{"version",1}};
     if(fs::exists(defaults_/"index.json"))index=boundedJson(read(defaults_/"index.json",MiB));
     if(index.value("format","")!="linblux-engine-defaults"||index.value("version",0)!=1)throw std::runtime_error("Versão dos padrões não suportada; restauração cancelada");

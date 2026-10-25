@@ -350,6 +350,9 @@ add_test(NAME linblux_defaults COMMAND linblux_defaults_tests)
 add_executable(linblux_engine_default_tests tests/engine_default_main.cpp)
 target_link_libraries(linblux_engine_default_tests PRIVATE linblux_engine)
 add_test(NAME linblux_engine_default_lifecycle COMMAND linblux_engine_default_tests)
+add_executable(linblux_engine_default_paths_tests tests/defaults_paths_main.cpp)
+target_link_libraries(linblux_engine_default_paths_tests PRIVATE linblux_engine)
+add_test(NAME linblux_engine_default_paths COMMAND linblux_engine_default_paths_tests)
 
 # Preserve notices for every static third-party component shipped in the application.
 install(FILES LICENSE DESTINATION share/linblux/licenses COMPONENT Linblux RENAME LINBLUX-MIT.txt)
@@ -424,6 +427,7 @@ linblux_turbo_headless(linblux_startup_no_display "smoke;headless;app;core")
 linblux_turbo_headless(linblux_help "smoke;headless;app")
 linblux_turbo_headless(linblux_defaults "unit;headless;core;experiences;serialization")
 linblux_turbo_headless(linblux_engine_default_lifecycle "unit;headless;core;experiences;serialization")
+linblux_turbo_headless(linblux_engine_default_paths "unit;headless;core;experiences;serialization")
 linblux_turbo_headless(linblux_atlas "unit;headless;tooling;atlas")
 
 linblux_turbo_graphics(linblux_decal_render "graphics;integration;rendering;game")

@@ -52,6 +52,7 @@ TEST_MODULES = {
     "linblux_home_video": ("media", "ui", "app"),
     "linblux_defaults": ("core", "experiences", "serialization"),
     "linblux_engine_default_lifecycle": ("core", "experiences", "serialization"),
+    "linblux_engine_default_paths": ("core", "experiences", "serialization"),
     "linblux_engine_default_restart": ("core", "experiences", "serialization", "app"),
     "linblux_atlas": ("atlas", "tooling"),
 }

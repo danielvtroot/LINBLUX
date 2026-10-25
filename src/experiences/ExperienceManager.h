@@ -72,6 +72,7 @@ public:
     bool isEngineDefault(const Experience& experience) const;
     const std::filesystem::path& lastDefaultsBackup() const {return lastDefaultsBackup_;}
     const std::filesystem::path& engineDefaultsRoot() const {return defaults_;}
+    const std::filesystem::path& factoryDefaultsRoot() const {return factoryDefaults_;}
 
     std::string importImage(const std::filesystem::path& file);
     std::string importImage(const Experience& experience,const std::filesystem::path& file);
@@ -84,10 +85,11 @@ public:
     // never into an installed user's defaults or personal project.
     static void writeFactoryResources(const std::filesystem::path& destination);
 private:
-    std::filesystem::path data_, factory_, library_, defaults_, lastDefaultsBackup_;
+    std::filesystem::path data_, factory_, library_, defaults_, factoryDefaults_, lastDefaultsBackup_;
     std::optional<Experience> active_;
     std::vector<std::string> warnings_;
     std::filesystem::path loadEngineResource(const std::string& key,Scene& scene) const;
+    void ensureDefaultsWritable();
     void saveEngineResource(const std::string& key,const Scene& scene);
     void backupDefaultsIndex(const std::string& index);
     void registerRoot(const std::filesystem::path& root);
