@@ -78,6 +78,22 @@ PartMaterial PartMaterialFromIndex(int index) {
 Part::Part(InstanceId id, std::string name, PartShape shape)
     : Instance(id, std::move(name)), shape_(shape) {}
 
+bool BodyProperties::validate(std::string& error) const {
+    const auto in=[](float v,float low,float high){return std::isfinite(v)&&v>=low&&v<=high;};
+    if(!in(density,.001f,1000)||!in(friction,0,10)||!in(restitution,0,1)||
+       !in(linearDamping,0,1)||!in(angularDamping,0,1)) {
+        error="Propriedades físicas fora dos limites: densidade 0,001–1000; atrito 0–10; restituição e amortecimento 0–1.";return false;
+    }
+    error.clear();return true;
+}
+bool Part::setBodyProperties(const BodyProperties& value,std::string& error) {
+    if(!value.validate(error))return false;
+    if(bodyProperties_.density!=value.density||bodyProperties_.friction!=value.friction||
+       bodyProperties_.restitution!=value.restitution||bodyProperties_.linearDamping!=value.linearDamping||
+       bodyProperties_.angularDamping!=value.angularDamping){bodyProperties_=value;dirty_.body=true;}
+    return true;
+}
+
 void Part::setShape(PartShape shape) {
     if (shape_ == shape) {
         return;

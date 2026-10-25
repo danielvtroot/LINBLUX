@@ -357,6 +357,7 @@ Part* Scene::duplicatePart(const Part& source) {
         copy->setMaterial(source.material());
         copy->setAnchored(source.anchored());
         copy->setCanCollide(source.canCollide());
+        std::string bodyError;copy->setBodyProperties(source.bodyProperties(),bodyError);
         copy->setDeletable(source.deletable());
         std::string ignored;
         reparent(copy, source.parent(), ignored);

@@ -42,7 +42,7 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 | Segurança/cotas/erros | PUBLICADO | Base cf53b09; limites host-only, finalizadores restritos, VM sem APIs de SO; testes studio. | É limite de confiabilidade em processo, não isolamento de SO; trabalho nativo também exige limites. |
 | Persistência de scripts/autoria | PUBLICADO | ProjectIO + LinbluxExamples: salvar/reabrir e executar. | Persistência de estado de gameplay/configurações via API controlada ainda PENDENTE. |
 | Estado privado por experiência | PUBLICADO | e44b4e8f07c803fe3bea4198dd234910c42808fe, remoto confirmado. Relatório 17: ProgressStore, storage Lua, Studio/Player; FAST 14/14, IMPACT 18/18 e integração gráfica pertinente 4/4. | Não exportado, limites explícitos, sem backup externo configurado. Publicado; recuperação privada externa continua pendente. |
-| Volumes Bullet e controle Lua do jogador | VALIDADO NO PLAYER | Relatório 18: overlap_box/overlap_sphere reais, filtros, cotas, intenção de movimento, salto, velocidade, força/impulso. FAST/IMPACT 13/13. | script_input_ui 1/1 em 20,792 s; publicação em andamento. Regiões contínuas e NPCs pendentes. |
+| Volumes Bullet e controle Lua do jogador | PUBLICADO | 431efefd30b1cb03d0d288da75a62608e9fe35dd, remoto confirmado. Relatório 18: overlap_box/overlap_sphere reais, filtros, cotas, intenção de movimento, salto, velocidade, força/impulso. FAST/IMPACT 13/13. | script_input_ui 1/1 em 20,792 s; publicado. Regiões contínuas e NPCs pendentes. |
 | Áudio por Lua | PENDENTE | Não há namespace documentado como implementado. | Dependência da Fase 3: backend/importação/streaming/referências reais. |
 | UI por Lua | PENDENTE | Não há namespace documentado como implementado. | Dependência da Fase 6: modelo/render/input e UI protegida. |
 
@@ -97,3 +97,30 @@ O monitor de backup deve permanecer ativo como labubu. Os diffs em .opencode,
 AGENTS.md, locales, EditorUI/GamePanels, engine_default_restart e ferramentas
 TURBO preexistentes foram preservados; não adicioná-los em lote à main. Apenas
 as duas linhas de mapeamento de backup do TURBO entraram no commit da Fase 0.
+
+## Checkpoint solicitado por limite de créditos — 25/10/2026
+
+Parada solicitada pelo usuário; missão integral NÃO concluída. Último código
+publicado antes desta entrega: 431efefd30b1cb03d0d288da75a62608e9fe35dd.
+Câmera a4398ee, transformações/componentes 2f9632a, persistência privada e44b4e8
+e consultas/movimento 431efef estão publicados e confirmados no remoto.
+
+Propriedades físicas persistentes IMPLEMENTADAS, TESTADAS e VALIDADAS NO PLAYER,
+com publicação deste checkpoint em andamento. Relatório 19 descreve arquivos,
+FAST 13/13, IMPACT 18/18 e integração final gráfica/pacote 2/2. Nenhum FULL.
+O erro inicial do teste gráfico foi corrigido; resultado final aprovado.
+
+Próximo passo exato: consultar ATLAS para Runtime/PhysicsWorld/Rig/SceneRenderer,
+definir navegação limitada e entidades NPC sem duplicar os sistemas existentes.
+A investigação inicial não encontrou pathfinding implementado; nenhum código
+de navegação foi escrito. Persistência de estado/transforms e propriedades
+físicas não precisam ser reconstruídas. Áudio/UI permanecem dependências reais
+da API Lua; fases 2–9 continuam pendentes conforme a tabela.
+
+Pendentes: NPCs/monstros/combate/navegação e oito demos; áudio MP3/WAV/OGG com
+Editor/Player/Lua/streaming/persistência; completar imagens/decals e operações
+seguras; remover só o rosto obrigatório de fábrica; UI Lua; vida circular
+vermelha; menu lateral animado preservando controles; integração abrangente,
+projetos antigos, Mundo Padrão, exportação/reabertura e documentação final.
+Backup externo de dados privados ainda sem destino. Preservar todos os diffs
+preexistentes, especialmente tools/turbo/turbo_lib/runner.py e selection.py.

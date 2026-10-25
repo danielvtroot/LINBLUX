@@ -67,6 +67,7 @@ int main(int argc,char** argv) {
         auto& decal=rig.addDecal(game::Torso);decal.surface.image=project.manifest.banner;decal.surface.face=1;
         auto* part=scene.createPart(PartShape::Block,{7,4,3},{2,3,4},"PortablePart");part->setRotationEulerDegrees({0,37,0});
         part->setAttribute("decal_image",project.manifest.icon);const auto partId=part->id();
+        BodyProperties body;body.density=2.5f;body.friction=.3f;body.restitution=.7f;body.linearDamping=.2f;body.angularDamping=.4f;std::string bodyError;CHECK(part->setBodyProperties(body,bodyError));
         const auto previous=author.activePlace();author.save(scene);CHECK(author.activePlace()!=previous);CHECK(fs::exists(previous));
         auto m=author.active()->manifest;m.name="Renamed";m.description="Updated description";author.updateMetadata(m);
         const auto goodManifest=Read(project.root/"experience.json");auto badMedia=m;badMedia.icon="assets/missing.png";
@@ -118,6 +119,7 @@ int main(int argc,char** argv) {
         CHECK(!received.manifest.faceImage.empty());CHECK(fs::is_regular_file(received.root/received.manifest.faceImage));
         author.close();Scene receivedScene;receiver.open(received,receivedScene);
         CHECK(receivedScene.findPart(partId));CHECK(receivedScene.gameAssets().findRig(rigId));
+        const auto& receivedBody=receivedScene.findPart(partId)->bodyProperties();CHECK(NearlyEqual(receivedBody.density,2.5f));CHECK(NearlyEqual(receivedBody.friction,.3f));CHECK(NearlyEqual(receivedBody.restitution,.7f));CHECK(NearlyEqual(receivedBody.linearDamping,.2f));CHECK(NearlyEqual(receivedBody.angularDamping,.4f));
         CHECK(fs::current_path()==cwd);CHECK(!game::ResolveImagePath(game::AssetsDir(),received.manifest.banner).empty());
         CHECK(projectio::toJson(receivedScene).find(base.string())==std::string::npos);
         auto again=receiver.importPackage(portable);CHECK(again.root!=received.root);CHECK(receiver.list().size()==2);

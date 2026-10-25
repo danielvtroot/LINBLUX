@@ -233,7 +233,7 @@ bool ValidateSchema(const json& root, std::string& error) {
                                       "cloudScale", "cloudSpeed", "cloudSoftness", "skyRotation"}, error, prefix)) return false;
         } else if (type == "Part" || type == "Baseplate" || type == "SpawnLocation") {
             if (!HasOnlyKeys(object, {"id", "class", "name", "parent", "shape", "position", "rotation",
-                                      "size", "color", "material", "anchored", "canCollide"}, error, prefix)) return false;
+                                      "size", "color", "material", "anchored", "canCollide", "body"}, error, prefix)) return false;
         } else {
             error = prefix + " declara classe desconhecida `" + type + "`"; return false;
         }

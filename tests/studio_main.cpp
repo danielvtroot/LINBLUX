@@ -78,6 +78,45 @@ void Hierarchy() {
     std::printf("1000-node hierarchy create/validate/round-trip: %.2f ms\n",
         std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count());
 }
+void BodyConfiguration() {
+    Scene scene;std::string error;
+    auto* floor=scene.createPart(PartShape::Block,{0,-.5f,0},{100,1,100},"Floor");floor->setAnchored(true);
+    auto* part=scene.createPart(PartShape::Block,{-10,1,0},{2,2,2},"Body");
+    BodyProperties body;body.density=2;body.friction=0;body.restitution=.6f;body.linearDamping=0;body.angularDamping=.3f;
+    CHECK(part->setBodyProperties(body,error));
+    PhysicsWorld world;world.attach(scene);CHECK(NearlyEqual(world.bodyMass(part->id()),16));CHECK(world.bodyMass(floor->id())==0);
+    body.density=3;CHECK(part->setBodyProperties(body,error));world.syncScene(scene);CHECK(NearlyEqual(world.bodyMass(part->id()),24));
+    part->setSize({4,2,2});world.syncScene(scene);CHECK(NearlyEqual(world.bodyMass(part->id()),48));
+    auto* copy=scene.duplicateTree(*part);CHECK(copy&&copy->isPart());CHECK(static_cast<Part*>(copy)->bodyProperties().density==3);
+    CHECK(scene.remove(copy));
+    const auto json=projectio::toJson(scene);Scene loaded;CHECK(projectio::fromJson(loaded,json,error));CHECK(projectio::toJson(loaded)==json);
+    CHECK(NearlyEqual(loaded.findPart(part->id())->bodyProperties().friction,0));
+    Scene declarative;CHECK(scenelua::fromLua(declarative,scenelua::toLua(scene),error));CHECK(projectio::toJson(declarative)==json);
+    auto invalid=nlohmann::json::parse(json);
+    for(auto& object:invalid["objects"])if(object["id"]==part->id())object["body"]["density"]=-1;
+    CHECK(!projectio::fromJson(loaded,invalid.dump(),error));CHECK(projectio::toJson(loaded)==json);
+    body.density=std::numeric_limits<float>::quiet_NaN();CHECK(!part->setBodyProperties(body,error));CHECK(part->bodyProperties().density==3);
+    auto legacy=nlohmann::json::parse(json);for(auto& object:legacy["objects"])object.erase("body");
+    Scene old;CHECK(projectio::fromJson(old,legacy.dump(),error));CHECK(old.findPart(part->id())->bodyProperties().density==1);
+    // Observe actual Bullet friction and damping instead of only comparing metadata.
+    auto* rough=scene.createPart(PartShape::Block,{10,1,0},{2,2,2},"Rough");
+    body={};body.friction=1;body.linearDamping=0;body.restitution=0;CHECK(rough->setBodyProperties(body,error));
+    auto* damped=scene.createPart(PartShape::Block,{20,20,0},{2,2,2},"Damped");body.linearDamping=1;CHECK(damped->setBodyProperties(body,error));
+    body={};body.restitution=1;CHECK(floor->setBodyProperties(body,error));
+    auto* bounce=scene.createPart(PartShape::Block,{30,6,0},{2,2,2},"Bounce");CHECK(bounce->setBodyProperties(body,error));
+    game::RuntimeSession runtime;CHECK(runtime.start(scene,error));
+    bool bounced=false;for(int i=0;i<30;++i){runtime.update(1.f/60,{});if(runtime.partVelocity(bounce->id()).y>1)bounced=true;}
+    CHECK(bounced);
+    CHECK(runtime.partMotion(part->id(),{5,0,0},game::PartMotion::Velocity,error));
+    CHECK(runtime.partMotion(rough->id(),{5,0,0},game::PartMotion::Velocity,error));
+    CHECK(runtime.partMotion(damped->id(),{5,0,0},game::PartMotion::Velocity,error));
+    for(int i=0;i<30;++i)runtime.update(1.f/60,{});
+    CHECK(runtime.partVelocity(part->id()).x>4);CHECK(runtime.partVelocity(rough->id()).x<runtime.partVelocity(part->id()).x-1);
+    CHECK(std::fabs(runtime.partVelocity(damped->id()).x)<.01f);CHECK(runtime.partMass(part->id())==48);runtime.stop();
+    scene.createScript(InstanceClass::Script,nullptr,"InvalidBody.lua")->source="linblux.scene.find('Body').body={density=7,friction=-1}";
+    CHECK(runtime.start(scene,error));CHECK(runtime.scripts().errorCount()==1);
+    CHECK(runtime.scene().findPart(part->id())->bodyProperties().density==3);CHECK(runtime.partMass(part->id())==48);runtime.stop();
+}
 void Scripts() {
     Scene author;author.buildDefaultScene();
     auto* target=author.createPart(PartShape::Block,{20,4,0},{4,4,4},"Target");target->setAnchored(true);
@@ -277,6 +316,7 @@ void LinbluxExamples() {
     author.createScript(InstanceClass::Script,nullptr,"Camera.lua")->source=source("camera.lua");
     author.createScript(InstanceClass::Script,nullptr,"Transformacoes.lua")->source=source("transformacoes.lua");
     author.createScript(InstanceClass::Script,nullptr,"ConsultasControle.lua")->source=source("consultas_controle.lua");
+    author.createScript(InstanceClass::Script,nullptr,"CorposRigidos.lua")->source=source("corpos_rigidos.lua");
     author.gameAssets().player.cameraFov=80;
     const auto baseline=projectio::toJson(author);
     const auto testDir=root/".turbo"/"lua-examples";std::filesystem::create_directories(testDir);
@@ -293,6 +333,7 @@ void LinbluxExamples() {
     CHECK(runtime.scene().workspace()->attributes().count("camera_concluida"));
     CHECK(runtime.scene().workspace()->attributes().count("transformacoes_concluidas"));
     CHECK(runtime.scene().workspace()->attributes().count("consultas_controle_concluido"));
+    CHECK(runtime.scene().workspace()->attributes().count("corpos_rigidos_concluido"));
     CHECK(runtime.playerCamera().camera().fovy==75);
     for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Example: %s\n",message.text.c_str());CHECK(!message.error);}
     CHECK(projectio::toJson(reopened)==baseline);CHECK(runtime.validate(error));runtime.stop();std::filesystem::remove(path);
@@ -1091,6 +1132,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

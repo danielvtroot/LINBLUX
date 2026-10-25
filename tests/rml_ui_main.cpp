@@ -80,7 +80,7 @@ int main() {
         if(!ui.frontend())return 1;
         std::function<void()> observeFrame;
         auto frames=[&](int count=2){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(BLACK);rlImGuiBegin();ui.draw();rlImGuiEnd();ui.renderModernFrontend();EndDrawing();if(observeFrame)observeFrame();}};
-        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames();};
+        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames(std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")?1:2);};
         auto key=[&](const std::string& name){event("keydown "+name);event("keyup "+name);};
         auto clickAt=[&](Vector2 p){event("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));event("mousedown 1");event("mouseup 1");};
         auto click=[&](const std::string& id){
@@ -108,6 +108,35 @@ int main() {
         // Optional fast iteration path; the registered CTest always exercises
         // the full editor + player sequence without this environment variable.
         capture("studio-1366");
+        if(std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")) {
+            auto editBody=[&](const std::string& field,const std::string& value){
+                click("property-search");key("ctrl+a");event("type --clearmodifiers "+field);key("Return");
+                click("prop-"+field);key("ctrl+a");event("type --clearmodifiers -- "+value);key("Return");frames();
+            };
+            editBody("Density","2.5");CHECK(NearlyEqual(part->bodyProperties().density,2.5f));
+            editBody("Friction","0.25");CHECK(NearlyEqual(part->bodyProperties().friction,.25f));
+            editBody("Restitution","0.75");CHECK(NearlyEqual(part->bodyProperties().restitution,.75f));
+            editBody("LinearDamping","0.4");CHECK(NearlyEqual(part->bodyProperties().linearDamping,.4f));
+            editBody("AngularDamping","0.6");CHECK(NearlyEqual(part->bodyProperties().angularDamping,.6f));
+            editBody("Density","-1");CHECK(NearlyEqual(part->bodyProperties().density,2.5f));
+            click("property-search");key("ctrl+a");key("BackSpace");key("Return");capture("body-properties");
+            const auto authored=projectio::toJson(scene);CHECK(projectio::save(scene,config.defaultProjectPath,error));
+            Scene reloaded;CHECK(projectio::load(reloaded,config.defaultProjectPath,error));
+            CHECK(SameProjectValue(nlohmann::json::parse(projectio::toJson(reloaded)),nlohmann::json::parse(authored)));
+            scene.createScript(InstanceClass::Script,nullptr,"CorpoEditor.lua")->source=R"(
+local part=linblux.scene.find("Wall")
+assert(math.abs(part.body.density-2.5)<0.001 and math.abs(part.body.restitution-0.75)<0.001)
+part.anchored=false
+assert(math.abs(part.mass-60)<0.001)
+part:apply_impulse(linblux.vec3(60,0,0))
+assert(math.abs(part.velocity.x-1)<0.001)
+)";
+            click("play");frames(8);auto& runtime=EditorUITestAccess::runtime(ui);CHECK(ui.playing());CHECK(runtime.scripts().errorCount()==0);
+            click("stop");frames();CHECK(!ui.playing());CHECK(part->anchored());
+            CHECK(NearlyEqual(part->bodyProperties().density,2.5f));
+            std::printf("Body Properties UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
         // A separate short path exercises real Explorer/Properties controls
         // with X11 events, including dropdowns and independent child deletion.
         if(std::getenv("LINBLUX_SCRIPT_INPUT_ONLY")) {

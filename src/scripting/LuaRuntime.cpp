@@ -417,6 +417,20 @@ struct LuaRuntime::Impl {
         for(int i=0;i<PartMaterialCount();++i)if(Eq(name,modern[i]))return PartMaterialFromIndex(i);
         PartMaterial material;Require(PartMaterialFromName(name,material),"Material desconhecido");return material;
     }
+    static BodyProperties ReadBody(lua_State* L,int index,BodyProperties properties={}) {
+        Require(lua_istable(L,index),"body requer tabela de propriedades físicas");index=lua_absindex(L,index);
+        lua_pushnil(L);while(lua_next(L,index)) {
+            const char* key=Text(L,-2);float* target=nullptr;
+            if(Eq(key,"density"))target=&properties.density;
+            else if(Eq(key,"friction"))target=&properties.friction;
+            else if(Eq(key,"restitution"))target=&properties.restitution;
+            else if(Eq(key,"linear_damping"))target=&properties.linearDamping;
+            else if(Eq(key,"angular_damping"))target=&properties.angularDamping;
+            else throw std::runtime_error("Propriedade física desconhecida");
+            *target=float(Number(L,-1));lua_pop(L,1);
+        }
+        std::string error;if(!properties.validate(error))throw std::runtime_error(error);return properties;
+    }
     static int ModernNew(lua_State* L) {
         auto& self=Host(L);const char* kind=Text(L,1);
         const bool part=Eq(kind,"part"),group=Eq(kind,"group"),model=Eq(kind,"model");
@@ -425,13 +439,14 @@ struct LuaRuntime::Impl {
         Vector3 position{},rotation{},size{4,4,4},color{163,162,165};
         bool anchored=true,collidable=true;double transparency=0;
         PartMaterial material=PartMaterial::SmoothPlastic;PartShape shape=PartShape::Block;
+        BodyProperties body;
         std::string name=part?"Objeto":group?"Grupo":"Modelo";
         Instance* parent=self.runtime->mutableScene().workspace();
         if(lua_istable(L,2)) {
             // Reject typos before creating anything. Read raw fields, without invoking user metamethods.
             lua_pushnil(L);while(lua_next(L,2)) {
                 const char* key=Text(L,-2);bool known=false;
-                for(const char* allowed:{"name","parent","position","rotation","size","color","anchored","collidable","transparency","material","shape"})known|=Eq(key,allowed);
+                for(const char* allowed:{"name","parent","position","rotation","size","color","anchored","collidable","transparency","material","shape","body"})known|=Eq(key,allowed);
                 Require(known,"Opção de criação desconhecida");
                 Require(part||Eq(key,"name")||Eq(key,"parent"),"Grupos não possuem transformação ou aparência de peça");lua_pop(L,1);
             }
@@ -443,6 +458,7 @@ struct LuaRuntime::Impl {
             Field(L,2,"collidable");if(!lua_isnil(L,-1)){Require(lua_isboolean(L,-1),"collidable requer booleano");collidable=lua_toboolean(L,-1);}lua_pop(L,1);
             Field(L,2,"transparency");if(!lua_isnil(L,-1))transparency=Number(L,-1);lua_pop(L,1);
             Field(L,2,"material");if(!lua_isnil(L,-1))material=Material(L,-1);lua_pop(L,1);
+            Field(L,2,"body");if(!lua_isnil(L,-1))body=ReadBody(L,-1);lua_pop(L,1);
             Field(L,2,"shape");if(!lua_isnil(L,-1)){const char* value=Text(L,-1);Require(Eq(value,"box")||Eq(value,"sphere"),"shape aceita box ou sphere");shape=Eq(value,"sphere")?PartShape::Sphere:PartShape::Block;}lua_pop(L,1);
         }
         Require(size.x>=kMinPartSize&&size.y>=kMinPartSize&&size.z>=kMinPartSize,"Tamanho mínimo é 0,2");
@@ -453,6 +469,7 @@ struct LuaRuntime::Impl {
         Require(created,"Não foi possível criar o objeto");std::string error;
         if(!scene.reparent(created,parent,error)){scene.remove(created);throw std::runtime_error(error);}
         if(part){auto& object=static_cast<Part&>(*created);object.setRotationEulerDegrees(rotation);object.setColor({static_cast<unsigned char>(color.x),static_cast<unsigned char>(color.y),static_cast<unsigned char>(color.z),static_cast<unsigned char>((1-transparency)*255)});object.setAnchored(anchored);object.setCanCollide(collidable);object.setMaterial(material);}
+        if(part)static_cast<Part&>(*created).setBodyProperties(body,error);
         self.pushInstance(L,created,true);return 1;
     }
     static int ModernFind(lua_State* L) {
@@ -754,8 +771,17 @@ struct LuaRuntime::Impl {
             if(Eq(key,"id")){self.instance(L,1);lua_pushinteger(L,lua_Integer(h.id));return 1;}
             if(Eq(key,"type")){auto& object=self.instance(L,1);const auto type=object.instanceClass();lua_pushstring(L,object.isPart()?"part":type==InstanceClass::Folder?"group":type==InstanceClass::Model?"model":IsScriptClass(type)?"script":type==InstanceClass::Decal?"decal":type==InstanceClass::Texture?"texture":"service");return 1;}
             if(Eq(key,"velocity")){auto& object=self.instance(L,1);Require(object.isPart(),"Velocidade requer uma peça");ModernVector(L,self.runtime->partVelocity(object.id()));return 1;}
+            if(Eq(key,"angular_velocity")){auto& object=PartObject(L,1);ModernVector(L,self.runtime->partVelocity(object.id(),true));return 1;}
+            if(Eq(key,"mass")){auto& object=PartObject(L,1);lua_pushnumber(L,self.runtime->partMass(object.id()));return 1;}
+            if(Eq(key,"body")){
+                const auto properties=PartObject(L,1).bodyProperties();lua_createtable(L,0,5);
+                lua_pushnumber(L,properties.density);lua_setfield(L,-2,"density");lua_pushnumber(L,properties.friction);lua_setfield(L,-2,"friction");
+                lua_pushnumber(L,properties.restitution);lua_setfield(L,-2,"restitution");lua_pushnumber(L,properties.linearDamping);lua_setfield(L,-2,"linear_damping");lua_pushnumber(L,properties.angularDamping);lua_setfield(L,-2,"angular_damping");return 1;
+            }
             if(Eq(key,"apply_force")){lua_pushcfunction(L,Safe<Motion<game::PartMotion::Force>>);return 1;}
             if(Eq(key,"apply_impulse")){lua_pushcfunction(L,Safe<Motion<game::PartMotion::Impulse>>);return 1;}
+            if(Eq(key,"apply_torque")){lua_pushcfunction(L,Safe<Motion<game::PartMotion::Torque>>);return 1;}
+            if(Eq(key,"apply_angular_impulse")){lua_pushcfunction(L,Safe<Motion<game::PartMotion::AngularImpulse>>);return 1;}
             key=ModernKey(key);
         }
 #define METHOD(name,fn) if(Eq(key,name)){lua_pushcfunction(L,Safe<fn>);return 1;}
@@ -843,9 +869,12 @@ struct LuaRuntime::Impl {
             const auto value=ReadVector(L,3);std::string error;if(!self.runtime->playerMotion(value,game::PartMotion::Velocity,error))throw std::runtime_error(error);return 0;
         }
         if(h.modern&&h.kind==Kind::Instance&&Eq(key,"transform")){lua_remove(L,2);return SetPose(L);}
-        if(h.modern&&h.kind==Kind::Instance&&Eq(key,"velocity")) {
+        if(h.modern&&h.kind==Kind::Instance&&Eq(key,"body")) {
+            auto& object=PartObject(L,1);const auto value=ReadBody(L,3,object.bodyProperties());std::string error;if(!object.setBodyProperties(value,error))throw std::runtime_error(error);return 0;
+        }
+        if(h.modern&&h.kind==Kind::Instance&&(Eq(key,"velocity")||Eq(key,"angular_velocity"))) {
             auto& object=self.instance(L,1);Require(object.isPart(),"Velocidade requer uma peça");const auto value=ReadVector(L,3);std::string error;
-            if(!self.runtime->partMotion(object.id(),value,game::PartMotion::Velocity,error))throw std::runtime_error(error);
+            if(!self.runtime->partMotion(object.id(),value,Eq(key,"velocity")?game::PartMotion::Velocity:game::PartMotion::AngularVelocity,error))throw std::runtime_error(error);
             return 0;
         }
         if(h.modern&&h.kind==Kind::Instance)key=ModernKey(key);

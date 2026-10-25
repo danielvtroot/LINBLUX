@@ -431,3 +431,31 @@ com jogador morto ou sessão fora de execução.
 [consultas_controle.lua](../assets/examples/lua/consultas_controle.lua) é salvo,
 reaberto e executado pelo teste Studio e pelo Player independente, com
 verificações de caixa orientada, exclusão de falsos positivos, salto e movimento.
+
+## Propriedades dos corpos rígidos
+
+Peças expõem `body`, uma cópia de `{density, friction, restitution,
+linear_damping, angular_damping}`. `peca.body={density=2}` aplica somente os
+campos informados, validando toda a alteração antes de modificar a peça.
+`scene.create("part",{body={...}})` aceita os mesmos campos. Limites: density
+0,001–1000; friction 0–10; restitution e damping 0–1. Padrões preservam o
+comportamento anterior: 1, 0,8, 0, 0,02 e 0,1, respectivamente.
+
+`peca.mass` lê a massa real no Bullet: volume × densidade, mínimo 0,1 para
+peças dinâmicas; ancoradas têm massa zero. Mudar densidade preserva a velocidade
+atual (portanto não conserva momento linear). Redimensionar recalcula massa e
+inércia. Forma esférica usa o menor eixo como diâmetro, como antes.
+`angular_velocity` lê/escreve velocidade angular em radianos por segundo;
+`:apply_torque(vetor)` e `:apply_angular_impulse(vetor)` usam eixos globais.
+Força/torque são consumidos pelo passo físico; para efeito contínuo renove-os
+em fixed_update. Não aplicam movimento a peças ancoradas.
+
+Propriedades físicas aparecem no Studio (RmlUi e ImGui), são clonadas e salvas
+no objeto JSON em `body` com `linearDamping`/`angularDamping`. Campo ausente em
+cenas antigas usa os padrões anteriores. Leitura inválida rejeita o documento
+sem substituir a cena atual. Exportação declarativa Lua preserva os campos.
+Valores modificados durante Play continuam transitórios, como as demais
+propriedades; edite no Studio e salve para persistir na autoria.
+
+[corpos_rigidos.lua](../assets/examples/lua/corpos_rigidos.lua) demonstra massa,
+impulsos, rotação, amortecimento e alternância ancorada/dinâmica no Player real.

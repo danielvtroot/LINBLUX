@@ -34,15 +34,25 @@ struct Transform {
     Vector3 size{4.0f, 4.0f, 4.0f};
 };
 
+struct BodyProperties {
+    float density = 1.0f;
+    float friction = 0.8f;
+    float restitution = 0.0f;
+    float linearDamping = 0.02f;
+    float angularDamping = 0.1f;
+    bool validate(std::string& error) const;
+};
+
 // Alteracoes pendentes que a camada de fisica deve aplicar no proximo sync.
 struct PartDirty {
     bool transform = false;
     bool shape = false;
     bool anchored = false;
     bool collide = false;
+    bool body = false;
 
-    bool any() const { return transform || shape || anchored || collide; }
-    void clear() { transform = shape = anchored = collide = false; }
+    bool any() const { return transform || shape || anchored || collide || body; }
+    void clear() { transform = shape = anchored = collide = body = false; }
 };
 
 class Part : public Instance {
@@ -88,6 +98,8 @@ public:
 
     bool canCollide() const { return canCollide_; }
     void setCanCollide(bool canCollide);
+    const BodyProperties& bodyProperties() const { return bodyProperties_; }
+    bool setBodyProperties(const BodyProperties& properties, std::string& error);
 
     // Escrita vinda do motor fisico: nao marca dirty (evita loop de sync).
     void syncFromPhysics(Vector3 position, Quaternion rotation);
@@ -105,6 +117,7 @@ private:
     PartMaterial material_ = PartMaterial::SmoothPlastic;
     bool anchored_ = false;
     bool canCollide_ = true;
+    BodyProperties bodyProperties_;
     PartDirty dirty_;
 };
 

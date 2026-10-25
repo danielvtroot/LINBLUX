@@ -587,5 +587,10 @@
   "PHYSICS": "FÍSICA",
   "Invalid PNG/JPEG or image exceeds the 32 MiB file / 64 MiB decoded budget": "PNG/JPEG inválido ou imagem acima do limite de 32 MiB em arquivo / 64 MiB decodificados",
   "Asset destination is a symlink": "O destino do recurso é um link simbólico",
-  "Image asset ID collision; existing image was preserved": "Conflito de identificador da imagem; o arquivo existente foi preservado"
+  "Image asset ID collision; existing image was preserved": "Conflito de identificador da imagem; o arquivo existente foi preservado",
+  "Density": "Densidade",
+  "Friction": "Atrito",
+  "Restitution": "Restituição",
+  "Linear damping": "Amortecimento linear",
+  "Angular damping": "Amortecimento angular"
 }
