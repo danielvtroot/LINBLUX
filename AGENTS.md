@@ -52,6 +52,28 @@ ctest --test-dir build-linblux -R '^linblux_(game|tests|defaults|engine_default_
 Não conclua que uma alteração está correta só porque a busca textual não
 encontrou erros. Compile e execute os testes afetados.
 
+## ATLAS TURBO
+
+Para seleção explicável de build/testes, FAST é o padrão de iteração e IMPACT é
+o padrão antes da entrega. FULL não roda após toda mudança pequena.
+
+```bash
+python3 tools/turbo/turbo.py test --mode fast --changed
+python3 tools/turbo/turbo.py test --mode impact --changed
+python3 tools/turbo/turbo.py test --mode full --no-cache   # decisão explícita
+python3 tools/turbo/turbo.py status
+python3 tools/turbo/turbo.py report
+python3 tools/turbo/turbo.py organize --dry-run
+```
+
+`test --plan` mostra a seleção sem executar. Logs completos ficam em
+`.turbo/logs/` (ignorado pelo Git); leia somente o primeiro erro e o caminho
+indicado. `PASSED_PARTIAL`, `UNKNOWN`, `NO_TESTS`, `REUSED` e `TIMEOUT` não são
+aprovação plena. IMPACT limita gráficos por padrão; registre o que ficou fora.
+Teste o próprio Turbo com `ctest -R '^linblux_turbo$'` e
+`python3 -m unittest discover -s tests/turbo -p 'test_*.py'`. Detalhes em
+`docs/turbo/README.md`.
+
 ## Contexto progressivo
 
 1. **Orientação:** este arquivo + `docs/ARCHITECTURE.md`.

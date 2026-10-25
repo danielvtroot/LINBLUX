@@ -384,3 +384,78 @@ if(Python3_Interpreter_FOUND)
     TIMEOUT 180
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
+
+# TURBO: labels, timeouts and display resource locks.  The classification is
+# based on the real command/environment and measured CTestCostData durations.
+# Keep this block at the end so conditional tests only receive properties when
+# they are actually registered in the current build.
+function(linblux_turbo_headless test labels)
+  if(TEST ${test})
+    set_tests_properties(${test} PROPERTIES LABELS "${labels}")
+    get_test_property(${test} TIMEOUT _linblux_timeout)
+    if(_linblux_timeout STREQUAL "NOTFOUND")
+      set_tests_properties(${test} PROPERTIES TIMEOUT 300)
+    endif()
+  endif()
+endfunction()
+
+function(linblux_turbo_graphics test labels)
+  if(TEST ${test})
+    set_tests_properties(${test} PROPERTIES
+      LABELS "${labels}"
+      RESOURCE_LOCK display
+      PROCESSORS 2)
+    get_test_property(${test} TIMEOUT _linblux_timeout)
+    if(_linblux_timeout STREQUAL "NOTFOUND")
+      set_tests_properties(${test} PROPERTIES TIMEOUT 300)
+    endif()
+  endif()
+endfunction()
+
+linblux_turbo_headless(linblux_player_help "smoke;headless;player")
+linblux_turbo_headless(linblux_player_validate "smoke;headless;player;serialization")
+linblux_turbo_headless(linblux_experiences "unit;headless;experiences;serialization")
+linblux_turbo_headless(linblux_studio "unit;headless;editor;game")
+linblux_turbo_headless(linblux_game "unit;headless;game;scene;physics")
+linblux_turbo_headless(linblux_tests "unit;headless;core;scene;physics;scripting;serialization")
+linblux_turbo_headless(linblux_manipulation "unit;headless;editor;scene;physics")
+linblux_turbo_headless(linblux_spawn "unit;headless;game;scene;objects")
+linblux_turbo_headless(linblux_startup_no_display "smoke;headless;app;core")
+linblux_turbo_headless(linblux_help "smoke;headless;app")
+linblux_turbo_headless(linblux_defaults "unit;headless;core;experiences;serialization")
+linblux_turbo_headless(linblux_engine_default_lifecycle "unit;headless;core;experiences;serialization")
+linblux_turbo_headless(linblux_atlas "unit;headless;tooling;atlas")
+
+linblux_turbo_graphics(linblux_decal_render "graphics;integration;rendering;game")
+linblux_turbo_graphics(linblux_rig_image "graphics;integration;editor;rendering;rig")
+linblux_turbo_graphics(linblux_gizmo_visual "graphics;integration;editor;scene;rendering")
+linblux_turbo_graphics(linblux_experience_ui "graphics;integration;experiences;ui;app;slow")
+linblux_turbo_graphics(linblux_rml_ui "graphics;integration;ui;editor;slow")
+linblux_turbo_graphics(linblux_rig_decals_ui "graphics;integration;editor;rendering;rig;slow")
+linblux_turbo_graphics(linblux_mouse_lock "graphics;integration;editor;ui;game;slow")
+linblux_turbo_graphics(linblux_manipulation_ui "graphics;integration;editor;scene;ui;slow")
+linblux_turbo_graphics(linblux_rig_input "graphics;integration;editor;rig;ui;slow")
+linblux_turbo_graphics(linblux_visual_studio "graphics;integration;editor;rendering;ui;slow")
+linblux_turbo_graphics(linblux_sky_capture "graphics;integration;rendering;scene")
+linblux_turbo_graphics(linblux_graphics_quality "graphics;integration;rendering;ui;game;slow")
+linblux_turbo_graphics(linblux_graphics_quality_1080 "graphics;integration;rendering;ui;game;slow")
+linblux_turbo_graphics(linblux_studio_ui "graphics;integration;editor;ui;slow")
+linblux_turbo_graphics(linblux_game_ui "graphics;integration;game;ui;slow")
+linblux_turbo_graphics(linblux_editor_input "graphics;integration;editor;ui;slow")
+linblux_turbo_graphics(linblux_experience_startup "graphics;integration;experiences;app;ui;slow")
+linblux_turbo_graphics(linblux_editor_restart "graphics;integration;editor;app;serialization;slow")
+linblux_turbo_graphics(linblux_home_video "graphics;integration;media;ui;app;slow")
+linblux_turbo_graphics(linblux_engine_default_restart "graphics;integration;core;experiences;serialization;app;slow")
+linblux_turbo_headless(linblux_video "integration;video;headless;media;slow")
+
+# TURBO's own tests: stdlib only and offline.  They do not replace the engine
+# suite; they validate selection, cache invalidation and process supervision.
+if(Python3_Interpreter_FOUND)
+  add_test(NAME linblux_turbo
+    COMMAND ${Python3_EXECUTABLE} -m unittest discover
+            -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/turbo -p "test_*.py" -v)
+  set_tests_properties(linblux_turbo PROPERTIES
+    TIMEOUT 180
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+endif()
+linblux_turbo_headless(linblux_turbo "unit;headless;tooling;turbo")

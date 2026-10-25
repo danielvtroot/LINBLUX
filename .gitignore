@@ -3,6 +3,7 @@
 /cache/
 /.cache/
 /.atlas/
+/.turbo/
 /compile_commands.json
 *.o
 *.a
