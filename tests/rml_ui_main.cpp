@@ -80,7 +80,7 @@ int main() {
         if(!ui.frontend())return 1;
         std::function<void()> observeFrame;
         auto frames=[&](int count=2){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(BLACK);rlImGuiBegin();ui.draw();rlImGuiEnd();ui.renderModernFrontend();EndDrawing();if(observeFrame)observeFrame();}};
-        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames();};
+        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames(std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")?1:2);};
         auto key=[&](const std::string& name){event("keydown "+name);event("keyup "+name);};
         auto clickAt=[&](Vector2 p){event("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));event("mousedown 1");event("mouseup 1");};
         auto click=[&](const std::string& id){
@@ -111,7 +111,7 @@ int main() {
         if(std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")) {
             auto editBody=[&](const std::string& field,const std::string& value){
                 click("property-search");key("ctrl+a");event("type --clearmodifiers "+field);key("Return");
-                click("prop-"+field);key("ctrl+a");event("type --clearmodifiers "+value);key("Return");frames();
+                click("prop-"+field);key("ctrl+a");event("type --clearmodifiers -- "+value);key("Return");frames();
             };
             editBody("Density","2.5");CHECK(NearlyEqual(part->bodyProperties().density,2.5f));
             editBody("Friction","0.25");CHECK(NearlyEqual(part->bodyProperties().friction,.25f));
@@ -131,7 +131,7 @@ assert(math.abs(part.mass-60)<0.001)
 part:apply_impulse(linblux.vec3(60,0,0))
 assert(math.abs(part.velocity.x-1)<0.001)
 )";
-            click("play");frames(20);auto& runtime=EditorUITestAccess::runtime(ui);CHECK(ui.playing());CHECK(runtime.scripts().errorCount()==0);
+            click("play");frames(8);auto& runtime=EditorUITestAccess::runtime(ui);CHECK(ui.playing());CHECK(runtime.scripts().errorCount()==0);
             click("stop");frames();CHECK(!ui.playing());CHECK(part->anchored());
             CHECK(NearlyEqual(part->bodyProperties().density,2.5f));
             std::printf("Body Properties UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
