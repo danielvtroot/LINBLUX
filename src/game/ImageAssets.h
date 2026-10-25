@@ -56,10 +56,10 @@ std::string NormalizeImageReference(const std::string& reference);
 // consulta isto antes de apagar o arquivo, para nunca deixar referência órfã.
 bool ImageInUse(const Scene& scene, const std::string& reference);
 
-// Remove um arquivo de imagem de assets/. Recusa symlinks, caminhos fora do
-// diretório de assets e imagens ainda referenciadas.
-bool RemoveImageAsset(const std::string& assetsDir, const std::string& filename,
-                      bool inUse, std::string& error);
+// Remove um asset importado de assets/. Recusa symlinks, caminhos fora do
+// diretório de assets e arquivos ainda referenciados.
+bool RemoveAssetFile(const std::string& assetsDir, const std::string& filename,
+                     bool inUse, std::string& error);
 
 // Caminho absoluto-lógico do asset dentro de assets/ (ou vazio se ausente).
 std::string ResolveImagePath(const std::string& assetsDir, const std::string& assetPath);

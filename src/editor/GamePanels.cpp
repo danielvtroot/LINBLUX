@@ -607,7 +607,7 @@ void EditorUI::drawRigEditor() {
                 if (ImGui::Selectable(i18n::Label("None"), body.image.empty())) body.image.clear();
                 for (const auto& image : images) {
                     const bool selected = std::filesystem::path(body.image).filename().string() == image.filename;
-                    if (ImGui::Selectable(image.filename.c_str(), selected)) body.image = image.filename;
+                    if (ImGui::Selectable(image.filename.c_str(), selected)) body.image = game::ImageAssetReference(image.filename);
                 }
                 ImGui::EndCombo();
             }

@@ -236,7 +236,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             auto next=*decal;const auto property=attr(e,"data-rig-property"),v=value(e);
             try {
                 if(property=="Name")next.name=v;
-                else if(property=="Image")next.surface.image=v;
+                else if(property=="Image")next.surface.image=game::NormalizeImageReference(v);
                 else if(property=="Face")next.surface.face=std::stoi(v);
                 else if(property=="Transparency") {size_t n=0;next.surface.transparency=std::stof(v,&n);if(n!=v.size())throw std::runtime_error("Enter a finite transparency");}
                 if(next.name.empty()||next.name.size()>128||!next.surface.valid())throw std::runtime_error("Invalid decal name, face or transparency (0..1)");
@@ -329,7 +329,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                 else {
                     auto* decal=action=="apply-image"&&selectedDecalRig==rig->id?rig->findDecal(selectedRigDecal):nullptr;
                     if(!decal)decal=&rig->addDecal(ui.selectedRigBody_);
-                    if(action=="apply-image")decal->surface.image=std::filesystem::path(v).filename().string();
+                    if(action=="apply-image")decal->surface.image=game::ImageAssetReference(v);
                     selectedRigDecal=decal->id;
                     selectedDecalRig=rig->id;
                 }
@@ -425,7 +425,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                 for(int i=0;i<6;++i)s+="<option value=\""+std::to_string(i)+"\" "+(decal->surface.face==i?"selected=\"selected\"":"")+">"+faces[i]+"</option>";
                 s+="</select></div><div class=\"property\"><label>Image Asset</label><select id=\"rig-prop-Image\" data-rig-property=\"Image\"><option value=\"\">None</option>";
                 if(GetTime()-imageScan>2){images=game::ListImages(game::AssetsDir());imageScan=GetTime();}
-                bool found=false;for(const auto& image:images){bool selected=decal->surface.image==image.filename;found|=selected;s+="<option value=\""+Escape(image.filename)+"\" "+(selected?"selected=\"selected\"":"")+">"+Escape(image.filename)+"</option>";}
+                bool found=false;for(const auto& image:images){bool selected=std::filesystem::path(decal->surface.image).filename().string()==image.filename;found|=selected;s+="<option value=\""+Escape(image.filename)+"\" "+(selected?"selected=\"selected\"":"")+">"+Escape(image.filename)+"</option>";}
                 if(!found&&!decal->surface.image.empty())s+="<option selected=\"selected\" value=\""+Escape(decal->surface.image)+"\">"+Escape(decal->surface.image)+" (missing)</option>";
                 s+="</select></div>";field("Transparency",Num(decal->surface.transparency));
                 s+=Button("rig-decal-delete","Delete this Decal","delete")+Button("show:rig","Edit body","rig");
@@ -673,7 +673,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(images.empty())s+="<p>No imported images yet.</p>";
             s+="<div class=\"asset-grid\">";
             for(const auto& image:images){const auto path=std::filesystem::path(game::AssetsDir())/image.filename;
-                s+="<div class=\"asset-card\"><img class=\"asset-preview\" src=\""+Escape(std::filesystem::absolute(path).string())+"\"/><span>"+Escape(image.id)+"</span>"+Button("apply-image","Decal","part",path.string())+Button("apply-texture","Texture","part",path.string())+"</div>";}
+                s+="<div class=\"asset-card\"><img class=\"asset-preview\" src=\""+Escape(std::filesystem::absolute(path).string())+"\"/><span>"+Escape(image.id)+"</span>"+Button("apply-image","Decal","part",path.string())+Button("apply-texture","Texture","part",path.string())+Button("remove-image","Remove","delete",image.filename)+"</div>";}
             s+="</div>";
         }
         html("advanced-content",s,advancedMarkup);

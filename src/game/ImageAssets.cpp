@@ -127,16 +127,16 @@ bool ImageInUse(const Scene& scene, const std::string& reference) {
     return false;
 }
 
-bool RemoveImageAsset(const std::string& assetsDir, const std::string& filename,
-                      bool inUse, std::string& error) {
+bool RemoveAssetFile(const std::string& assetsDir, const std::string& filename,
+                     bool inUse, std::string& error) {
     error.clear();
-    if(inUse){error="A imagem está em uso na cena; remova as referências antes de apagá-la.";return false;}
+    if(inUse){error="O asset está em uso na cena; remova as referências antes de apagá-lo.";return false;}
     const std::string name=std::filesystem::path(filename).filename().string();
     if(name!=filename||name.empty()){error="Use apenas o nome do arquivo em assets/.";return false;}
     const std::filesystem::path root=std::filesystem::path(assetsDir).lexically_normal();
     const std::filesystem::path target=root/name;
     std::error_code fsError;
-    if(!std::filesystem::is_regular_file(target,fsError)){error="Imagem não encontrada: "+name;return false;}
+    if(!std::filesystem::is_regular_file(target,fsError)){error="Asset não encontrado: "+name;return false;}
     if(std::filesystem::is_symlink(std::filesystem::symlink_status(target,fsError))){error="Symlink não pode ser removido como asset.";return false;}
     if(!std::filesystem::remove(target,fsError)||fsError){error="Falha ao remover "+name+": "+fsError.message();return false;}
     ClearImageTextures();

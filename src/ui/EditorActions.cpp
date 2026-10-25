@@ -81,6 +81,11 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             std::string asset,error;if(!game::ImportImageTo(game::AssetsDir(),c.value,asset,error))throw std::runtime_error(error);
             e.setStatus("Image imported: "+asset);
         }
+        else if(c.action=="remove-image"||c.action=="remove-asset") {
+            if(!e.experienceUi_)throw std::runtime_error("Abra uma experiência antes de remover imagens importadas");
+            e.experienceUi_->removeAsset(c.value,game::ImageInUse(e.scene_,c.value));
+            e.setStatus("Asset removido: "+c.value);
+        }
         else if(c.action=="apply-image"||c.action=="apply-texture") {
             auto* part=e.scene_.selection();if(!part||!part->isPart())throw std::runtime_error("Select a Part before applying an image");
             const auto path=game::ResolveImagePath(game::AssetsDir(),c.value);if(path.empty())throw std::runtime_error("Image asset missing");

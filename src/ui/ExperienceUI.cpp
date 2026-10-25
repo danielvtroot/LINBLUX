@@ -91,6 +91,10 @@ void ExperienceUI::choose(const std::string& purpose,bool saveFile,bool director
     dialogPurpose_=purpose;editor_.camera_.releaseCapture();editor_.setGameplayCapture(false);
 }
 void ExperienceUI::chooseAsset(){choose("asset",false,false,true);}
+void ExperienceUI::removeAsset(const std::string& reference,bool usedByScene) {
+    manager_.removeAsset(reference,usedByScene);
+    dirty_=true;
+}
 void ExperienceUI::releaseLoadingImages() {
     document_.GetElementById("exp-loading-background")->RemoveAttribute("src");
     document_.GetElementById("exp-loading-icon")->RemoveAttribute("src");

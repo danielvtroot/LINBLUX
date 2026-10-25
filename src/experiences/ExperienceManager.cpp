@@ -199,6 +199,11 @@ void writeNumber(FILE* out,uint64_t value,int bytes) {
 bool packagePath(const std::string& path) {
     return safeRelativePath(path)&&(path=="experience.json"||path.rfind("places/",0)==0||path.rfind("assets/",0)==0);
 }
+bool isImageAsset(const std::string& path) {
+    auto ext=fs::path(path).extension().string();
+    for(auto& c:ext)c=char(std::tolower(static_cast<unsigned char>(c)));
+    return ext==".png"||ext==".jpg"||ext==".jpeg";
+}
 } // namespace
 
 std::string newId() {
@@ -555,6 +560,26 @@ void ExperienceManager::deletePermanently(const Experience& experience) {
 void ExperienceManager::close(){active_.reset();game::SetProjectAssetRoot({});}
 std::string ExperienceManager::importImage(const fs::path& file) {if(!active_)throw std::runtime_error("Open an experience first");return imageImport(active_->root,file);}
 std::string ExperienceManager::importImage(const Experience& e,const fs::path& file) {return imageImport(inspect(e.root).root,file);}
+std::string ExperienceManager::importAsset(const fs::path& file) {
+    if(!active_)throw std::runtime_error("Open an experience first");
+    const auto root=inspect(active_->root).root;
+    std::string path,error;
+    if(!game::ImportMediaTo((root/"assets").string(),file.string(),game::MediaKind::Any,path,error))throw std::runtime_error(error);
+    return "assets/"+fs::path(path).filename().string();
+}
+void ExperienceManager::removeAsset(const std::string& reference,bool usedByScene) {
+    if(!active_)throw std::runtime_error("Abra uma experiência antes de remover assets");
+    const auto root=inspect(active_->root).root;
+    const auto normalized=game::NormalizeImageReference(reference);
+    const auto tail=normalized.rfind("assets/",0)==0?normalized.substr(7):std::string();
+    if(tail.empty()||tail.find('/')!=std::string::npos||tail.find('\\')!=std::string::npos)
+        throw std::runtime_error("Selecione um asset importado da experiência");
+    for(const auto& ref:{active_->manifest.icon,active_->manifest.banner,active_->manifest.loadingBackground,active_->manifest.faceImage})
+        if(!ref.empty()&&ref==normalized)throw std::runtime_error("O asset é usado na apresentação da experiência; troque a imagem antes de removê-lo");
+    std::string error;
+    if(!game::RemoveAssetFile((root/"assets").string(),tail,usedByScene,error))throw std::runtime_error(error);
+    event("asset_removed",root);
+}
 void ExperienceManager::setDefaultTemplate(const Scene& scene) {
     Manifest m;m.id=newId();m.installationId=newId();m.name="My Default";m.created=m.modified=now();m.sourceTemplate="user-snapshot";
     auto e=snapshot(scene,active_?active_->root:fs::path{},data_/"templates",m,false);
@@ -734,7 +759,7 @@ void ExperienceManager::exportPackage(const Experience& experience,const fs::pat
     }
     if(paths.size()>maxEntries)throw std::runtime_error("Too many files in experience");
     uint64_t total=0,decodedTotal=0;for(const auto& path:paths){const auto file=containedFile(e.root,path);const auto size=fs::file_size(file);if(size>maxFile||total+size>maxTotal)throw std::runtime_error("Package exceeds 256 MiB budget");total+=size;
-        if(path.rfind("assets/",0)==0){ImageInfo info;if(!ReadSafeImageInfo(file.string(),info))throw std::runtime_error("Invalid asset in export: "+path);decodedTotal+=uint64_t(info.width)*info.height*4;if(decodedTotal>maxTotal)throw std::runtime_error("Image decoded budget exceeds 256 MiB");}
+        if(path.rfind("assets/",0)==0&&isImageAsset(path)){ImageInfo info;if(!ReadSafeImageInfo(file.string(),info))throw std::runtime_error("Invalid asset in export: "+path);decodedTotal+=uint64_t(info.width)*info.height*4;if(decodedTotal>maxTotal)throw std::runtime_error("Image decoded budget exceeds 256 MiB");}
     }
     const auto target=fs::absolute(destination);fs::create_directories(target.parent_path());
     const auto temporary=target.parent_path()/(".lo-export-"+newId());
@@ -781,7 +806,7 @@ Experience ExperienceManager::importPackage(const fs::path& package) {
     if(in.peek()!=EOF)throw std::runtime_error("Trailing data in .lo package");
     auto e=inspect(stage.path);Scene probe;loadWorld(probe,e);
     uint64_t decodedBudget=0;
-    for(const auto& name:names)if(name.rfind("assets/",0)==0) {
+    for(const auto& name:names)if(name.rfind("assets/",0)==0&&isImageAsset(name)) {
         ImageInfo info;const auto file=stage.path/name;
         if(!ReadSafeImageInfo(file.string(),info))throw std::runtime_error("Invalid packaged image: "+name);
         decodedBudget+=uint64_t(info.width)*info.height*4;
