@@ -35,12 +35,13 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 | Forças/impulsos/gravid./raycast/contatos | PUBLICADO | Base cf53b09; Runtime/PhysicsWorld/LuaRuntime; LinbluxPhysics/FixedContacts. | nearby usa centros; consultas de volumes, propriedades completas e regiões contínuas não estão prontas. |
 | Jogador/vida/spawn/animações | PUBLICADO | Base cf53b09; LinbluxPlayer + game/spawn. | Um controlador nativo, rig compatível legado; NPCs e rigs arbitrários são pendências próprias. |
 | Câmera | PUBLICADO | a4398eed1ef1fbb9fcb8c257166e8327729e6e12, hash remoto confirmado. Relatório 15: FOV persistente, set_pose por alvo/up ou Euler, quaternion, release. FAST 13/13, IMPACT 13/13 + gráfico pertinente/studio/Player 3/3. | Pose transitória reconstruída por Script; sem desvio de obstáculos. |
-| Transformações e componentes de peças | VALIDADO NO PLAYER | Relatório 16: conversões/escala/interpolação, Scripts reais, validação atômica e raycast Bullet; FAST/IMPACT 13/13. | Referência rígida explícita; grupos não herdam transformação. Decals editáveis pendentes na fase de imagens. Publicação deste incremento em andamento. |
+| Transformações e componentes de peças | PUBLICADO | 2f9632a85fe9baaac953e2c37613158141186c6c, remoto confirmado. Relatório 16: conversões/escala/interpolação, Scripts reais, validação atômica e raycast Bullet; FAST/IMPACT 13/13. | Referência rígida explícita; grupos não herdam transformação. Decals editáveis pendentes na fase de imagens. |
 | Entrada/eventos | PUBLICADO | cf53b09; ScriptInput, Runtime, LuaRuntime; script_input_ui real. | Controle físico não testado; amostras de controle injetadas. Não expor Escape/atalhos de saída aos scripts. |
 | Tempo/cancelamento/intervalos | PUBLICADO | 26066dff73dc128c50987de2f5f25dfcf71ff89b, push main confirmado; validado no Player. Relatório 14: LuaRuntime; temporizadores.lua, LinbluxTaskCancellation/LinbluxExamples. FAST 13/13, IMPACT 18/18 selecionados. | every não recupera pulsos atrasados; um coroutine por intervalo. |
 | Diagnóstico no Player | PUBLICADO | 26066dff73dc128c50987de2f5f25dfcf71ff89b, push main confirmado. Relatório 14: Player --validate + contador LuaRuntime; lua_player_validation.py, quatro cenas reais. | Validação simula 2 s e Stop, não prova todas as ações futuras. Recusa erros evictos do buffer. |
 | Segurança/cotas/erros | PUBLICADO | Base cf53b09; limites host-only, finalizadores restritos, VM sem APIs de SO; testes studio. | É limite de confiabilidade em processo, não isolamento de SO; trabalho nativo também exige limites. |
 | Persistência de scripts/autoria | PUBLICADO | ProjectIO + LinbluxExamples: salvar/reabrir e executar. | Persistência de estado de gameplay/configurações via API controlada ainda PENDENTE. |
+| Estado privado por experiência | VALIDADO NO PLAYER | Relatório 17: ProgressStore, storage Lua, Studio/Player; FAST 14/14, IMPACT 18/18 e integração gráfica pertinente 4/4. | Não exportado, limites explícitos, sem backup externo configurado. Publicação deste incremento em andamento. |
 | Áudio por Lua | PENDENTE | Não há namespace documentado como implementado. | Dependência da Fase 3: backend/importação/streaming/referências reais. |
 | UI por Lua | PENDENTE | Não há namespace documentado como implementado. | Dependência da Fase 6: modelo/render/input e UI protegida. |
 
@@ -79,11 +80,11 @@ FULL ou nova validação gráfica neste incremento de scheduler/CLI. Nenhum buil
 ou teste ficou ativo; manter apenas o serviço de backup solicitado.
 
 Não há trabalho de NPC/áudio/decals/HUD/menu escondido como pronto. A próxima ação
-concreta agora é continuar transformações/componentes. Câmera implementada e
-validada conforme relatório 15, incluindo compatibilidade e Player. Consultar
-ATLAS para Part::transform, RigidTransform/Compose/Inverse e Scene::createScript.
-Reutilizar a hierarquia e o formato serializado; não introduzir acompanhamento
-automático de filhos que altere a semântica mundial de projetos antigos.
+concreta agora é ampliar consultas espaciais reais e controle de personagem Lua.
+Câmera, transformações de peças e persistência privada estão implementadas/
+validadas conforme relatórios 15–17. Consultar ATLAS para PhysicsWorld,
+RuntimeSession::partMotion/PlayerInput e LuaRuntime. Não duplicar o Bullet nem
+mudar a hierarquia/serialização sem migração.
 
 Depois, tratar transformações/componentes e a persistência controlada de estado.
 Armazenamento de progresso deve usar escopo definido pelo host, diretório privado
