@@ -460,3 +460,70 @@ propriedades; edite no Studio e salve para persistir na autoria.
 
 [corpos_rigidos.lua](../assets/examples/lua/corpos_rigidos.lua) demonstra massa,
 impulsos, rotação, amortecimento e alternância ancorada/dinâmica no Player real.
+
+## NPCs e navegação
+
+Um NPC é uma **Part comum** da cena com o componente `NpcProperties`
+(`enabled`, `speed`, `maxHealth`, `respawnDelay`, `turnSpeed`). Não há
+personagem fixo no C++: o corpo é criado por `scene.create("part", {...})` (ou
+autorado no Studio) e o comportamento vem de um Script. Os dados são
+serializados no objeto JSON (`npc`), por isso o NPC sobrevive a salvar e
+reabrir. Vida e posição de respawn são estado de execução e não são gravadas.
+
+```lua
+local npc = linblux.npc.create{
+    name = "Guarda", position = linblux.vec3(0, 2.6, 0),
+    size = linblux.vec3(2, 5, 2), speed = 10, max_health = 100,
+    respawn_delay = 0, turn_speed = 10,
+    script = "print('componente do NPC')",   -- opcional
+}
+linblux.npc.attach(peca, {speed = 6})   -- transforma uma peça existente
+linblux.npc.detach(peca)
+local ok = linblux.npc.move_to(npc, linblux.vec3(20, 2.6, 0)) -- false = inacessível
+linblux.npc.stop(npc)
+linblux.npc.state(npc)      -- idle | moving | arrived | unreachable | dead
+linblux.npc.speed(npc)      linblux.npc.set_speed(npc, 12)
+linblux.npc.health(npc)     linblux.npc.max_health(npc)
+linblux.npc.set_health(npc, 40)  linblux.npc.damage(npc, 10)  linblux.npc.heal(npc, 5)
+linblux.npc.target(npc)     -- destino (vec3) ou nil
+linblux.npc.path(npc)       -- waypoints restantes
+local pontos, alcancavel = linblux.npc.find_path(de, para)
+local nav = linblux.npc.navigation() -- {ready, cells, walkable, cell_size, columns, rows}
+```
+
+**Movimento.** O NPC é um corpo dinâmico conduzido no passo fixo: a velocidade
+horizontal aponta para o próximo waypoint e a vertical continua sob gravidade.
+Assim paredes, escadas e o jogador são resolvidos pelo Bullet existente; o
+teletransporte só existe no respawn configurado. A rotação é travada (o NPC
+não tomba) e o giro respeita `turn_speed` (rad/s). Degraus de até 1,2 unidade
+são vencidos quando há espaço livre; saltos e desníveis maiores não são
+suportados.
+
+**Navegação.** Uma grade XZ é amostrada a partir da física real: só entram
+superfícies e obstáculos **estáticos** (`anchored`) sólidos. Cada célula exige
+piso com normal ≥ 0,7, altura livre de 4,5 e folga lateral de 1,0. O caminho
+vem de A* com 8 vizinhos (sem cortar cantos), custo diagonal e suavização por
+linha de visão. O agente padrão é uma caixa dinâmica; corpos maiores que os
+corredores medidos podem ficar presos, o que vira `unreachable` após duas
+tentativas de replanejamento. Destinos em ilhas isoladas, dentro de paredes ou
+sobre plataformas altas retornam `false` sem mover o NPC. A grade é construída
+sob demanda, uma vez por sessão, limitada a 4096 células; depois de mover
+geometria estática chame `linblux.npc.navigation()` ou recrie o NPC para
+reconstruí-la. Não há navmesh triangulada, saltos entre plataformas, desvio
+dinâmico de outros agentes nem suporte a rampas com inclinação acima do limite:
+a movimentação continua restrita às superfícies caminháveis.
+
+**Ciclo de vida.** Ao parar a execução todos os controladores são liberados;
+destruir a Part (`part:destroy()`) descarta o controlador no passo seguinte e
+`linblux.npc.detach` devolve a rotação livre ao corpo. Os NPCs são apenas
+objetos da cena de execução: a cena autoral nunca é modificada por Play.
+
+Exemplos reais, salvos e executados pelos testes Studio e pelo Player:
+
+- [npc_patrulha.lua](../assets/examples/lua/npc_patrulha.lua): ciclo de
+  waypoints com espera em cada ponto e tratamento de destino inacessível.
+- [npc_perseguidor.lua](../assets/examples/lua/npc_perseguidor.lua): detecta o
+  jogador no raio, replaneja quando ele se move e para ao perder o alvo.
+- [npc_monstro.lua](../assets/examples/lua/npc_monstro.lua): persegue, ataca por
+  proximidade com intervalo, aplica dano na vida real do jogador e recebe dano
+  pelo evento `atacar_monstro`.

@@ -49,3 +49,17 @@ e dos assets. RuntimeSession salva ao pausar/parar e descarta início cancelado.
 --validate e padrão da engine usam memória. Não confundir progress.json com mundo
 autoral. Testes: LinbluxProgress/studio, lua_player_validation, progress_player_ui
 e script_input_ui com reabertura de Play. Ver PERSISTENCIA_PRIVADA.md.
+
+NPCs (25/10/2026): `src/game/Npc.{h,cpp}` e `src/game/Navigation.{h,cpp}`.
+`NpcProperties` vive na Part (dados serializados em `npc`); o controlador de
+runtime é um `std::map<InstanceId,Controller>` em `RuntimeSession::npcs_`,
+recriado a cada Play e liberado no Stop, sem ponteiros persistidos. O corpo é a
+própria Part dinâmica: `PhysicsWorld` trava a rotação de Parts com NPC,
+`setBodyYaw` gira sem tocar velocidade e `isSpaceClear` valida o degrau de até
+1,2. A navegação é uma grade XZ de Parts estáticas sólidas (máx. 4096 células,
+construída sob demanda) com A* 8-vizinhos, sem cortar cantos. Limites: sem
+navmesh, saltos, ilhas ligadas por rampa íngreme ou desvio dinâmico; corpos
+maiores que o corredor amostrado podem ficar presos e resultam em `unreachable`.
+Testes: `LinbluxNpc` e `NpcExamples` em `tests/studio_main.cpp` (muro, rota,
+destino inacessível, morte/respawn, destruição, detach, serialização) e quatro
+casos `Npc*.lua` em `tests/lua_player_validation.py`.
