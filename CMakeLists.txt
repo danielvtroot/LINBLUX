@@ -387,6 +387,12 @@ if(Python3_Interpreter_FOUND)
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/lua_player_validation.py
             --player $<TARGET_FILE:linblux_player>)
   set_tests_properties(linblux_lua_player_validation PROPERTIES TIMEOUT 30 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+  if(XVFB_RUN_EXECUTABLE)
+    add_test(NAME linblux_progress_player_ui
+      COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset"
+              ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/progress_player_ui.py --player $<TARGET_FILE:linblux_player>)
+    set_tests_properties(linblux_progress_player_ui PROPERTIES TIMEOUT 45 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
+  endif()
   add_test(NAME linblux_backup
     COMMAND ${Python3_EXECUTABLE} -m unittest discover
             -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/backup -p "test_*.py" -v)
@@ -477,3 +483,4 @@ endif()
 linblux_turbo_headless(linblux_turbo "unit;headless;tooling;turbo")
 linblux_turbo_headless(linblux_backup "unit;integration;headless;tooling;backup")
 linblux_turbo_headless(linblux_lua_player_validation "integration;headless;player;scripting;serialization")
+linblux_turbo_graphics(linblux_progress_player_ui "graphics;integration;player;scripting;serialization")

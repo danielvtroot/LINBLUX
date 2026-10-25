@@ -10,10 +10,11 @@
 #include <cstring>
 using namespace loblox;
 int main(int argc,char** argv) {
-    std::string project;bool validate=false;int frames=0;
+    std::string project;bool validate=false,checkScripts=false;int frames=0;
     for(int i=1;i<argc;++i) {
         const std::string argument=argv[i];
-        if(argument=="--help"||argument=="-h") {std::puts("LINBLUX Player\nUso: linblux_player --project CAMINHO [--frames N]\n     linblux_player --validate CAMINHO\nExecuta experiências locais. Multiplayer ainda não implementado.");return 0;}
+        if(argument=="--help"||argument=="-h") {std::puts("LINBLUX Player\nUso: linblux_player --project CAMINHO [--frames N] [--check-scripts]\n     linblux_player --validate CAMINHO\nExecuta experiências locais. Multiplayer ainda não implementado.");return 0;}
+        if(argument=="--check-scripts"){checkScripts=true;continue;}
         if((argument=="--project"||argument=="--validate")&&i+1<argc){validate=argument=="--validate";project=argv[++i];}
         else if(argument=="--frames"&&i+1<argc){char* end=nullptr;const long value=std::strtol(argv[++i],&end,10);if(!end||*end||value<1||value>100000)return 2;frames=int(value);}
         else {std::fprintf(stderr,"Argumento inválido: %s\n",argument.c_str());return 2;}
@@ -68,5 +69,5 @@ int main(int argc,char** argv) {
         }
         runtime.stop();game::ClearImageTextures();
     }
-    if(customFont)UnloadFont(font);CloseWindow();return 0;
+    if(customFont)UnloadFont(font);CloseWindow();return checkScripts&&runtime.scripts().errorCount()>0?1:0;
 }

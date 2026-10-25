@@ -33,7 +33,7 @@ std::string field(const char* id,const char* name,const std::string& value,const
 }
 ExperienceUI::ExperienceUI(EditorUI& editor,experiences::ExperienceManager& manager,Rml::Context& context,Rml::ElementDocument& document)
     :editor_(editor),manager_(manager),context_(context),document_(document) {editor_.experienceUi_=this;}
-ExperienceUI::~ExperienceUI(){if(loadingJob_.valid()){loadingJob_.wait();if(load_!=LoadState::None)editor_.runtime_.stop(false);}editor_.experienceUi_=nullptr;}
+ExperienceUI::~ExperienceUI(){if(loadingJob_.valid())loadingJob_.wait();if(load_!=LoadState::None)editor_.runtime_.stop(false);editor_.experienceUi_=nullptr;}
 bool ExperienceUI::overlayActive() const {return home_||load_!=LoadState::None;}
 bool ExperienceUI::loading() const {return load_!=LoadState::None;}
 void ExperienceUI::initialize(bool home) {home_=home;documentOpened();show(document_,"experience-menu",true);show(document_,"experience-root",true);dirty_=true;}
