@@ -30,6 +30,12 @@ public:
     // Remove um asset importado da experiência ativa, recusando arquivos que
     // ainda estejam em uso na cena ou na apresentação.
     void removeAsset(const std::string& reference, bool usedByScene);
+    // Dependências da imagem na apresentação da experiência (ícone, banner,
+    // fundo de carregamento e rosto). A UI mostra antes de excluir.
+    std::vector<std::string> presentationUses(const std::string& reference) const;
+    // Troca a imagem em todas as referências de apresentação e devolve quantas
+    // mudaram. Usado por Substituir imagem antes de excluir a antiga.
+    std::size_t replaceImageReferences(const std::string& from,const std::string& to);
     bool save(std::string& error);
     bool editingEngineDefault() const {return manager_.active()&&manager_.isEngineDefault(*manager_.active());}
     bool handlesSave() const {return manager_.active().has_value();}

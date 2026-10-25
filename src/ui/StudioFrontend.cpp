@@ -248,7 +248,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             for(int i=0;i<PartMaterialCount();++i)options+="<option value=\""+std::to_string(i)+"\" "+(initial==std::to_string(i)?"selected=\"selected\"":"")+">"+PartMaterialName(PartMaterialFromIndex(i))+"</option>";
             el("appearance-controls")->SetInnerRML(options+"</select>");
         }
-        field->SetValue(initial);focusValue=initial;display("dialog-overlay",true,"flex");field->Focus();
+        field->SetDisabled(false);field->SetValue(initial);focusValue=initial;display("dialog-overlay",true,"flex");field->Focus();
     }
     void applyPlayerSetting(const std::string& setting,const std::string& v) {
         if(ui.runtime_.state()!=game::RuntimeState::Paused)return;
@@ -271,6 +271,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     }
     void commit(Rml::Element* e) {
         if(!e)return;
+        if(e->GetId().rfind("image-query",0)==0){imageQuery=value(e);propertyMarkup.clear();advancedMarkup.clear();return;}
         if(e->HasAttribute("data-rig-property")) {
             if(ui.runtime_.active())return;
             auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);
@@ -307,6 +308,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(target->GetId()=="tree-search") {search=value(target);treeHash=0;return;}
             if(target->GetId()=="property-search") {propertySearch=value(target);filterProperties();return;}
             if(target->GetId()=="tool-search"||target->GetId()=="tool-category") {filterTools();return;}
+            if(target->GetId().rfind("image-query",0)==0) {imageQuery=value(target);propertyMarkup.clear();advancedMarkup.clear();return;}
             if(attr(target,"type")=="checkbox"||target->GetTagName()=="select"||attr(target,"type")=="range")commit(target);
             return;
         }
@@ -384,13 +386,61 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(action=="open-dialog"||action=="save-dialog"){prompt(action=="open-dialog"?"open":"save-as");return;}
         if(action=="import-dialog"){prompt("import-image");return;}
         if(action=="import-sound"){prompt("import-sound");return;}
+        if(action=="clear-image") {
+            if(ui.runtime_.active())return;
+            if(v=="rig") {
+                auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);
+                auto* decal=rig&&selectedDecalRig==rig->id?rig->findDecal(selectedRigDecal):nullptr;
+                if(!decal)return;
+                decal->surface.image.clear();ui.setStatus("Imagem removida do adesivo; o arquivo continua na biblioteca.");
+            } else {
+                auto* part=ui.scene_.selection();if(!part||!part->isPart())return;
+                // Remover o decal/textura da peça não apaga a imagem: o arquivo
+                // permanece disponível para outros objetos.
+                part->removeAttribute(v=="texture"?"texture_image":"decal_image");
+                ui.setStatus(v=="texture"?"Textura removida da peça; a imagem continua na biblioteca.":"Adesivo removido da peça; a imagem continua na biblioteca.");
+            }
+            invalidateImages();treeHash=0;return;
+        }
+        if(action=="rename-image"||action=="replace-image"||action=="delete-image") {
+            if(ui.runtime_.active())return;
+            ui.endGizmoSession(true,"dialog");ui.cancelRigGizmo();ui.camera_.releaseCapture();
+            dialogOpen=true;text("dialog-error","");el("appearance-controls")->SetInnerRML("");
+            auto* field=dynamic_cast<Rml::ElementFormControl*>(el("dialog-value"));
+            const auto display=game::ImageDisplayName(game::AssetsDir(),v);
+            if(action=="delete-image") {
+                std::vector<std::string> uses;
+                for(const auto& use:game::DescribeImageUsage(ui.scene_,v))uses.push_back(use.where);
+                if(experiences)for(const auto& use:experiences->presentationUses(v))uses.push_back(use);
+                std::string report;
+                if(uses.empty())report="Nenhuma referência encontrada. A imagem será excluída apenas desta experiência; o arquivo original no computador não é apagado.";
+                else {
+                    report="Esta imagem está em uso e não será excluída: ";
+                    for(std::size_t i=0;i<uses.size();++i)report+=(i?" · ":"")+uses[i];
+                    report+=". Remova ou substitua essas referências (Incluindo apresentação) e tente novamente.";
+                }
+                dialog="delete-image:"+v;text("dialog-title","Excluir imagem");text("dialog-description",report);
+                field->SetDisabled(true);field->SetValue(display);display("dialog-overlay",true,"flex");context->GetRootElement()->Focus();return;
+            }
+            field->SetDisabled(false);
+            if(action=="rename-image") {
+                dialog="rename-image:"+v;text("dialog-title","Renomear imagem");
+                text("dialog-description","Só o nome exibido muda: o arquivo e o ID técnico continuam iguais, então nenhuma referência quebra. Nomes repetidos são permitidos.");
+                field->SetValue(display);focusValue=display;
+            } else {
+                dialog="replace-image:"+v;text("dialog-title","Substituir imagem");
+                text("dialog-description","Informe o caminho de um PNG/JPEG. Peças, adesivos, ícone, banner e rosto passam a usar a nova imagem; o arquivo antigo continua na biblioteca até ser excluído.");
+                field->SetValue("");focusValue="";
+            }
+            display("dialog-overlay",true,"flex");field->Focus();return;
+        }
         if(action=="color-dialog"||action=="material-dialog"){prompt(action=="color-dialog"?"color":"material");return;}
         if(action=="edit-color"){prompt("color:"+v);return;}
         if(action=="choose-color"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
         if(action=="insert-menu") {std::string menu;for(const auto& item:std::vector<std::pair<std::string,std::string>>{{"part","Part"},{"folder","Folder"},{"model","Model"},{"script","Script"},{"local-script","LocalScript"},{"module","ModuleScript"},{"r6","R6 rig"}})menu+=Button(item.first,item.second);el("context-menu")->SetInnerRML(i18n::Markup(menu));auto b=bounds("new-object");rect("context-menu",{b.x-160,b.y+23,184,183});display("context-menu",true);contextOpen=true;return;}
         if(action=="cancel-dialog") {dialogOpen=false;context->GetRootElement()->Focus();return;}
         if(action=="confirm-dialog") {const auto v=value(el("dialog-value"));const auto id=ui.scene_.selection()?ui.scene_.selection()->id():0;
-            if(actions.dispatch({dialog,v,id})) {if(dialog=="import-image"||dialog=="import-sound")imageScan=-10;dialogOpen=false;context->GetRootElement()->Focus();treeHash=0;}else text("dialog-error",ui.status_);return;}
+            if(actions.dispatch({dialog,v,id})) {if(dialog=="import-image"||dialog=="import-sound"||dialog.rfind("rename-image:",0)==0||dialog.rfind("replace-image:",0)==0||dialog.rfind("delete-image:",0)==0)invalidateImages();dialogOpen=false;context->GetRootElement()->Focus();treeHash=0;}else text("dialog-error",ui.status_);return;}
         if(action=="close-advanced"){showAdvanced("");return;}
         if(action=="toggle-toolbox"){ui.showToolbox_=!ui.showToolbox_;saveLayout();return;}
         if(action=="toggle-explorer"){ui.showExplorer_=!ui.showExplorer_;saveLayout();return;}
@@ -443,7 +493,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             s+="<div id=\"rig-"+rid+"\" class=\"tree-row"+std::string(active&&ui.selectedRigBody_<0?" selected":"")+"\" data-rig=\""+rid+"\"><span class=\"leaf\"/><img src=\"icon-rig\"/><span class=\"node-name\">"+Escape(rig.name)+"</span></div>";
             if(active)for(int b=0;b<game::kBodyCount;++b) {
                 const auto attributes=" data-rig=\""+rid+"\" data-rig-body=\""+std::to_string(b)+"\"";
-                s+="<div id=\"rig-body-"+rid+"-"+std::to_string(b)+"\" class=\"tree-row"+std::string(ui.selectedRigBody_==b&&selectedRigDecal.empty()?" selected":"")+"\""+attributes+" style=\"padding-left:25px\"><img src=\"icon-part\"/><span class=\"node-name\">"+Escape(rig.bodies[b].name)+"</span></div>";
+                s+="<div id=\"rig-body-"+rid+"-"+std::to_string(b)+"\" class=\"tree-row"+std::string(ui.selectedRigBody_==b&&selectedRigDecal.empty()?" selected":"")+"\""+attributes+" style=\"padding-left:25px\"><img src=\"icon-part\"/><span class=\"node-name\">"+Escape(game::BodyDisplayName(rig.bodies[b].name))+"</span></div>";
                 for(const auto& d:rig.bodies[b].decals)s+="<div id=\"rig-decal-"+rid+"-"+Escape(d.id)+"\" class=\"tree-row"+std::string(ui.selectedRigBody_==b&&selectedRigDecal==d.id?" selected":"")+"\""+attributes+" data-rig-decal=\""+Escape(d.id)+"\" style=\"padding-left:43px\"><img src=\"icon-image\"/><span class=\"node-name\">"+Escape(d.name)+"</span></div>";
             }
         }
@@ -459,21 +509,19 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(selectedDecalRig!=rig->id)selectedRigDecal.clear();
             game::RigDecal* decal=nullptr;for(auto& candidate:body.decals)if(candidate.id==selectedRigDecal)decal=&candidate;
             if(!decal)selectedRigDecal.clear();
-            text("property-title",decal?decal->name+" · Decal":body.name+" · R6 body");
+            text("property-title",decal?decal->name+" · Adesivo":game::BodyDisplayName(body.name)+" · corpo R6");
             auto field=[&](const char* key,const std::string& v){s+="<div class=\"property\"><label>"+std::string(key)+"</label><input id=\"rig-prop-"+key+"\" data-rig-property=\""+key+"\" value=\""+Escape(v)+"\"/></div>";};
             if(decal) {
-                s=Button("rig-decal-add","Add Decal","image")+Button("import-dialog","Import image…","folder")+"<div class=\"property-group\">DECAL</div>";field("Name",decal->name);
+                s=Button("rig-decal-add","Adicionar adesivo","image")+Button("import-dialog","Importar imagem","folder")+"<div class=\"property-group\">ADESIVO</div>";field("Name",decal->name);
                 s+="<div class=\"property\"><label>Face</label><select id=\"rig-prop-Face\" data-rig-property=\"Face\">";
-                const char* faces[]={"Front (-Z)","Back (+Z)","Left (-X)","Right (+X)","Top (+Y)","Bottom (-Y)"};
+                const char* faces[]={"Frente (-Z)","Trás (+Z)","Esquerda (-X)","Direita (+X)","Topo (+Y)","Base (-Y)"};
                 for(int i=0;i<6;++i)s+="<option value=\""+std::to_string(i)+"\" "+(decal->surface.face==i?"selected=\"selected\"":"")+">"+faces[i]+"</option>";
-                s+="</select></div><div class=\"property\"><label>Image Asset</label><select id=\"rig-prop-Image\" data-rig-property=\"Image\"><option value=\"\">None</option>";
-                if(GetTime()-imageScan>2){images=game::ListImages(game::AssetsDir());imageScan=GetTime();}
-                bool found=false;for(const auto& image:images){bool selected=std::filesystem::path(decal->surface.image).filename().string()==image.filename;found|=selected;s+="<option value=\""+Escape(image.filename)+"\" "+(selected?"selected=\"selected\"":"")+">"+Escape(image.filename)+"</option>";}
-                if(!found&&!decal->surface.image.empty())s+="<option selected=\"selected\" value=\""+Escape(decal->surface.image)+"\">"+Escape(decal->surface.image)+" (missing)</option>";
-                s+="</select></div>";field("Transparency",Num(decal->surface.transparency));
-                s+=Button("rig-decal-delete","Delete this Decal","delete")+Button("show:rig","Edit body","rig");
-                s+="<div class=\"property-help\">ID: rig://"+Escape(rig->id)+"/"+Escape(decal->id)+"<br/>Parent: "+Escape(body.name)+"</div>";
-            }else s="<div class=\"property-help\">Select a Decal child to edit its own face and image. Front is local -Z.</div>"+Button("rig-decal-add","Add Decal","image")+Button("import-dialog","Import image…","folder")+Button("show:rig","Edit body","rig");
+                s+="</select></div><div class=\"property\"><label>Imagem</label><span class=\"readonly\">"+Escape(decal->surface.image.empty()?"Nenhuma imagem":game::ImageDisplayName(game::AssetsDir(),decal->surface.image))+"</span></div>";
+                s+=ImagePicker(decal->surface.image,"apply-image","rig","image-query");
+                field("Transparency",Num(decal->surface.transparency));
+                s+=Button("rig-decal-delete","Remover adesivo","delete")+Button("show:rig","Editar corpo","rig");
+                s+="<div class=\"property-help\">ID: rig://"+Escape(rig->id)+"/"+Escape(decal->id)+"<br/>Membro: "+Escape(game::BodyDisplayName(body.name))+"</div>";
+            }else s="<div class=\"property-help\">Selecione um adesivo para editar face e imagem. A frente é o eixo local -Z.</div>"+Button("rig-decal-add","Adicionar adesivo","image")+Button("import-dialog","Importar imagem","folder")+Button("show:rig","Editar corpo","rig");
             html("property-body",s,propertyMarkup);return;
         }
         if(!node) {auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);text("property-title",rig?rig->name:"No selection");s=rig?Button("show:rig","Edit character","rig")+Button("show:animation","Animate","animation")+Button("rename","Rename")+Button("duplicate","Duplicate")+Button("delete","Delete"):"<div class=\"empty-state\">Select an object to edit properties.</div>";html("property-body",s,propertyMarkup);return;}
@@ -506,20 +554,35 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             else check("Spawn",spawnEnabled);
             if(spawnEnabled)input("SpawnPriority",Num(static_cast<float>(game::SpawnPriority(p))),"Spawn priority");
             s+="<div class=\"property-help\">Higher priority wins; ties use the oldest instance.</div>";
-            group("SURFACES");s+=Button("show:assets","Import / apply image","image");
+            group("SURFACES");s+=Button("show:assets","Importar / aplicar imagem","image");
+            auto surface=[&](const char* prefix,const char* label,const char* applyAction,const char* queryId) {
+                const std::string imageField=std::string(prefix)+"_image";
+                std::string image;const auto imageIt=p.attributes().find(imageField);
+                if(imageIt!=p.attributes().end())if(const auto* value=std::get_if<std::string>(&imageIt->second))image=*value;
+                s+="<div class=\"property\" data-property-name=\""+imageField+"\"><label>"+std::string(label)+"</label><span class=\"readonly\">"+Escape(image.empty()?"Nenhuma imagem":game::ImageDisplayName(game::AssetsDir(),image))+"</span></div>";
+                s+=ImagePicker(image,applyAction,prefix,queryId);
+            };
+            surface("decal","Adesivo","apply-image","image-query");
+            surface("texture","Textura","apply-texture","image-query-texture");
             for(const char* prefix:{"decal","texture"}) {
                 const std::string field=std::string(prefix)+"_face";
+                const std::string caption=std::string(prefix)=="decal"?"Face do adesivo":"Face da textura";
                 std::string face="Front";const auto it=p.attributes().find(field);if(it!=p.attributes().end())if(const auto* v=std::get_if<std::string>(&it->second))face=*v;
-                s+="<div class=\"property\" data-property-name=\""+field+"\"><label>"+std::string(prefix)+" face</label><select data-node=\""+id+"\" data-property=\""+field+"\">";
-                for(const char* option:{"Front","Back","Left","Right","Top","Bottom"}) {
-                    s+="<option value=\""+std::string(option)+"\" "+(face==option?"selected=\"selected\"":"")+">"+option+"</option>";
+                s+="<div class=\"property\" data-property-name=\""+field+"\"><label title=\""+Escape(caption)+"\">"+Escape(caption)+"</label><select data-node=\""+id+"\" data-property=\""+field+"\">";
+                for(const auto& option:std::vector<std::pair<const char*,const char*>>{{"Front","Frente"},{"Back","Trás"},{"Left","Esquerda"},{"Right","Direita"},{"Top","Topo"},{"Bottom","Base"}}) {
+                    s+="<option value=\""+std::string(option.first)+"\" "+(face==option.first?"selected=\"selected\"":"")+">"+option.second+"</option>";
                 }
                 s+="</select></div>";
             }
-            for(const char* field:{"decal_image","decal_transparency","decal_rotation","texture_image","texture_transparency","texture_repeat_u","texture_repeat_v","texture_offset_u","texture_offset_v"}) {
-                std::string v=std::string(field).find("repeat")!=std::string::npos?"1":std::string(field).find("image")!=std::string::npos?"":"0";
-                auto it=p.attributes().find(field);if(it!=p.attributes().end()){if(auto* text=std::get_if<std::string>(&it->second))v=*text;else if(auto* number=std::get_if<double>(&it->second))v=Num(*number);}
-                input(field,v);
+            const std::pair<const char*,const char*> surfaceFields[]={
+                {"decal_transparency","Transparência do adesivo"},{"decal_rotation","Rotação do adesivo"},
+                {"texture_transparency","Transparência da textura"},
+                {"texture_repeat_u","Repetição U"},{"texture_repeat_v","Repetição V"},
+                {"texture_offset_u","Deslocamento U"},{"texture_offset_v","Deslocamento V"}};
+            for(const auto& entry:surfaceFields) {
+                std::string v=std::string(entry.first).find("repeat")!=std::string::npos?"1":"0";
+                auto it=p.attributes().find(entry.first);if(it!=p.attributes().end()){if(auto* text=std::get_if<std::string>(&it->second))v=*text;else if(auto* number=std::get_if<double>(&it->second))v=Num(*number);}
+                input(entry.first,v,entry.second);
             }
         } else if(node==ui.scene_.lighting()) {
             const auto* l=ui.scene_.lighting();group("PROCEDURAL ATMOSPHERE");check("SkyEnabled",l->skyEnabled());input("Brightness",Num(l->brightness()));input("SunIntensity",Num(l->sunIntensity()));
@@ -534,6 +597,9 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         bool attributesOpen=false;
         for(const auto& a:node->attributes()) {
             if(a.first=="spawn"||a.first=="Spawn"||a.first=="spawn_priority"||a.first=="SpawnPriority")continue;
+            // Imagens de superfície têm seletor visual próprio; não repetir o
+            // caminho técnico como campo de texto avançado.
+            if(a.first=="decal_image"||a.first=="texture_image")continue;
             if(!attributesOpen){group("ATTRIBUTES");attributesOpen=true;}
             std::string v;
             if(const auto* text=std::get_if<std::string>(&a.second))v=*text;
@@ -644,7 +710,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             }
             const std::pair<ImGuiKey,Rml::Input::KeyIdentifier> keys[]={{ImGuiKey_Backspace,Rml::Input::KI_BACK},{ImGuiKey_Delete,Rml::Input::KI_DELETE},{ImGuiKey_LeftArrow,Rml::Input::KI_LEFT},{ImGuiKey_RightArrow,Rml::Input::KI_RIGHT},{ImGuiKey_Home,Rml::Input::KI_HOME},{ImGuiKey_End,Rml::Input::KI_END},{ImGuiKey_Tab,Rml::Input::KI_TAB},{ImGuiKey_A,Rml::Input::KI_A},{ImGuiKey_C,Rml::Input::KI_C},{ImGuiKey_V,Rml::Input::KI_V},{ImGuiKey_X,Rml::Input::KI_X},{ImGuiKey_Z,Rml::Input::KI_Z},{ImGuiKey_Y,Rml::Input::KI_Y}};
             for(auto key:keys){if(playerPaused&&key.first==ImGuiKey_Tab)continue;if(ImGui::IsKeyPressed(key.first))context->ProcessKeyDown(key.second,mods);if(ImGui::IsKeyReleased(key.first))context->ProcessKeyUp(key.second,mods);}
-            if(ImGui::IsKeyPressed(ImGuiKey_Enter,false)){if(dialogOpen) {EditorCommand c{dialog,value(el("dialog-value")),ui.scene_.selection()?ui.scene_.selection()->id():0};if(actions.dispatch(c)){if(dialog=="import-image")imageScan=-10;dialogOpen=false;}else text("dialog-error",ui.status_);}else {commit(focused);focusValue=value(focused);}if(auto* select=dynamic_cast<Rml::ElementFormControlSelect*>(focused))select->HideSelectBox();if(context->GetFocusElement()!=focused)focused->Focus();focused->Blur();}
+            if(ImGui::IsKeyPressed(ImGuiKey_Enter,false)){if(dialogOpen) {EditorCommand c{dialog,value(el("dialog-value")),ui.scene_.selection()?ui.scene_.selection()->id():0};if(actions.dispatch(c)){if(dialog=="import-image"||dialog.rfind("rename-image:",0)==0||dialog.rfind("replace-image:",0)==0||dialog.rfind("delete-image:",0)==0)invalidateImages();dialogOpen=false;}else text("dialog-error",ui.status_);}else {commit(focused);focusValue=value(focused);}if(auto* select=dynamic_cast<Rml::ElementFormControlSelect*>(focused))select->HideSelectBox();if(context->GetFocusElement()!=focused)focused->Focus();focused->Blur();}
             if(ImGui::IsKeyPressed(ImGuiKey_Escape,false)) {
                 if(playerPaused&&attr(focused,"type")=="range") {
                     // A slider is live, not an unfinished text edit. Escape
@@ -671,7 +737,10 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         }
         // Dispatch may blur a field and enqueue its commit. Drain by index so
         // a blur cannot invalidate an iterator while an action changes focus.
-        for(size_t i=0;i<commands.size();++i){const auto c=commands[i];actions.dispatch(c);if(c.action=="r6")showAdvanced("rig");}commands.clear();
+        bool refreshImages=false;
+        for(size_t i=0;i<commands.size();++i){const auto c=commands[i];actions.dispatch(c);if(c.action=="r6")showAdvanced("rig");
+            refreshImages|=c.action.rfind("apply-image",0)==0||c.action.rfind("apply-texture",0)==0||c.action=="remove-image"||c.action.rfind("delete-image:",0)==0||c.action.rfind("replace-image:",0)==0||c.action.rfind("rename-image:",0)==0;}
+        commands.clear();if(refreshImages)invalidateImages();
     }
     void updateTooltip() {
         auto* owner=ancestor(context->GetHoverElement(),"title");const std::string label=attr(owner,"title");
@@ -713,17 +782,18 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         } else {
             if(GetTime()-imageScan>2){images=game::ListImages(game::AssetsDir());imageScan=GetTime();}
             const auto sounds=game::ListAudioAssets(game::AssetsDir());
-            s="<h2>Local images</h2><p class=\"muted\">PNG / JPEG · select a Part, then apply a decal or repeating texture.</p>"+Button("import-dialog","Import image","folder");
-            if(images.empty())s+="<p>No imported images yet.</p>";
+            s="<h2>Imagens locais</h2><p class=\"muted\">PNG / JPEG · selecione uma peça e aplique adesivo ou textura. Renomear muda só o nome exibido.</p>"+Button("import-dialog","Importar imagem","folder");
+            if(images.empty())s+="<p>Nenhuma imagem importada ainda.</p>";
             s+="<div class=\"asset-grid\">";
-            for(const auto& image:images){const auto path=std::filesystem::path(game::AssetsDir())/image.filename;
-                s+="<div class=\"asset-card\"><img class=\"asset-preview\" src=\""+Escape(std::filesystem::absolute(path).string())+"\"/><span>"+Escape(image.id)+"</span>"+Button("apply-image","Decal","part",path.string())+Button("apply-texture","Texture","part",path.string())+Button("remove-image","Remove","delete",image.filename)+"</div>";}
+            for(const auto& image:images){const auto path=std::filesystem::absolute(std::filesystem::path(game::AssetsDir())/image.filename).string();
+                const auto usage=game::DescribeImageUsage(ui.scene_,image.filename).size();
+                s+="<div class=\"asset-card\" title=\""+Escape("ID técnico: "+image.id+" · arquivo: "+image.filename)+"\"><img class=\"asset-preview\" src=\""+Escape(path)+"\"/><span class=\"asset-name\">"+Escape(image.name)+"</span><span class=\"asset-meta\">"+ImageTypeLabel(image.filename)+" · "+(usage?std::to_string(usage)+" uso(s)":"não utilizada")+"</span>"+Button("apply-image","Adesivo","part",path)+Button("apply-texture","Textura","part",path)+Button("rename-image","Renomear","edit",image.filename)+Button("replace-image","Substituir","image",image.filename)+Button("delete-image","Excluir","delete",image.filename)+"</div>";}
             s+="</div>";
-            s+="<h2>Local sounds</h2><p class=\"muted\">MP3 / WAV / OGG · use <code>linblux.audio.play(id)</code> in a Script.</p>"+Button("import-sound","Import sound","folder");
-            if(sounds.empty())s+="<p>No imported sounds yet.</p>";
+            s+="<h2>Sons locais</h2><p class=\"muted\">MP3 / WAV / OGG · use <code>linblux.audio.play(id)</code> em um Script.</p>"+Button("import-sound","Importar som","folder");
+            if(sounds.empty())s+="<p>Nenhum som importado ainda.</p>";
             s+="<div class=\"asset-grid\">";
             for(const auto& sound:sounds)
-                s+="<div class=\"asset-card\"><span>"+Escape(sound.id)+"</span><span class=\"muted\">"+Escape(sound.reference)+"</span>"+Button("remove-sound","Remove","delete",sound.reference)+"</div>";
+                s+="<div class=\"asset-card\"><span class=\"asset-name\">"+Escape(sound.id)+"</span><span class=\"asset-meta\">"+Escape(sound.reference)+"</span>"+Button("remove-sound","Remover","delete",sound.reference)+"</div>";
             s+="</div>";
         }
         html("advanced-content",s,advancedMarkup);

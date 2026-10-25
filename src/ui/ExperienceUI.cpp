@@ -95,6 +95,39 @@ void ExperienceUI::removeAsset(const std::string& reference,bool usedByScene) {
     manager_.removeAsset(reference,usedByScene);
     dirty_=true;
 }
+std::vector<std::string> ExperienceUI::presentationUses(const std::string& reference) const {
+    std::vector<std::string> uses;
+    const auto active=manager_.active();if(!active)return uses;
+    const auto file=std::filesystem::path(game::NormalizeImageReference(reference)).filename().string();
+    if(file.empty())return uses;
+    const auto& m=active->manifest;
+    const auto matches=[&](const std::string& value) {
+        return !value.empty()&&std::filesystem::path(value).filename().string()==file;
+    };
+    if(matches(m.icon))uses.push_back("Ícone da experiência");
+    if(matches(m.banner))uses.push_back("Banner da experiência");
+    if(matches(m.loadingBackground))uses.push_back("Fundo de carregamento");
+    if(matches(m.faceImage))uses.push_back("Rosto da experiência");
+    return uses;
+}
+std::size_t ExperienceUI::replaceImageReferences(const std::string& from,const std::string& to) {
+    const auto active=manager_.active();if(!active)return 0;
+    const auto source=std::filesystem::path(game::NormalizeImageReference(from)).filename().string();
+    if(source.empty())return 0;
+    auto manifest=active->manifest;
+    std::size_t replaced=0;
+    const auto swap=[&](std::string& value) {
+        if(value.empty()||std::filesystem::path(value).filename().string()!=source)return;
+        value=to;++replaced;
+    };
+    swap(manifest.icon);swap(manifest.banner);swap(manifest.loadingBackground);swap(manifest.faceImage);
+    if(replaced) {
+        manager_.updateMetadata(manifest);
+        game::SetProjectFaceImage(manifest.faceImage);
+        dirty_=true;
+    }
+    return replaced;
+}
 void ExperienceUI::releaseLoadingImages() {
     document_.GetElementById("exp-loading-background")->RemoveAttribute("src");
     document_.GetElementById("exp-loading-icon")->RemoveAttribute("src");

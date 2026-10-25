@@ -111,6 +111,36 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             e.experienceUi_->removeAsset(c.value,game::ImageInUse(e.scene_,c.value)||game::SoundInUse(e.scene_,c.value));
             e.setStatus("Asset removido: "+c.value);
         }
+        else if(c.action.rfind("rename-image:",0)==0) {
+            std::string error;
+            if(!game::RenameImageAsset(game::AssetsDir(),c.action.substr(13),c.value,error))throw std::runtime_error(error);
+            e.setStatus("Imagem renomeada: "+c.value);
+        }
+        else if(c.action.rfind("replace-image:",0)==0) {
+            const std::string oldFile=std::filesystem::path(c.action.substr(14)).filename().string();
+            if(!ui::SafeImageFile(c.value))throw std::runtime_error("Use a PNG/JPEG within the 32 MiB file / 64 MiB decoded budget");
+            std::string asset,error;if(!game::ImportImageTo(game::AssetsDir(),c.value,asset,error))throw std::runtime_error(error);
+            const std::string reference=game::ImageAssetReference(asset);
+            // A troca reescreve as referências existentes; nada aponta para o
+            // arquivo antigo e nenhum objeto perde a superfície.
+            std::size_t replaced=game::ReplaceImageReferences(e.scene_,oldFile,reference);
+            if(e.experienceUi_)replaced+=e.experienceUi_->replaceImageReferences(oldFile,reference);
+            e.setStatus("Imagem substituída em "+std::to_string(replaced)+" referência(s).");
+        }
+        else if(c.action.rfind("delete-image:",0)==0) {
+            const std::string file=std::filesystem::path(c.action.substr(13)).filename().string();
+            std::vector<std::string> uses;
+            for(const auto& use:game::DescribeImageUsage(e.scene_,file))uses.push_back(use.where);
+            if(e.experienceUi_)for(const auto& use:e.experienceUi_->presentationUses(file))uses.push_back(use);
+            if(!uses.empty()) {
+                std::string message="A imagem ainda é usada em: ";
+                for(std::size_t i=0;i<uses.size();++i)message+=(i?" · ":"")+uses[i];
+                throw std::runtime_error(message+". Remova ou substitua essas referências antes de excluir.");
+            }
+            if(e.experienceUi_)e.experienceUi_->removeAsset(file,false);
+            else {std::string error;if(!game::RemoveAssetFile(game::AssetsDir(),file,false,error))throw std::runtime_error(error);}
+            e.setStatus("Imagem excluída da experiência: "+file);
+        }
         else if(c.action=="apply-image"||c.action=="apply-texture") {
             auto* part=e.scene_.selection();if(!part||!part->isPart())throw std::runtime_error("Select a Part before applying an image");
             const auto path=game::ResolveImagePath(game::AssetsDir(),c.value);if(path.empty())throw std::runtime_error("Image asset missing");

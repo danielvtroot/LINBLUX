@@ -616,8 +616,17 @@ void ExperienceManager::removeAsset(const std::string& reference,bool usedByScen
     const auto tail=normalized.rfind("assets/",0)==0?normalized.substr(7):std::string();
     if(tail.empty()||tail.find('/')!=std::string::npos||tail.find('\\')!=std::string::npos)
         throw std::runtime_error("Selecione um asset importado da experiência");
-    for(const auto& ref:{active_->manifest.icon,active_->manifest.banner,active_->manifest.loadingBackground,active_->manifest.faceImage})
-        if(!ref.empty()&&ref==normalized)throw std::runtime_error("O asset é usado na apresentação da experiência; troque a imagem antes de removê-lo");
+    // O manifesto em disco é a verdade: comparar pelo nome do arquivo cobre
+    // referências absolutas herdadas e metadados atualizados nesta sessão.
+    const auto current=inspect(active_->root);
+    const auto same=[&](const std::string& ref) {
+        return !ref.empty()&&std::filesystem::path(game::NormalizeImageReference(ref)).filename().string()==tail;
+    };
+    for(const auto& entry:{std::pair<const char*,std::string>{"ícone",current.manifest.icon},
+                           std::pair<const char*,std::string>{"banner",current.manifest.banner},
+                           std::pair<const char*,std::string>{"fundo de carregamento",current.manifest.loadingBackground},
+                           std::pair<const char*,std::string>{"rosto",current.manifest.faceImage}})
+        if(same(entry.second))throw std::runtime_error(std::string("A imagem é usada no ")+entry.first+" da experiência; substitua a imagem antes de removê-la");
     std::string error;
     if(!game::RemoveAssetFile((root/"assets").string(),tail,usedByScene,error))throw std::runtime_error(error);
     event("asset_removed",root);
