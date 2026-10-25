@@ -54,7 +54,7 @@ int main(int argc,char** argv) {
             const bool paused=runtime.state()==game::RuntimeState::Paused;
             game::PlayerInput input;
             if(!paused)input.script=game::CaptureScriptInput();
-            if(!paused){input.movement={float(IsKeyDown(KEY_D)-IsKeyDown(KEY_A)),float(IsKeyDown(KEY_W)-IsKeyDown(KEY_S))};input.jump=IsKeyDown(KEY_SPACE);input.shiftKey=IsKeyDown(KEY_LEFT_SHIFT);input.zoom=GetMouseWheelMove();if(IsMouseButtonDown(MOUSE_BUTTON_RIGHT)||runtime.shiftLockActive()){if(!IsCursorHidden())DisableCursor();input.look=GetMouseDelta();}else if(IsCursorHidden())EnableCursor();}
+            if(!paused){input.movement={float(IsKeyDown(KEY_D)-IsKeyDown(KEY_A)),float(IsKeyDown(KEY_W)-IsKeyDown(KEY_S))};input.jump=IsKeyDown(KEY_SPACE);input.shiftKey=IsKeyDown(KEY_LEFT_SHIFT);input.zoom=GetMouseWheelMove();if(!runtime.playerCamera().scripted()&&(IsMouseButtonDown(MOUSE_BUTTON_RIGHT)||runtime.shiftLockActive())){if(!IsCursorHidden())DisableCursor();input.look=GetMouseDelta();}else if(IsCursorHidden())EnableCursor();}
             runtime.update(GetFrameTime(),input);
             BeginDrawing();ClearBackground(ui::theme::background);
             RigRenderState avatar{&runtime.rig(),runtime.pose(),runtime.renderCharacterRoot()};

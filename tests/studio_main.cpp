@@ -274,17 +274,22 @@ void LinbluxExamples() {
     author.createScript(InstanceClass::Script,door,"Porta.lua")->source=source("porta.lua");
     author.createScript(InstanceClass::Script,nullptr,"Mundo.lua")->source=source("mundo.lua");
     author.createScript(InstanceClass::Script,nullptr,"Temporizadores.lua")->source=source("temporizadores.lua");
+    author.createScript(InstanceClass::Script,nullptr,"Camera.lua")->source=source("camera.lua");
+    author.gameAssets().player.cameraFov=80;
     const auto baseline=projectio::toJson(author);
     const auto testDir=root/".turbo"/"lua-examples";std::filesystem::create_directories(testDir);
     const auto path=(testDir/(std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".json")).string();
     CHECK(projectio::save(author,path,error));Scene reopened;CHECK(projectio::load(reopened,path,error));
     CHECK(projectio::toJson(reopened)==baseline);
+    CHECK(reopened.gameAssets().player.cameraFov==80);
     game::RuntimeSession runtime;CHECK(runtime.start(reopened,error));
     for(int i=0;i<90;++i)runtime.update(1.f/60,{});
     CHECK(runtime.scene().findPart(platform->id())->position().x>25);
     CHECK(runtime.scene().findPart(door->id())->position().y==13);
     CHECK(std::get<bool>(runtime.scene().findPart(door->id())->attributes().at("aberta")));
     CHECK(runtime.scene().workspace()->attributes().count("timer_concluido"));
+    CHECK(runtime.scene().workspace()->attributes().count("camera_concluida"));
+    CHECK(runtime.playerCamera().camera().fovy==75);
     for(const auto& message:runtime.scripts().messages()){if(message.error)std::printf("Example: %s\n",message.text.c_str());CHECK(!message.error);}
     CHECK(projectio::toJson(reopened)==baseline);CHECK(runtime.validate(error));runtime.stop();std::filesystem::remove(path);
 }

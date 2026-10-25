@@ -381,7 +381,7 @@ bool RuntimeSession::respawn(std::string& error) {
 }
 Vector3 RuntimeSession::position() const { return body_ ? Vec(body_->getWorldTransform().getOrigin()) : Vector3{}; }
 bool RuntimeSession::shiftLockActive() const {
-    return settings_.enableShiftLock && shiftLockRequested_ && state_ == RuntimeState::Playing;
+    return !camera_.scripted()&&settings_.enableShiftLock && shiftLockRequested_ && state_ == RuntimeState::Playing;
 }
 Vector3 RuntimeSession::velocity() const { return body_ ? Vec(body_->getLinearVelocity()) : Vector3{}; }
 RigidTransform RuntimeSession::characterRoot() const {
@@ -524,7 +524,7 @@ void RuntimeSession::step(float dt, Vector3 desired, bool jump) {
     if (!onGround) transition(velocity().y > 1 ? HumanoidState::Jumping : HumanoidState::Freefall);
     else if (!wasGrounded) transition(HumanoidState::Landing);
     else transition(horizontal > .2f ? HumanoidState::Walking : HumanoidState::Idle);
-    if (!(settings_.cameraLock || shiftLockActive() || camera_.firstPerson()) && settings_.autoRotate && horizontal > .2f) {
+    if (!(!camera_.scripted()&&settings_.cameraLock || shiftLockActive() || camera_.firstPerson()) && settings_.autoRotate && horizontal > .2f) {
         const float target = std::atan2(-actual.x, -actual.z);
         yaw_ += std::remainder(target-yaw_, 2*PI) * Response(settings_.turnSpeed, dt);
     }
@@ -703,7 +703,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     }
     // One facing owner in locked modes, at display frequency. A 144/240 Hz
     // camera must not wait for the next 60 Hz physics tick to turn the body.
-    if(settings_.cameraLock || shiftLockActive() || camera_.firstPerson())yaw_=camera_.yaw();
+    if((!camera_.scripted()&&settings_.cameraLock) || shiftLockActive() || camera_.firstPerson())yaw_=camera_.yaw();
     if(state_==RuntimeState::Playing)camera_.update(dt,renderCharacterRoot().position,velocity(),input,settings_,*this);
     std::vector<InstanceId> fallen;
     for(auto* part:scene_->parts()) if(!part->anchored() && part->deletable() && part->position().y<scene_->workspace()->fallenPartsDestroyHeight())fallen.push_back(part->id());
