@@ -356,7 +356,7 @@ end)
             clickVisible("image-query-"+importedImage);frames(2);
             CHECK(rig()->findDecal(second)->surface.image==game::ImageAssetReference(importedImage));
             // Nome amigável é editável e persiste em assets/image-names.json.
-            click("advanced-assets");frames(3);
+            clickVisible("cmd-show:assets-");frames(3);
             clickVisible("cmd-rename-image-"+importedImage);
             click("dialog-value");key("ctrl+a");event("type --clearmodifiers Textura importada");
             click("dialog-confirm");frames(2);
