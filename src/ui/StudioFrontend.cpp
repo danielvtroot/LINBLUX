@@ -102,6 +102,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     bool editing()const {return context&&formOwner(context->GetFocusElement());}
     void experienceInput() {
         const auto& io=ImGui::GetIO();mouseOwned=keyboardOwned=true;escapeConsumed=false;
+        if(std::getenv("LOBLOX_TRACE_HOME")&&(ImGui::IsMouseClicked(0)||ImGui::IsMouseReleased(0)))std::fprintf(stderr,"TRACE exp input focus=%d clicked=%d\n",IsWindowFocused(),ImGui::IsMouseClicked(0));
         if(!IsWindowFocused()){context->ProcessMouseLeave();context->ProcessMouseButtonUp(0,0);return;}
         const int mods=(io.KeyCtrl?Rml::Input::KM_CTRL:0)|(io.KeyShift?Rml::Input::KM_SHIFT:0)|(io.KeyAlt?Rml::Input::KM_ALT:0);
         context->ProcessMouseMove(int(io.MousePos.x*dpi),int(io.MousePos.y*dpi),mods);
