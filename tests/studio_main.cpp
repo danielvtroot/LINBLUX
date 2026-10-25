@@ -388,6 +388,25 @@ end, sensor)
         CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);
     }
 }
+void LinbluxTransformValidation() {
+    Scene author;author.buildDefaultScene();std::string error;
+    auto* target=author.createPart(PartShape::Block,{70,10,0},{3,3,3},"AlvoValidacao");target->setAnchored(true);
+    const char* sources[]{
+        "local p=linblux.scene.find('AlvoValidacao'); p.transform={position=linblux.vec3(100,100,100),size=linblux.vec3(0,2,2)}",
+        "linblux.scene.find('AlvoValidacao'):get_transform(linblux.scene.root)",
+        "linblux.scene.find('AlvoValidacao'):scale_by(-2)",
+        "local other=linblux.scene.create('part'); local c=other:add_script(\"linblux.scene.root:set_attribute('component_survived',true)\"); linblux.scene.find('AlvoValidacao'):remove_component(c)",
+        R"(linblux.scene.find('AlvoValidacao'):add_script('', 'a\0b'))",
+        "linblux.scene.find('AlvoValidacao'):add_script(string.rep('x',262145))"
+    };
+    int index=0;for(const auto* source:sources)author.createScript(InstanceClass::Script,nullptr,"ValidacaoTransform"+std::to_string(++index))->source=source;
+    const auto baseline=projectio::toJson(author);game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+    for(int i=0;i<20;++i)runtime.update(1.f/60,{});
+    CHECK(runtime.scripts().errorCount()==6);
+    const auto* actual=runtime.scene().findPart(target->id());CHECK(NearlyEqual(actual->position(),target->position()));CHECK(NearlyEqual(actual->size(),target->size()));
+    CHECK(actual->children().empty());CHECK(runtime.scene().workspace()->attributes().count("component_survived"));
+    CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);runtime.stop();
+}
 void LinbluxCameraControl() {
     Scene author;author.buildDefaultScene();std::string error;
     author.gameAssets().player.cameraFov=85;
@@ -1027,6 +1046,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }
