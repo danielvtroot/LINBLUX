@@ -32,6 +32,24 @@ bool ImportImageTo(const std::string& assetsDir, const std::string& sourcePath,
 // Lista .png/.jpg existentes em assets/, ordenada por nome.
 std::vector<ImageAsset> ListImages(const std::string& assetsDir);
 
+// Referência canônica gravada no projeto: sempre `assets/<arquivo>`.
+std::string ImageAssetReference(const std::string& filename);
+
+// Converte uma referência herdada (nome solto, caminho absoluto dentro do
+// projeto) na forma canônica. Referências externas e nomes de recursos
+// embutidos são devolvidos como estão para que a importação decida. Esta é a
+// única regra de normalização: UI e persistência usam a mesma função.
+std::string NormalizeImageReference(const std::string& reference);
+
+// true quando alguma Part, rig, decal ou céu da cena usa a imagem. A remoção
+// consulta isto antes de apagar o arquivo, para nunca deixar referência órfã.
+bool ImageInUse(const Scene& scene, const std::string& reference);
+
+// Remove um arquivo de imagem de assets/. Recusa symlinks, caminhos fora do
+// diretório de assets e imagens ainda referenciadas.
+bool RemoveImageAsset(const std::string& assetsDir, const std::string& filename,
+                      bool inUse, std::string& error);
+
 // Caminho absoluto-lógico do asset dentro de assets/ (ou vazio se ausente).
 std::string ResolveImagePath(const std::string& assetsDir, const std::string& assetPath);
 
