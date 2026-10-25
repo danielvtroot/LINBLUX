@@ -604,11 +604,13 @@ void NpcAnimation() {
     auto& rig=author.gameAssets().createLinbluxCharacter();const std::string rigId=rig.id;
     author.gameAssets().defaultRig=rigId;
     auto* npc=author.createPart(PartShape::Block,{0,3,0},{2,5,2},"NpcAnimado");
-    game::NpcProperties properties;properties.speed=14;properties.maxHealth=40;properties.respawnDelay=1;properties.rig="player";
+    NpcProperties properties;properties.speed=14;properties.maxHealth=40;properties.respawnDelay=1;properties.rig="player";
     CHECK(npc->setNpcProperties(properties,error));
     const auto npcId=npc->id();
     const auto baseline=projectio::toJson(author);
-    game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+    game::RuntimeSession runtime;
+    if(!runtime.start(author,error))std::printf("NPC animação: start falhou: %s\n",error.c_str());
+    CHECK(runtime.start(author,error));
     CHECK(runtime.npcs().attached(npcId));
     CHECK(runtime.npcs().rig(npcId)==rigId);
     runtime.update(1.f/60,{});
@@ -1389,6 +1391,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }
