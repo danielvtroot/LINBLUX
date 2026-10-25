@@ -1,6 +1,7 @@
 #include "ui/StudioFrontend.h"
 #include "ui/EditorActions.h"
 #include "ui/ExperienceUI.h"
+#include "ui/Localization.h"
 #include "ui/ImageSafety.h"
 #include "ui/RmlFrontendSupport.h"
 #include "editor/EditorUI.h"
@@ -36,7 +37,7 @@ std::string Escape(const std::string& s) {std::string out;for(char c:s)out+=c=='
 std::string Num(float v) {return numfmt::Text(v, 4);}
 std::string Hex(Color c) {char s[8];std::snprintf(s,sizeof(s),"#%02x%02x%02x",c.r,c.g,c.b);return s;}
 std::string Button(const std::string& action,const std::string& label,const std::string& icon="",const std::string& value="",const std::string& scope="cmd") {
-    return "<button id=\""+scope+"-"+action+"-"+Escape(value)+"\" data-action=\""+action+"\" data-value=\""+Escape(value)+"\">"+(icon.empty()?"":"<img src=\"icon-"+icon+"\"/>")+Escape(label)+"</button>";
+    return "<button id=\""+scope+"-"+action+"-"+Escape(value)+"\" data-action=\""+action+"\" data-value=\""+Escape(value)+"\">"+(icon.empty()?"":"<img src=\"icon-"+icon+"\"/>")+Escape(i18n::Text(label))+"</button>";
 }
 bool Within(Vector2 p,Rectangle r){return r.width>0 && CheckCollisionPointRec(p,r);}
 std::filesystem::path LayoutPath() {
@@ -83,8 +84,8 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(cached!=layout) {e->SetProperty("display",layout);cached=layout;}
         }
     }
-    void text(const std::string& id,const std::string& value){if(auto* e=el(id);e&&e->GetInnerRML()!=Escape(value))e->SetInnerRML(Escape(value));}
-    void html(const std::string& id,const std::string& value,std::string& old){if(value!=old){el(id)->SetInnerRML(value);old=value;}}
+    void text(const std::string& id,const std::string& value){if(auto* e=el(id);e&&e->GetInnerRML()!=Escape(i18n::Text(value)))e->SetInnerRML(Escape(i18n::Text(value)));}
+    void html(const std::string& id,const std::string& value,std::string& old){if(value!=old){el(id)->SetInnerRML(i18n::Markup(value));old=value;}}
     void rect(const std::string& id,Rectangle r){style(id,"left",Num(r.x)+"px");style(id,"top",Num(r.y)+"px");style(id,"width",Num(r.width)+"px");style(id,"height",Num(r.height)+"px");}
     std::string attr(Rml::Element* e,const char* name)const{return e?e->GetAttribute<Rml::String>(name,""):"";}
     Rml::Element* ancestor(Rml::Element* e,const char* name)const{while(e&&e!=document){if(e->HasAttribute(name))return e;e=e->GetParentNode();}return nullptr;}
@@ -343,7 +344,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(action=="color-dialog"||action=="material-dialog"){prompt(action=="color-dialog"?"color":"material");return;}
         if(action=="edit-color"){prompt("color:"+v);return;}
         if(action=="choose-color"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
-        if(action=="insert-menu") {std::string menu;for(const auto& item:std::vector<std::pair<std::string,std::string>>{{"part","Part"},{"folder","Folder"},{"model","Model"},{"script","Script"},{"local-script","LocalScript"},{"module","ModuleScript"},{"r6","R6 rig"}})menu+=Button(item.first,item.second);el("context-menu")->SetInnerRML(menu);auto b=bounds("new-object");rect("context-menu",{b.x-160,b.y+23,184,183});display("context-menu",true);contextOpen=true;return;}
+        if(action=="insert-menu") {std::string menu;for(const auto& item:std::vector<std::pair<std::string,std::string>>{{"part","Part"},{"folder","Folder"},{"model","Model"},{"script","Script"},{"local-script","LocalScript"},{"module","ModuleScript"},{"r6","R6 rig"}})menu+=Button(item.first,item.second);el("context-menu")->SetInnerRML(i18n::Markup(menu));auto b=bounds("new-object");rect("context-menu",{b.x-160,b.y+23,184,183});display("context-menu",true);contextOpen=true;return;}
         if(action=="cancel-dialog") {dialogOpen=false;context->GetRootElement()->Focus();return;}
         if(action=="confirm-dialog") {const auto v=value(el("dialog-value"));const auto id=ui.scene_.selection()?ui.scene_.selection()->id():0;
             if(actions.dispatch({dialog,v,id})) {if(dialog=="import-image")imageScan=-10;dialogOpen=false;context->GetRootElement()->Focus();treeHash=0;}else text("dialog-error",ui.status_);return;}
@@ -525,13 +526,13 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                     selectedRigDecal=attr(rig,"data-rig-decal");selectedDecalRig=ui.selectedRig_;
                     std::string menu=Button("rig-decal-add","Add Decal","image","","context");
                     if(!selectedRigDecal.empty())menu+=Button("rig-decal-delete","Delete Decal","delete","","context");
-                    el("context-menu")->SetInnerRML(menu);rect("context-menu",{std::min(mouse.x,float(w)-190),std::min(mouse.y,float(h)-80),184,60});
+                    el("context-menu")->SetInnerRML(i18n::Markup(menu));rect("context-menu",{std::min(mouse.x,float(w)-190),std::min(mouse.y,float(h)-80),184,60});
                     display("context-menu",true);contextOpen=true;treeKeyboard=true;rig=nullptr;
                 }
                 if(row||rig) {
                     if(row)actions.dispatch({"select","",row->GetAttribute<InstanceId>("data-node-row",0)});else actions.dispatch({"rig-select",attr(rig,"data-rig")});
                     std::string menu;for(const auto* cmd:{"rename","duplicate","copy","paste","folder","model","script","delete","focus"})if(row||std::string(cmd)=="rename"||std::string(cmd)=="duplicate"||std::string(cmd)=="delete"||std::string(cmd)=="focus")menu+=Button(cmd,cmd,"","","context");
-                    el("context-menu")->SetInnerRML(menu);rect("context-menu",{std::min(mouse.x,float(w)-190),std::min(mouse.y,float(h)-235),184,row?231.f:106.f});display("context-menu",true);contextOpen=true;treeKeyboard=true;
+                    el("context-menu")->SetInnerRML(i18n::Markup(menu));rect("context-menu",{std::min(mouse.x,float(w)-190),std::min(mouse.y,float(h)-235),184,row?231.f:106.f});display("context-menu",true);contextOpen=true;treeKeyboard=true;
                 }
             }
             if(io.MouseWheel!=0 && mouseOwned)context->ProcessMouseWheel(-io.MouseWheel,mods);
@@ -760,7 +761,7 @@ bool StudioFrontend::initialize(std::string& error) {
     std::ifstream ribbonFile(root/"documents/ribbon.rml");
     if(!ribbonFile){error="Failed to load ribbon.rml";return false;}
     const std::string ribbon((std::istreambuf_iterator<char>(ribbonFile)),std::istreambuf_iterator<char>());
-    p.el("ribbon-tools")->SetInnerRML(ribbon);
+    p.el("ribbon-tools")->SetInnerRML(i18n::Markup(ribbon));
     for(const char* type:{"click","dblclick","change","focus","blur","mousedown"})p.document->AddEventListener(type,&p,true);
     p.document->Show();p.display("context-menu",false);p.display("tooltip",false);p.display("dialog-overlay",false);p.display("game-layer",false);p.display("advanced-content",false);
     p.syncing=true;p.loadLayout();p.layout();p.ribbon();p.tree();p.properties();p.context->Update();p.syncing=false;
@@ -810,7 +811,7 @@ void StudioFrontend::draw() {
     p.context->Update();p.syncing=false;rlImGuiSetExternalTextInput(p.editing());
     if(p.timing){p.presentationTime+=beforeScene-started;p.sceneTime+=afterScene-beforeScene;p.updateTime+=GetTime()-afterScene;p.frameTime+=GetFrameTime();}
 }
-void StudioFrontend::render(){auto& p=*impl_;const double started=GetTime();p.renderer->drawCalls=0;rlDrawRenderBatchActive();p.renderer->SetViewport(GetRenderWidth(),GetRenderHeight());p.renderer->BeginFrame();p.context->Render();p.renderer->EndFrame();
+void StudioFrontend::render(){auto& p=*impl_;const double started=GetTime();p.renderer->drawCalls=0;if(p.experiences)p.experiences->drawBackground();rlDrawRenderBatchActive();p.renderer->SetViewport(GetRenderWidth(),GetRenderHeight());p.renderer->BeginFrame();p.context->Render();p.renderer->EndFrame();
     rlImGuiRenderDeferredPopups();
     if(p.mouseOwned && !(Within(GetMousePosition(),p.advancedRect)&&p.advanced!="settings"&&p.advanced!="assets"))SetMouseCursor(p.system.cursor);
     if(p.timing){p.renderTime+=GetTime()-started;if(++p.timingFrames==30){std::fprintf(stderr,"RML timing ms: presentation=%.2f scene=%.2f update=%.2f render=%.2f frame=%.2f draws=%d\n",p.presentationTime*1000/30,p.sceneTime*1000/30,p.updateTime*1000/30,p.renderTime*1000/30,p.frameTime*1000/30,p.renderer->drawCalls);p.timingFrames=0;p.presentationTime=p.sceneTime=p.updateTime=p.renderTime=p.frameTime=0;}}
@@ -839,7 +840,7 @@ void StudioFrontend::enableExperiences(experiences::ExperienceManager& manager,b
     if(!std::filesystem::exists(root))root=std::filesystem::path(GetApplicationDirectory()).parent_path()/"share/linblux/ui";
     if(!std::filesystem::exists(root))root=LINBLUX_UI_DIR;
     std::ifstream file(root/"documents/home.rml");if(!file)throw std::runtime_error("Missing home.rml");
-    const std::string html((std::istreambuf_iterator<char>(file)),{});p.el("experience-host")->SetInnerRML(html);
+    const std::string html((std::istreambuf_iterator<char>(file)),{});p.el("experience-host")->SetInnerRML(i18n::Markup(html));
     p.experiences=std::make_unique<ExperienceUI>(p.ui,manager,*p.context,*p.document);p.experiences->initialize(home);
 }
 void StudioFrontend::resetDocumentView() {

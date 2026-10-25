@@ -1,6 +1,7 @@
 #pragma once
 #include "experiences/ExperienceManager.h"
 #include "ui/NativeFileDialog.h"
+#include "media/VideoBackground.h"
 #include <future>
 #include <optional>
 #include <string>
@@ -17,6 +18,10 @@ public:
     void initialize(bool home);
     void enqueue(const std::string& action,const std::string& value={});
     void frame();
+    void drawBackground();
+    bool videoRunning() const {return background_.running();}
+    uint64_t videoDecodedFrames() const {return background_.decodedFrames();}
+    bool homeVisible() const {return home_&&!loading();}
     bool overlayActive() const;
     bool loading() const;
     bool nativeDialogActive() const {return chooser_.active();}
@@ -34,6 +39,7 @@ private:
     Rml::Context& context_;
     Rml::ElementDocument& document_;
     ui::NativeFileDialog chooser_;
+    media::VideoBackground background_;
     std::string page_="home",markup_,error_,savedWorld_,dialogPurpose_,confirm_,pendingPath_,helpText_,filter_,cardMenu_;
     size_t libraryPage_=0;
     std::vector<std::pair<std::string,std::string>> commands_;

@@ -1,4 +1,5 @@
 #include "ui/NativeFileDialog.h"
+#include "ui/Localization.h"
 #include <array>
 #include <cstdlib>
 #include <cstring>
@@ -34,9 +35,9 @@ bool NativeFileDialog::begin(const std::string& title,const std::string& initial
     if(kde) {
         args.push_back(directory?"--getexistingdirectory":save?"--getsavefilename":"--getopenfilename");args.push_back(initial);
         if(!directory)args.push_back(images?"*.png *.jpg *.jpeg|Images":"*.lo *.json|Projetos LINBLUX");
-        args.insert(args.end(),{"--title",title});
+        args.insert(args.end(),{"--title",i18n::Text(title)});
     } else {
-        args.insert(args.end(),{"--file-selection","--title="+title,"--filename="+initial});
+        args.insert(args.end(),{"--file-selection","--title="+i18n::Text(title),"--filename="+initial});
         if(directory)args.push_back("--directory");
         if(save)args.insert(args.end(),{"--save","--confirm-overwrite"});
         if(!directory)args.push_back(images?"--file-filter=Images | *.png *.jpg *.jpeg":"--file-filter=LINBLUX | *.lo *.json");

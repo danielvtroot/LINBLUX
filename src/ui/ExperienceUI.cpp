@@ -1,4 +1,5 @@
 #include "ui/ExperienceUI.h"
+#include "ui/Localization.h"
 #include "ui/EditorActions.h"
 #include "ui/StudioFrontend.h"
 #include "editor/EditorUI.h"
@@ -21,10 +22,10 @@ namespace fs=std::filesystem;
 namespace {
 std::string esc(const std::string& s){std::string out;for(char c:s)out+=c=='&'?"&amp;":c=='<'?"&lt;":c=='>'?"&gt;":c=='\"'?"&quot;":std::string(1,c);return out;}
 std::string button(const std::string& action,const std::string& label,const std::string& value={},const std::string& id={},bool primary=false) {
-    return "<button "+(id.empty()?"":"id=\""+id+"\" ")+"data-experience=\""+action+"\" data-value=\""+esc(value)+"\" class=\""+(primary?"experience-primary":"")+"\">"+esc(label)+"</button>";
+    return "<button "+(id.empty()?"":"id=\""+id+"\" ")+"data-experience=\""+action+"\" data-value=\""+esc(value)+"\" class=\""+(primary?"experience-primary":"")+"\">"+esc(i18n::Text(label))+"</button>";
 }
 void show(Rml::ElementDocument& doc,const char* id,bool visible,const char* layout="block") {if(auto* e=doc.GetElementById(id))e->SetProperty("display",visible?layout:"none");}
-void text(Rml::ElementDocument& doc,const char* id,const std::string& value) {if(auto* e=doc.GetElementById(id);e&&e->GetInnerRML()!=esc(value))e->SetInnerRML(esc(value));}
+void text(Rml::ElementDocument& doc,const char* id,const std::string& value) {if(auto* e=doc.GetElementById(id);e&&e->GetInnerRML()!=esc(i18n::Text(value)))e->SetInnerRML(esc(i18n::Text(value)));}
 std::string field(const char* id,const char* name,const std::string& value,const char* hint="") {
     return "<label class=\"experience-field\"><span>"+std::string(name)+"</span><input id=\""+id+"\" value=\""+esc(value)+"\"/><small>"+hint+"</small></label>";
 }
@@ -144,7 +145,7 @@ void ExperienceUI::dispatch(const std::string& action,const std::string& v) {
     else if(action=="cancel-form") {if(returnToStudio_){home_=false;returnToStudio_=false;}else{page_="home";dirty_=true;}}
     else if(action=="create") {
         experiences::CreateOptions options;options.name=value("exp-name");options.description=value("exp-description");options.templateId=value("exp-template");
-        options.icon=value("exp-icon");options.banner=value("exp-banner");options.loadingBackground=value("exp-loading");
+        options.icon=value("exp-icon");options.banner=value("exp-banner");options.loadingBackground.clear();
         options.useDefaultCharacter=document_.GetElementById("exp-use-character")->HasAttribute("checked");
         if(value("exp-location")!=manager_.libraryRoot().string())manager_.setLibraryRoot(value("exp-location"));
         open(manager_.create(options));
@@ -163,7 +164,7 @@ void ExperienceUI::dispatch(const std::string& action,const std::string& v) {
         auto m=selected_->manifest;m.name=value("exp-name");m.description=value("exp-description");
         const auto media=[&](const std::string& input,std::string& ref){const auto path=value(input);if(path.empty()){ref.clear();return;}
             if(path!=ref)ref=manager_.importImage(*selected_,path);};
-        media("exp-icon",m.icon);media("exp-banner",m.banner);media("exp-loading",m.loadingBackground);
+        media("exp-icon",m.icon);media("exp-banner",m.banner);
         manager_.updateMetadata(*selected_,m);selected_=manager_.inspect(selected_->root);error_.clear();
         if(returnToStudio_){home_=false;returnToStudio_=false;}else{page_="home";dirty_=true;}
     } else if(action=="remove-media") {setValue("exp-"+v,"");if(auto* image=document_.GetElementById("exp-preview-"+v))image->SetAttribute("src","icon-image");}
@@ -203,10 +204,11 @@ void ExperienceUI::dispatch(const std::string& action,const std::string& v) {
 }
 void ExperienceUI::buildPage() {
     std::string html;
-    const auto title=[&](const std::string& name,const std::string& description){return "<div class=\"experience-title\"><div><h1>"+esc(name)+"</h1><p>"+esc(description)+"</p></div><div>"+(manager_.active()?button("return-studio","Return to Studio"):"")+button("new","New Experience",{},"exp-new-main",true)+"</div></div>";};
+    const auto title=[&](const std::string& name,const std::string& description){return "<div class=\"experience-title\"><div><h1>"+esc(i18n::Text(name))+"</h1><p>"+esc(i18n::Text(description))+"</p></div><div>"+(manager_.active()?button("return-studio","Return to Studio"):"")+button("new","New Experience",{},"exp-new-main",true)+"</div></div>";};
     const bool archive=page_=="archive";
     if(page_=="home"||page_=="library"||archive||page_=="templates") {
-        html+=title(archive?"Archive":page_=="library"?"My Experiences":page_=="templates"?"Templates":"Home",archive?"Archived and deleted experiences can be restored.":"Create, build and share experiences on your computer.");
+        if(page_=="home")html+="<div class=\"home-intro\"><small>LINBLUX STUDIO</small><h1>Dê forma ao seu próximo mundo.</h1><p>Crie, programe e explore experiências 3D com liberdade.</p><div class=\"home-actions\">"+button("new","Criar experiência",{},"exp-new-main",true)+button("import","Abrir experiência",{},"exp-import")+"</div></div>";
+        else html+=title(archive?"Archive":page_=="library"?"My Experiences":page_=="templates"?"Templates":"Início",archive?"Archived and deleted experiences can be restored.":"Create, build and share experiences on your computer.");
         if(page_!="templates") {
             entries_=manager_.list(archive);
             if(page_!="home") {
@@ -214,14 +216,14 @@ void ExperienceUI::buildPage() {
                 auto lower=[](std::string s){for(char& c:s)c=char(std::tolower(static_cast<unsigned char>(c)));return s;};
                 const auto query=lower(filter_);entries_.erase(std::remove_if(entries_.begin(),entries_.end(),[&](const auto& e){return lower(e.manifest.name+" "+e.manifest.description).find(query)==std::string::npos;}),entries_.end());
             }
-            html+="<div class=\"experience-section\"><h2>"+std::string(archive?"Archived Experiences":page_=="library"?"All Experiences":"My Recent Experiences")+"</h2>"+button("page","View all","library")+"</div><div class=\"experience-grid\">";
-            if(entries_.empty())html+="<div class=\"experience-empty\">"+std::string(archive?"Your archive is empty.":"Your next experience starts here. Choose a template below, or import a .lo / legacy project.")+"</div>";
+            html+="<div class=\"experience-section\"><h2>"+std::string(archive?"Archived Experiences":page_=="library"?"All Experiences":"Experiências recentes")+"</h2>"+button("page","View all","library")+"</div><div class=\"experience-grid\">";
+            if(entries_.empty())html+="<div class=\"experience-empty\">"+std::string(archive?"Your archive is empty.":"Seu próximo mundo começa aqui. Crie uma experiência ou abra um projeto existente.")+"</div>";
             const size_t limit=page_=="home"?8:24;
             const size_t pages=std::max(size_t(1),(entries_.size()+limit-1)/limit);
             libraryPage_=std::min(libraryPage_,pages-1);const size_t start=page_=="home"?0:libraryPage_*limit;
             for(size_t i=start;i<std::min(entries_.size(),start+limit);++i) {
                 const auto& entry=entries_[i];fs::path thumb;try{thumb=manager_.thumbnail(entry);}catch(const std::exception&){}
-                html+="<div class=\"experience-card\" data-experience-card=\""+entry.manifest.installationId+"\"><div class=\"experience-cover\"><img class=\""+std::string(thumb.empty()?"experience-placeholder":"")+"\" src=\""+esc(thumb.empty()?"icon-part":thumb.string())+"\"/></div><div class=\"experience-card-body\"><h3>"+esc(entry.manifest.name)+"</h3><p>"+esc(entry.manifest.description.empty()?"Uma experiência LINBLUX local":entry.manifest.description)+"</p><small>Local · "+esc(entry.manifest.modified.substr(0,10))+"</small><div class=\"experience-card-actions\">"+button(archive?"details":"open",archive?"Manage":"Open",entry.manifest.installationId,"exp-open-"+std::to_string(i),true)+button("card-menu","…",entry.manifest.installationId,"exp-details-"+std::to_string(i))+"</div></div>";
+                html+="<div class=\"experience-card\" data-experience-card=\""+entry.manifest.installationId+"\"><div class=\"experience-cover\"><img class=\""+std::string(thumb.empty()?"experience-placeholder":"")+"\" src=\""+esc(thumb.empty()?"linblux-logo":thumb.string())+"\"/></div><div class=\"experience-card-body\"><h3>"+esc(entry.manifest.name)+"</h3><p>"+esc(entry.manifest.description.empty()?"Uma experiência LINBLUX local":entry.manifest.description)+"</p><small>Local · "+esc(entry.manifest.modified.substr(0,10))+"</small><div class=\"experience-card-actions\">"+button(archive?"details":"open",archive?"Manage":"Open",entry.manifest.installationId,"exp-open-"+std::to_string(i),true)+button("card-menu","…",entry.manifest.installationId,"exp-details-"+std::to_string(i))+"</div></div>";
                 if(cardMenu_==entry.manifest.installationId)html+="<div class=\"experience-card-menu\">"+button("details","Rename / Edit Details…",entry.manifest.installationId,"exp-card-details")+button("duplicate","Duplicate")+button("export","Export .lo…")+button(archive?"restore":"archive",archive?"Restore":"Archive")+button("delete","Delete…")+button("dismiss-card","Close")+"</div>";
                 html+="</div>";
             }
@@ -229,13 +231,13 @@ void ExperienceUI::buildPage() {
             if(page_!="home"&&pages>1)html+="<div class=\"experience-pagination\">"+button("previous-page","Previous",{},"exp-prev")+"<span>Page "+std::to_string(libraryPage_+1)+" of "+std::to_string(pages)+" · "+std::to_string(entries_.size())+" experiences</span>"+button("next-page","Next",{},"exp-next")+"</div>";
             if(page_=="home"||page_=="library")for(const auto& lost:manager_.missing())html+="<div class=\"experience-missing\"><b>"+esc(lost.name)+"</b><small>Unavailable: "+esc(lost.previousRoot.string())+"</small>"+button("locate","Locate directory…",lost.installationId)+button("forget-missing","Forget recent entry",lost.installationId)+"</div>";
         }
-        if(page_=="home"||page_=="templates") {
+        if(page_=="templates") {
             const auto available=manager_.templates();const bool hasDefault=std::any_of(available.begin(),available.end(),[](const auto& item){return item.id=="my-default";});
             html+="<div class=\"experience-section\"><h2>Open a Template</h2>"+(hasDefault?button("edit-default","Edit My Default"):"")+"</div><div class=\"experience-grid\">";
             for(const auto& item:available)html+="<button id=\"exp-template-"+item.id+"\" class=\"experience-template\" data-experience=\"new\" data-value=\""+item.id+"\"><img src=\"icon-"+std::string(item.id=="classic"?"rig":item.id=="my-default"?"folder":"part")+"\"/><b>"+esc(item.name)+"</b><small>Local template</small></button>";
             html+="</div>";
         }
-        if(page_=="home")html+="<div class=\"experience-section\"><h2>Conheça o LINBLUX</h2></div><div class=\"experience-discover\"><button data-experience=\"help\" data-value=\"STUDIO2_GUIDE.md\"><b>Start building</b><small>Tools, Explorer and local projects</small></button><button data-experience=\"help\" data-value=\"LUA_API.md\"><b>Game scripting</b><small>Lua APIs implemented by Loblox</small></button><button data-experience=\"help\" data-value=\"EXPERIENCES.md\"><b>Share an experience</b><small>Portable files and your own templates</small></button></div>";
+
     } else if(page_=="new"||page_=="details") {
         const bool create=page_=="new";const auto m=!create&&selected_?selected_->manifest:experiences::Manifest{};
         html+=title(create?"New Experience":"Experience Details",create?"Start from a real template. Your source files stay untouched.":"Presentation images are independent from your map and character.");
@@ -253,13 +255,13 @@ void ExperienceUI::buildPage() {
             html+="</div>";
         }
         html+="</div><div class=\"experience-media\">";
-        const char* ids[]={"icon","banner","loading"};const char* names[]={"Experience Icon","Experience Banner","Loading Background"};
-        const std::string refs[]={m.icon,m.banner,m.loadingBackground};
-        for(int i=0;i<3;++i){const auto path=selected_&&!create&&!refs[i].empty()?(selected_->root/refs[i]).string():"icon-image";
+        const char* ids[]={"icon","banner"};const char* names[]={"Ícone do mapa","Banner do mapa"};
+        const std::string refs[]={m.icon,m.banner};
+        for(int i=0;i<2;++i){const auto path=selected_&&!create&&!refs[i].empty()?(selected_->root/refs[i]).string():"icon-image";
             html+="<div class=\"experience-media-block\"><b>"+std::string(names[i])+"</b><div class=\"experience-media-preview\"><img id=\"exp-preview-"+ids[i]+"\" src=\""+esc(path)+"\"/></div><input id=\"exp-"+ids[i]+"\" value=\""+esc(refs[i])+"\" placeholder=\"Optional image path\"/>"+button("choose-media","Choose image…",ids[i],"exp-choose-"+std::string(ids[i]))+button("remove-media","Remove",ids[i])+"<small>"+std::string(i==0?"Square recommended · 512 × 512":i==1?"16:9 recommended · 1920 × 1080":"Any aspect ratio · cover crop during entry")+"</small></div>";}
         html+="</div></div><div class=\"experience-form-footer\">"+button("cancel-form",returnToStudio_?"Back to Studio":"Cancel")+button(create?"create":"save-details",create?"Create & Open":"Save Details",{},create?"exp-create":"exp-save-details",true)+"</div>";
     } else if(page_=="help")html+=title("Ajuda do LINBLUX","Local documentation for implemented features")+"<pre class=\"experience-help\">"+esc(helpText_)+"</pre>";
-    document_.GetElementById("experience-content")->SetInnerRML(html);
+    document_.GetElementById("experience-content")->SetInnerRML(i18n::Markup(html));
     // Release old page thumbnails at navigation boundaries, never per frame.
     Rml::ReleaseTextures();markup_=std::move(html);dirty_=false;
 }
@@ -282,6 +284,9 @@ void ExperienceUI::requestPlay() {
             background->SetProperty("left",std::to_string((GetScreenWidth()-info.width*scale)/2)+"px");background->SetProperty("top",std::to_string((GetScreenHeight()-info.height*scale)/2)+"px");
         }
     } else background->RemoveAttribute("src");
+}
+void ExperienceUI::drawBackground() {
+    if(homeVisible())background_.draw(GetScreenWidth(),GetScreenHeight());
 }
 void ExperienceUI::frame() {
     auto commands=std::move(commands_);commands_.clear();
@@ -309,6 +314,8 @@ void ExperienceUI::frame() {
         if(opacity<=0){load_=LoadState::None;releaseLoadingImages();editor_.finishPlayStart();}
     }
     if(home_&&dirty_)try{buildPage();}catch(const std::exception& e){error_=e.what();}
+    if(homeVisible()){if(!background_.running())background_.start(game::BuiltinAssetPath("midia/careditfullhd.mp4"));}
+    else if(background_.running())background_.stop();
     show(document_,"experience-home",home_);show(document_,"experience-root",true);
     show(document_,"experience-file-shade",fileMenu_&&!home_);show(document_,"experience-loading",loading());
     if(load_==LoadState::Paint)document_.GetElementById("experience-loading")->SetProperty("opacity","1");

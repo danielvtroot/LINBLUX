@@ -316,9 +316,6 @@ Rml::TextureHandle StudioRenderer::LoadTexture(Rml::Vector2i& dimensions, const 
         UnloadImage(image);
         return 0;
     }
-    // The original logo keeps a wide transparent margin around its artwork.
-    // Trim it so the small circular menu button shows the mark at the same
-    // correct visual weight at small sizes.
     // Preserve the official logo pixels and alpha; proportional layout controls its size.
     const int longest = std::max(image.width, image.height);
     if (longest > maxEdge) {

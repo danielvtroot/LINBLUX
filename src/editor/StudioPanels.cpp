@@ -1,3 +1,4 @@
+#include "ui/Localization.h"
 #include "editor/EditorUI.h"
 #include "ui/StudioFrontend.h"
 #include "game/ImageAssets.h"
@@ -200,9 +201,9 @@ int LuaEditCallback(ImGuiInputTextCallbackData* data) {
 }
 }
 void EditorUI::drawInstanceProperties(Instance& object) {
-    ImGui::TextWrapped("%s  /  %s",object.name().c_str(),object.className());
+    ImGui::TextWrapped(i18n::Label("%s  /  %s"),object.name().c_str(),object.className());
     ImGui::SetNextItemWidth(-1);
-    ImGui::InputTextWithHint("##property_filter","Search properties",propertiesFilter_,sizeof(propertiesFilter_));
+    ImGui::InputTextWithHint(i18n::Label("##property_filter"),"Search properties",propertiesFilter_,sizeof(propertiesFilter_));
     ImGui::PushID(static_cast<int>(object.id()));
     const auto category=[&](const char* label) {
         return ImGui::CollapsingHeader(label,ImGuiTreeNodeFlags_DefaultOpen);
@@ -227,10 +228,10 @@ void EditorUI::drawInstanceProperties(Instance& object) {
                 if (*text) object.setName(text); else setStatus("Name nao pode ser vazio.",true);
             }
         }
-        if (row("ClassName")) ImGui::TextDisabled("%s",object.className());
-        if (row("Stable ID")) ImGui::TextDisabled("%llu",static_cast<unsigned long long>(object.id()));
+        if (row("ClassName")) ImGui::TextDisabled(i18n::Label("%s"),object.className());
+        if (row("Stable ID")) ImGui::TextDisabled(i18n::Label("%llu"),static_cast<unsigned long long>(object.id()));
         if (row("Parent","Organizational parenting preserves world transforms.")) {
-            if (ImGui::BeginCombo("##Parent",object.parent()?object.parent()->name().c_str():"Game (root)")) {
+            if (ImGui::BeginCombo(i18n::Label("##Parent"),object.parent()?object.parent()->name().c_str():"Game (root)")) {
                 for (const auto& candidate:scene_.objects()) {
                     if (!scene_.canParent(&object,candidate.get())) continue;
                     ImGui::PushID(static_cast<int>(candidate->id()));
@@ -275,11 +276,11 @@ void EditorUI::drawInstanceProperties(Instance& object) {
             }
             if (row("Transparency","Stored as the color alpha channel.")) {
                 float alpha=1-part.color().a/255.f;
-                if (ImGui::SliderFloat("##Transparency",&alpha,0,1,"%.2f")) {
+                if (ImGui::SliderFloat(i18n::Label("##Transparency"),&alpha,0,1,"%.2f")) {
                     auto color=part.color(); color.a=static_cast<unsigned char>(std::lround((1-alpha)*255)); part.setColor(color);
                 }
             }
-            if (row("Material") && ImGui::BeginCombo("##Material",PartMaterialName(part.material()))) {
+            if (row("Material") && ImGui::BeginCombo(i18n::Label("##Material"),PartMaterialName(part.material()))) {
                 for (int i=0;i<PartMaterialCount();++i) if(ImGui::Selectable(PartMaterialName(PartMaterialFromIndex(i)),part.material()==PartMaterialFromIndex(i))) part.setMaterial(PartMaterialFromIndex(i));
                 ImGui::EndCombo();
             }
@@ -291,8 +292,8 @@ void EditorUI::drawInstanceProperties(Instance& object) {
             auto importPopup = [&]() {
                 if (ImGui::BeginPopup("##import_image")) {
                     if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
-                    ImGui::InputTextWithHint("##import_path", "Path ou colhe o caminho (.png/.jpg)", importPath, sizeof(importPath));
-                    if (ImGui::Button("Importar") && importPath[0]) {
+                    ImGui::InputTextWithHint(i18n::Label("##import_path"), "Path ou colhe o caminho (.png/.jpg)", importPath, sizeof(importPath));
+                    if (ImGui::Button(i18n::Label("Importar")) && importPath[0]) {
                         std::string usable, err;
                         if (game::ImportImageTo(game::AssetsDir(), importPath, usable, err)) {
                             ImGui::CloseCurrentPopup();
@@ -300,13 +301,13 @@ void EditorUI::drawInstanceProperties(Instance& object) {
                         } else setStatus(err, true);
                     }
                     ImGui::SameLine();
-                    if (ImGui::Button("Cancelar")) ImGui::CloseCurrentPopup();
+                    if (ImGui::Button(i18n::Label("Cancelar"))) ImGui::CloseCurrentPopup();
                     ImGui::EndPopup();
                 }
             };
             if (row("Decal Image", "Imagem aplicada-textura; ID estável, sem caminho absoluto.")) {
                 const auto id = part.attributes().find("decal_image");
-                if (ImGui::SmallButton("Importar...")) ImGui::OpenPopup("##import_image");
+                if (ImGui::SmallButton(i18n::Label("Importar..."))) ImGui::OpenPopup("##import_image");
                 ImGui::SameLine();
                 ImGui::TextUnformatted(id != part.attributes().end() && std::get_if<std::string>(&id->second) ? std::get<std::string>(id->second).c_str() : "(nenhum)");
                 importPopup();
@@ -316,7 +317,7 @@ void EditorUI::drawInstanceProperties(Instance& object) {
                 if (const auto it = part.attributes().find("decal_face"); it != part.attributes().end())
                     if (const auto* txt = std::get_if<std::string>(&it->second))
                         for (int f = 0; f < 6; ++f) if (*txt == faces[f]) face = f;
-                if (ImGui::BeginCombo("##decal_face", faces[face])) {
+                if (ImGui::BeginCombo(i18n::Label("##decal_face"), faces[face])) {
                     for (int f = 0; f < 6; ++f) if (ImGui::Selectable(faces[f])) part.setAttribute("decal_face", std::string(faces[f]));
                     ImGui::EndCombo();
                 }
@@ -326,7 +327,7 @@ void EditorUI::drawInstanceProperties(Instance& object) {
                 if (const auto it = part.attributes().find("decal_transparency"); it != part.attributes().end())
                     if (const auto* v = std::get_if<double>(&it->second)) t = *v;
                 float transparency=static_cast<float>(t);
-                if (ImGui::SliderFloat("##decal_transparency", &transparency, 0, 1, "%.2f"))
+                if (ImGui::SliderFloat(i18n::Label("##decal_transparency"), &transparency, 0, 1, "%.2f"))
                     part.setAttribute("decal_transparency", static_cast<double>(transparency));
             }
             if (row("Decal Rotation")) {
@@ -337,7 +338,7 @@ void EditorUI::drawInstanceProperties(Instance& object) {
                 int idx = (int)((int)std::lround(deg)) % 360;
                 if (idx < 0) { idx += 360; }
                 idx = idx / 90;
-                if (ImGui::BeginCombo("##decal_rotation", turns[idx])) {
+                if (ImGui::BeginCombo(i18n::Label("##decal_rotation"), turns[idx])) {
                     for (int t = 0; t < 4; ++t) if (ImGui::Selectable(turns[t])) part.setAttribute("decal_rotation", (double)(t * 90));
                     ImGui::EndCombo();
                 }
@@ -362,16 +363,16 @@ void EditorUI::drawInstanceProperties(Instance& object) {
             static double lastScan = -1.0;
             const double now = ImGui::GetTime();
             if (lastScan < 0.0 || now - lastScan > 2.0) { assetsCache = game::ListImages(game::AssetsDir()); lastScan = now; }
-            ImGui::TextDisabled("Imagens em %s: %zu", game::AssetsDir().c_str(), assetsCache.size());
+            ImGui::TextDisabled(i18n::Label("Imagens em %s: %zu"), game::AssetsDir().c_str(), assetsCache.size());
         }
         if (category("Behavior") && table("Behavior values")) {
             ImGui::BeginDisabled(part.instanceClass()==InstanceClass::Baseplate);
-            if (row("Anchored")) { bool value=part.anchored(); if(ImGui::Checkbox("##Anchored",&value)) part.setAnchored(value); }
-            if (row("CanCollide")) { bool value=part.canCollide(); if(ImGui::Checkbox("##CanCollide",&value)) part.setCanCollide(value); }
+            if (row("Anchored")) { bool value=part.anchored(); if(ImGui::Checkbox(i18n::Label("##Anchored"),&value)) part.setAnchored(value); }
+            if (row("CanCollide")) { bool value=part.canCollide(); if(ImGui::Checkbox(i18n::Label("##CanCollide"),&value)) part.setCanCollide(value); }
             if (row("Damage","Contact damage; solid Bullet contact, cooldown 0.75 seconds, runtime only.")) {
                 float amount=0;const auto it=part.attributes().find("Damage");
                 if(it!=part.attributes().end())if(const auto* n=std::get_if<double>(&it->second))amount=float(*n);
-                if(ImGui::InputFloat("##Damage",&amount,1,10,"%.1f",ImGuiInputTextFlags_EnterReturnsTrue)) {
+                if(ImGui::InputFloat(i18n::Label("##Damage"),&amount,1,10,"%.1f",ImGuiInputTextFlags_EnterReturnsTrue)) {
                     if(std::isfinite(amount)&&amount>=0&&amount<=100000)part.setAttribute("Damage",double(amount));
                     else setStatus("Damage deve ser finito, entre 0 e 100000.",true);
                 }
@@ -381,20 +382,20 @@ void EditorUI::drawInstanceProperties(Instance& object) {
     }
     if (IsScriptClass(object.instanceClass()) && category("Script") && table("Script values")) {
         auto& script=static_cast<Script&>(object);
-        if (row("Enabled")) ImGui::Checkbox("##Enabled",&script.enabled);
-        if (row("RunContext")) ImGui::TextWrapped("%s",script.instanceClass()==InstanceClass::ModuleScript?"Module: on require":
+        if (row("Enabled")) ImGui::Checkbox(i18n::Label("##Enabled"),&script.enabled);
+        if (row("RunContext")) ImGui::TextWrapped(i18n::Label("%s"),script.instanceClass()==InstanceClass::ModuleScript?"Module: on require":
             script.instanceClass()==InstanceClass::LocalScript?"Local player (in process)":"Authoritative (in process)");
-        if (row("Source")) { ImGui::Text("%zu bytes",script.source.size());if(ImGui::SmallButton("Open Script Editor"))openScript(script.id()); }
+        if (row("Source")) { ImGui::Text(i18n::Label("%zu bytes"),script.source.size());if(ImGui::SmallButton(i18n::Label("Open Script Editor")))openScript(script.id()); }
         if (row("Last runtime")) {
             const auto& messages=runtime_.scripts().messages();const scripting::Message* latest=nullptr;
             for(auto it=messages.rbegin();it!=messages.rend();++it)if(it->script==script.name()){latest=&*it;break;}
-            if(latest)ImGui::TextWrapped("%s: %s",latest->error?"Error":"Output",latest->text.c_str());
-            else ImGui::TextWrapped("No output/error in this session");
+            if(latest)ImGui::TextWrapped(i18n::Label("%s: %s"),latest->error?"Error":"Output",latest->text.c_str());
+            else ImGui::TextWrapped(i18n::Label("No output/error in this session"));
         }
         ImGui::EndTable();
     }
     ImGui::PopID();
-    if (ImGui::Button("Focus (F)",{-1,0})) focusSelection();
+    if (ImGui::Button(i18n::Label("Focus (F)"),{-1,0})) focusSelection();
 }
 
 void EditorUI::insertScript(InstanceClass type) {
@@ -510,13 +511,13 @@ void EditorUI::drawCentralScriptWorkspace() {
     ImGui::SetCursorPos(ImVec2(10,8));
     ImGui::PushID(static_cast<int>(activeDocument_));
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("SCRIPT");
+    ImGui::TextUnformatted(i18n::Label("SCRIPT"));
     ImGui::SameLine();
-    ImGui::TextDisabled("%s",object->name().c_str());
+    ImGui::TextDisabled(i18n::Label("%s"),object->name().c_str());
     if(draft.dirty){ImGui::SameLine();ImGui::TextColored(ImVec4(1,.72f,.35f,1),"modified");}
     const float closeWidth=ImGui::CalcTextSize("Close tab").x+ImGui::GetStyle().FramePadding.x*2;
     ImGui::SameLine(std::max(ImGui::GetCursorPosX(),ImGui::GetWindowContentRegionMax().x-closeWidth));
-    if(ImGui::SmallButton("Close tab"))closeDocument(activeDocument_);
+    if(ImGui::SmallButton(i18n::Label("Close tab")))closeDocument(activeDocument_);
     drawScriptEditorBody(*object,draft,true);
     ImGui::PopID();
     ImGui::PopStyleVar();
@@ -525,24 +526,24 @@ void EditorUI::drawCentralScriptWorkspace() {
 void EditorUI::drawScriptEditorBody(Instance& object,ScriptDraft& draft,bool central) {
     const auto& io=ImGui::GetIO();
     const bool windowFocused=ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-    if(ImGui::SmallButton("Reveal in Explorer"))scene_.select(&object);
+    if(ImGui::SmallButton(i18n::Label("Reveal in Explorer")))scene_.select(&object);
     ImGui::SameLine();
-    if(ImGui::SmallButton("Save project"))saveCurrentProject();
+    if(ImGui::SmallButton(i18n::Label("Save project")))saveCurrentProject();
     ImGui::SameLine();
-    if(ImGui::SmallButton("Revert source")) {
+    if(ImGui::SmallButton(i18n::Label("Revert source"))) {
         draft.text=static_cast<Script&>(object).source;draft.baseline=draft.text;
         draft.dirty=false;draft.undo.clear();draft.redo.clear();
         draft.pendingCursor=0;draft.restoreFocus=true;
     }
-    ImGui::SameLine();ImGui::TextDisabled("%zu / 262144 bytes | Lua 5.4",draft.text.size());
-    ImGui::SetNextItemWidth(180);ImGui::InputTextWithHint("##find","Find text",draft.search,sizeof(draft.search));
+    ImGui::SameLine();ImGui::TextDisabled(i18n::Label("%zu / 262144 bytes | Lua 5.4"),draft.text.size());
+    ImGui::SetNextItemWidth(180);ImGui::InputTextWithHint(i18n::Label("##find"),"Find text",draft.search,sizeof(draft.search));
     if(*draft.search) {
         const auto found=draft.text.find(draft.search);
-        ImGui::SameLine();if(found==std::string::npos)ImGui::TextDisabled("Not found");
+        ImGui::SameLine();if(found==std::string::npos)ImGui::TextDisabled(i18n::Label("Not found"));
         else {
             const int line=1+static_cast<int>(std::count(draft.text.begin(),draft.text.begin()+found,'\n'));
-            ImGui::Text("Line %d",line);ImGui::SameLine();
-            if(ImGui::SmallButton("Go to match")) {
+            ImGui::Text(i18n::Label("Line %d"),line);ImGui::SameLine();
+            if(ImGui::SmallButton(i18n::Label("Go to match"))) {
                 draft.line=line;draft.pendingLine=line;
                 draft.pendingCursor=static_cast<int>(found);
                 draft.restoreFocus=true;
@@ -550,8 +551,8 @@ void EditorUI::drawScriptEditorBody(Instance& object,ScriptDraft& draft,bool cen
         }
     }
     ImGui::SetNextItemWidth(80);
-    ImGui::InputInt("Line",&draft.line,0,0);ImGui::SameLine();
-    if(ImGui::SmallButton("Go")) {
+    ImGui::InputInt(i18n::Label("Line"),&draft.line,0,0);ImGui::SameLine();
+    if(ImGui::SmallButton(i18n::Label("Go"))) {
         draft.pendingLine=std::max(1,draft.line);
         draft.pendingCursor=-1;
         draft.restoreFocus=true;
@@ -642,7 +643,7 @@ void EditorUI::drawScriptEditorBody(Instance& object,ScriptDraft& draft,bool cen
     draw->PopClipRect();
     ImGui::PopFont();
     if(scriptErrors>0)ImGui::TextColored(ImVec4(1,.45f,.4f,1),"Erros de runtime: %d (veja o Output)",scriptErrors);
-    else ImGui::TextDisabled("Tab indents | Ctrl+Z/Y undo/redo | Ctrl+S save | Ctrl+W close tab | so executa no Play");
+    else ImGui::TextDisabled(i18n::Label("Tab indents | Ctrl+Z/Y undo/redo | Ctrl+S save | Ctrl+W close tab | so executa no Play"));
     if(restoreFocus)draft.restoreFocus=false;
     if(windowFocused&&io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_S,false))saveCurrentProject();
     if(central&&windowFocused&&io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_W,false))closeDocument(activeDocument_);
@@ -658,15 +659,15 @@ void EditorUI::drawScriptEditor() {
     }
     ImGui::SetNextWindowSize({750,440},ImGuiCond_FirstUseEver);
     if(frontend_)frontend_->prepareAdvanced();
-    if(!ImGui::Begin("Script Editor",&showScriptEditor_,frontend_?(ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoDocking):0)){ImGui::End();return;}
-    if(ImGui::Button("New Script"))insertScript();
+    if(!ImGui::Begin(i18n::Label("Script Editor"),&showScriptEditor_,frontend_?(ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoDocking):0)){ImGui::End();return;}
+    if(ImGui::Button(i18n::Label("New Script")))insertScript();
     ImGui::SameLine();
-    if(ImGui::Button("New Module"))insertScript(InstanceClass::ModuleScript);
+    if(ImGui::Button(i18n::Label("New Module")))insertScript(InstanceClass::ModuleScript);
     ImGui::SameLine();
-    if(ImGui::Button("Save All + Project"))saveCurrentProject();
+    if(ImGui::Button(i18n::Label("Save All + Project")))saveCurrentProject();
     ImGui::SameLine();
-    if(ImGui::Button("Play"))startPlay();
-    ImGui::SameLine();if(ImGui::Button("Output"))showOutput_=true;
+    if(ImGui::Button(i18n::Label("Play")))startPlay();
+    ImGui::SameLine();if(ImGui::Button(i18n::Label("Output")))showOutput_=true;
     if(ImGui::BeginTabBar("Scripts",ImGuiTabBarFlags_FittingPolicyScroll)) {
         for(auto it=scriptDrafts_.begin();it!=scriptDrafts_.end();) {
             auto* object=scene_.find(it->first);
@@ -694,15 +695,15 @@ void EditorUI::drawOutput() {
     }
     ImGui::SetNextWindowSize({740,230},ImGuiCond_FirstUseEver);
     if(frontend_)frontend_->prepareAdvanced();
-    if(!ImGui::Begin("Output",&showOutput_,frontend_?(ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoDocking):0)){ImGui::End();return;}
-    ImGui::Text("Lua: %zu KiB / 8192 | %zu / 128 tasks",runtime_.scripts().memoryUsed()/1024,runtime_.scripts().taskCount());
+    if(!ImGui::Begin(i18n::Label("Output"),&showOutput_,frontend_?(ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoDocking):0)){ImGui::End();return;}
+    ImGui::Text(i18n::Label("Lua: %zu KiB / 8192 | %zu / 128 tasks"),runtime_.scripts().memoryUsed()/1024,runtime_.scripts().taskCount());
     ImGui::Separator();
     int messageIndex=0;
     outputMessageRects_.clear();
     for(const auto& message:runtime_.scripts().messages()) {
         ImGui::PushID(++messageIndex);
         ImGui::PushStyleColor(ImGuiCol_Text,message.error?ImVec4(1,.4f,.35f,1):ImVec4(.7f,.85f,.75f,1));
-        ImGui::TextWrapped("[%s] %s",message.script.c_str(),message.text.c_str());
+        ImGui::TextWrapped(i18n::Label("[%s] %s"),message.script.c_str(),message.text.c_str());
         const ImVec2 messageMin=ImGui::GetItemRectMin(), messageMax=ImGui::GetItemRectMax();
         outputMessageRects_.push_back({messageMin.x,messageMin.y,messageMax.x-messageMin.x,messageMax.y-messageMin.y});
         ImGui::PopStyleColor();

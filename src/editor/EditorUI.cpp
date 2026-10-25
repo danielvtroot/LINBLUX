@@ -1,3 +1,4 @@
+#include "ui/Localization.h"
 #include "editor/EditorUI.h"
 #include "ui/ExperienceUI.h"
 #include "editor/StudioTheme.h"
@@ -1204,29 +1205,29 @@ void EditorUI::drawMainMenuBar() {
     if (!ImGui::BeginMainMenuBar()) return;
     const auto& headerLogo=LoadLinbluxLogo();
     if(headerLogo.ok)ImGui::Image(static_cast<ImTextureID>(headerLogo.id),{18.f*headerLogo.width/headerLogo.height,18});
-    else ImGui::TextUnformatted("L");
+    else ImGui::TextUnformatted(i18n::Label("L"));
     ImGui::SameLine(0.0f, 4.0f);
-    ImGui::TextUnformatted("LINBLUX");
+    ImGui::TextUnformatted(i18n::Label("LINBLUX"));
     ImGui::SameLine(0.0f, 18.0f);
     ImGui::BeginDisabled(runtime_.active());
-    if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("Save Project", "Ctrl+S")) {
+    if (ImGui::BeginMenu(i18n::Label("File"))) {
+        if (ImGui::MenuItem(i18n::Label("Save Project"), "Ctrl+S")) {
             saveCurrentProject();
         }
-        if (ImGui::MenuItem("Save Project As...")) {
+        if (ImGui::MenuItem(i18n::Label("Save Project As..."))) {
             endGizmoSession(true);
             requestSavePopup_ = true;
             std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
             dialogError_.clear();
         }
-        if (ImGui::MenuItem("Open Project...", "Ctrl+O")) {
+        if (ImGui::MenuItem(i18n::Label("Open Project..."), "Ctrl+O")) {
             endGizmoSession(true);
             requestOpenPopup_ = true;
             std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
             dialogError_.clear();
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("Export Scene as Lua...")) {
+        if (ImGui::MenuItem(i18n::Label("Export Scene as Lua..."))) {
             endGizmoSession(true);
             requestLuaExportPopup_ = true;
             std::string luaPath = projectPath_;
@@ -1236,7 +1237,7 @@ void EditorUI::drawMainMenuBar() {
             std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", luaPath.c_str());
             dialogError_.clear();
         }
-        if (ImGui::MenuItem("Import Scene from Lua...")) {
+        if (ImGui::MenuItem(i18n::Label("Import Scene from Lua..."))) {
             endGizmoSession(true);
             requestLuaImportPopup_ = true;
             std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", "projects/scene.lua");
@@ -1244,48 +1245,48 @@ void EditorUI::drawMainMenuBar() {
         }
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("Home")) {
-        if (ImGui::MenuItem("Select", "1")) setTool(ToolMode::Select, "menu");
-        if (ImGui::MenuItem("Move", "2")) setTool(ToolMode::Move, "menu");
-        if (ImGui::MenuItem("Scale", "3")) setTool(ToolMode::Scale, "menu");
-        if (ImGui::MenuItem("Rotate", "4")) setTool(ToolMode::Rotate, "menu");
-        if (ImGui::MenuItem("Insert Block")) insertPart(PartShape::Block);
-        if (ImGui::MenuItem("Insert Sphere")) insertPart(PartShape::Sphere);
-        if (ImGui::MenuItem("Insert Spawn")) insertSpawnLocation();
-        if (ImGui::MenuItem("Insert Folder")) insertContainer(InstanceClass::Folder);
-        if (ImGui::MenuItem("Insert Model")) insertContainer(InstanceClass::Model);
+    if (ImGui::BeginMenu(i18n::Label("Home"))) {
+        if (ImGui::MenuItem(i18n::Label("Select"), "1")) setTool(ToolMode::Select, "menu");
+        if (ImGui::MenuItem(i18n::Label("Move"), "2")) setTool(ToolMode::Move, "menu");
+        if (ImGui::MenuItem(i18n::Label("Scale"), "3")) setTool(ToolMode::Scale, "menu");
+        if (ImGui::MenuItem(i18n::Label("Rotate"), "4")) setTool(ToolMode::Rotate, "menu");
+        if (ImGui::MenuItem(i18n::Label("Insert Block"))) insertPart(PartShape::Block);
+        if (ImGui::MenuItem(i18n::Label("Insert Sphere"))) insertPart(PartShape::Sphere);
+        if (ImGui::MenuItem(i18n::Label("Insert Spawn"))) insertSpawnLocation();
+        if (ImGui::MenuItem(i18n::Label("Insert Folder"))) insertContainer(InstanceClass::Folder);
+        if (ImGui::MenuItem(i18n::Label("Insert Model"))) insertContainer(InstanceClass::Model);
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("Model")) {
-        if (ImGui::MenuItem("Anchor", nullptr, false, scene_.selection() && scene_.selection()->isPart())) {
+    if (ImGui::BeginMenu(i18n::Label("Model"))) {
+        if (ImGui::MenuItem(i18n::Label("Anchor"), nullptr, false, scene_.selection() && scene_.selection()->isPart())) {
             auto* part = static_cast<Part*>(scene_.selection());
             part->setAnchored(!part->anchored());
         }
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("View")) {
-        ImGui::MenuItem("Toolbox", nullptr, &showToolbox_);
-        ImGui::MenuItem("Explorer", nullptr, &showExplorer_);
-        ImGui::MenuItem("Properties", nullptr, &showProperties_);
-        ImGui::MenuItem("Script Editor", nullptr, &showScriptEditor_);
-        ImGui::MenuItem("Output", nullptr, &showOutput_);
-        ImGui::MenuItem("Rig Editor", nullptr, &showRigEditor_);
-        ImGui::MenuItem("Animation Editor", nullptr, &showAnimationEditor_);
-        if (ImGui::MenuItem("Reset Layout")) {
+    if (ImGui::BeginMenu(i18n::Label("View"))) {
+        ImGui::MenuItem(i18n::Label("Toolbox"), nullptr, &showToolbox_);
+        ImGui::MenuItem(i18n::Label("Explorer"), nullptr, &showExplorer_);
+        ImGui::MenuItem(i18n::Label("Properties"), nullptr, &showProperties_);
+        ImGui::MenuItem(i18n::Label("Script Editor"), nullptr, &showScriptEditor_);
+        ImGui::MenuItem(i18n::Label("Output"), nullptr, &showOutput_);
+        ImGui::MenuItem(i18n::Label("Rig Editor"), nullptr, &showRigEditor_);
+        ImGui::MenuItem(i18n::Label("Animation Editor"), nullptr, &showAnimationEditor_);
+        if (ImGui::MenuItem(i18n::Label("Reset Layout"))) {
             ImGui::DockBuilderRemoveNode(ImGui::GetID("LinbluxDockspace"));
             layoutBuilt_ = false; showExplorer_ = showProperties_ = showToolbox_ = true;
         }
         bool light=studio::Light();
-        if (ImGui::MenuItem("Light theme",nullptr,&light)) studio::Apply(light);
+        if (ImGui::MenuItem(i18n::Label("Light theme"),nullptr,&light)) studio::Apply(light);
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("Script")) {
-        if (ImGui::MenuItem("New Script")) insertScript();
-        if (ImGui::MenuItem("New LocalScript")) insertScript(InstanceClass::LocalScript);
-        if (ImGui::MenuItem("New ModuleScript")) insertScript(InstanceClass::ModuleScript);
-        if (ImGui::MenuItem("Install default game scripts")) scene_.installDefaultScripts();
-        ImGui::MenuItem("Script Editor",nullptr,&showScriptEditor_);
-        ImGui::MenuItem("Output",nullptr,&showOutput_);
+    if (ImGui::BeginMenu(i18n::Label("Script"))) {
+        if (ImGui::MenuItem(i18n::Label("New Script"))) insertScript();
+        if (ImGui::MenuItem(i18n::Label("New LocalScript"))) insertScript(InstanceClass::LocalScript);
+        if (ImGui::MenuItem(i18n::Label("New ModuleScript"))) insertScript(InstanceClass::ModuleScript);
+        if (ImGui::MenuItem(i18n::Label("Install default game scripts"))) scene_.installDefaultScripts();
+        ImGui::MenuItem(i18n::Label("Script Editor"),nullptr,&showScriptEditor_);
+        ImGui::MenuItem(i18n::Label("Output"),nullptr,&showOutput_);
         ImGui::EndMenu();
     }
     ImGui::EndDisabled();
@@ -1293,7 +1294,7 @@ void EditorUI::drawMainMenuBar() {
     const std::string projectName=std::filesystem::path(projectPath_).filename().string();
     const float projectX=ImGui::GetWindowWidth()-ImGui::CalcTextSize(projectName.c_str()).x-16;
     if(projectX>ImGui::GetCursorPosX()+20) {
-        ImGui::SameLine(projectX);ImGui::TextDisabled("%s",projectName.c_str());
+        ImGui::SameLine(projectX);ImGui::TextDisabled(i18n::Label("%s"),projectName.c_str());
         if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s",projectPath_.c_str());
     }
     ImGui::EndMainMenuBar();
@@ -1304,7 +1305,7 @@ void EditorUI::drawToolbar() {
                                    ImGuiWindowFlags_NoScrollWithMouse;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 7.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(7.0f, 6.0f));
-    ImGui::Begin("##Toolbar", nullptr, flags);
+    ImGui::Begin(i18n::Label("##Toolbar"), nullptr, flags);
     const LinbluxLogo& logo = LoadLinbluxLogo();
     if (logo.ok) {
         // Proporcao preservada (1600x1600 => quadrado); nao estica nem deforma.
@@ -1320,10 +1321,10 @@ void EditorUI::drawToolbar() {
     }
     ImGui::SameLine(0.0f, 3.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(120, 185, 255, 255));
-    ImGui::TextUnformatted("LINBLUX");
+    ImGui::TextUnformatted(i18n::Label("LINBLUX"));
     ImGui::PopStyleColor();
     ImGui::SameLine(0.0f, 14.0f);
-    if(ImGui::Checkbox("Snap",&snapEnabled_)) {endGizmoSession(true,"snap_toggle");cancelRigGizmo();}
+    if(ImGui::Checkbox(i18n::Label("Snap"),&snapEnabled_)) {endGizmoSession(true,"snap_toggle");cancelRigGizmo();}
     const auto snapMin=ImGui::GetItemRectMin(),snapMax=ImGui::GetItemRectMax();
     snapControl_={snapMin.x,snapMin.y,snapMax.x-snapMin.x,snapMax.y-snapMin.y};
     if(ImGui::IsItemHovered())ImGui::SetTooltip("OFF: continuous fine movement. ON: increments from the drag's initial transform.");
@@ -1338,7 +1339,7 @@ void EditorUI::drawToolbar() {
     ImGui::SameLine(0,14);
     ImGui::BeginTabBar("##RibbonTabs", ImGuiTabBarFlags_FittingPolicyScroll);
 
-    if (ImGui::BeginTabItem("Home")) {
+    if (ImGui::BeginTabItem(i18n::Label("Home"))) {
         ImGui::Spacing();
         if (IconButton("select", Icon::Select, "Select", tool_ == ToolMode::Select,
                        "Selecionar objetos (1)")) {
@@ -1409,7 +1410,7 @@ void EditorUI::drawToolbar() {
             ImGui::OpenPopup("##material_menu");
         }
         if (ImGui::BeginPopup("##color_palette")) {
-            if (homePart == nullptr) ImGui::TextDisabled("Selecione uma peça primeiro.");
+            if (homePart == nullptr) ImGui::TextDisabled(i18n::Label("Selecione uma peça primeiro."));
             else for (int i = 0; i < static_cast<int>(sizeof(kPalette) / sizeof(kPalette[0])); ++i) {
                 ImGui::PushID(i);
                 const ImVec4 c(kPalette[i].r / 255.0f, kPalette[i].g / 255.0f,
@@ -1425,7 +1426,7 @@ void EditorUI::drawToolbar() {
             ImGui::EndPopup();
         }
         if (ImGui::BeginPopup("##material_menu")) {
-            if (homePart == nullptr) ImGui::TextDisabled("Selecione uma peça primeiro.");
+            if (homePart == nullptr) ImGui::TextDisabled(i18n::Label("Selecione uma peça primeiro."));
             else for (int i = 0; i < PartMaterialCount(); ++i) {
                 if (ImGui::Selectable(PartMaterialName(PartMaterialFromIndex(i)),
                                       static_cast<int>(homePart->material()) == i)) {
@@ -1454,9 +1455,9 @@ void EditorUI::drawToolbar() {
         ImGui::EndTabItem();
     }
 
-    if (ImGui::BeginTabItem("Model")) {
+    if (ImGui::BeginTabItem(i18n::Label("Model"))) {
         ImGui::Spacing();
-        if (ImGui::Checkbox("Local axes", &gizmoLocalSpace_)) {
+        if (ImGui::Checkbox(i18n::Label("Local axes"), &gizmoLocalSpace_)) {
             endGizmoSession(true);
             cancelRigGizmo();
             gizmo_.setLocalSpace(gizmoLocalSpace_);
@@ -1464,20 +1465,20 @@ void EditorUI::drawToolbar() {
         }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(74.0f);
-        ImGui::DragFloat("Move snap", &moveSnap_, 0.1f, 0.0f, 128.0f, "%.2f");
+        ImGui::DragFloat(i18n::Label("Move snap"), &moveSnap_, 0.1f, 0.0f, 128.0f, "%.2f");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(74.0f);
-        ImGui::DragFloat("Scale snap", &scaleSnap_, 0.05f, 0.0f, 128.0f, "%.2f");
+        ImGui::DragFloat(i18n::Label("Scale snap"), &scaleSnap_, 0.05f, 0.0f, 128.0f, "%.2f");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(74.0f);
-        ImGui::DragFloat("Rotate snap", &rotateSnapDegrees_, 1.0f, 0.0f, 180.0f, "%.1f°");
+        ImGui::DragFloat(i18n::Label("Rotate snap"), &rotateSnapDegrees_, 1.0f, 0.0f, 180.0f, "%.1f°");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(84.0f);
-        if (ImGui::DragFloat("Camera speed", &cameraMoveSpeed_, 0.5f, 1.0f, 200.0f, "%.0f"))
+        if (ImGui::DragFloat(i18n::Label("Camera speed"), &cameraMoveSpeed_, 0.5f, 1.0f, 200.0f, "%.0f"))
             camera_.setNavigationSettings(cameraMoveSpeed_, cameraLookSensitivity_);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(88.0f);
-        if (ImGui::DragFloat("Look sensitivity", &cameraLookSensitivity_, 0.0001f,
+        if (ImGui::DragFloat(i18n::Label("Look sensitivity"), &cameraLookSensitivity_, 0.0001f,
                              0.0005f, 0.03f, "%.4f"))
             camera_.setNavigationSettings(cameraMoveSpeed_, cameraLookSensitivity_);
         gizmo_.setSnap(snapEnabled_?moveSnap_:0,snapEnabled_?scaleSnap_:0,snapEnabled_?rotateSnapDegrees_:0);
@@ -1506,7 +1507,7 @@ void EditorUI::drawToolbar() {
             ImGui::OpenPopup("##material_menu");
         }
         if (ImGui::BeginPopup("##color_palette")) {
-            if (part == nullptr) ImGui::TextDisabled("Selecione uma peca primeiro.");
+            if (part == nullptr) ImGui::TextDisabled(i18n::Label("Selecione uma peca primeiro."));
             else for (int i = 0; i < static_cast<int>(sizeof(kPalette) / sizeof(kPalette[0])); ++i) {
                 ImGui::PushID(i);
                 const ImVec4 c(kPalette[i].r / 255.0f, kPalette[i].g / 255.0f,
@@ -1522,7 +1523,7 @@ void EditorUI::drawToolbar() {
             ImGui::EndPopup();
         }
         if (ImGui::BeginPopup("##material_menu")) {
-            if (part == nullptr) ImGui::TextDisabled("Selecione uma peca primeiro.");
+            if (part == nullptr) ImGui::TextDisabled(i18n::Label("Selecione uma peca primeiro."));
             else for (int i = 0; i < PartMaterialCount(); ++i) {
                 if (ImGui::Selectable(PartMaterialName(PartMaterialFromIndex(i)), static_cast<int>(part->material()) == i)) {
                     applyMaterialToSelection(i);
@@ -1534,7 +1535,7 @@ void EditorUI::drawToolbar() {
         ImGui::EndTabItem();
     }
 
-    if (ImGui::BeginTabItem("Avatar")) {
+    if (ImGui::BeginTabItem(i18n::Label("Avatar"))) {
         ImGui::Spacing();
         if (IconButton("avatar_r6", Icon::Rig, "R6", false, "Inserir um Rig R6")) insertR6();
         ImGui::SameLine();
@@ -1549,7 +1550,7 @@ void EditorUI::drawToolbar() {
         ImGui::EndTabItem();
     }
 
-    if (ImGui::BeginTabItem("Script")) {
+    if (ImGui::BeginTabItem(i18n::Label("Script"))) {
         ImGui::Spacing();
         if (IconButton("script_new", Icon::ScriptPage, "New Script", false,
                        "Criar um Script")) insertScript();
@@ -1565,7 +1566,7 @@ void EditorUI::drawToolbar() {
         ImGui::EndTabItem();
     }
 
-    if (ImGui::BeginTabItem("View")) {
+    if (ImGui::BeginTabItem(i18n::Label("View"))) {
         ImGui::Spacing();
         if (IconButton("toolbox_toggle", Icon::Part, "Toolbox", showToolbox_,
                        "Show or hide the Toolbox")) {
@@ -1584,7 +1585,7 @@ void EditorUI::drawToolbar() {
         ImGui::EndTabItem();
     }
 
-    if (ImGui::BeginTabItem("Game")) {
+    if (ImGui::BeginTabItem(i18n::Label("Game"))) {
         ImGui::Spacing();
         if (IconButton("game_play", Icon::Clip, "Play (F5)", playing(),
                        "Iniciar o Play e executar os scripts")) startPlay();
@@ -1606,12 +1607,12 @@ void EditorUI::drawToolbar() {
 }
 
 void EditorUI::drawToolbox() {
-    ImGui::Begin("Toolbox");
+    ImGui::Begin(i18n::Label("Toolbox"));
     static char search[64] = {};
-    ImGui::TextDisabled("PARTS AND TEMPLATES");
-    ImGui::TextUnformatted("Build a scene");
+    ImGui::TextDisabled(i18n::Label("PARTS AND TEMPLATES"));
+    ImGui::TextUnformatted(i18n::Label("Build a scene"));
     ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::InputTextWithHint("##toolbox_search", "Search objects...", search, sizeof(search));
+    ImGui::InputTextWithHint(i18n::Label("##toolbox_search"), "Search objects...", search, sizeof(search));
     ImGui::Spacing();
 
     if (ContainsIgnoreCase("Block", search)) {
@@ -1631,12 +1632,12 @@ void EditorUI::drawToolbox() {
 
     ImGui::Spacing();
     ImGui::SeparatorText("Scene");
-    ImGui::TextDisabled("%d objects", static_cast<int>(scene_.objects().size()));
+    ImGui::TextDisabled(i18n::Label("%d objects"), static_cast<int>(scene_.objects().size()));
     ImGui::SameLine();
-    ImGui::TextDisabled("%d parts", static_cast<int>(scene_.parts().size()));
-    ImGui::TextDisabled("%d physics bodies", static_cast<int>(physics_.bodyCount()));
+    ImGui::TextDisabled(i18n::Label("%d parts"), static_cast<int>(scene_.parts().size()));
+    ImGui::TextDisabled(i18n::Label("%d physics bodies"), static_cast<int>(physics_.bodyCount()));
     ImGui::Spacing();
-    if (ImGui::CollapsingHeader("Navigation shortcuts", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader(i18n::Label("Navigation shortcuts"), ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::BulletText("WASD / Q E      Move camera");
         ImGui::BulletText("RMB drag          Orbit / look");
         ImGui::BulletText("Q / E             Down / Up");
@@ -1659,7 +1660,7 @@ void EditorUI::drawViewport() {
     }
     if(centralScript)ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4(.105f,.115f,.135f,1));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    const bool visible = ImGui::Begin("Viewport", nullptr,
+    const bool visible = ImGui::Begin(i18n::Label("Viewport"), nullptr,
                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
                  (frontend_?(ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoDocking):0));
     if (!visible) {
@@ -1695,7 +1696,7 @@ void EditorUI::drawViewport() {
     if (!viewportReady_) {
         endGizmoSession(true);
         camera_.releaseCapture();
-        ImGui::TextDisabled("Viewport indisponivel.");
+        ImGui::TextDisabled(i18n::Label("Viewport indisponivel."));
         ImGui::End();
         ImGui::PopStyleVar();
         return;
@@ -2017,7 +2018,7 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
     if (ImGui::BeginDragDropSource()) {
         const auto id = instance->id();
         ImGui::SetDragDropPayload("LINBLUX_INSTANCE",&id,sizeof(id));
-        ImGui::Text("%s (%s)",instance->name().c_str(),instance->className());
+        ImGui::Text(i18n::Label("%s (%s)"),instance->name().c_str(),instance->className());
         ImGui::EndDragDropSource();
     }
     if (ImGui::BeginDragDropTarget()) {
@@ -2030,26 +2031,26 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
     char explorerPopupId[64];
         std::snprintf(explorerPopupId, sizeof(explorerPopupId), "##explorer_context_%" PRIu64, instance->id());
         if (ImGui::BeginPopupContextItem(explorerPopupId)) {
-        ImGui::TextDisabled("%s", instance->className());
+        ImGui::TextDisabled(i18n::Label("%s"), instance->className());
         ImGui::Separator();
-        if (IsScriptClass(instance->instanceClass()) && ImGui::MenuItem("Open Script")) openScript(instance->id());
-        if (ImGui::MenuItem("Rename", "F2")) { scene_.select(instance); renameSelection(); }
-        if (ImGui::MenuItem("Duplicate", "Ctrl+D",false,instance->deletable())) { scene_.select(instance); pendingDuplicate_=true; }
-        if (ImGui::MenuItem("Copy", "Ctrl+C",false,instance->deletable())) clipboardId_ = instance->id();
-        if (ImGui::BeginMenu("Insert child (+)", !IsScriptClass(instance->instanceClass()) && instance != scene_.lighting())) {
-            if (ImGui::MenuItem("Script")) { scene_.select(instance); pendingInsert_=4; }
-            if (ImGui::MenuItem("ModuleScript")) { scene_.select(instance); pendingInsert_=5; }
-            if (ImGui::MenuItem("Folder")) { scene_.select(instance); pendingInsert_=1; }
-            if (ImGui::MenuItem("Model")) { scene_.select(instance); pendingInsert_=2; }
-            if (ImGui::MenuItem("Part")) { scene_.select(instance); pendingInsert_=3; }
+        if (IsScriptClass(instance->instanceClass()) && ImGui::MenuItem(i18n::Label("Open Script"))) openScript(instance->id());
+        if (ImGui::MenuItem(i18n::Label("Rename"), "F2")) { scene_.select(instance); renameSelection(); }
+        if (ImGui::MenuItem(i18n::Label("Duplicate"), "Ctrl+D",false,instance->deletable())) { scene_.select(instance); pendingDuplicate_=true; }
+        if (ImGui::MenuItem(i18n::Label("Copy"), "Ctrl+C",false,instance->deletable())) clipboardId_ = instance->id();
+        if (ImGui::BeginMenu(i18n::Label("Insert child (+)"), !IsScriptClass(instance->instanceClass()) && instance != scene_.lighting())) {
+            if (ImGui::MenuItem(i18n::Label("Script"))) { scene_.select(instance); pendingInsert_=4; }
+            if (ImGui::MenuItem(i18n::Label("ModuleScript"))) { scene_.select(instance); pendingInsert_=5; }
+            if (ImGui::MenuItem(i18n::Label("Folder"))) { scene_.select(instance); pendingInsert_=1; }
+            if (ImGui::MenuItem(i18n::Label("Model"))) { scene_.select(instance); pendingInsert_=2; }
+            if (ImGui::MenuItem(i18n::Label("Part"))) { scene_.select(instance); pendingInsert_=3; }
             ImGui::EndMenu();
         }
-        if (ImGui::MenuItem("Focar na viewport", "F")) {
+        if (ImGui::MenuItem(i18n::Label("Focar na viewport"), "F")) {
             endGizmoSession(true);
             scene_.select(instance);
             focusSelection();
         }
-        if (ImGui::MenuItem("Excluir", "Del", false, instance->deletable())) {
+        if (ImGui::MenuItem(i18n::Label("Excluir"), "Del", false, instance->deletable())) {
             endGizmoSession(true);
             scene_.select(instance);
             pendingDelete_ = instance->id();
@@ -2068,12 +2069,12 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
 void EditorUI::drawExplorer() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize,ImVec2(280,150));
     ImGui::SetNextWindowSize({350, 620}, ImGuiCond_FirstUseEver);
-    ImGui::Begin("Explorer", &showExplorer_);
+    ImGui::Begin(i18n::Label("Explorer"), &showExplorer_);
     explorerFocused_ = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-    if (ImGui::Button("+ Folder")) insertContainer(InstanceClass::Folder);
-    ImGui::SameLine(); if (ImGui::Button("+ Model")) insertContainer(InstanceClass::Model);
+    if (ImGui::Button(i18n::Label("+ Folder"))) insertContainer(InstanceClass::Folder);
+    ImGui::SameLine(); if (ImGui::Button(i18n::Label("+ Model"))) insertContainer(InstanceClass::Model);
     ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::InputTextWithHint("##explorer_filter", "Search name or class", explorerFilter_,
+    ImGui::InputTextWithHint(i18n::Label("##explorer_filter"), "Search name or class", explorerFilter_,
                              sizeof(explorerFilter_));
     if (scene_.workspace() != nullptr) {
         drawExplorerNode(scene_.workspace(), explorerFilter_);
@@ -2092,19 +2093,19 @@ void EditorUI::drawExplorer() {
         // Context menu for rig
         std::string rigPopupId = "##rig_context_" + rig.id;
         if (ImGui::BeginPopupContextItem(rigPopupId.c_str())) {
-            ImGui::TextDisabled("%s", "Rig");
+            ImGui::TextDisabled(i18n::Label("%s"), "Rig");
             ImGui::Separator();
-            if (ImGui::MenuItem("Rename", "F2")) { selectRig(rig.id); renameSelection(); }
-            if (ImGui::MenuItem("Duplicate", "Ctrl+D")) { selectRig(rig.id); pendingDuplicate_=true; }
-            if (ImGui::MenuItem("Delete", "Del")) { selectRig(rig.id); pendingDeleteRigId_ = rig.id; }
+            if (ImGui::MenuItem(i18n::Label("Rename"), "F2")) { selectRig(rig.id); renameSelection(); }
+            if (ImGui::MenuItem(i18n::Label("Duplicate"), "Ctrl+D")) { selectRig(rig.id); pendingDuplicate_=true; }
+            if (ImGui::MenuItem(i18n::Label("Delete"), "Del")) { selectRig(rig.id); pendingDeleteRigId_ = rig.id; }
             ImGui::EndPopup();
         }
         
         if (open) {
-            ImGui::TextDisabled("HumanoidRootPart (internal)");
+            ImGui::TextDisabled(i18n::Label("HumanoidRootPart (internal)"));
             for (int b = 0; b < game::kBodyCount; ++b)
                 if (ImGui::Selectable(rig.bodies[b].name.c_str(), rig.id == selectedRig_ && selectedRigBody_ == b)) selectRig(rig.id, b);
-            ImGui::TextDisabled("CharacterController / Animator");
+            ImGui::TextDisabled(i18n::Label("CharacterController / Animator"));
             ImGui::TreePop();
         }
         ImGui::PopID();
@@ -2140,9 +2141,9 @@ void EditorUI::drawExplorer() {
     }
     ImGui::Separator();
     if (scene_.selection() != nullptr) {
-        ImGui::TextDisabled("Selecionado: %s", scene_.selection()->name().c_str());
+        ImGui::TextDisabled(i18n::Label("Selecionado: %s"), scene_.selection()->name().c_str());
     } else {
-        ImGui::TextDisabled("Nenhum objeto selecionado");
+        ImGui::TextDisabled(i18n::Label("Nenhum objeto selecionado"));
     }
     ImGui::End();
     ImGui::PopStyleVar();
@@ -2150,10 +2151,10 @@ void EditorUI::drawExplorer() {
 
 void EditorUI::drawPartProperties(Part& part) {
     ImGui::PushStyleColor(ImGuiCol_Text, ClassColor(part.instanceClass()));
-    ImGui::Text("%s", part.className());
+    ImGui::Text(i18n::Label("%s"), part.className());
     ImGui::PopStyleColor();
     ImGui::SameLine();
-    ImGui::TextDisabled("#%llu", static_cast<unsigned long long>(part.id()));
+    ImGui::TextDisabled(i18n::Label("#%llu"), static_cast<unsigned long long>(part.id()));
     ImGui::Separator();
 
     char name[128];
@@ -2191,7 +2192,7 @@ void EditorUI::drawPartProperties(Part& part) {
         }
     }
     if (!part.anchored()) {
-        ImGui::TextDisabled("Peca dinamica: a fisica controla o movimento.");
+        ImGui::TextDisabled(i18n::Label("Peca dinamica: a fisica controla o movimento."));
     }
 
     ImGui::SeparatorText("Appearance");
@@ -2206,7 +2207,7 @@ void EditorUI::drawPartProperties(Part& part) {
                 static_cast<unsigned char>(std::lround(color[3] * 255.0f))});
         }
     }
-    if (ImGui::BeginCombo("Material", PartMaterialName(part.material()))) {
+    if (ImGui::BeginCombo(i18n::Label("Material"), PartMaterialName(part.material()))) {
         for (int i = 0; i < PartMaterialCount(); ++i) {
             const bool selected = static_cast<int>(part.material()) == i;
             if (ImGui::Selectable(PartMaterialName(PartMaterialFromIndex(i)), selected)) {
@@ -2228,39 +2229,39 @@ void EditorUI::drawPartProperties(Part& part) {
     const bool legacySpawn=part.instanceClass()==InstanceClass::SpawnLocation;
     bool spawnEnabled=legacySpawn||game::IsSpawnPart(part);
     if(legacySpawn) {
-        ImGui::TextDisabled("Legacy SpawnLocation (always a spawn point)");
-    } else if(ImGui::Checkbox("Spawn point",&spawnEnabled)) {
+        ImGui::TextDisabled(i18n::Label("Legacy SpawnLocation (always a spawn point)"));
+    } else if(ImGui::Checkbox(i18n::Label("Spawn point"),&spawnEnabled)) {
         if(spawnEnabled)part.setAttribute("spawn",true);
         else part.removeAttribute("spawn");
     }
     if(spawnEnabled) {
         float priority=static_cast<float>(game::SpawnPriority(part));
-        if(ImGui::DragFloat("Spawn priority",&priority,0.1f,-1000000.0f,1000000.0f,"%.2f"))
+        if(ImGui::DragFloat(i18n::Label("Spawn priority"),&priority,0.1f,-1000000.0f,1000000.0f,"%.2f"))
             part.setAttribute("spawn_priority",static_cast<double>(priority));
-        ImGui::TextDisabled("Highest priority wins; ties use the oldest instance.");
+        ImGui::TextDisabled(i18n::Label("Highest priority wins; ties use the oldest instance."));
     }
 
     ImGui::SeparatorText("Physics");
     bool anchored = part.anchored();
-    if (ImGui::Checkbox("Anchored", &anchored)) {
+    if (ImGui::Checkbox(i18n::Label("Anchored"), &anchored)) {
         part.setAnchored(anchored);
     }
     bool canCollide = part.canCollide();
-    if (ImGui::Checkbox("CanCollide", &canCollide)) {
+    if (ImGui::Checkbox(i18n::Label("CanCollide"), &canCollide)) {
         part.setCanCollide(canCollide);
     }
 
     ImGui::Separator();
-    if (ImGui::Button("Focar (F)", ImVec2(-FLT_MIN, 0.0f))) {
+    if (ImGui::Button(i18n::Label("Focar (F)"), ImVec2(-FLT_MIN, 0.0f))) {
         focusSelection();
     }
     ImGui::BeginDisabled(!part.deletable());
-    if (ImGui::Button("Excluir", ImVec2(-FLT_MIN, 0.0f))) {
+    if (ImGui::Button(i18n::Label("Excluir"), ImVec2(-FLT_MIN, 0.0f))) {
         deleteSelection();
     }
     ImGui::EndDisabled();
     if (!part.deletable()) {
-        ImGui::TextDisabled("Elemento estrutural protegido.");
+        ImGui::TextDisabled(i18n::Label("Elemento estrutural protegido."));
     }
 }
 
@@ -2270,7 +2271,7 @@ void EditorUI::drawLightingProperties() {
         return;
     }
     ImGui::PushStyleColor(ImGuiCol_Text, ClassColor(InstanceClass::Lighting));
-    ImGui::TextUnformatted("Lighting");
+    ImGui::TextUnformatted(i18n::Label("Lighting"));
     ImGui::PopStyleColor();
     ImGui::Separator();
 
@@ -2303,11 +2304,11 @@ void EditorUI::drawLightingProperties() {
         lighting->setSunDirection(Vector3{sunValues[0], sunValues[1], sunValues[2]});
     }
     float intensity = lighting->sunIntensity();
-    if (ImGui::SliderFloat("SunIntensity", &intensity, 0.0f, 3.0f, "%.2f")) {
+    if (ImGui::SliderFloat(i18n::Label("SunIntensity"), &intensity, 0.0f, 3.0f, "%.2f")) {
         lighting->setSunIntensity(intensity);
     }
     float brightness = lighting->brightness();
-    if (ImGui::SliderFloat("Brightness", &brightness, 0.2f, 2.0f, "%.2f")) {
+    if (ImGui::SliderFloat(i18n::Label("Brightness"), &brightness, 0.2f, 2.0f, "%.2f")) {
         lighting->setBrightness(brightness);
     }
     ImGui::SeparatorText("Fog");
@@ -2319,13 +2320,13 @@ void EditorUI::drawLightingProperties() {
                                     static_cast<unsigned char>(std::lround(fog[2] * 255.0f)), 255});
     }
     float fogDensity = lighting->fogDensity();
-    if (ImGui::SliderFloat("FogDensity", &fogDensity, 0.0f, 1.0f, "%.3f")) {
+    if (ImGui::SliderFloat(i18n::Label("FogDensity"), &fogDensity, 0.0f, 1.0f, "%.3f")) {
         lighting->setFogDensity(fogDensity);
     }
 
     ImGui::SeparatorText("Sky");
     bool skyEnabled = lighting->skyEnabled();
-    if (ImGui::Checkbox("Sky Enabled", &skyEnabled)) {
+    if (ImGui::Checkbox(i18n::Label("Sky Enabled"), &skyEnabled)) {
         lighting->setSkyEnabled(skyEnabled);
         if (!skyEnabled)
             ImGui::SetTooltip("O fundo volta para a cor sólida do SkyColor");
@@ -2368,47 +2369,47 @@ void EditorUI::drawLightingProperties() {
     }
 
     float sunSize = lighting->sunSize();
-    if (ImGui::SliderFloat("Sun Size", &sunSize, 0.0f, 1.0f, "%.3f")) {
+    if (ImGui::SliderFloat(i18n::Label("Sun Size"), &sunSize, 0.0f, 1.0f, "%.3f")) {
         lighting->setSunSize(sunSize);
     }
 
     float atmoStrength = lighting->atmosphereStrength();
-    if (ImGui::SliderFloat("Atmosphere Strength", &atmoStrength, 0.0f, 1.0f, "%.2f")) {
+    if (ImGui::SliderFloat(i18n::Label("Atmosphere Strength"), &atmoStrength, 0.0f, 1.0f, "%.2f")) {
         lighting->setAtmosphereStrength(atmoStrength);
     }
 
     ImGui::SeparatorText("Clouds");
     float cloudDensity = lighting->cloudDensity();
-    if (ImGui::SliderFloat("Cloud Density", &cloudDensity, 0.0f, 1.0f, "%.2f")) {
+    if (ImGui::SliderFloat(i18n::Label("Cloud Density"), &cloudDensity, 0.0f, 1.0f, "%.2f")) {
         lighting->setCloudDensity(cloudDensity);
     }
 
     float cloudScale = lighting->cloudScale();
-    if (ImGui::SliderFloat("Cloud Scale", &cloudScale, 0.1f, 10.0f, "%.2f")) {
+    if (ImGui::SliderFloat(i18n::Label("Cloud Scale"), &cloudScale, 0.1f, 10.0f, "%.2f")) {
         lighting->setCloudScale(cloudScale);
     }
 
     float cloudSpeed = lighting->cloudSpeed();
-    if (ImGui::SliderFloat("Cloud Speed", &cloudSpeed, 0.0f, 5.0f, "%.2f")) {
+    if (ImGui::SliderFloat(i18n::Label("Cloud Speed"), &cloudSpeed, 0.0f, 5.0f, "%.2f")) {
         lighting->setCloudSpeed(cloudSpeed);
     }
 
     float cloudSoftness = lighting->cloudSoftness();
-    if (ImGui::SliderFloat("Cloud Softness", &cloudSoftness, 0.0f, 1.0f, "%.2f")) {
+    if (ImGui::SliderFloat(i18n::Label("Cloud Softness"), &cloudSoftness, 0.0f, 1.0f, "%.2f")) {
         lighting->setCloudSoftness(cloudSoftness);
     }
 
     float skyRot = lighting->skyRotation();
-    if (ImGui::DragFloat("Sky Rotation (deg)", &skyRot, 0.5f, -360.0f, 360.0f, "%.1f")) {
+    if (ImGui::DragFloat(i18n::Label("Sky Rotation (deg)"), &skyRot, 0.5f, -360.0f, 360.0f, "%.1f")) {
         lighting->setSkyRotation(skyRot);
     }
 }
 
 void EditorUI::drawWorkspaceProperties() {
     ImGui::PushStyleColor(ImGuiCol_Text, ClassColor(InstanceClass::Workspace));
-    ImGui::TextUnformatted("Workspace");
+    ImGui::TextUnformatted(i18n::Label("Workspace"));
     ImGui::PopStyleColor();
-    ImGui::TextDisabled("#%llu",
+    ImGui::TextDisabled(i18n::Label("#%llu"),
                         static_cast<unsigned long long>(scene_.workspace()->id()));
     ImGui::Separator();
     char name[128];
@@ -2417,31 +2418,31 @@ void EditorUI::drawWorkspaceProperties() {
         scene_.workspace()->setName(name);
     }
     float height=scene_.workspace()->fallenPartsDestroyHeight();
-    if(ImGui::InputFloat("FallenPartsDestroyHeight",&height,10,100,"%.1f",ImGuiInputTextFlags_EnterReturnsTrue) &&
+    if(ImGui::InputFloat(i18n::Label("FallenPartsDestroyHeight"),&height,10,100,"%.1f",ImGuiInputTextFlags_EnterReturnsTrue) &&
         !scene_.workspace()->setFallenPartsDestroyHeight(height))setStatus("Void height invalido.",true);
     ImGui::SeparatorText("Projeto");
-    ImGui::Text("Objetos: %d", static_cast<int>(scene_.objects().size()));
-    ImGui::Text("Pecas: %d", static_cast<int>(scene_.parts().size()));
-    ImGui::Text("Corpos fisicos: %d", static_cast<int>(physics_.bodyCount()));
-    ImGui::TextWrapped("Arquivo: %s", projectPath_.c_str());
+    ImGui::Text(i18n::Label("Objetos: %d"), static_cast<int>(scene_.objects().size()));
+    ImGui::Text(i18n::Label("Pecas: %d"), static_cast<int>(scene_.parts().size()));
+    ImGui::Text(i18n::Label("Corpos fisicos: %d"), static_cast<int>(physics_.bodyCount()));
+    ImGui::TextWrapped(i18n::Label("Arquivo: %s"), projectPath_.c_str());
 }
 
 void EditorUI::drawProperties() {
     ImGui::SetNextWindowSize({330, 560}, ImGuiCond_FirstUseEver);
-    ImGui::Begin("Properties");
+    ImGui::Begin(i18n::Label("Properties"));
     Instance* selection = scene_.selection();
     if (selection == nullptr) {
         if (auto* rig = scene_.gameAssets().findRig(selectedRig_)) {
-            ImGui::Text("%s (R6 rig)", rig->name.c_str());
-            ImGui::Text("Root: %.2f, %.2f, %.2f", rig->root.position.x, rig->root.position.y, rig->root.position.z);
-            if (selectedRigBody_ >= 0) ImGui::Text("Body: %s", rig->bodies[selectedRigBody_].name.c_str());
-            ImGui::Text("Joint: %s", rig->joints[selectedJoint_].name.c_str());
-            if (ImGui::Button("Open Rig Editor")) showRigEditor_ = true;
+            ImGui::Text(i18n::Label("%s (R6 rig)"), rig->name.c_str());
+            ImGui::Text(i18n::Label("Root: %.2f, %.2f, %.2f"), rig->root.position.x, rig->root.position.y, rig->root.position.z);
+            if (selectedRigBody_ >= 0) ImGui::Text(i18n::Label("Body: %s"), rig->bodies[selectedRigBody_].name.c_str());
+            ImGui::Text(i18n::Label("Joint: %s"), rig->joints[selectedJoint_].name.c_str());
+            if (ImGui::Button(i18n::Label("Open Rig Editor"))) showRigEditor_ = true;
             ImGui::End(); return;
         }
         ImGui::Spacing();
-        ImGui::TextUnformatted("Properties");
-        ImGui::TextWrapped("Select an object in the Explorer or viewport to edit its properties.");
+        ImGui::TextUnformatted(i18n::Label("Properties"));
+        ImGui::TextWrapped(i18n::Label("Select an object in the Explorer or viewport to edit its properties."));
     } else if (selection == scene_.lighting()) {
         drawLightingProperties();
     } else if (selection == scene_.workspace()) {
@@ -2459,12 +2460,12 @@ void EditorUI::drawDialogs() {
     if (ImGui::BeginPopupModal("Rename instance",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
         if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
         const bool enter=ImGui::InputText("Name",renameBuffer_,sizeof(renameBuffer_),ImGuiInputTextFlags_EnterReturnsTrue);
-        if (enter || ImGui::Button("Rename")) {
+        if (enter || ImGui::Button(i18n::Label("Rename"))) {
             if (auto* node=scene_.find(renameId_); node && renameBuffer_[0]) node->setName(renameBuffer_);
             if(auto* rig=scene_.gameAssets().findRig(renameRigId_);rig && renameBuffer_[0])rig->name=renameBuffer_;
             renameId_=0;renameRigId_.clear(); ImGui::CloseCurrentPopup();
         }
-        ImGui::SameLine(); if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape,false)) {
+        ImGui::SameLine(); if (ImGui::Button(i18n::Label("Cancel")) || ImGui::IsKeyPressed(ImGuiKey_Escape,false)) {
             renameId_=0;renameRigId_.clear(); ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -2488,14 +2489,14 @@ void EditorUI::drawDialogs() {
 
     ImGui::SetNextWindowSize(ImVec2(520.0f, 0.0f), ImGuiCond_Appearing);
     if (ImGui::BeginPopupModal("Salvar projeto", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextUnformatted("Caminho do arquivo (.json):");
+        ImGui::TextUnformatted(i18n::Label("Caminho do arquivo (.json):"));
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::InputText("##save_path", pathBuffer_, sizeof(pathBuffer_));
         if (!dialogError_.empty()) {
             ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.40f, 1.0f), "%s", dialogError_.c_str());
         }
         ImGui::Spacing();
-        if (ImGui::Button("Salvar", ImVec2(120.0f, 0.0f))) {
+        if (ImGui::Button(i18n::Label("Salvar"), ImVec2(120.0f, 0.0f))) {
             std::string error;
             std::error_code pathError;
             const std::filesystem::path chosen = std::filesystem::absolute(pathBuffer_, pathError);
@@ -2510,7 +2511,7 @@ void EditorUI::drawDialogs() {
             }
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancelar", ImVec2(120.0f, 0.0f))) {
+        if (ImGui::Button(i18n::Label("Cancelar"), ImVec2(120.0f, 0.0f))) {
             dialogError_.clear();
             ImGui::CloseCurrentPopup();
         }
@@ -2519,15 +2520,15 @@ void EditorUI::drawDialogs() {
 
     ImGui::SetNextWindowSize(ImVec2(520.0f, 0.0f), ImGuiCond_Appearing);
     if (ImGui::BeginPopupModal("Abrir projeto", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextUnformatted("Caminho do arquivo (.json):");
+        ImGui::TextUnformatted(i18n::Label("Caminho do arquivo (.json):"));
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::InputText("##open_path", pathBuffer_, sizeof(pathBuffer_));
-        ImGui::TextDisabled("Carregar substitui a cena atual.");
+        ImGui::TextDisabled(i18n::Label("Carregar substitui a cena atual."));
         if (!dialogError_.empty()) {
             ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.40f, 1.0f), "%s", dialogError_.c_str());
         }
         ImGui::Spacing();
-        if (ImGui::Button("Abrir", ImVec2(120.0f, 0.0f))) {
+        if (ImGui::Button(i18n::Label("Abrir"), ImVec2(120.0f, 0.0f))) {
             std::string error;
             endGizmoSession(true);
             if (projectio::load(scene_, pathBuffer_, error)) {
@@ -2550,7 +2551,7 @@ void EditorUI::drawDialogs() {
             }
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancelar", ImVec2(120.0f, 0.0f))) {
+        if (ImGui::Button(i18n::Label("Cancelar"), ImVec2(120.0f, 0.0f))) {
             dialogError_.clear();
             ImGui::CloseCurrentPopup();
         }
@@ -2559,12 +2560,12 @@ void EditorUI::drawDialogs() {
 
     ImGui::SetNextWindowSize(ImVec2(540.0f, 0.0f), ImGuiCond_Appearing);
     if (ImGui::BeginPopupModal("Exportar cena Lua", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextUnformatted("Exportar cena declarativa (.lua):");
+        ImGui::TextUnformatted(i18n::Label("Exportar cena declarativa (.lua):"));
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::InputText("##lua_export_path", pathBuffer_, sizeof(pathBuffer_));
-        ImGui::TextDisabled("Contem apenas dados da cena; nenhum script e executado.");
+        ImGui::TextDisabled(i18n::Label("Contem apenas dados da cena; nenhum script e executado."));
         if (!dialogError_.empty()) ImGui::TextColored(ImVec4(0.78f, 0.12f, 0.10f, 1), "%s", dialogError_.c_str());
-        if (ImGui::Button("Exportar", ImVec2(120, 0))) {
+        if (ImGui::Button(i18n::Label("Exportar"), ImVec2(120, 0))) {
             std::string error;
             if (scenelua::save(scene_, pathBuffer_, error)) {
                 setStatus("Cena exportada: " + std::string(pathBuffer_));
@@ -2573,7 +2574,7 @@ void EditorUI::drawDialogs() {
             } else dialogError_ = error;
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancelar##lua_export", ImVec2(120, 0))) {
+        if (ImGui::Button(i18n::Label("Cancelar##lua_export"), ImVec2(120, 0))) {
             dialogError_.clear(); ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -2581,13 +2582,13 @@ void EditorUI::drawDialogs() {
 
     ImGui::SetNextWindowSize(ImVec2(560.0f, 0.0f), ImGuiCond_Appearing);
     if (ImGui::BeginPopupModal("Importar cena Lua", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextUnformatted("Importar cena declarativa (.lua):");
+        ImGui::TextUnformatted(i18n::Label("Importar cena declarativa (.lua):"));
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::InputText("##lua_import_path", pathBuffer_, sizeof(pathBuffer_));
-        ImGui::TextWrapped("Aceita somente `return` seguido por tabelas literais do formato loblox-scene. O arquivo nunca e executado.");
-        ImGui::TextDisabled("Uma importacao valida substitui a cena atual.");
+        ImGui::TextWrapped(i18n::Label("Aceita somente `return` seguido por tabelas literais do formato loblox-scene. O arquivo nunca e executado."));
+        ImGui::TextDisabled(i18n::Label("Uma importacao valida substitui a cena atual."));
         if (!dialogError_.empty()) ImGui::TextColored(ImVec4(0.78f, 0.12f, 0.10f, 1), "%s", dialogError_.c_str());
-        if (ImGui::Button("Importar", ImVec2(120, 0))) {
+        if (ImGui::Button(i18n::Label("Importar"), ImVec2(120, 0))) {
             std::string error;
             endGizmoSession(true);
             if (scenelua::load(scene_, pathBuffer_, error)) {
@@ -2602,7 +2603,7 @@ void EditorUI::drawDialogs() {
             } else dialogError_ = error;
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancelar##lua_import", ImVec2(120, 0))) {
+        if (ImGui::Button(i18n::Label("Cancelar##lua_import"), ImVec2(120, 0))) {
             dialogError_.clear(); ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();

@@ -116,3 +116,38 @@
 @keyframes experience-pulse { from { opacity: 0.25; transform: scaleX(0.5); } to { opacity: 1; transform: scaleX(1.4); } }
 .experience-compact .experience-media { width: 240px; }
 .experience-compact .experience-main { padding: 23px; }
+
+/* LINBLUX: full-window video is drawn behind RmlUi, never inside a card. */
+#experience-home { background: transparent; }
+.home-header { position: absolute; left: 5%; right: 5%; top: 28px; height: 64px; display: flex; align-items: center; justify-content: space-between; }
+.home-header .experience-brand { margin: 0; padding: 0; }
+.home-header .experience-brand img { width: 64px; height: auto; margin-right: 14px; }
+.home-header .experience-brand b { font-size: 22px; letter-spacing: 3px; }
+.home-header .experience-brand small { margin-left: 12px; font-size: 11px; }
+.home-navigation { display: flex; }
+.home-navigation button { height: 36px; padding: 7px 12px; background: #14141895; border: 0px; border-radius: 6px; margin-left: 8px; }
+.home-navigation button:hover { background: #393237c9; }
+.experience-main { left: 0; right: 0; top: 112px; padding: 16px 5% 24px; }
+.experience-compact .experience-main { padding: 16px 5% 24px; }
+#experience-content { max-width: 1680px; }
+.home-intro { padding: 26px 0 30px; }
+.home-intro small { font-size: 12px; letter-spacing: 3px; color: #ebabb0; }
+.home-intro h1 { font-size: 42px; margin: 14px 0 12px; }
+.home-intro p { color: #d3cdd0; font-size: 16px; margin: 0 0 28px; }
+.home-actions { display: flex; }
+.home-actions button { height: 46px; padding: 12px 24px; margin-right: 12px; font-size: 15px; border-radius: 7px; background: #17171bd9; border: 1px #ffffff20; }
+.home-actions .experience-primary, .experience-primary { background: #ba2838; border-color: #ed4554; color: white; }
+.home-actions .experience-primary:hover, .experience-primary:hover { background: #d63749; }
+.experience-section { margin-top: 16px; }
+.experience-section h2 { font-size: 19px; }
+.experience-section button { color: #e9c1c7; font-size: 13px; }
+.experience-card { width: 240px; background: #131316c9; border: 1px #ffffff14; border-radius: 9px; }
+.experience-card:hover { border-color: #dc667480; background: #242126df; }
+.experience-card h3 { font-size: 15px; }
+.experience-card p { font-size: 12px; }
+.experience-card-actions button { height: 32px; font-size: 12px; }
+.experience-empty { width: 100%; padding: 26px; background: #1313168c; border: 0px; border-radius: 8px; font-size: 15px; color: #d6cdd1; }
+.experience-form, .experience-title { padding: 20px; background: #131316d9; border-radius: 8px; }
+.experience-confirm-card { background: #19191df5; border-color: #ffffff20; }
+.experience-loading-shade { background: #09090bbd; }
+.experience-spinner { background: #e34255; }

@@ -122,7 +122,22 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(linblux_core PRIVATE -Wall -Wextra)
 endif()
 
+option(LINBLUX_ENABLE_VIDEO "Video de fundo com FFmpeg" ON)
+if(LINBLUX_ENABLE_VIDEO)
+  pkg_check_modules(FFMPEG IMPORTED_TARGET libavformat libavcodec libavutil libswscale)
+endif()
+add_library(linblux_media STATIC src/media/VideoBackground.cpp)
+target_include_directories(linblux_media PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src ${RAYLIB_INCLUDE_DIRS})
+target_link_libraries(linblux_media PUBLIC ${RAYLIB_LIBRARIES} Threads::Threads)
+if(FFMPEG_FOUND AND LINBLUX_ENABLE_VIDEO)
+  target_compile_definitions(linblux_media PRIVATE LINBLUX_VIDEO_FFMPEG)
+  target_link_libraries(linblux_media PRIVATE PkgConfig::FFMPEG)
+else()
+  message(WARNING "FFmpeg indisponivel: tela inicial usara fundo estatico")
+endif()
+
 add_library(linblux_editor STATIC
+  src/ui/Localization.cpp
   src/ui/ExperienceUI.cpp
   src/ui/NativeFileDialog.cpp
   src/ui/StudioFrontend.cpp
@@ -133,7 +148,7 @@ add_library(linblux_editor STATIC
   src/editor/GamePanels.cpp
   src/editor/StudioPanels.cpp
 )
-target_link_libraries(linblux_editor PUBLIC linblux_core linblux_imgui linblux_rml_gl3 OpenGL::GL)
+target_link_libraries(linblux_editor PUBLIC linblux_core linblux_media linblux_imgui linblux_rml_gl3 OpenGL::GL)
 target_compile_definitions(linblux_editor PRIVATE LINBLUX_UI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/ui")
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(linblux_editor PRIVATE -Wall -Wextra)
@@ -291,4 +306,18 @@ if(XVFB_RUN_EXECUTABLE)
       set_tests_properties(linblux_editor_restart PROPERTIES TIMEOUT 90)
     endif()
   endif()
+endif()
+
+if(FFMPEG_FOUND AND LINBLUX_ENABLE_VIDEO)
+  add_executable(linblux_video_tests tests/video_main.cpp)
+  target_link_libraries(linblux_video_tests PRIVATE linblux_media)
+  add_test(NAME linblux_video COMMAND linblux_video_tests ${CMAKE_CURRENT_SOURCE_DIR}/midia/careditfullhd.mp4)
+  set_tests_properties(linblux_video PROPERTIES TIMEOUT 40)
+endif()
+if(XVFB_RUN_EXECUTABLE AND FFMPEG_FOUND AND LINBLUX_ENABLE_VIDEO)
+  add_executable(linblux_home_video_tests tests/home_video_main.cpp)
+  target_link_libraries(linblux_home_video_tests PRIVATE linblux_editor)
+  add_dependencies(linblux_home_video_tests linblux_ui_assets linblux_template_assets linblux_media_assets)
+  add_test(NAME linblux_home_video COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24" $<TARGET_FILE:linblux_home_video_tests>)
+  set_tests_properties(linblux_home_video PROPERTIES TIMEOUT 120 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
 endif()

@@ -8,19 +8,8 @@ struct Palette {
     ImVec4 background, panel, raised, hover, selected;
     ImVec4 text, secondary, disabled, border, accent, error, overlay;
 };
-inline const Palette& Colors(bool light = false) {
-    static const Palette dark{
-        {.075f,.086f,.105f,1}, {.105f,.118f,.141f,1}, {.145f,.161f,.192f,1},
-        {.20f,.24f,.30f,1}, {.16f,.32f,.53f,1}, {.92f,.94f,.97f,1},
-        {.68f,.73f,.80f,1}, {.49f,.54f,.61f,1}, {.25f,.29f,.35f,1},
-        {.28f,.64f,1,1}, {1,.40f,.36f,1}, {.025f,.035f,.055f,.58f}};
-    static const Palette bright{
-        {.90f,.92f,.94f,1}, {.96f,.97f,.98f,1}, {1,1,1,1},
-        {.85f,.89f,.94f,1}, {.72f,.83f,.96f,1}, {.10f,.13f,.18f,1},
-        {.28f,.33f,.40f,1}, {.43f,.47f,.53f,1}, {.68f,.73f,.79f,1},
-        {.08f,.35f,.67f,1}, {.72f,.12f,.10f,1}, {.025f,.035f,.055f,.58f}};
-    return light ? bright : dark;
-}
+#include "editor/StudioPalette.generated.h"
+inline const Palette& Colors(bool = false) {return LinbluxPalette;}
 inline bool& Light() { static bool light = false; return light; }
 inline void Apply(bool light = false) {
     Light() = light;

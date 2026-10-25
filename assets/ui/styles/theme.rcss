@@ -1,0 +1,15 @@
+/* Generated shared LINBLUX theme. */
+button:hover { background-color: #373137; border-color: #e34255; }
+button:active, button.active, select option:hover, select option:checked { background-color: #592631; border-color: #e34255; }
+button.primary, .experience-primary { background-color: #ba2838; border-color: #e34255; }
+button:focus, input:focus, textarea:focus, select:focus { border-color: #e34255; }
+#header, #tabs, #ribbon, #status { background-color: #101013; }
+.panel, #advanced, #dialog, #context-menu { background-color: #19191eea; border-color: #ffffff18; }
+.panel-heading, .document-tab, .group-name { background-color: #242429; }
+input[type=checkbox]:checked { background-color: #e34255; decorator: none; }
+.tree-row.selected, .tree-row:hover, .document-tab.active, #tabs button.active { background-color: #592631; border-color: #e34255; }
+#game-topbar .logo-button, #game-capsule { border-radius: 8px; background-color: #19191eea; }
+.pause-panel { background-color: #19191eea; border-color: #ffffff18; }
+.pause-tabs button.active { border-color: #e34255; }
+.pause-tabs button { border-radius: 6px; }
+#game-topbar button { border-radius: 7px; }
