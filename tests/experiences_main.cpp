@@ -70,6 +70,9 @@ int main(int argc,char** argv) {
         auto* part=scene.createPart(PartShape::Block,{7,4,3},{2,3,4},"PortablePart");part->setRotationEulerDegrees({0,37,0});
         part->setAttribute("decal_image",project.manifest.icon);const auto partId=part->id();
         BodyProperties body;body.density=2.5f;body.friction=.3f;body.restitution=.7f;body.linearDamping=.2f;body.angularDamping=.4f;std::string bodyError;CHECK(part->setBodyProperties(body,bodyError));
+        auto* portableModel=scene.group({partId},"Modelo portátil",bodyError);CHECK(portableModel);const auto modelId=portableModel->id();
+        ModelFrame portableFrame;CHECK(scene.modelFrame(modelId,portableFrame,bodyError));portableFrame.scale=1.5f;portableFrame.rotation=QuatFromEulerDegrees({0,20,0});
+        CHECK(scene.transformModel(modelId,portableFrame,bodyError));
         const auto previous=author.activePlace();author.save(scene);CHECK(author.activePlace()!=previous);CHECK(fs::exists(previous));
         auto m=author.active()->manifest;m.name="Renamed";m.description="Updated description";author.updateMetadata(m);
         const auto goodManifest=Read(project.root/"experience.json");auto badMedia=m;badMedia.icon="assets/missing.png";
@@ -125,6 +128,8 @@ int main(int argc,char** argv) {
         for(const auto& rig:receivedScene.gameAssets().rigs)for(const auto& body:rig.bodies)
             if(!body.image.empty())CHECK(!game::ResolveImagePath(game::AssetsDir(),body.image).empty());
         CHECK(receivedScene.findPart(partId));CHECK(receivedScene.gameAssets().findRig(rigId));
+        ModelFrame receivedFrame;CHECK(receivedScene.modelFrame(modelId,receivedFrame,bodyError));CHECK(NearlyEqual(receivedFrame.scale,1.5f));
+        CHECK(NearlyEqual(receivedFrame.rotation,portableFrame.rotation));CHECK(receivedScene.findPart(partId)->parent()->id()==modelId);
         const auto& receivedBody=receivedScene.findPart(partId)->bodyProperties();CHECK(NearlyEqual(receivedBody.density,2.5f));CHECK(NearlyEqual(receivedBody.friction,.3f));CHECK(NearlyEqual(receivedBody.restitution,.7f));CHECK(NearlyEqual(receivedBody.linearDamping,.2f));CHECK(NearlyEqual(receivedBody.angularDamping,.4f));
         CHECK(fs::current_path()==cwd);CHECK(!game::ResolveImagePath(game::AssetsDir(),received.manifest.banner).empty());
         CHECK(projectio::toJson(receivedScene).find(base.string())==std::string::npos);

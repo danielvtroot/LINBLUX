@@ -110,6 +110,30 @@ int main() {
         // Optional fast iteration path; the registered CTest always exercises
         // the full editor + player sequence without this environment variable.
         capture("studio-1366");
+        if(std::getenv("LINBLUX_MODELS_ONLY")) {
+            auto* second=scene.createPart(PartShape::Block,{22,3,0},{4,6,1},"Segunda peça");second->setAnchored(true);frames(2);
+            click("node-"+std::to_string(part->id()));event("keydown ctrl");click("node-"+std::to_string(second->id()));event("keyup ctrl");
+            CHECK(scene.selectedIds().size()==2);key("ctrl+g");frames(2);
+            auto* model=scene.selection();CHECK(model&&model->instanceClass()==InstanceClass::Model);
+            if(!model||model->instanceClass()!=InstanceClass::Model){capture("model-group-failure");rlImGuiShutdown();CloseWindow();return 1;}
+            const auto id=model->id();CHECK(part->parent()==model&&second->parent()==model);
+            clickVisible("prop-Model.Position.0");key("ctrl+a");event("type --clearmodifiers 20");key("Return");
+            CHECK(NearlyEqual(part->position().x,16));CHECK(NearlyEqual(second->position().x,24));
+            clickVisible("prop-Model.Scale");key("ctrl+a");event("type --clearmodifiers 2");key("Return");CHECK(NearlyEqual(part->size().x,8));
+            clickVisible("prop-Model.Rotation.1");key("ctrl+a");event("type --clearmodifiers 90");key("Return");CHECK(NearlyEqual(part->position().z,8,.01f));
+            const auto original=part->position();clickVisible("prop-Pivot.Position.0");key("ctrl+a");event("type --clearmodifiers 30");key("Return");CHECK(NearlyEqual(part->position(),original));
+            CHECK(projectio::save(scene,config.defaultProjectPath,error));Scene loaded;CHECK(projectio::load(loaded,config.defaultProjectPath,error));
+            ModelFrame frame;CHECK(loaded.modelFrame(id,frame,error));CHECK(NearlyEqual(frame.position.x,30));CHECK(frame.scale==2);
+            capture("model-properties");
+            scene.createScript(InstanceClass::Script,nullptr,"ModeloPlay.lua")->source="local m=linblux.scene.find("+std::to_string(id)+");assert(m.scale==2);linblux.scene.root:set_attribute('model_play',true)";
+            click("play");frames(8);CHECK(ui.playing());CHECK(EditorUITestAccess::runtime(ui).scripts().errorCount()==0);
+            CHECK(EditorUITestAccess::runtime(ui).scene().workspace()->attributes().count("model_play"));
+            key("shift+F5");frames(2);CHECK(!ui.playing());CHECK(NearlyEqual(part->position(),original));
+            clickVisible("node-"+std::to_string(id));key("ctrl+shift+g");frames(2);
+            CHECK(scene.find(id)==nullptr);CHECK(part->parent()==scene.workspace());CHECK(NearlyEqual(part->position(),original));
+            CHECK(scene.validate(error));std::printf("Model UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
         if(std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")) {
             auto editBody=[&](const std::string& field,const std::string& value){
                 click("property-search");key("ctrl+a");event("type --clearmodifiers "+field);key("Return");

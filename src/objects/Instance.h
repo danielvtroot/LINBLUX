@@ -87,15 +87,26 @@ protected:
     std::map<std::string,Attribute> attributes_;
 };
 
-// Organizational groups: no independent transform or physics body.
+struct ModelFrame {
+    Vector3 position{};
+    Quaternion rotation{0,0,0,1};
+    float scale=1;
+    bool valid() const;
+};
+// Groups have no physics body. Scene owns propagation of a Model's frame.
 class Container final : public Instance {
 public:
     Container(InstanceId id, std::string name, InstanceClass type)
         : Instance(id, std::move(name)), type_(type) {}
     const char* className() const override { return InstanceClassName(type_); }
     InstanceClass instanceClass() const override { return type_; }
+    bool hasModelFrame() const { return hasModelFrame_; }
+    const ModelFrame& modelFrame() const { return modelFrame_; }
 private:
+    friend class Scene;
     InstanceClass type_;
+    bool hasModelFrame_=false;
+    ModelFrame modelFrame_;
 };
 
 class Script final : public Instance {

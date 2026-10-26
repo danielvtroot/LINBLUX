@@ -68,6 +68,11 @@ public:
     // World transforms and object addresses remain unchanged. Depth is capped at 128.
     bool canParent(const Instance* object, const Instance* parent) const;
     bool reparent(Instance* object, Instance* parent, std::string& error);
+    bool modelFrame(InstanceId model,ModelFrame& frame,std::string& error) const;
+    bool setModelPivot(InstanceId model,const ModelFrame& frame,std::string& error);
+    bool transformModel(InstanceId model,const ModelFrame& frame,std::string& error);
+    Container* group(const std::vector<InstanceId>& objects,const std::string& name,std::string& error);
+    bool ungroup(InstanceId model,std::string& error);
     Instance* duplicateTree(const Instance& source, Instance* parent = nullptr);
     Script* createScript(InstanceClass type, Instance* parent = nullptr,
                          const std::string& name = "", InstanceId forcedId = 0);
@@ -100,6 +105,9 @@ public:
 
     Instance* selection() const { return selection_; }
     void select(Instance* object);
+    void toggleSelection(Instance* object);
+    bool selected(InstanceId id) const;
+    const std::vector<InstanceId>& selectedIds() const { return selectionIds_; }
 
     InstanceId nextId() const { return nextId_; }
     void setNextId(InstanceId id);
@@ -129,6 +137,7 @@ private:
     Workspace* workspace_ = nullptr;
     Lighting* lighting_ = nullptr;
     Instance* selection_ = nullptr;
+    std::vector<InstanceId> selectionIds_;
     InstanceId nextId_ = 1;
     game::GameAssets gameAssets_;
     std::vector<NpcVisual> npcVisuals_;

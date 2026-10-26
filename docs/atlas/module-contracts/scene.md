@@ -38,3 +38,8 @@ o formato, atualize `serialization` e testes de ciclo de vida.
 **Limites:** a cena ainda contém seleção/listeners usados pela autoria e
 `GameAssets`; não é um ECS. Rigs não são Instances filhas. Multiplayer/Server
 não existe.
+
+Modelos: ModelFrame tipado em Container, pivô mundial explícito ou centro dos
+limites das Parts. Scene propaga transformações uniformes em lote, validando
+antes de gravar; group/ungroup preservam poses e IDs. Seleção múltipla não é
+serializada. Clonagem percorre snapshot dos filhos, não o vetor que pode mudar.
