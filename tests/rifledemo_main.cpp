@@ -101,7 +101,7 @@ int main() {
         float bestHealth = 100;
         for (const auto id : alvos) bestHealth = std::min(bestHealth, runtime.npcs().health(id));
         require(std::fabs(bestHealth - 66) < .01f,
-                "raycast shot did not damage a target (best health " + std::to_string(bestHealth) + ")");
+                "raycast shot did not damage a target (best health " + std::to_string(bestHealth) + ") Lua: " + scriptErrors(runtime));
         bool tracer = false;
         for (const auto& object : runtime.scene().objects())
             if (object->isPart() && object->name().rfind("Tracante", 0) == 0) tracer = true;

@@ -64,8 +64,9 @@ local function faisca(posicao)
     local brilho = linblux.scene.create("part", {name="Faisca", position=posicao,
         size=v(0.32, 0.32, 0.32), color=v(255, 196, 92), anchored=true,
         collidable=false, material="emissive"})
+    brilho:set_attribute("efeito_rifle", true)
     task.spawn(function()
-        task.wait(0.2)
+        task.wait(0.08)
         if brilho then brilho:destroy() end
     end)
 end
@@ -85,6 +86,19 @@ local function recuar()
     end)
 end
 
+-- Efeitos são Parts consultáveis como qualquer objeto. Pule somente nossos
+-- efeitos visuais, com trabalho limitado; uma parede continua bloqueando o tiro.
+local function consultarDisparo(origem, direcao)
+    local restante = 200
+    for _ = 1, 8 do
+        local hit = linblux.physics.raycast(origem, direcao, restante, arma)
+        if not hit or not hit.object:get_attribute("efeito_rifle") then return hit end
+        restante = restante - hit.distance - 0.5
+        if restante <= 0 then return nil end
+        origem = v(hit.point.x + direcao.x*0.5, hit.point.y + direcao.y*0.5, hit.point.z + direcao.z*0.5)
+    end
+end
+
 local function atirar()
     if not equipada() or not boca then return end
     local ok, motivo = linblux.items.activate(arma)
@@ -97,13 +111,14 @@ local function atirar()
     local origem = boca.world_position
     local direcao = boca.direction
     -- Consulte antes de criar efeitos: o traçante também é uma Part visível.
-    local acerto = linblux.physics.raycast(origem, direcao, 200, arma)
+    local acerto = consultarDisparo(origem, direcao)
     faisca(v(origem.x + direcao.x * 0.4, origem.y + direcao.y * 0.4, origem.z + direcao.z * 0.4))
     -- Traçante é uma Part física real: a física existente a move e o tempo a limpa.
     local tracer = linblux.scene.create("part", {name="Tracante",
         position=v(origem.x + direcao.x * 2, origem.y + direcao.y * 2, origem.z + direcao.z * 2),
-        size=v(0.18, 0.18, 0.18), color=v(255, 224, 130), anchored=false,
+        size=v(0.22, 0.22, 0.22), color=v(255, 224, 130), anchored=false,
         collidable=false, material="emissive"})
+    tracer:set_attribute("efeito_rifle", true)
     tracer.velocity = v(direcao.x * 220, direcao.y * 220, direcao.z * 220)
     task.spawn(function()
         task.wait(0.9)
