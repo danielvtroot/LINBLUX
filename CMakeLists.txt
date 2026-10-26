@@ -307,7 +307,7 @@ if(XVFB_RUN_EXECUTABLE)
 
     # Script-built UI: the same raylib renderer the Studio Play texture and the
     # Player use, verified by framebuffer pixels at two window sizes.
-    add_test(NAME linblux_player_menu COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_menu.py $<TARGET_FILE:linblux_player>)
+    add_test(NAME linblux_player_menu COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" python3 ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_menu.py $<TARGET_FILE:linblux_player>)
     set_tests_properties(linblux_player_menu PROPERTIES TIMEOUT 55 LABELS "graphics;integration;player;ui")
     add_test(NAME linblux_player_menu_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
     set_tests_properties(linblux_player_menu_ui PROPERTIES TIMEOUT 75 ENVIRONMENT "LINBLUX_PLAYER_MENU_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;player;ui")

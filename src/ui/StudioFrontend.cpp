@@ -933,7 +933,7 @@ if(c.action=="r6")showAdvanced("rig");
         style("pause-panel","left",Num(-view.width*(1-eased))+"px");
         style("pause","pointer-events",paused?"auto":"none");
         pauseWasOpen=paused;
-        display("pause",active&&(paused||menuProgress>0),"block");display("health",false);display("game-topbar",active,"flex");
+        display("pause",active&&(paused||menuProgress>0),"block");display("health",false);display("game-topbar",active&&!paused&&menuProgress==0,"flex");
         const auto cursor=ui.gameplayCursor();
         display("mouse-lock-cursor",active&&cursor.visual==GameCursorVisual::MouseLock);
         style("mouse-lock-cursor","left",Num(cursor.position.x-view.x)+"px");

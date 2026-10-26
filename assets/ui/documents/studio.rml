@@ -25,7 +25,7 @@
   <div id="pause"><div id="pause-panel" class="pause-panel">
    <div class="pause-sidebar"><div class="pause-brand"><img src="linblux-logo"/><span>LINBLUX</span></div>
     <button id="resume" data-action="resume" class="primary">Continuar · Esc</button>
-    <div class="pause-tabs"><button id="page-game" data-page="game">Jogador</button><button id="page-settings" data-page="settings">Câmera</button><button id="page-controls" data-page="controls">Controles</button><button id="page-audio" data-page="audio">Áudio</button><button id="page-video" data-page="video">Vídeo</button><button id="page-about" data-page="about">Ajuda</button></div>
+    <div class="pause-tabs"><button id="page-game" data-page="game"><span>Jogador</span></button><button id="page-settings" data-page="settings"><span>Câmera</span></button><button id="page-controls" data-page="controls"><span>Controles</span></button><button id="page-audio" data-page="audio"><span>Áudio</span></button><button id="page-video" data-page="video"><span>Vídeo</span></button><button id="page-about" data-page="about"><span>Ajuda</span></button></div>
     <button id="leave" data-action="stop">Parar teste</button>
    </div><div class="pause-main"><div class="pause-heading"><span id="pause-experience">Experiência</span><button id="pause-close" data-action="resume" title="Fechar menu">×</button></div>
    <div id="pause-content">
