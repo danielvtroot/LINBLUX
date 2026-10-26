@@ -32,3 +32,5 @@ FAST final20261026T225715Z-20329:17/17 em8,8 s, cobertura global desconhecida.
 A rodada anterior encontrou o defeito real do RifleDemo em andamento (resolvido
 no exemplo; não incluído no commit deste menu). Núcleo recompilado: studio,
 core e UI Lua3/3 aprovados; não há aprovação global/FULL implícita.
+
+IMPACT20261026T225754Z-20749:23/23 em59,0s, cobertura global parcial.
