@@ -26,7 +26,7 @@ end
 local function criarAlvo(x, z)
     local peca = linblux.npc.create{name="Alvo", position=v(x, 4, z),
         size=v(2.4, 7, 2.4), color=v(214, 66, 58), max_health=100,
-        speed=0, respawn_delay=4}
+        speed=0, respawn_delay=4, rig="player"}
     peca:set_attribute("alvo", true)
     return peca
 end
@@ -46,5 +46,19 @@ linblux.events.on("inventory_changed", function(evento)
         mostrarDica("1 equipa   ·   clique atira   ·   R recarrega   ·   Delete solta")
     elseif evento.action == "drop" then
         mostrarDica("Segure E para recolher o rifle")
+    end
+end)
+
+-- Guia animado: a patrulha e os clipes usam os sistemas públicos de NPC.
+local guia = linblux.npc.create{name="Guia LINBLUX", position=v(-14,4,-14),
+    size=v(2,5,2), color=v(110,115,125), speed=6, rig="player"}
+local pontos={v(-14,4,-14),v(-22,4,-22)}
+local proximo=2
+linblux.npc.move_to(guia,pontos[proximo])
+linblux.events.on("update",function()
+    local estado=linblux.npc.state(guia)
+    if estado=="idle" then
+        proximo=proximo%2+1
+        linblux.npc.move_to(guia,pontos[proximo])
     end
 end)

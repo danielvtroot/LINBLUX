@@ -56,7 +56,8 @@ try:
  key('e',.85);key('1');shoot()
  time.sleep(4);im=capture('verified');cyan=sum(1 for c in im.getdata() if c[0]<25 and c[1]>235 and 145<c[2]<195)
  assert cyan>1000,'Lua assertions did not reach their success marker'
- p.wait(timeout=35);assert p.returncode==0,(root/'player.log').read_text()[-3000:]
+ key('Escape');cmd('mousemove','--window',window,50,685);cmd('mousedown',1);time.sleep(.25);cmd('mouseup',1)
+ p.wait(timeout=6);assert p.returncode==0,(root/'player.log').read_text()[-3000:]
  print('RifleDemo real Player: E, 1, shooting, NPC damage, reload, Delete, same-ID recollection, HUD/Lua UI: OK;',root)
 finally:
  if p.poll() is None:p.terminate()

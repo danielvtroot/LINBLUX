@@ -15,6 +15,7 @@ import argparse
 import json
 import math
 import struct
+import shutil
 import sys
 import wave
 from pathlib import Path
@@ -82,6 +83,7 @@ def part(pid, name, parent, position, size, color, material="Metal", anchored=Tr
 
 
 def build_world(item_source: str, demo_source: str, library: list[dict]) -> dict:
+    shutil.copyfile(ROOT / "midia/logo.png", DEMO / "assets/logo.png")
     factory = json.loads(FACTORY.read_text())
     base = {obj["name"]: obj for obj in factory["objects"]}
     game = factory["game"]
@@ -109,6 +111,8 @@ def build_world(item_source: str, demo_source: str, library: list[dict]) -> dict
          "attachment": {"position": [0.0, 0.0, -2.4], "rotation": [0.0, 0.0, 0.0, 1.0]}},
         {"id": 17, "class": "Script", "name": "Item.lua", "parent": 10,
          "source": item_source, "enabled": True},
+        dict(part(18, "Placa LINBLUX", 1, (14, 4, -14), (5, 5, 0.4), (40, 40, 46)),
+             attributes={"decal_image": "assets/logo.png", "decal_face": "Front"}),
     ]
     return {"format": "loblox-project", "version": 5, "nextId": 20,
             "objects": objects, "game": game}

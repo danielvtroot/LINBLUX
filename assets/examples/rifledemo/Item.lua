@@ -9,11 +9,11 @@ local v = linblux.vec3
 local arma = linblux.self
 
 local PENTE, RESERVA, RECARGA, INTERVALO = 12, 24, 1.6, 0.16
-local SOM_TIRO = "assets/tiro.wav"
-local SOM_IMPACTO = "assets/impacto.wav"
-local SOM_RECARGA = "assets/recarga.wav"
-local SOM_EQUIPAR = "assets/equipar.wav"
-local SOM_VAZIO = "assets/vazio.wav"
+local SOM_TIRO = "tiro"
+local SOM_IMPACTO = "impacto"
+local SOM_RECARGA = "recarga"
+local SOM_EQUIPAR = "equipar"
+local SOM_VAZIO = "vazio"
 
 local painel, rotulo, ferrolho, boca
 
@@ -32,7 +32,7 @@ end
 
 local function tocar(referencia, volume)
     if not linblux.audio.device_ready() then return end
-    linblux.audio.play(referencia, {volume=volume})
+    linblux.audio.play(referencia, {volume=volume, owner=arma})
 end
 
 local function hud()
