@@ -60,15 +60,9 @@ const char* kItemScript = R"lua(
 -- Todo item programável usa a mesma API: este script não é de rifle, apenas
 -- reage a item_action e desenha munição quando o item está equipado.
 local arma = linblux.self
-local raiz = linblux.scene.root
-local execucoes = (raiz:get_attribute("debug_execs") or 0) + 1
-raiz:set_attribute("debug_execs", execucoes)
-local criacoes = 0
 local painel, rotulo
 
 local function criar()
-    criacoes = criacoes + 1
-    raiz:set_attribute("debug_criacoes", criacoes)
     painel = linblux.ui.create("panel", {anchor="bottom-right", x=-24, y=-24,
         width=200, height=52, background="#101014E6"})
     rotulo = linblux.ui.create("label", {parent=painel, anchor="center", width=180,
@@ -79,10 +73,7 @@ end
 local function atualizar()
     local estado = linblux.items.combat(arma)
     if not estado then return end
-    local equipado = linblux.items.equipped()
-    raiz:set_attribute("debug_equip", equipado and equipado.id or 0)
-    raiz:set_attribute("debug_painel", painel and 1 or 0)
-    if equipado ~= arma then
+    if linblux.items.equipped() ~= arma then
         if painel then linblux.ui.destroy(painel); painel = nil; rotulo = nil
             arma:set_attribute("ui_rotulo", 0) end
         return
@@ -163,32 +154,32 @@ for _, filho in ipairs(item:children()) do
     if string.sub(filho.name, 1, 10) == "BocaDoCano" then boca = filho end
 end
 if boca then pub("boca_id", boca.id) else pub("boca_id", 0) end
-print("ITEM:", item.id, item.name, item.position.X, item.position.Y, item.position.Z)
-print("BOCA:", boca.id, boca.name, boca.position.Z, boca.world_position.Z)
 local acerto = linblux.physics.raycast(boca.world_position, boca.direction, 120, item)
 pub("acerto", acerto and acerto.object.name or "nenhum")
 pub("acerto_distancia", acerto and acerto.distance or -1)
 if acerto and acerto.object == alvo then linblux.npc.damage(alvo, 25) end
 pub("alvo_vida", linblux.npc.health(alvo))
 
--- Sem ignorar a subárvore do item, o raio do próprio pivô o atinge.
-local sem = linblux.physics.raycast(item.position, v(0,0,1), 12)
-local com = linblux.physics.raycast(item.position, v(0,0,1), 12, item)
+-- Cópia no mundo (com colisão): sem ignorar a subárvore, o raio do próprio
+-- pivô atinge o Modelo; com o Modelo ignorado, nenhuma peça dele aparece.
+local p = clone.position
+local origem = v(p.x, p.y, p.z - 20)
+local sem = linblux.physics.raycast(origem, v(0,0,1), 40)
+local com = linblux.physics.raycast(origem, v(0,0,1), 40, clone)
 pub("auto_sem", sem and sem.object.name or "nenhum")
 pub("auto_com", com and com.object.name or "nenhum")
+print("CLONE:", clone.id, clone.name, p.x, p.y, p.z, sem and sem.object.name or "nenhum")
+local chao = linblux.physics.raycast(v(p.x, p.y + 5, p.z), v(0,-1,0), 40)
+print("CHAO:", chao and chao.object.name or "nenhum")
 
 linblux.items.unequip()
 linblux.items.equip(item)
 task.wait(0.05)
 -- Publicado no fim para comparar com a mesma pose que o C++ lê depois.
-pub("boca_x", boca.world_position.X)
-pub("boca_y", boca.world_position.Y)
-pub("boca_z", boca.world_position.Z)
-pub("debug_item_x", item.position.X)
-pub("debug_item_z", item.position.Z)
-pub("debug_local_z", boca.position.Z)
-pub("debug_boca_nome", boca.name)
-pub("boca_dir_z", boca.direction.Z)
+pub("boca_x", boca.world_position.x)
+pub("boca_y", boca.world_position.y)
+pub("boca_z", boca.world_position.z)
+pub("boca_dir_z", boca.direction.z)
 pub("fim", true)
 )lua";
 }
@@ -313,18 +304,17 @@ int main() {
         require(attributeNumber(*workspace, "reserva_recarregada") == 4, "reload_end event reserve");
 
         // Attachment: origem do efeito e direção frontal acompanham o Modelo.
-        for (const auto& message : runtime.scripts().messages()) std::fprintf(stderr, "MSG %s\n", message.text.c_str());
-        const auto* muzzleNode = static_cast<const Attachment*>(runtime.scene().find(muzzleId));
-        require(muzzleNode, "muzzle attachment vanished");
+        // A instância tem o próprio Attachment; o do protótipo fica escondido.
+        const auto* muzzleNode = attachmentOf(runtime.scene(), itemId);
+        require(muzzleNode, "item lost its attachment");
+        const auto muzzleInstanceId = muzzleNode->id();
+        require(InstanceId(attributeNumber(*workspace, "boca_id")) == muzzleInstanceId,
+                "script found a different attachment than the item's");
         ModelFrame muzzleFrame;
-        require(runtime.scene().attachmentFrame(muzzleId, muzzleFrame, error), "attachment frame: " + error);
+        require(runtime.scene().attachmentFrame(muzzleInstanceId, muzzleFrame, error), "attachment frame: " + error);
         require(std::fabs(muzzleFrame.position.x - attributeNumber(*workspace, "boca_x")) < .01f &&
                 std::fabs(muzzleFrame.position.z - attributeNumber(*workspace, "boca_z")) < .01f,
-                "Lua world_position disagrees with the engine frame: item(" +
-                std::to_string(attributeNumber(*workspace, "debug_item_x")) + "," +
-                std::to_string(attributeNumber(*workspace, "debug_item_z")) + ") local" +
-                std::to_string(attributeNumber(*workspace, "debug_local_z")) + " name " +
-                attributeString(*workspace, "debug_boca_nome") + " lua(" +
+                "Lua world_position disagrees with the engine frame: lua(" +
                 std::to_string(attributeNumber(*workspace, "boca_x")) + "," +
                 std::to_string(attributeNumber(*workspace, "boca_y")) + "," +
                 std::to_string(attributeNumber(*workspace, "boca_z")) + ") engine(" +
@@ -357,7 +347,8 @@ int main() {
                 "raycast from the muzzle hit '" + attributeString(*workspace, "acerto") + "'");
         require(attributeNumber(*workspace, "alvo_vida") == 75, "damage was not applied by the health API");
         require(attributeString(*workspace, "auto_com") == "nenhum", "ignoring the item still hit itself");
-        require(attributeString(*workspace, "auto_sem") == "Corpo" || attributeString(*workspace, "auto_sem") == "Cano",
+        require(attributeString(*workspace, "auto_sem").rfind("Corpo", 0) == 0 ||
+                attributeString(*workspace, "auto_sem").rfind("Cano", 0) == 0,
                 "self-hit fixture is not meaningful: '" + attributeString(*workspace, "auto_sem") + "'");
 
         // HUD Lua: só existe com o item equipado e acompanha a munição real.
@@ -375,7 +366,7 @@ int main() {
         require(runtime.teleportPlayer(Vector3Add(runtime.position(), {2.f, 0, 0}), error),
                 "teleport: " + error);
         for (int i = 0; i < 4; ++i) runtime.update(1.f / 60, {});
-        require(runtime.scene().attachmentFrame(muzzleId, muzzleFrame, error), "attachment frame after teleport");
+        require(runtime.scene().attachmentFrame(muzzleInstanceId, muzzleFrame, error), "attachment frame after teleport");
         require(muzzleFrame.position.x - before.x > 1.5f, "attachment did not follow the equipped item");
 
         // Desequipar remove o HUD e encerra recarga/ativação pendentes.
@@ -392,7 +383,7 @@ int main() {
         ModelFrame rotated = itemFrame;
         rotated.rotation = QuatFromEulerDegreesZYX({0, 90, 0});
         require(runtime.mutableScene().transformModel(itemId, rotated, error), "rotate model: " + error);
-        require(runtime.scene().attachmentFrame(muzzleId, muzzleFrame, error), "attachment after rotation");
+        require(runtime.scene().attachmentFrame(muzzleInstanceId, muzzleFrame, error), "attachment after rotation");
         const Vector3 rotatedOffset = Vector3Subtract(muzzleFrame.position, rotated.position);
         require(std::fabs(rotatedOffset.x) > 2.f && std::fabs(rotatedOffset.z) < 1.f,
                 "attachment did not rotate with the model");
