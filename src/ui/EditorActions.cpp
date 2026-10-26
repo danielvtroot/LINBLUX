@@ -221,6 +221,8 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             else if(node->instanceClass()==InstanceClass::Model&&name.rfind("Item.",0)==0){
                 if(name=="Item.Prototype"){
                     if(c.value!="true"&&c.value!="false")throw std::runtime_error("Use verdadeiro ou falso.");
+                    const auto extra=(!node->attributes().count("_linblux_item_prototype"))+(c.value=="true"&&!node->attributes().count("item_type"));
+                    if(node->attributes().size()+extra>64)throw std::runtime_error("Limite de atributos do Modelo atingido.");
                     if(!node->setAttribute("_linblux_item_prototype",c.value=="true"))throw std::runtime_error("Limite de atributos do Modelo atingido.");
                     if(c.value=="true"&&!node->attributes().count("item_type"))if(!node->setAttribute("item_type",std::string("item-")+std::to_string(node->id())))throw std::runtime_error("Limite de atributos do Modelo atingido.");
                 }else if(name=="Item.Type"){

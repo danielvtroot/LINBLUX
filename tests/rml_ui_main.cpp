@@ -155,10 +155,15 @@ int main() {
             CHECK(loaded.attachmentFrame(anchorId,anchorWorld,error));CHECK(NearlyEqual(anchorWorld.position,anchorPosition));
             clickVisible("node-"+std::to_string(id));
             ModelFrame frame;CHECK(loaded.modelFrame(id,frame,error));CHECK(NearlyEqual(frame.position.x,30));CHECK(frame.scale==2);
+            clickVisible("prop-Item.Prototype");frames(2);CHECK(std::get<bool>(model->attributes().at("_linblux_item_prototype")));
+            clickVisible("prop-Item.Type");key("ctrl+a");event("type --clearmodifiers visual_item");key("Return");
+            CHECK(std::get<std::string>(model->attributes().at("item_type"))=="visual_item");
+            CHECK(projectio::save(scene,config.defaultProjectPath,error));
             capture("model-properties");
             scene.createScript(InstanceClass::Script,nullptr,"ModeloPlay.lua")->source="local m=linblux.scene.find("+std::to_string(id)+");assert(m.scale==2);linblux.scene.root:set_attribute('model_play',true)";
             click("play");frames(8);CHECK(ui.playing());CHECK(EditorUITestAccess::runtime(ui).scripts().errorCount()==0);
             CHECK(EditorUITestAccess::runtime(ui).scene().workspace()->attributes().count("model_play"));
+            CHECK(EditorUITestAccess::runtime(ui).inventory().prototype("visual_item")==id);
             key("shift+F5");frames(2);CHECK(!ui.playing());CHECK(NearlyEqual(part->position(),original));
             clickVisible("node-"+std::to_string(id));key("ctrl+shift+g");frames(2);
             CHECK(scene.find(id)==nullptr);CHECK(part->parent()==scene.workspace());CHECK(NearlyEqual(part->position(),original));

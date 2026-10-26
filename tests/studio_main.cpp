@@ -141,8 +141,12 @@ void InventoryLifecycle() {
     const auto* ballPart=static_cast<const Part*>(scene.find(ball)->children().front());
     CHECK(Vector2Distance({ballPart->position().x,ballPart->position().z},{2,0})>ballPart->sphereRadius()+1);
     // A session operates on its own copy; prototype flags never alter saved authoring.
-    Scene authored;CHECK(projectio::fromJson(authored,original,error));game::RuntimeSession runtime;CHECK(runtime.start(authored,error));
-    const auto authorBefore=projectio::toJson(authored);runtime.inventory().registerType("chave",prototype->id());const auto runtimeItem=runtime.inventory().spawn("chave");runtime.inventory().collect(runtimeItem);runtime.inventory().equip(runtimeItem);runtime.stop();CHECK(projectio::toJson(authored)==authorBefore);
+    Scene authored;CHECK(projectio::fromJson(authored,original,error));
+    auto* authoredPrototype=authored.find(prototype->id());authoredPrototype->setAttribute("_linblux_item_prototype",true);authoredPrototype->setAttribute("item_type",std::string("chave"));
+    static_cast<Script*>(authored.find(script->id()))->source="assert(linblux.items.info(linblux.self).name);linblux.self:set_attribute('rodou',true)";
+    const auto authorBefore=projectio::toJson(authored);game::RuntimeSession runtime;CHECK(runtime.start(authored,error));CHECK(runtime.scripts().errorCount()==0);
+    const auto runtimeItem=runtime.inventory().spawn("chave");runtime.inventory().collect(runtimeItem);runtime.inventory().equip(runtimeItem);runtime.update(1.f/60,{});
+    CHECK(runtime.scripts().errorCount()==0);CHECK(runtime.scene().find(runtimeItem)->attributes().count("rodou"));runtime.stop();CHECK(projectio::toJson(authored)==authorBefore);
 }
 void AttachmentJoints() {
     Scene scene;std::string error;auto* model=scene.createContainer(InstanceClass::Model,nullptr,"Articulação");

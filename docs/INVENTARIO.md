@@ -1,5 +1,11 @@
 # Inventário da sessão
 
+No Studio, selecione um Modelo e marque **Protótipo de item** nas Propriedades.
+Defina o tipo (identificador estável) e escolha o ícone pelo seletor de imagens.
+Esse catálogo é carregado antes dos scripts, evitando executar comportamento de
+protótipos. O nome amigável é o nome do Modelo. O marcador, tipo e ícone são
+atributos persistidos e acompanham salvar, Mundo Padrão e pacotes .lo.
+
 A API `linblux.items` usa Modelos e IDs reais. Registrar um tipo transforma o
 Modelo em protótipo da sessão: suas peças ficam ocultas/sem contato e seus
 scripts ficam desativados. Instâncias clonadas retomam os scripts originais,
@@ -55,7 +61,6 @@ nenhuma dessas mutações altera a cena autoral. Estado entre partidas deve ser
 salvo explicitamente pelo criador com storage, usando tipo e dados próprios,
 não supondo que um ID de instância gerado sobreviva a outra sessão.
 
-Exemplo executável: assets/examples/lua/inventario.lua. A criação de tipos nesta
-unidade é por Lua no editor de scripts existente. Não há assistente visual de
-tipos nem transferência multiplayer. Segurar E, tecla Delete e hotbar ainda
+Exemplo executável: assets/examples/lua/inventario.lua. Tipos podem ser configurados nas Propriedades ou criados dinamicamente por
+Lua (use apenas uma forma para cada tipo). Não há transferência multiplayer. Segurar E, tecla Delete e hotbar ainda
 precisam da integração de entrada/apresentação; não são anunciados como prontos.
