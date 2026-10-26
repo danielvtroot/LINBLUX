@@ -99,7 +99,7 @@ end)
 linblux.events.on("update", function(dt) atualizar() end)
 linblux.events.on("destroy", function()
     if painel then linblux.ui.destroy(painel); painel = nil end
-end)
+end, arma)
 )lua";
 const char* kDriverScript = R"lua(
 local v = linblux.vec3
@@ -169,11 +169,7 @@ local com = linblux.physics.raycast(item.position, v(0,0,1), 12, item)
 pub("auto_sem", sem and sem.object.name or "nenhum")
 pub("auto_com", com and com.object.name or "nenhum")
 
--- Recusas: ativar item guardado e recarregar item guardado.
-local guardado_erro = pcall(function() linblux.items.unequip() end)
-local ativacao_guardada = pcall(function() return linblux.items.activate(item) end)
-pub("ativacao_guardada_falhou", not ativacao_guardada)
-pub("unequip_ok", guardado_erro)
+linblux.items.unequip()
 linblux.items.equip(item)
 task.wait(0.05)
 pub("fim", true)
@@ -326,7 +322,6 @@ int main() {
         require(attributeString(*workspace, "auto_com") == "nenhum", "ignoring the item still hit itself");
         require(attributeString(*workspace, "auto_sem") == "Corpo" || attributeString(*workspace, "auto_sem") == "Cano",
                 "self-hit fixture is not meaningful: '" + attributeString(*workspace, "auto_sem") + "'");
-        require(attributeBool(*workspace, "ativacao_guardada_falhou"), "activation of a stored item was accepted");
 
         // HUD Lua: só existe com o item equipado e acompanha a munição real.
         auto uiLabel = [&](InstanceId item) {
@@ -390,6 +385,41 @@ int main() {
 
         runtime.stop(false);
         require(!runtime.itemActions().known(itemId), "stop kept item state");
+
+        // Recusas de estado: um item no mundo não ativa nem recarrega, e um
+        // elemento de UI com propriedade inválida não fica órfão no modelo.
+        {
+            Scene refuse;
+            refuse.buildDefaultScene();
+            auto* part = refuse.createPart(PartShape::Block, {0, 0, 0}, {1, 1, 3}, "Ferramenta");
+            auto* model = refuse.group({part->id()}, "FerramentaModelo", error);
+            require(model, "refuse group: " + error);
+            auto* script = refuse.createScript(InstanceClass::Script,
+                refuse.ensureService(InstanceClass::ServerScriptService), "Recusa.lua");
+            script->source = R"lua(
+local modelo = linblux.scene.find("FerramentaModelo")
+linblux.items.register("ferramenta", modelo, {name="Ferramenta"})
+local item = linblux.items.spawn("ferramenta")
+linblux.items.activate(item)
+)lua";
+            auto* uiScript = refuse.createScript(InstanceClass::Script,
+                refuse.ensureService(InstanceClass::ServerScriptService), "UiInvalida.lua");
+            uiScript->source = R"lua(
+-- Propriedade inválida: o elemento criado não pode sobreviver sem id.
+linblux.ui.create("label", {text="x", cor="#FFFFFF"})
+)lua";
+            game::RuntimeSession refused;
+            require(refused.start(refuse, error), "refuse start: " + error);
+            for (int i = 0; i < 4; ++i) refused.update(1.f / 60, {});
+            std::string text;
+            for (const auto& message : refused.scripts().messages()) text += message.text + "\n";
+            require(text.find("Ative somente o item equipado") != std::string::npos,
+                    "stored item activation was accepted:\n" + text);
+            require(text.find("Opção de UI desconhecida") != std::string::npos,
+                    "invalid UI property did not fail:\n" + text);
+            require(refused.ui().count() == 0, "failed ui.create left an orphan element");
+            refused.stop(false);
+        }
         std::printf("Item actions: activation, ammo, reload, attachment, raycast, damage, HUD and cleanup OK\n");
     } catch (const std::exception& e) {
         std::fprintf(stderr, "Item actions failed: %s\n", e.what());
