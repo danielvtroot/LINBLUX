@@ -685,7 +685,7 @@ Color Tint(const std::string* hex) {
 }
 void DrawFaceQuad(Vector3 position, Quaternion rotationQuat, Vector3 size, int face,
                   const Texture2D& tex, float alpha, Color tint, Vector2 repeatUv,
-                  Vector2 offsetUv, int uvRotation, Vector3 lightDirection, float sunIntensity,
+                  Vector2 offsetUv, float uvRotation, Vector3 lightDirection, float sunIntensity,
                   float brightness, float outward = 0.02f) {
     const Vector3 half = Vector3Scale(size, 0.5f);
     const FaceDef& def = kFaces[face];
@@ -704,11 +704,8 @@ void DrawFaceQuad(Vector3 position, Quaternion rotationQuat, Vector3 size, int f
         // Rotaciona base uv (0..1) por quarter-turns em torno do centro.
         u = (u - 0.5f) * repeatUv.x + offsetUv.x;
         v = (v - 0.5f) * repeatUv.y + offsetUv.y;
-        for (int turns = (uvRotation % 360 + 360) % 360 / 90; turns > 0; --turns) {
-            const float next = v;
-            v = -u;
-            u = next;
-        }
+        const float angle=uvRotation*DEG2RAD,c=std::cos(angle),s=std::sin(angle);
+        const float previousU=u;u=previousU*c+v*s;v=-previousU*s+v*c;
         return std::pair<float, float>{u + 0.5f, v + 0.5f};
     };
     // Cantos locais: bl, br, tr, tl ao longo de u/v.
@@ -820,12 +817,31 @@ void DrawPartSkins(const Part& part, const std::string& assetsDir,
                      nullptr, nullptr, "texture_repeat_u", "texture_repeat_v",
                      "texture_offset_u", "texture_offset_v", assetsDir,
                      lightDirection, sunIntensity, brightness);
+    rlDrawRenderBatchActive();rlDisableDepthMask();
+    for(const auto* child:part.children())if(IsSurfaceClass(child->instanceClass())) {
+        const auto& surface=static_cast<const Surface&>(*child);const auto& value=surface.properties();
+        if(!value.valid()||value.image.empty())continue;
+        const auto path=game::ResolveImagePath(assetsDir,value.image);if(path.empty())continue;
+        const auto texture=game::AssetTexture(path);if(!texture.id)continue;
+        Vector2 repeat{1,1};
+        if(surface.instanceClass()==InstanceClass::Texture) {
+            const auto& face=skins::kFaces[value.face];const auto size=part.size();
+            const auto extent=[&](Vector3 axis){return std::fabs(axis.x)*size.x+std::fabs(axis.y)*size.y+std::fabs(axis.z)*size.z;};
+            repeat={extent(face.uAxis)/value.studsPerTileU,extent(face.vAxis)/value.studsPerTileV};
+        }
+        skins::DrawFaceQuad(part.position(),part.rotation(),part.size(),value.face,texture,1-value.transparency,value.tint,
+            repeat,{value.offsetU,value.offsetV},value.rotation,lightDirection,sunIntensity,brightness,.021f);
+    }
+    rlDrawRenderBatchActive();rlEnableDepthMask();
 }
 
 Texture2D& FaceTexture() {
     static Texture2D tex{};
-    static const auto path=game::BuiltinAssetPath("rosto1.png");
-    tex=game::AssetTexture(game::ProjectFaceImage().empty()?path:game::ProjectFaceImage());
+    // Sem rosto obrigatório: só desenha a face quando o projeto define uma
+    // imagem. Cabeças novas ficam sem marcas faciais impostas;
+    // experiências antigas que já têm faceImage continuam intactas.
+    const auto& reference=game::ProjectFaceImage();
+    tex=reference.empty()?Texture2D{}:game::AssetTexture(reference);
     return tex;
 }
 
@@ -977,7 +993,7 @@ void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float in
             if(!p.valid()||p.image.empty())continue;
             const auto tex=game::AssetTexture(game::ResolveImagePath(game::AssetsDir(),p.image));
             if(tex.id)skins::DrawFaceQuad(world[i].position,world[i].rotation,rig.bodies[i].size,p.face,
-                tex,1-p.transparency,p.tint,{1,1},{0,0},0,light,intensity,brightness,.02f);
+                tex,1-p.transparency,p.tint,{1,1},{p.offsetU,p.offsetV},p.rotation,light,intensity,brightness,.02f);
         }
     }
     rlDrawRenderBatchActive();rlEnableDepthMask();
@@ -985,18 +1001,9 @@ void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float in
         if (i == state.selectedBody||state.selectedBody==-2) DrawRotatedBoxWires(world[i].position,
             rig.bodies[i].size, world[i].rotation, GOLD);
     }
-    // Rosto do usuário quando existir; sem arquivo, mantém os olhos mínimos.
-    // The face and fallback eyes sit farther out than the body image decal so
-    // applying an image to the head never hides the default face.
-    if (FaceTexture().id != 0) {
-        DrawHeadFace(world[game::Head], rig.bodies[game::Head].size);
-    } else {
-        // Original minimal face marks the -Z front without external textures.
-        for (float side : {-1.f, 1.f}) {
-            const auto eye = game::Compose(world[game::Head], {{side*.35f, .08f, -rig.bodies[game::Head].size.z*.5f-.04f}});
-            DrawShadedBox(eye.position, {.13f, .15f, .035f}, eye.rotation, DARKGRAY, light, 0, 1);
-        }
-    }
+    // Preserva só a face explicitamente configurada por projetos legados.
+    // Imagens de corpo e adesivos são desenhados pelos componentes acima.
+    if (FaceTexture().id != 0) DrawHeadFace(world[game::Head],rig.bodies[game::Head].size);
     if (state.pivots) {
         for (const auto& joint : rig.joints) {
             const auto pivot = game::Compose(world[joint.child],joint.childAnchor);

@@ -114,6 +114,22 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 .empty-state { padding: 9px 8px; color: #aeb4c1; font-size: 11px; }
 .property-action { margin: 5px; height: 25px; font-size: 11px; }
 .property .color-button { flex: 0 0 19px; width: 19px; height: 17px; padding: 0; margin-right: 5px; border: 1px #8799b1; }
+/* Seletor visual de imagens: miniatura + nome amigável, com busca e rolagem
+   própria para não estourar a borda do painel de Propriedades. */
+.image-picker { width: 100%; padding: 4px 6px 6px; border-bottom: 1px #383b43; background-color: #2b2e35; }
+.image-current { display: flex; align-items: center; width: 100%; min-height: 46px; margin-bottom: 3px; }
+.image-current-thumb { flex: 0 0 42px; width: 42px; height: 42px; margin-right: 7px; background-color: #23262c; border: 1px #515967; }
+.image-current-name { flex: 1; min-width: 0; font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.image-missing { flex: 0 0 auto; margin-right: 5px; padding: 2px 4px; background-color: #7d3a3a; border-radius: 2px; font-size: 9px; color: #ffd7d7; }
+.image-current button { flex: 0 0 auto; }
+.image-query { width: 100%; height: 24px; margin: 2px 0 4px; padding: 3px 6px; font-size: 11px; background-color: #23262c; border: 1px #454b57; }
+.image-options { width: 100%; max-height: 196px; overflow: auto; padding: 2px; background-color: #23262c; border: 1px #3d434e; }
+.image-option { display: flex; align-items: center; width: 100%; height: 42px; padding: 2px 4px; border: 1px transparent; background-color: transparent; border-radius: 2px; text-align: left; font-size: 11px; }
+.image-option img { flex: 0 0 34px; width: 34px; height: 34px; margin-right: 7px; }
+.image-option-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.image-option-type { flex: 0 0 auto; margin-left: 6px; color: #98a3b4; font-size: 9px; }
+.image-empty { padding: 8px; color: #98a3b4; font-size: 10px; }
+.image-picker-actions button { height: 24px; margin: 5px 4px 0 0; font-size: 10px; }
 #viewport-label { position: absolute; height: 26px; padding: 0; background-color: #35383f; border-top: 1px #545b66; display: flex; align-items: stretch; justify-content: flex-start; font-size: 11px; overflow: hidden; }
 #document-list { display: flex; flex: 1; min-width: 0; height: 26px; overflow: hidden; }
 .document-tab { display: flex; flex: 0 1 auto; min-width: 0; height: 26px; border-right: 1px #555d69; background-color: #30333a; }
@@ -145,10 +161,12 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 .config-field input, .config-field select { width: 52%; height: 24px; font-size: 11px; }
 .config-field input[type=checkbox] { width: 14px; height: 14px; }
 .asset-grid { display: flex; flex-wrap: wrap; padding: 10px 0; }
-.asset-card { width: 164px; margin: 0 8px 8px 0; padding: 7px; border: 1px #515967; background-color: #30343c; }
+.asset-card { width: 176px; margin: 0 8px 8px 0; padding: 7px; border: 1px #515967; background-color: #30343c; }
 .asset-card .asset-preview { display: block; width: auto; height: auto; max-width: 110px; max-height: 90px; margin: 0 auto 5px; }
-.asset-card span { display: block; font-size: 10px; margin-bottom: 7px; }
-.asset-card button { font-size: 10px; padding: 3px; }
+.asset-card span { display: block; font-size: 10px; margin-bottom: 4px; }
+.asset-card .asset-name { font-size: 11px; color: #e2e8f2; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.asset-card .asset-meta { color: #98a3b4; font-size: 9px; margin-bottom: 7px; }
+.asset-card button { font-size: 10px; padding: 3px; margin: 0 3px 3px 0; }
 #status { position: absolute; bottom: 0; left: 0; right: 0; height: 23px; padding: 5px 9px; display: flex; justify-content: space-between; background-color: #22252b; border-top: 1px #4a4f5a; font-size: 10px; color: #b8c3d4; }
 #message { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 #scene-count { margin-left: 15px; }
@@ -168,3 +186,14 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 .compact .group-tools button { width: 48px; min-width: 48px; flex-basis: 48px; font-size: 10px; }
 .compact .ribbon-group { padding: 0 4px; margin-right: 4px; }
 .compact .group-tools img { width: 24px; height: 24px; }
+
+/* Referências de imagens: rolagem limitada no diálogo, sem cobrir os comandos. */
+.image-usages { max-height: 200px; overflow: auto; }
+.image-usage { padding: 6px 0; border-bottom: 1px #ffffff18; }
+.image-usage span { display: block; margin-bottom: 4px; font-size: 12px; }
+.image-usage button { height: 26px; margin-right: 5px; padding: 3px 7px; }
+#dialog { max-height: 88%; overflow: auto; }
+.image-picker, .image-query, .image-options, .image-option { box-sizing: border-box; }
+.asset-card { box-sizing: border-box; }
+
+button.image-locked { opacity: 0.45; pointer-events: none; }

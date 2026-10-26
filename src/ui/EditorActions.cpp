@@ -111,6 +111,43 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             e.experienceUi_->removeAsset(c.value,game::ImageInUse(e.scene_,c.value)||game::SoundInUse(e.scene_,c.value));
             e.setStatus("Asset removido: "+c.value);
         }
+        else if(c.action.rfind("rename-image:",0)==0) {
+            std::string error;
+            if(!game::RenameImageAsset(game::AssetsDir(),c.action.substr(13),c.value,error))throw std::runtime_error(error);
+            e.setStatus("Imagem renomeada: "+c.value);
+        }
+        else if(c.action.rfind("replace-image:",0)==0) {
+            const std::string oldFile=std::filesystem::path(c.action.substr(14)).filename().string();
+            if(!ui::SafeImageFile(c.value))throw std::runtime_error("Use a PNG/JPEG within the 32 MiB file / 64 MiB decoded budget");
+            std::string asset,error;if(!game::ImportImageTo(game::AssetsDir(),c.value,asset,error))throw std::runtime_error(error);
+            const std::string reference=game::ImageAssetReference(asset);
+            // A troca reescreve as referências existentes; nada aponta para o
+            // arquivo antigo e nenhum objeto perde a superfície.
+            std::size_t replaced=game::ReplaceImageReferences(e.scene_,oldFile,reference);
+            if(e.experienceUi_)replaced+=e.experienceUi_->replaceImageReferences(oldFile,reference);
+            e.setStatus("Imagem substituída em "+std::to_string(replaced)+" referência(s).");
+        }
+        else if(c.action.rfind("delete-image:",0)==0) {
+            const std::string file=std::filesystem::path(c.action.substr(13)).filename().string();
+            std::vector<std::string> uses;
+            for(const auto& use:game::DescribeImageUsage(e.scene_,file))uses.push_back(use.where);
+            if(e.experienceUi_)for(const auto& use:e.experienceUi_->presentationUses(file))uses.push_back(use);
+            if(!uses.empty()) {
+                std::string message="A imagem ainda é usada em: ";
+                for(std::size_t i=0;i<uses.size();++i)message+=(i?" · ":"")+uses[i];
+                throw std::runtime_error(message+". Remova ou substitua essas referências antes de excluir.");
+            }
+            if(!e.saveCurrentProject())throw std::runtime_error("A imagem foi preservada porque a experiência não pôde ser salva.");
+            if(e.experienceUi_)e.experienceUi_->removeAsset(file,false);
+            else {std::string error;if(!game::RemoveAssetFile(game::AssetsDir(),file,false,error))throw std::runtime_error(error);}
+            e.setStatus("Imagem excluída da experiência: "+file);
+        }
+        else if(c.action=="apply-surface-image") {
+            auto* node=e.scene_.selection();if(!node||!IsSurfaceClass(node->instanceClass()))throw std::runtime_error("Selecione um adesivo ou textura.");
+            if(game::ResolveImagePath(game::AssetsDir(),c.value).empty())throw std::runtime_error("Imagem ausente.");
+            auto& surface=static_cast<Surface&>(*node);auto value=surface.properties();value.image=game::ImageAssetReference(c.value);
+            if(!surface.setProperties(value))throw std::runtime_error("Propriedades de superfície inválidas.");
+        }
         else if(c.action=="apply-image"||c.action=="apply-texture") {
             auto* part=e.scene_.selection();if(!part||!part->isPart())throw std::runtime_error("Select a Part before applying an image");
             const auto path=game::ResolveImagePath(game::AssetsDir(),c.value);if(path.empty())throw std::runtime_error("Image asset missing");
@@ -147,6 +184,15 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                 if(std::holds_alternative<double>(it->second))node->setAttribute(key,double(Number(c.value)));
                 else if(std::holds_alternative<bool>(it->second)){if(c.value!="true"&&c.value!="false")throw std::runtime_error("Use true or false");node->setAttribute(key,c.value=="true");}
                 else node->setAttribute(key,c.value);
+            }
+            else if(IsSurfaceClass(node->instanceClass())&&name.rfind("Surface.",0)==0) {
+                auto& surface=static_cast<Surface&>(*node);auto value=surface.properties();const float number=Number(c.value);
+                if(name=="Surface.Face"){if(number<0||number>5||std::floor(number)!=number)throw std::runtime_error("Face deve ser inteira de 0 a 5.");value.face=int(number);}
+                else if(name=="Surface.Transparency")value.transparency=number;else if(name=="Surface.Rotation")value.rotation=number;
+                else if(name=="Surface.OffsetU")value.offsetU=number;else if(name=="Surface.OffsetV")value.offsetV=number;
+                else if(name=="Surface.TileU")value.studsPerTileU=number;else if(name=="Surface.TileV")value.studsPerTileV=number;
+                else throw std::runtime_error("Propriedade de superfície desconhecida.");
+                if(!surface.setProperties(value))throw std::runtime_error("Propriedades de superfície fora dos limites.");
             }
             else if(node->isPart()) {
                 auto& p=*static_cast<Part*>(node);e.endGizmoSession(true,"property");

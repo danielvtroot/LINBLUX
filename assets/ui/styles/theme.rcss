@@ -3,6 +3,8 @@ button:hover { background-color: #373137; border-color: #e34255; }
 button:active, button.active, select option:hover, select option:checked { background-color: #592631; border-color: #e34255; }
 button.primary, .experience-primary { background-color: #ba2838; border-color: #e34255; }
 button:focus, input:focus, textarea:focus, select:focus { border-color: #e34255; }
+.image-option:hover { background-color: #373137; border-color: #e34255; }
+.image-option.selected, #advanced-tabs button.active { background-color: #592631; border-color: #e34255; }
 #header, #tabs, #ribbon, #status { background-color: #101013; }
 .panel, #dialog, #context-menu { background-color: #19191eea; border-color: #ffffff18; }
 .panel-heading, .document-tab, .group-name { background-color: #242429; }

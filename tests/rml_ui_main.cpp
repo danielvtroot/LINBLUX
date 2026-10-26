@@ -93,6 +93,8 @@ int main() {
             clickAt({b.x+b.width/2,b.y+b.height/2});
         };
         auto capture=[&](const std::string& name){frames();TakeScreenshot((std::string(directory)+"/"+name+".png").c_str());};
+        // Painéis longos rolam; a automação rola até o controle antes de clicar.
+        auto clickVisible=[&](const std::string& id){ui.frontend()->scrollIntoView(id);frames(2);click(id);};
         frames(6);event("search --name '^LINBLUX RML integration$' windowfocus --sync");
         std::string windowId;
         {FILE* pipe=popen("xdotool search --name '^LINBLUX RML integration$' | head -1","r");char buffer[64]{};if(pipe&&std::fgets(buffer,sizeof(buffer),pipe))windowId=buffer;if(pipe)pclose(pipe);while(!windowId.empty()&&(windowId.back()=='\n'||windowId.back()=='\r'))windowId.pop_back();}
@@ -323,25 +325,28 @@ end)
             click("tree-search");event("type --clearmodifiers R6");key("Return");
             click("rig-"+rigId);click("rig-body-"+rigId+"-0");
             click("cmd-rig-decal-add-");CHECK(rig()->bodies[game::Torso].decals.size()==1);
+            if(rig()->bodies[game::Torso].decals.empty()){capture("rig-add-failure");rlImGuiShutdown();CloseWindow();return 1;}
             const auto first=rig()->bodies[game::Torso].decals.front().id;
             click("rig-prop-Name");key("ctrl+a");event("type --clearmodifiers DecalFront");key("Return");
             CHECK(rig()->findDecal(first)->name=="DecalFront");
-            click("rig-prop-Image");capture("rig-image-open");key("Down");key("Down");key("Return");
-            CHECK(rig()->findDecal(first)->surface.image=="front.png");
-            click("cmd-rig-decal-add-");CHECK(rig()->bodies[game::Torso].decals.size()==2);
+            // O seletor visual aplica pela miniatura/nome; o antigo select de
+            // IDs técnicos não existe mais.
+            clickVisible("image-query-front.png");frames(2);capture("rig-image-open");
+            CHECK(rig()->findDecal(first)->surface.image=="assets/front.png");
+            clickVisible("cmd-rig-decal-add-");CHECK(rig()->bodies[game::Torso].decals.size()==2);
             const auto second=rig()->bodies[game::Torso].decals.back().id;
-            click("rig-prop-Name");key("ctrl+a");event("type --clearmodifiers DecalBack");key("Return");
-            click("rig-prop-Face");key("Down");key("Return");
+            clickVisible("rig-prop-Name");key("ctrl+a");event("type --clearmodifiers DecalBack");key("Return");
+            clickVisible("rig-prop-Face");key("Down");key("Return");
             CHECK(rig()->findDecal(second)->surface.face==1);
-            click("rig-prop-Image");key("Down");key("Return");
-            CHECK(rig()->findDecal(second)->surface.image=="back.png");
-            click("rig-prop-Transparency");key("ctrl+a");event("type --clearmodifiers 0.25");key("Return");
+            clickVisible("image-query-back.png");frames(2);
+            CHECK(rig()->findDecal(second)->surface.image=="assets/back.png");
+            clickVisible("rig-prop-Transparency");key("ctrl+a");event("type --clearmodifiers 0.25");key("Return");
             CHECK(NearlyEqual(rig()->findDecal(second)->surface.transparency,.25f));
             capture("rig-decals-properties");
             // Import through the existing dialog; choose the imported image
             // for this child without replacing its sibling or face.
             image=GenImageColor(32,32,ORANGE);CHECK(ExportImage(image,"external.png"));UnloadImage(image);
-            click("cmd-import-dialog-");
+            clickVisible("cmd-import-dialog-");
             click("dialog-value");SetClipboardText((std::string(directory)+"/external.png").c_str());key("ctrl+a");key("ctrl+v");key("Return");
             auto imported=game::ListImages(game::AssetsDir());
             CHECK(imported.size()==3);
@@ -349,14 +354,23 @@ end)
             CHECK(!importedImage.empty());
             if(importedImage.empty()) {std::fprintf(stderr,"Import dialog error: %s\n",ui.frontend()->elementText("dialog-error").c_str());capture("rig-import-error");key("Escape");}
             else {
-            click("rig-prop-Image");
-            for(int i=0;i<5;++i)key("Up"); // first option: None
-            for(const auto& item:imported){key("Down");if(item.filename==importedImage)break;}
-            key("Return");
-            if(rig()->findDecal(second)->surface.image!=importedImage)std::fprintf(stderr,"Imported image selection: expected=%s actual=%s markup=%s\n",importedImage.c_str(),rig()->findDecal(second)->surface.image.c_str(),ui.frontend()->elementText("rig-prop-Image").c_str());
-            CHECK(rig()->findDecal(second)->surface.image==importedImage);
+            clickVisible("image-query-"+importedImage);frames(2);
+            CHECK(rig()->findDecal(second)->surface.image==game::ImageAssetReference(importedImage));
+            // Nome amigável é editável e persiste em assets/image-names.json.
+            clickVisible("cmd-show:assets-");frames(3);
+            clickVisible("cmd-rename-image-"+importedImage);
+            CHECK(ui.frontend()->elementText("dialog-title")=="Renomear imagem");
+            click("dialog-value");key("ctrl+a");event("type --clearmodifiers Texturaimportada");
+            click("dialog-confirm");frames(2);
+            CHECK(game::ImageDisplayName(game::AssetsDir(),importedImage)=="Texturaimportada");
+            CHECK(ui.frontend()->elementBounds("image-query-"+importedImage).width>0);
+            // Excluir imagem em uso é recusado com relatório de dependências.
+            clickVisible("cmd-delete-image-"+importedImage);
+            CHECK(ui.frontend()->elementText("dialog-description").find("em uso")!=std::string::npos);
+            key("Escape");frames(2);
+            CHECK(std::filesystem::exists(std::filesystem::path("assets")/importedImage));
             }
-            CHECK(rig()->findDecal(first)->surface.image=="front.png");CHECK(rig()->findDecal(second)->surface.face==1);
+            CHECK(rig()->findDecal(first)->surface.image=="assets/front.png");CHECK(rig()->findDecal(second)->surface.face==1);
             CHECK(projectio::save(scene,config.defaultProjectPath,error));
             Scene roundTrip;CHECK(projectio::load(roundTrip,config.defaultProjectPath,error));
             const auto* saved=roundTrip.gameAssets().findRig(rigId);CHECK(saved&&saved->bodies[game::Torso].decals.size()==2);
@@ -369,6 +383,41 @@ end)
             CHECK(projectio::save(scene,config.defaultProjectPath,error));
             CHECK(projectio::load(roundTrip,config.defaultProjectPath,error));
             CHECK(roundTrip.gameAssets().findRig(rigId)->bodies[game::Torso].decals.size()==1);
+            // Remover a imagem aplicada mantém o adesivo; excluir o arquivo é
+            // uma operação separada e só acontece sem referências.
+            click("rig-decal-"+rigId+"-"+second);frames(2);
+            clickVisible("cmd-clear-image-rig");frames(2);
+            CHECK(rig()->findDecal(second)!=nullptr);
+            CHECK(rig()->findDecal(second)->surface.image.empty());
+            CHECK(std::filesystem::exists(std::filesystem::path("assets")/importedImage));
+            // A antiga imagem direta do membro aparece no registro e pode ser
+            // localizada e removida sem tocar no rig ou no arquivo importado.
+            rig()->bodies[game::Head].image=game::ImageAssetReference(importedImage);frames(2);
+            clickVisible("cmd-delete-image-"+importedImage);
+            CHECK(ui.frontend()->elementText("appearance-controls").find("Cabeça")!=std::string::npos);
+            capture("image-references");click("usage-image-use-0");frames(2);
+            CHECK(ui.frontend()->elementBounds("rig-image-"+rigId+"-1").width>0);
+            clickVisible("cmd-clear-image-rig-body");CHECK(rig()->bodies[game::Head].image.empty());
+            CHECK(rig()->findDecal(second)!=nullptr);
+            clickVisible("cmd-delete-image-"+importedImage);
+            CHECK(ui.frontend()->elementText("dialog-description").find("Nenhuma referência")!=std::string::npos);
+            click("dialog-confirm");frames(3);
+            CHECK(!std::filesystem::exists(std::filesystem::path("assets")/importedImage));
+            CHECK(rig()->findDecal(second)!=nullptr);
+            // Componente Surface independente: selecionar pelo Explorador,
+            // aplicar imagem, editar propriedades, salvar e limpar só o vínculo.
+            click("tree-search");key("ctrl+a");key("BackSpace");key("Return");
+            auto* surface=scene.createSurface(InstanceClass::Decal,part,"Placa original");CHECK(surface);frames(2);
+            clickVisible("node-"+std::to_string(surface->id()));
+            clickVisible("image-query-surface-front.png");CHECK(surface->properties().image=="assets/front.png");
+            clickVisible("prop-Surface.Transparency");key("ctrl+a");event("type --clearmodifiers 0.5");key("Return");
+            CHECK(NearlyEqual(surface->properties().transparency,.5f));
+            CHECK(projectio::save(scene,config.defaultProjectPath,error));CHECK(projectio::load(roundTrip,config.defaultProjectPath,error));
+            auto* loadedSurface=roundTrip.find(surface->id());CHECK(loadedSurface&&IsSurfaceClass(loadedSurface->instanceClass()));
+            if(!loadedSurface){std::fprintf(stderr,"Surface persistence: %s\n",error.c_str());capture("surface-save-failure");rlImGuiShutdown();CloseWindow();return 1;}
+            CHECK(static_cast<Surface*>(loadedSurface)->properties().image=="assets/front.png");
+            capture("surface-properties");clickVisible("cmd-clear-image-surface");CHECK(surface->properties().image.empty());
+            CHECK(scene.find(surface->id())==surface);
             CHECK(scene.validate(error));capture("rig-decals-deleted");
         } else {
         const auto cameraStart=camera.camera();
@@ -532,7 +581,12 @@ end)
         // overflow raylib's bounded char queue while no frame is being pumped.
         SetClipboardText(imagePath.c_str());key("ctrl+v");key("Return");frames(4);
         const auto imported=game::ListImages(game::AssetsDir());CHECK(imported.size()==1);
-        if(!imported.empty()) {click("cmd-apply-image-assets/"+imported.front().filename);CHECK(part->attributes().count("decal_image"));capture("image-library-decal");}
+        if(!imported.empty()) {
+            const auto assetPath=std::filesystem::absolute(std::filesystem::path(game::AssetsDir())/imported.front().filename).string();
+            click("cmd-apply-image-"+assetPath);
+            CHECK(part->attributes().count("decal_image"));
+            capture("image-library-decal");
+        }
         // Close the embedded panel through its RML close button.
         CHECK(actions.dispatch({"select","",partId}));
         // A native scene action does not implicitly change panel layout.

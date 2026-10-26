@@ -84,12 +84,12 @@ int main() {
     CHECK(rig.bodies[RightArm].image == "body.png");
 
     auto encoded = EncodeAssets(assets);
-    CHECK(encoded["rigs"][0]["bodies"][Torso]["image"] == "body.png");
+    CHECK(encoded["rigs"][0]["bodies"][Torso]["image"] == "assets/body.png");
     GameAssets decoded;
     CHECK(DecodeAssets(encoded, decoded, error));
     CHECK(decoded.rigs.size() == 1);
-    CHECK(decoded.rigs[0].bodies[Head].image == "body.png");
-    CHECK(decoded.rigs[0].bodies[RightLeg].image == "body.png");
+    CHECK(decoded.rigs[0].bodies[Head].image == "assets/body.png");
+    CHECK(decoded.rigs[0].bodies[RightLeg].image == "assets/body.png");
 
     auto cleared = decoded;
     cleared.rigs[0].bodies[Torso].image.clear();
@@ -110,8 +110,8 @@ int main() {
     const auto projectJson = projectio::toJson(project);
     Scene loaded;
     CHECK(projectio::fromJson(loaded, projectJson, error));
-    CHECK(loaded.gameAssets().rigs[0].bodies[Torso].image == "body.png");
-    CHECK(loaded.gameAssets().rigs[0].bodies[Head].image == "body.png");
+    CHECK(loaded.gameAssets().rigs[0].bodies[Torso].image == "assets/body.png");
+    CHECK(loaded.gameAssets().rigs[0].bodies[Head].image == "assets/body.png");
 
     // Independent child identity, face and image survive the actual project
     // format. Erasing one child must not erase its sibling or reuse its ID.
@@ -128,7 +128,7 @@ int main() {
     CHECK(savedRig.bodies[Torso].decals.size()==2);
     CHECK(savedRig.findDecal(frontId)->name=="DecalFront");
     CHECK(savedRig.findDecal(backId)->surface.face==1);
-    CHECK(savedRig.findDecal(backId)->surface.image=="back.png");
+    CHECK(savedRig.findDecal(backId)->surface.image=="assets/back.png");
     CHECK(savedRig.findDecal(backId)->surface.transparency==.25f);
     CHECK(savedRig.bodies[LeftArm].decals.front().surface.face==2);
     savedRig.resizeBody(Torso,{2.5f,2.2f,1.2f});
@@ -144,6 +144,7 @@ int main() {
     auto duplicate=loaded.gameAssets();duplicate.rigs[0].bodies[Head].decals.push_back(duplicate.rigs[0].bodies[Torso].decals.front());
     CHECK(!duplicate.validate(error));
 
+    SetProjectFaceImage("");
     // ---- Rendered R6 skin ------------------------------------------------
     SetTraceLogLevel(LOG_WARNING);
     InitWindow(512, 512, "LINBLUX R6 image regression");
@@ -184,10 +185,11 @@ int main() {
         CHECK(Magenta(torsoPixel));
         CHECK(Magenta(armPixel));
 
-        // The default face art must stay in front of the head image. The
-        // centre of rosto1.png is transparent, so count the black line art
-        // instead of expecting an opaque centre pixel. Repeating the render
-        // catches depth-fighting flicker between image and face.
+        // No automatic face: a custom head image is unobstructed by engine art.
+        CHECK(CountFaceInk(front,headAt)<8);CHECK(Magenta(Sample(front,headAt)));
+        ExportImage(front,(std::string(directory)+"/rig-no-face.png").c_str());UnloadImage(front);
+        // Explicit legacy presentation faces remain supported.
+        SetProjectFaceImage(BuiltinAssetPath("rosto1.png"));front=render(pose);
         const int faceInk = CountFaceInk(front, headAt);
         CHECK(faceInk > 50);
         for (int pass = 0; pass < 2; ++pass) {

@@ -95,6 +95,40 @@ void ExperienceUI::removeAsset(const std::string& reference,bool usedByScene) {
     manager_.removeAsset(reference,usedByScene);
     dirty_=true;
 }
+std::vector<game::ImageUsage> ExperienceUI::presentationReferences(const std::string& reference) const {
+    const auto active=manager_.active();return active?game::DescribeImageUsage(manager_.inspect(active->root).manifest,reference):std::vector<game::ImageUsage>{};
+}
+std::vector<std::string> ExperienceUI::presentationUses(const std::string& reference) const {
+    std::vector<std::string> result;for(const auto& use:presentationReferences(reference))result.push_back(use.where);return result;
+}
+bool ExperienceUI::clearPresentationImage(const game::ImageUsage& use,std::string& error) {
+    try {
+        const auto active=manager_.active();if(!active)throw std::runtime_error("Nenhuma experiência aberta.");
+        auto manifest=manager_.inspect(active->root).manifest;std::string* field=nullptr;
+        if(use.property=="icon")field=&manifest.icon;else if(use.property=="banner")field=&manifest.banner;
+        else if(use.property=="loadingBackground")field=&manifest.loadingBackground;else if(use.property=="faceImage")field=&manifest.faceImage;
+        if(!field||*field!=use.reference)throw std::runtime_error("Referência alterada. Consulte os usos novamente.");
+        field->clear();manager_.updateMetadata(manifest);game::SetProjectFaceImage(manifest.faceImage);dirty_=true;error.clear();return true;
+    }catch(const std::exception& e){error=e.what();return false;}
+}
+std::size_t ExperienceUI::replaceImageReferences(const std::string& from,const std::string& to) {
+    const auto active=manager_.active();if(!active)return 0;
+    const auto source=std::filesystem::path(game::NormalizeImageReference(from)).filename().string();
+    if(source.empty())return 0;
+    auto manifest=active->manifest;
+    std::size_t replaced=0;
+    const auto swap=[&](std::string& value) {
+        if(!game::ImageReferenceMatches(value,from))return;
+        value=to;++replaced;
+    };
+    swap(manifest.icon);swap(manifest.banner);swap(manifest.loadingBackground);swap(manifest.faceImage);
+    if(replaced) {
+        manager_.updateMetadata(manifest);
+        game::SetProjectFaceImage(manifest.faceImage);
+        dirty_=true;
+    }
+    return replaced;
+}
 void ExperienceUI::releaseLoadingImages() {
     document_.GetElementById("exp-loading-background")->RemoveAttribute("src");
     document_.GetElementById("exp-loading-icon")->RemoveAttribute("src");
