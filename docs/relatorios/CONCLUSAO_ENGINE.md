@@ -186,3 +186,28 @@ limpo; `linblux_image_assets`, `linblux_audio`, `linblux_experiences`,
 inclui áudio e exemplos animados) passaram; nenhum FULL nem teste gráfico novo.
 Diffs preexistentes em `.opencode`, `AGENTS.md`, locales, `EditorUI/GamePanels`,
 `engine_default_restart` e ferramentas TURBO foram preservados e não entraram nos commits.
+
+## Recuperação em andamento — imagens e rosto
+
+Base confirmada local/remota: e4c7c5d4dce1e7b7d3fd58edf08d7a82d3f312de.
+93fe7e5 já está publicado; rigs/animações e navegação de NPCs não foram refeitos.
+AutoBackup ativo, checkpoint/push d674ad9f7067 confirmado; snapshot dos diffs
+iniciais salvo em .turbo/recovery-images (não versionado, sem substituir Git).
+
+IMPLEMENTADO/TESTADO: registro central de usos em Surface, atributos, membros e
+adesivos de rig e manifesto; descritores estáveis; limpeza de vínculo legado;
+nomes amigáveis persistidos; remoção da face/olhos automáticos do renderizador;
+proteção da cena salva antes da exclusão; seletor e lista de usos no editor.
+FAST 20261025T235258Z-9735: 17/17, build 183,7 s, testes 18,5 s. IMPACT
+20261025T235744Z-13539: 17/17 em 14,6 s, cobertura global parcial. Sem FULL.
+Validação gráfica ainda em andamento; não considerar este incremento publicado
+ou visualmente aprovado até o registro final. A primeira tentativa gráfica
+falhou na sincronização da primeira ação e foi ajustada para preservar os dois
+quadros de eventos da fixture existente, com diagnóstico em vez de crash.
+
+A missão atual também exige Modelos com pivô/transformações de conjunto,
+multisseleção, Attachments/juntas, inventário, interação segurando E, Drop/Delete,
+hotbar e RifleDemo. Esses recursos NÃO estão implementados nesta recuperação.
+Áudio 2D/Lua existe na base 00898e2; gerenciamento completo, prévia e integração
+adicional continuam a verificar/completar. UI Lua, HUD circular, menu lateral e
+integração abrangente seguem pendentes. Não reimplementar NPCs/áudio já existentes.

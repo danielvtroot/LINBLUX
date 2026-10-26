@@ -63,3 +63,8 @@ maiores que o corredor amostrado podem ficar presos e resultam em `unreachable`.
 Testes: `LinbluxNpc` e `NpcExamples` em `tests/studio_main.cpp` (muro, rota,
 destino inacessível, morte/respawn, destruição, detach, serialização) e quatro
 casos `Npc*.lua` em `tests/lua_player_validation.py`.
+
+Imagens: DescribeImageUsage é a fonte única para usos em atributos conhecidos,
+Surface, Body.image, RigDecal e manifesto. Descritores preservam IDs/propriedade
+e recusam edição obsoleta. ImageInUse/ReplaceImageReferences delegam à consulta.
+Nomes amigáveis são metadados versionados no projeto, não caminhos novos.
