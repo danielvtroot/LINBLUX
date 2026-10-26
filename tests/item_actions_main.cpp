@@ -262,17 +262,7 @@ int main() {
             runtime.update(1.f / 60, {});
             ++frames;
         }
-        require(attributeBool(*workspace, "fim"), "driver script did not finish (execs=" +
-                std::to_string(attributeNumber(*workspace, "debug_execs")) + " creates=" +
-                std::to_string(attributeNumber(*workspace, "debug_criacoes")) + ", equip=" +
-                std::to_string(attributeNumber(*workspace, "debug_equip")) + ", painel=" +
-                std::to_string(attributeNumber(*workspace, "debug_painel")) + ", ui=" +
-                std::to_string(runtime.ui().count()) + "):\n" + scriptErrors(runtime) + "ALL:\n" +
-                [&] {
-                    std::string all;
-                    for (const auto& message : runtime.scripts().messages()) all += message.text + "\n";
-                    return all;
-                }());
+        require(attributeBool(*workspace, "fim"), "driver script did not finish:\n" + scriptErrors(runtime));
         require(runtime.scripts().errorCount() == 0, "script errors:\n" + scriptErrors(runtime));
         const auto itemId = InstanceId(attributeNumber(*workspace, "item_id"));
         const auto cloneId = InstanceId(attributeNumber(*workspace, "clone_id"));
@@ -341,7 +331,6 @@ int main() {
 
         // Impacto: o raio parte do Attachment e ignora o próprio item.
         require(attributeNumber(*workspace, "boca_id") != 0, "driver did not find the instance attachment");
-        for (const auto& message : runtime.scripts().messages()) std::fprintf(stderr, "MSG %s\n", message.text.c_str());
         require(attributeString(*workspace, "acerto") == "Alvo",
                 "raycast from the muzzle hit '" + attributeString(*workspace, "acerto") + "'");
         require(attributeNumber(*workspace, "alvo_vida") == 75, "damage was not applied by the health API");
