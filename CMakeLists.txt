@@ -89,6 +89,7 @@ add_library(linblux_engine STATIC
   src/game/JpegImage.cpp
   src/game/Runtime.cpp
   src/game/Inventory.cpp
+  src/game/ItemActions.cpp
   src/game/Interaction.cpp
   src/game/Navigation.cpp
   src/game/Npc.cpp
@@ -306,6 +307,8 @@ if(XVFB_RUN_EXECUTABLE)
 
     # Script-built UI: the same raylib renderer the Studio Play texture and the
     # Player use, verified by framebuffer pixels at two window sizes.
+    add_test(NAME linblux_rifledemo_player COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" python3 ${CMAKE_CURRENT_SOURCE_DIR}/tests/rifledemo_player.py $<TARGET_FILE:linblux_player>)
+    set_tests_properties(linblux_rifledemo_player PROPERTIES TIMEOUT 60 LABELS "graphics;integration;player;inventory;combat;scripting")
     add_test(NAME linblux_player_menu COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" python3 ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_menu.py $<TARGET_FILE:linblux_player>)
     set_tests_properties(linblux_player_menu PROPERTIES TIMEOUT 55 LABELS "graphics;integration;player;ui")
     add_test(NAME linblux_player_menu_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
@@ -401,6 +404,17 @@ add_executable(linblux_ui_lua_tests tests/ui_lua_main.cpp)
 target_link_libraries(linblux_ui_lua_tests PRIVATE linblux_engine)
 add_test(NAME linblux_lua_interface COMMAND linblux_ui_lua_tests)
 set_tests_properties(linblux_lua_interface PROPERTIES TIMEOUT 60)
+# Ações genéricas de item: intervalo, munição, recarga, Attachment, raycast,
+# dano, HUD Lua, soltar/recolher e limpeza na destruição.
+add_executable(linblux_item_actions_tests tests/item_actions_main.cpp)
+target_link_libraries(linblux_item_actions_tests PRIVATE linblux_engine)
+add_test(NAME linblux_item_actions COMMAND linblux_item_actions_tests)
+set_tests_properties(linblux_item_actions PROPERTIES TIMEOUT 90)
+
+add_executable(linblux_rifledemo_tests tests/rifledemo_main.cpp)
+target_link_libraries(linblux_rifledemo_tests PRIVATE linblux_engine)
+add_test(NAME linblux_rifledemo COMMAND linblux_rifledemo_tests)
+set_tests_properties(linblux_rifledemo PROPERTIES TIMEOUT 40 LABELS "headless;integration;inventory;scripting;game;combat")
 
 # Preserve notices for every static third-party component shipped in the application.
 install(FILES LICENSE DESTINATION share/linblux/licenses COMPONENT Linblux RENAME LINBLUX-MIT.txt)
@@ -496,6 +510,7 @@ linblux_turbo_headless(linblux_defaults "unit;headless;core;experiences;serializ
 linblux_turbo_headless(linblux_engine_default_lifecycle "unit;headless;core;experiences;serialization")
 linblux_turbo_headless(linblux_engine_default_paths "unit;headless;core;experiences;serialization")
 linblux_turbo_headless(linblux_lua_interface "unit;headless;scripting;ui;game")
+linblux_turbo_headless(linblux_item_actions "unit;headless;scripting;game;combat;inventory")
 linblux_turbo_headless(linblux_atlas "unit;headless;tooling;atlas")
 
 linblux_turbo_graphics(linblux_decal_render "graphics;integration;rendering;game")

@@ -83,5 +83,8 @@ int main(int argc,char** argv) {
         }
         runtime.stop();game::ClearImageTextures();
     }
-    if(customFont)UnloadFont(font);CloseWindow();return checkScripts&&runtime.scripts().errorCount()>0?1:0;
+    if(customFont)UnloadFont(font);CloseWindow();
+    if(checkScripts)for(const auto& message:runtime.scripts().messages())if(message.error)
+        std::fprintf(stderr,"%s:%d: %s\n",message.script.c_str(),message.line,message.text.c_str());
+    return checkScripts&&runtime.scripts().errorCount()>0?1:0;
 }

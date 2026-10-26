@@ -34,6 +34,9 @@ public:
     void characterAdded();
     void healthChanged(float health,bool died);
     void inventoryChanged(InstanceId item,const std::string& action);
+    // Transições do estado genérico de uso do item (ativar, recarregar, munição).
+    // O script decide o efeito; a engine só entrega o estado já atualizado.
+    void itemAction(InstanceId item,const std::string& action,int ammo,int reserve,int magazine,bool reloading,bool active);
     void interactionCompleted(InstanceId object);
     // Pointer events for script-built UI, produced by the host renderer and
     // delivered as tasks so a callback never runs inside a render pass.

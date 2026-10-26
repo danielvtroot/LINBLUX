@@ -6,6 +6,7 @@
 #include "game/Audio.h"
 #include "game/HealthHud.h"
 #include "game/Inventory.h"
+#include "game/ItemActions.h"
 #include "game/Interaction.h"
 #include "game/Npc.h"
 #include "game/Rig.h"
@@ -114,6 +115,10 @@ public:
     const std::string& itemNotice()const{return itemNotice_;}
     Inventory& inventory(){return *inventory_;}
     const Inventory& inventory()const{return *inventory_;}
+    // Estado genérico de uso dos itens (intervalo, munição, recarga). Não é
+    // inventário: qualquer item equipável pode ou não usá-lo.
+    ItemActions& itemActions(){return itemActions_;}
+    const ItemActions& itemActions()const{return itemActions_;}
     AudioSystem& audio(){return audio_;}
     const AudioSystem& audio() const {return audio_;}
     // Declarative UI built by scripts. Cleared with the Play session and when
@@ -184,6 +189,7 @@ private:
     std::unique_ptr<Scene> scene_;
     std::unique_ptr<PhysicsWorld> physics_;
     std::unique_ptr<Inventory> inventory_;
+    ItemActions itemActions_;
     std::unique_ptr<InteractionSystem> interactions_;
     unsigned hotbarPage_=0;std::string itemNotice_;float itemNoticeTime_=0;
     void updateItemControls(float dt);
