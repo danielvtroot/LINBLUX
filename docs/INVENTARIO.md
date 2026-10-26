@@ -68,3 +68,9 @@ precisam da integração de entrada/apresentação; não são anunciados como pr
 Clonar um protótipo na autoria deriva um novo identificador de tipo, com o ID
 da cópia como sufixo. Instâncias criadas por items.spawn têm o marcador de
 protótipo desligado, para não serem registradas como tipos em outra carga.
+
+Escopo Alpha desta unidade: estrutura de componentes capturada ao instanciar.
+Modele a hierarquia antes de spawn; adicionar/remover Parts de uma instância
+guardada/equipada não é suportado nesta etapa. Cor/material, transformações e
+atributos de comportamento permanecem programáveis. Estado automático entre
+partidas e transferência multiplayer também ficam fora deste incremento.
