@@ -105,25 +105,28 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             e.setStatus("Image imported: "+asset);
         }
         else if(c.action=="import-sound") {
-            std::string asset,error;
+            std::string asset,error;double seconds=0;
+            if(!game::ProbeAudio(c.value,seconds,error))throw std::runtime_error(error);
             if(!game::ImportMediaTo(game::AssetsDir(),c.value,game::MediaKind::Audio,asset,error))throw std::runtime_error(error);
-            double seconds=0;
-            if(!game::ProbeAudio(asset,seconds,error))throw std::runtime_error(error);
             const std::string reference="assets/"+std::filesystem::path(asset).filename().string();
-            auto& sound=e.scene_.gameAssets().addSound(reference);
-            e.setStatus("Sound imported: "+sound.name);
+            auto* existing=e.scene_.gameAssets().findSound(reference);
+            auto& sound=existing?*existing:e.scene_.gameAssets().addSound(reference,std::filesystem::path(c.value).stem().string());sound.durationSeconds=seconds;
+            e.setStatus("Som importado: "+sound.name);
         }
         else if(c.action=="remove-sound") {
-            auto& sounds=e.scene_.gameAssets().sounds;
-            const auto it=std::find_if(sounds.begin(),sounds.end(),[&](const game::SoundAsset& sound){
-                return sound.reference==c.value||std::filesystem::path(sound.reference).filename().string()==c.value;});
-            if(it==sounds.end())throw std::runtime_error("Sound is no longer in this project's library");
-            const std::string reference=it->reference;
-            e.scene_.gameAssets().removeSound(it->id);
-            if(game::SoundInUse(e.scene_,reference))throw std::runtime_error("Sound is still used by a script or attribute");
-            if(e.experienceUi_)e.experienceUi_->removeAsset(reference,false);
-            else {std::string error;if(!game::RemoveAssetFile(game::AssetsDir(),std::filesystem::path(reference).filename().string(),false,error))throw std::runtime_error(error);}
-            e.setStatus("Sound removed: "+reference);
+            if(e.runtime_.active())throw std::runtime_error("Pare a execução antes de excluir áudio.");std::string error;
+            if(!game::RemoveSoundAsset(e.scene_,game::AssetsDir(),c.value,[&](std::string& message){const bool ok=e.saveCurrentProject();if(!ok)message=e.status_;return ok;},error))throw std::runtime_error(error);
+            e.setStatus("Áudio excluído da experiência; arquivo original preservado.");
+        }
+        else if(c.action.rfind("rename-sound:",0)==0){
+            auto* sound=e.scene_.gameAssets().findSound(c.action.substr(13));if(!sound)throw std::runtime_error("Áudio não encontrado.");
+            if(c.value.empty()||c.value.size()>128)throw std::runtime_error("Nome de áudio deve ter1–128 bytes.");
+            for(const auto& node:e.scene_.objects())if(IsScriptClass(node->instanceClass())&&static_cast<Script*>(node.get())->source.find(sound->name)!=std::string::npos)throw std::runtime_error("Um script usa o nome atual; use o ID estável antes de renomear.");
+            sound->name=c.value;e.setStatus("Nome atualizado; ID e arquivo preservados.");
+        }
+        else if(c.action.rfind("sound-volume:",0)==0||c.action.rfind("sound-loop:",0)==0){
+            const bool volume=c.action.rfind("sound-volume:",0)==0;auto* sound=e.scene_.gameAssets().findSound(c.action.substr(volume?13:11));if(!sound)throw std::runtime_error("Áudio não encontrado.");
+            if(volume){const auto v=Number(c.value);if(v<0||v>1)throw std::runtime_error("Volume entre0 e1.");sound->volume=v;}else sound->loop=c.value=="true";
         }
         else if(c.action=="remove-image"||c.action=="remove-asset") {
             if(!e.experienceUi_)throw std::runtime_error("Abra uma experiência antes de remover imagens importadas");

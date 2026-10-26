@@ -65,7 +65,7 @@ struct LuaRuntime::Impl {
     std::size_t memory=0;
     std::size_t errors=0;
     double time=0;
-    unsigned generation=0,modelOperations=0;
+    unsigned generation=0,modelOperations=0,resourceOperations=0;
     int instructions=0, frameBudget=0, moduleDepth=0;
     InstanceId executing=0;
     Limits limits;
@@ -743,15 +743,17 @@ struct LuaRuntime::Impl {
     }
     static int AudioPlay(lua_State* L) {
         auto& self=Host(L);Require(lua_type(L,1)==LUA_TSTRING,"linblux.audio.play requer referencia ou id");
-        std::string reference=Text(L,1);float volume=1;bool loop=false;
+        Require(++self.resourceOperations<=16,"Limite de 16 operações de áudio por quadro atingido.");
+        std::string reference=Text(L,1);float volume=1;bool loop=false;InstanceId owner=0;
         if(const auto* library=FindSound(*self.runtime,reference)){reference=library->reference;volume=library->volume;loop=library->loop;}
         if(lua_gettop(L)>1&&!lua_isnil(L,2)) {
             Require(lua_istable(L,2),"volume/loop do audio devem estar em tabela");
             Field(L,2,"volume");if(!lua_isnil(L,-1))volume=float(Number(L,-1));lua_pop(L,1);
             Field(L,2,"loop");if(!lua_isnil(L,-1)){Require(lua_isboolean(L,-1),"loop requer booleano");loop=lua_toboolean(L,-1);}lua_pop(L,1);
-            lua_pushnil(L);while(lua_next(L,2)){const char* key=Text(L,-2);Require(Eq(key,"volume")||Eq(key,"loop"),"Opcao de audio desconhecida");lua_pop(L,1);}
+            Field(L,2,"owner");if(!lua_isnil(L,-1))owner=self.instance(L,-1).id();lua_pop(L,1);
+            lua_pushnil(L);while(lua_next(L,2)){const char* key=Text(L,-2);Require(Eq(key,"volume")||Eq(key,"loop")||Eq(key,"owner"),"Opcao de audio desconhecida");lua_pop(L,1);}
         }
-        std::string error;const int handle=self.runtime->audio().play(reference,volume,loop,error);
+        std::string error;const int handle=self.runtime->audio().play(reference,volume,loop,error,owner);
         Require(handle>0,error.c_str());lua_pushinteger(L,handle);return 1;
     }
     static int AudioStop(lua_State* L) {
@@ -785,6 +787,8 @@ struct LuaRuntime::Impl {
         lua_pushnumber(L,seconds);return 1;
     }
     static int AudioStopAll(lua_State* L) { auto& self=Host(L);self.runtime->audio().stopAll();return 0; }
+    static int AudioDevice(lua_State* L){lua_pushboolean(L,Host(L).runtime->audio().deviceReady());return 1;}
+    static int AudioStreaming(lua_State* L){lua_pushboolean(L,Host(L).runtime->audio().streaming(AudioHandle(L,1)));return 1;}
     static int AudioList(lua_State* L) {
         auto& self=Host(L);const auto& sounds=self.runtime->scene().gameAssets().sounds;
         lua_createtable(L,int(sounds.size()),0);int index=0;
@@ -793,6 +797,7 @@ struct LuaRuntime::Impl {
             lua_pushstring(L,sound.id.c_str());lua_setfield(L,-2,"id");
             lua_pushstring(L,sound.name.c_str());lua_setfield(L,-2,"name");
             lua_pushstring(L,sound.reference.c_str());lua_setfield(L,-2,"reference");
+            lua_pushnumber(L,sound.durationSeconds);lua_setfield(L,-2,"duration");
             lua_pushnumber(L,sound.volume);lua_setfield(L,-2,"volume");
             lua_pushboolean(L,sound.loop);lua_setfield(L,-2,"loop");
             lua_pushstring(L,sound.kind.c_str());lua_setfield(L,-2,"kind");
@@ -1373,6 +1378,7 @@ struct LuaRuntime::Impl {
         lua_pushcfunction(L,Safe<AudioIsLooping>);lua_setfield(L,-2,"looping");
         lua_pushcfunction(L,Safe<AudioDuration>);lua_setfield(L,-2,"duration");
         lua_pushcfunction(L,Safe<AudioStopAll>);lua_setfield(L,-2,"stop_all");
+        lua_pushcfunction(L,Safe<AudioDevice>);lua_setfield(L,-2,"device_ready");lua_pushcfunction(L,Safe<AudioStreaming>);lua_setfield(L,-2,"is_streaming");
         lua_pushcfunction(L,Safe<AudioList>);lua_setfield(L,-2,"list");
         lua_setfield(L,-2,"audio");
         lua_newtable(L);
@@ -1598,13 +1604,13 @@ bool LuaRuntime::start(game::RuntimeSession& runtime) {
     *static_cast<Impl**>(lua_getextraspace(self.state))=&self;
     lua_pushcfunction(self.state,Impl::Safe<Impl::Setup>);
     if(lua_pcall(self.state,0,0,0)!=LUA_OK){self.message(true,0,lua_tostring(self.state,-1));self.close();return false;}
-    self.modelOperations=0;self.discoverScripts();
+    self.modelOperations=0;self.resourceOperations=0;self.discoverScripts();
     self.tick(0);self.event(EngineStart);self.event(Spawn);self.tick(0);return true;
 }
-void LuaRuntime::stop(){impl_->modelOperations=0;impl_->stop();}
+void LuaRuntime::stop(){impl_->modelOperations=0;impl_->resourceOperations=0;impl_->stop();}
 void LuaRuntime::update(float dt){
     if(!impl_->state||!std::isfinite(dt)||dt<0)return;
-    impl_->modelOperations=0;
+    impl_->modelOperations=0;impl_->resourceOperations=0;
     const auto added=impl_->discoverScripts();impl_->inputEvents();impl_->event(Heartbeat,dt);impl_->tick(dt);
     for(const auto id:added)impl_->event(EngineStart,0,id);
 }
