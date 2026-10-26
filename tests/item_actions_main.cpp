@@ -217,10 +217,10 @@ int main() {
             require(actions.reload(7, error), "reload: " + error);
             require(!actions.activate(7, error), "activation during reload was accepted");
             actions.tick(0.4f, 7);
-            require(!actions.state(7)->reloading, "reload ended before its time");
+            require(actions.state(7)->reloading, "reload ended before its time");
             actions.tick(0.7f, 7);
             require(!actions.state(7)->reloading, "reload did not end");
-            require(actions.ammo(7) == 5 && actions.reserve(7) == 1, "reload did not move reserve ammo");
+            require(actions.ammo(7) == 5 && actions.reserve(7) == 2, "reload did not move reserve ammo");
             require(!actions.reload(7, error) && error.find("cheio") != std::string::npos,
                     "reloading a full magazine was accepted");
             require(!actions.setAmmo(7, 99, 0, error), "out-of-magazine ammo accepted");
@@ -289,7 +289,8 @@ int main() {
         const Vector3 muzzleOffset = Vector3Subtract(muzzleFrame.position, itemFrame.position);
         require(Vector3Length(muzzleOffset) > 2.f, "muzzle is not offset from the item pivot");
         const Vector3 forward = Vector3RotateByQuaternion({0, 0, -1}, muzzleFrame.rotation);
-        require(Vector3Dot(Vector3Normalize(muzzleOffset), forward) > .99f,
+        const Vector3 muzzleDir = Vector3Normalize(muzzleOffset);
+        require(muzzleDir.x * forward.x + muzzleDir.y * forward.y + muzzleDir.z * forward.z > .99f,
                 "muzzle is not along the attachment forward axis");
         require(attributeNumber(*workspace, "boca_dir_z") < -.99, "equipped muzzle does not face -Z");
 
@@ -344,7 +345,7 @@ int main() {
         require(runtime.scene().modelFrame(itemId, itemFrame, error), "model frame before rotation");
         ModelFrame rotated = itemFrame;
         rotated.rotation = QuatFromEulerDegreesZYX({0, 90, 0});
-        require(runtime.scene().transformModel(itemId, rotated, error), "rotate model: " + error);
+        require(runtime.mutableScene().transformModel(itemId, rotated, error), "rotate model: " + error);
         require(runtime.scene().attachmentFrame(muzzleId, muzzleFrame, error), "attachment after rotation");
         const Vector3 rotatedOffset = Vector3Subtract(muzzleFrame.position, rotated.position);
         require(std::fabs(rotatedOffset.x) > 2.f && std::fabs(rotatedOffset.z) < 1.f,

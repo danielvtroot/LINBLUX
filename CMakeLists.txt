@@ -392,6 +392,12 @@ add_executable(linblux_ui_lua_tests tests/ui_lua_main.cpp)
 target_link_libraries(linblux_ui_lua_tests PRIVATE linblux_engine)
 add_test(NAME linblux_lua_interface COMMAND linblux_ui_lua_tests)
 set_tests_properties(linblux_lua_interface PROPERTIES TIMEOUT 60)
+# Ações genéricas de item: intervalo, munição, recarga, Attachment, raycast,
+# dano, HUD Lua, soltar/recolher e limpeza na destruição.
+add_executable(linblux_item_actions_tests tests/item_actions_main.cpp)
+target_link_libraries(linblux_item_actions_tests PRIVATE linblux_engine)
+add_test(NAME linblux_item_actions COMMAND linblux_item_actions_tests)
+set_tests_properties(linblux_item_actions PROPERTIES TIMEOUT 90)
 
 # Preserve notices for every static third-party component shipped in the application.
 install(FILES LICENSE DESTINATION share/linblux/licenses COMPONENT Linblux RENAME LINBLUX-MIT.txt)
@@ -487,6 +493,7 @@ linblux_turbo_headless(linblux_defaults "unit;headless;core;experiences;serializ
 linblux_turbo_headless(linblux_engine_default_lifecycle "unit;headless;core;experiences;serialization")
 linblux_turbo_headless(linblux_engine_default_paths "unit;headless;core;experiences;serialization")
 linblux_turbo_headless(linblux_lua_interface "unit;headless;scripting;ui;game")
+linblux_turbo_headless(linblux_item_actions "unit;headless;scripting;game;combat;inventory")
 linblux_turbo_headless(linblux_atlas "unit;headless;tooling;atlas")
 
 linblux_turbo_graphics(linblux_decal_render "graphics;integration;rendering;game")
