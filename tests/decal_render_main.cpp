@@ -40,6 +40,15 @@ int main() {
             }
             part->setAttribute(field,std::string());
         }
+        // The selectable Surface component must draw actual pixels too.
+        for(const auto kind:{loblox::InstanceClass::Decal,loblox::InstanceClass::Texture}) {
+            auto* surface=scene.createSurface(kind,part,"Surface");auto properties=surface->properties();properties.image=file;
+            surface->setProperties(properties);const Color pixel=render("surface");++checks;
+            if(!(pixel.r>150&&pixel.g<90&&pixel.b>110)){++failures;std::fprintf(stderr,"Surface not rendered: %d,%d,%d\n",pixel.r,pixel.g,pixel.b);}
+            properties.transparency=1;surface->setProperties(properties);const Color hidden=render(nullptr);++checks;
+            if(std::abs(int(hidden.r)-int(blank.r))>3||std::abs(int(hidden.g)-int(blank.g))>3){++failures;std::fprintf(stderr,"Surface transparency ignored\n");}
+            scene.remove(surface);
+        }
         UnloadRenderTexture(target);
     }
     loblox::game::ClearImageTextures();CloseWindow();
