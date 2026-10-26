@@ -61,6 +61,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     std::set<InstanceId> collapsed;InstanceId dragNode=0,dragTarget=0;Vector2 dragStart{};
     bool dragging=false,mouseOwned=false,escapeConsumed=false,dialogOpen=false,treeKeyboard=false,restoreFocus=false;
     bool initialized=false,syncing=false,keyboardOwned=false;float shownHealth=100,healthTrail=100;int w=0,h=0;
+    game::AudioSystem previewAudio;int previewVoice=0;std::string previewRoot;
     std::vector<game::ImageUsage> imageUses;
     std::vector<EditorCommand> commands;
     std::unique_ptr<ExperienceUI> experiences;
@@ -164,6 +165,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         rect("bottom-divider",{l,float(h)-statusHeight-5-bottom,view.width,5});display("bottom-divider",hasAdvanced);
     }
     void showAdvanced(const std::string& name) {
+        if(name!="assets"){previewAudio.stopAll();previewVoice=0;}
         if(name=="script") {advanced.clear();advancedMarkup.clear();ui.showScriptEditor_=false;ui.openScriptEditor();return;}
         advanced=name;advancedMarkup.clear();ui.showScriptEditor_=false;ui.showAnimationEditor_=name=="animation";ui.showRigEditor_=name=="rig";ui.showGameSettings_=false;ui.showOutput_=name=="output";
         if(name=="animation") {auto& a=ui.scene_.gameAssets();if(!a.animations.empty())ui.openAnimation(a.findAnimation(a.player.walkAnimation)?a.player.walkAnimation:a.animations.front().id);}
@@ -428,6 +430,26 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(!rig||ui.selectedRigBody_<0)return;
             if(game::ResolveImagePath(game::AssetsDir(),v).empty())return;
             rig->bodies[ui.selectedRigBody_].image=game::ImageAssetReference(v);invalidateImages();treeHash=0;return;
+        }
+        if(action=="preview-sound"||action=="pause-sound"||action=="stop-sound"){
+            if(action=="stop-sound"){previewAudio.stopAll();previewVoice=0;}
+            else if(action=="pause-sound"){if(previewAudio.isPaused(previewVoice))previewAudio.resume(previewVoice);else previewAudio.pause(previewVoice);}
+            else {previewAudio.stopAll();previewVoice=0;
+                if(!previewAudio.deviceReady()){ui.setStatus("Nenhum dispositivo de áudio disponível para prévia.",true);return;}
+                const auto* sound=ui.scene_.gameAssets().findSound(v);std::string error;
+                previewVoice=previewAudio.play(v,sound?sound->volume:1,sound?sound->loop:false,error);
+                if(!previewVoice)ui.setStatus(error,true);else{previewRoot=game::ProjectAssetRoot();ui.setStatus("Prévia: "+(sound?sound->name:v));}}
+            return;
+        }
+        if(action=="rename-sound"||action=="remove-sound"){
+            previewAudio.stopAll();previewVoice=0;auto* sound=ui.scene_.gameAssets().findSound(v);if(!sound){ui.setStatus("Áudio sem metadados: importe novamente para catalogar.",true);return;}
+            dialogOpen=true;text("dialog-error","");el("appearance-controls")->SetInnerRML("");auto* field=static_cast<Rml::ElementFormControlInput*>(el("dialog-value"));
+            if(auto* button=el("dialog-confirm")){button->RemoveAttribute("disabled");button->SetClass("image-locked",false);}
+            if(action=="rename-sound"){dialog="rename-sound:"+sound->id;text("dialog-title","Renomear áudio");text("dialog-description","O ID estável e o arquivo permanecem iguais.");field->SetDisabled(false);field->SetValue(sound->name);focusValue=sound->name;}
+            else {dialog="remove-sound";text("dialog-title","Excluir áudio: "+sound->name);std::string message="O arquivo gerenciado será excluído do disco; o original externo será preservado. A experiência será salva antes da exclusão.";
+                const auto uses=game::DescribeSoundUsage(ui.scene_,v);for(const auto& use:uses)message+="\nEm uso: "+use.where+" · "+use.property;
+                text("dialog-description",message);field->SetDisabled(true);field->SetValue(v);if(!uses.empty())el("dialog-confirm")->SetAttribute("disabled","");}
+            display("dialog-overlay",true,"flex");context->GetRootElement()->Focus();if(action=="rename-sound")field->Focus();return;
         }
         if(action=="rename-image"||action=="replace-image"||action=="delete-image") {
             if(ui.runtime_.active())return;
@@ -862,8 +884,12 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             s+="<h2>Sons locais</h2><p class=\"muted\">MP3 / WAV / OGG · use <code>linblux.audio.play(id)</code> em um Script.</p>"+Button("import-sound","Importar som","folder");
             if(sounds.empty())s+="<p>Nenhum som importado ainda.</p>";
             s+="<div class=\"asset-grid\">";
-            for(const auto& sound:sounds)
-                s+="<div class=\"asset-card\"><span class=\"asset-name\">"+Escape(sound.id)+"</span><span class=\"asset-meta\">"+Escape(sound.reference)+"</span>"+Button("remove-sound","Remover","delete",sound.reference)+"</div>";
+            for(const auto& file:sounds){const auto* saved=ui.scene_.gameAssets().findSound(file.reference);const auto& sound=saved?*saved:file;
+                s+="<div class=\"asset-card\"><span class=\"asset-name\">"+Escape(saved?sound.name:"Som não catalogado")+"</span><span class=\"asset-meta\">"+Escape(file.reference)+(sound.durationSeconds>0?" · "+Num(sound.durationSeconds)+" s":"")+"</span>";
+                s+=Button("preview-sound","Ouvir","play",file.reference)+Button("pause-sound","Pausar / continuar","pause",file.reference)+Button("stop-sound","Parar","stop",file.reference);
+                s+="<label>Volume<input type=\"range\" min=\"0\" max=\"1\" step=\"0.05\" value=\""+Num(sound.volume)+"\" data-action=\"sound-volume:"+Escape(sound.id)+"\"/></label><label>Repetir<input type=\"checkbox\" data-action=\"sound-loop:"+Escape(sound.id)+"\" "+(sound.loop?"checked=\"checked\"":"")+"/></label>";
+                s+=Button("rename-sound","Renomear","edit",file.reference)+Button("remove-sound","Excluir","delete",file.reference)+"</div>";}
+
             s+="</div>";
         }
         html("advanced-content",s,advancedMarkup);
@@ -963,7 +989,7 @@ bool StudioFrontend::initialize(std::string& error) {
     rlImGuiDeferPopupRendering(true);error.clear();return true;
 }
 void StudioFrontend::draw() {
-    auto& p=*impl_;const double started=GetTime();
+    auto& p=*impl_;p.previewAudio.update(GetFrameTime());if(p.advanced!="assets"||p.ui.runtime_.active()||(!p.previewRoot.empty()&&p.previewRoot!=game::ProjectAssetRoot())){p.previewAudio.stopAll();p.previewVoice=0;}const double started=GetTime();
     if(p.experiences) {
         p.experiences->frame();
         const bool exclusive=p.experiences->overlayActive();p.document->SetClass("experience-exclusive",exclusive);
