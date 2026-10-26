@@ -252,3 +252,26 @@ implementação desses itens escondida neste incremento.
 Relatório 22 e MODELOS.md registram APIs, formato v4, testes e limites.
 Próximo requisito: integrar gizmos/undo do conjunto e Attachments/vínculos,
 sem reimplementar os sistemas de imagem/NPCs já publicados.
+
+## Checkpoint final desta sessão — gizmos e undo
+
+Código IMPLEMENTADO e TESTADO: 271a5cbf684bc367fc8da4dd807f5a1f846dcddf. Modelos agora usam os gizmos
+existentes para mover/girar/escalar uniformemente, com undo composto e
+cancelamento exato, sem corpo Bullet auxiliar. Propriedades/pivôs entram no
+histórico. Corrigido bloqueio de Ctrl+Z/Y por painéis passivos RmlUi.
+FAST final17/17; IMPACT20/20; models_ui supervisionado23,394 s aprovado,
+captura inspecionada. Cobertura global parcial; sem FULL. Relatório23.
+
+O item histórico “gizmos/undo pendentes” acima está resolvido por este commit.
+PUBLICADO: recuperação4bb803c/bf90835 e Modelos9fe720b, push confirmado.
+Publicação do novo código e deste relatório: conferir main remoto e relatório
+de entrega desta sessão. AutoBackup ativo e checkpoint remoto confirmado.
+
+Próximo requisito PENDENTE: Attachments/juntas, antes de inventário/E/Delete/
+hotbar. Depois: gerenciamento completo de áudio, UI Lua, combate/RifleDemo,
+HUD circular, menu lateral e integração abrangente. Não confundir a base de
+áudio/NPCs existente com conclusão dessas fases. Mundo Padrão/projetos antigos
+foram preservados; validação integral futura ainda necessária.
+
+Encerramento solicitado por limite de créditos; a missão NÃO está concluída.
+Retomar pelo relatório23 e MODELOS.md, preservando os diffs alheios restantes.
