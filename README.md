@@ -2,10 +2,16 @@
 
 <img src="midia/logo.png" width="112" alt="LINBLUX"/>
 
-Plataforma independente e open-source para criar, editar e executar experiências
-3D no Linux. C++17, raylib, Bullet, Lua 5.4 e RmlUi. Interface em português brasileiro.
+Engine 3D open-source para criação de experiências no Linux.
+Studio e Player independentes para criar, editar e executar mundos locais. C++17, raylib, Bullet, Lua 5.4 e RmlUi. Interface em português brasileiro.
 
 Repositório oficial: **https://github.com/danielvtroot/LINBLUX** · branch `main`.
+
+**Alpha 0.1.0: candidato interno; Release pública ainda bloqueada.**
+[Instalação/candidato, dependências e limites](docs/ALPHA_0_1_0.md) ·
+[Demo interativa](assets/examples/rifledemo/README.md) ·
+[Changelog](docs/CHANGELOG.md).
+Nenhuma tag ou Release é anunciada como publicada.
 
 ## O que funciona
 
@@ -15,6 +21,12 @@ Repositório oficial: **https://github.com/danielvtroot/LINBLUX** · branch `mai
 - Arquivamento e exclusão permanente com confirmação e proteção da biblioteca.
 - Mundo e personagem padrão editáveis e versionados, copiados para novas experiências.
 - Execução isolada da cena autoral e Player independente do Studio.
+- Lua para objetos, física, NPCs/navegação, áudio e UI; inventário real com E/1–9/Delete.
+- Modelos, Attachments/juntas, RifleDemo programado por Lua e NPCs com rig.
+- HUD circular de saúde real e menu lateral nas interfaces padrão Studio/Player.
+
+[Home do candidato sem vídeo](docs/screenshots/alpha-home-fallback.png) ·
+[RifleDemo no Player real](docs/screenshots/alpha-rifledemo-player.png).
 
 O personagem atual usa seis corpos/juntas com configuração própria. Importação de
 malhas/esqueletos arbitrários, terreno avançado e multiplayer ainda não estão prontos.

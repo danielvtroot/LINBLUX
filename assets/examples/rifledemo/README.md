@@ -6,7 +6,7 @@ Abra `world.loblox.json` no Studio e clique Executar, ou use:
 linblux_player --project assets/examples/rifledemo/world.loblox.json
 ```
 
-Aproxime-se do item, segure E, pressione1 para equipar, clique para disparar,
+Aproxime-se do item, segure E, pressione 1 para equipar, clique para disparar,
 R para recarregar e Delete para soltar. E recolhe a mesma instância com sua
 munição atual. Esc abre o menu protegido. Há três alvos com rig/vida/respawn,
 um guia animado em patrulha e uma placa com a logo oficial.

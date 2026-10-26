@@ -444,3 +444,17 @@ exclui MP4; build FFmpeg GPL requer revisão de obrigações antes de distribuir
 binários. Sem hardware de áudio nesta execução. Restam migração de expectativas
 gráficas históricas, regressão abrangente, instalação em outro sistema Linux e
 fechamento de licenças. NÃO há tag/Release nem conclusão integral da missão.
+
+## 26/10 — candidato Linux, sem anúncio de Release
+
+RifleDemo PUBLICADO:4e2887927b3a147f5d9346daa0434491e2c4cf53, push confirmado.
+Empacotador/check Linux IMPLEMENTADOS/TESTADOS:54 arquivos verificados, Player
+validou/renderizou e Studio abriu fora do checkout com HOME/XDG/CWD novos,
+16,018s sob TURBO. Capturas reais publicadas; instalação omite MP4 por padrão.
+Relatório33/ALPHA_0_1_0.md definem dependências, escopo e bloqueios. Candidato
+local em .turbo/dist, sem tag/Release e sem promessa de portabilidade universal.
+AutoBackup ativo, último checkpoint remoto6467653f3bc6 conferido; alterações
+posteriores a esse instante serão protegidas também pelos commits de main.
+Próximo requisito sob controle do código: atualizar testes históricos de
+HUD/menu antes da regressão abrangente. Fonte binária GPL/raylib, áudio físico
+e outra instalação Linux continuam exigindo validação específica externa.
