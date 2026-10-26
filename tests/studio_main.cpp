@@ -144,8 +144,10 @@ void InventoryLifecycle() {
     Scene authored;CHECK(projectio::fromJson(authored,original,error));
     auto* authoredPrototype=authored.find(prototype->id());authoredPrototype->setAttribute("_linblux_item_prototype",true);authoredPrototype->setAttribute("item_type",std::string("chave"));
     static_cast<Script*>(authored.find(script->id()))->source="assert(linblux.items.info(linblux.self).name);linblux.self:set_attribute('rodou',true)";
+    auto* prototypeCopy=authored.duplicateTree(*authoredPrototype);CHECK(prototypeCopy);
+    CHECK(std::get<std::string>(prototypeCopy->attributes().at("item_type"))!="chave");
     const auto authorBefore=projectio::toJson(authored);game::RuntimeSession runtime;CHECK(runtime.start(authored,error));CHECK(runtime.scripts().errorCount()==0);
-    const auto runtimeItem=runtime.inventory().spawn("chave");runtime.inventory().collect(runtimeItem);runtime.inventory().equip(runtimeItem);runtime.update(1.f/60,{});
+    const auto runtimeItem=runtime.inventory().spawn("chave");runtime.inventory().collect(runtimeItem);runtime.inventory().equip(runtimeItem);CHECK(!std::get<bool>(runtime.scene().find(runtimeItem)->attributes().at("_linblux_item_prototype")));runtime.update(1.f/60,{});
     CHECK(runtime.scripts().errorCount()==0);CHECK(runtime.scene().find(runtimeItem)->attributes().count("rodou"));runtime.stop();CHECK(projectio::toJson(authored)==authorBefore);
 }
 void AttachmentJoints() {

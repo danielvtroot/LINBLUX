@@ -64,3 +64,7 @@ não supondo que um ID de instância gerado sobreviva a outra sessão.
 Exemplo executável: assets/examples/lua/inventario.lua. Tipos podem ser configurados nas Propriedades ou criados dinamicamente por
 Lua (use apenas uma forma para cada tipo). Não há transferência multiplayer. Segurar E, tecla Delete e hotbar ainda
 precisam da integração de entrada/apresentação; não são anunciados como prontos.
+
+Clonar um protótipo na autoria deriva um novo identificador de tipo, com o ID
+da cópia como sufixo. Instâncias criadas por items.spawn têm o marcador de
+protótipo desligado, para não serem registradas como tipos em outra carga.

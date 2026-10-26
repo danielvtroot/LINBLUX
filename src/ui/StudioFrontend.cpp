@@ -312,6 +312,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(target->GetId()=="tool-search"||target->GetId()=="tool-category") {filterTools();return;}
             if(target->GetId().rfind("image-query",0)==0) {imageQuery=value(target);propertyMarkup.clear();advancedMarkup.clear();return;}
             if(attr(target,"type")=="checkbox"||target->GetTagName()=="select"||attr(target,"type")=="range")commit(target);
+            if(target->GetId()=="prop-Item.Prototype"){focusValue=value(target);target->Blur();propertyMarkup.clear();}
             return;
         }
         if(type=="mousedown") {

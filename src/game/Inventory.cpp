@@ -81,7 +81,7 @@ InstanceId Inventory::spawn(const std::string& type,const ModelFrame* pose){
     const auto id=copy->id();auto nodes=Nodes(copy);Impl::Item item{type,definition.options,{}};
     for(size_t i=0;i<nodes.size();++i){auto snapshot=definition.nodes[i];snapshot.id=nodes[i]->id();item.nodes.push_back(snapshot);}
     try{
-        if(pose)h.move(id,*pose);copy->setAttribute("item_icon",item.options.icon);copy->setAttribute("item_type",type);
+        if(pose)h.move(id,*pose);if(copy->attributes().count("_linblux_item_prototype"))copy->setAttribute("_linblux_item_prototype",false);copy->setAttribute("item_icon",item.options.icon);copy->setAttribute("item_type",type);
         Present(h.scene,item.nodes,true,true,true);h.items.emplace(id,std::move(item));h.physics.syncScene(h.scene);h.change(id,"spawn");return id;
     }catch(...){h.scene.remove(copy);throw;}
 }
