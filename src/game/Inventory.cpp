@@ -30,10 +30,11 @@ struct Inventory::Impl {
     Item& item(InstanceId id){model(id);auto it=items.find(id);Need(it!=items.end(),"Modelo não é um item registrado.");return it->second;}
     void change(InstanceId id,const char* action){if(changes.size()<256)changes.push_back({id,action});}
     void forget(InstanceId id){bag.erase(std::remove(bag.begin(),bag.end(),id),bag.end());if(equipped==id)equipped=0;items.erase(id);}
-    ModelFrame held(const Item& item)const{
+    ModelFrame held(InstanceId id,const Item& item)const{
         const auto rotation=QuatFromEulerDegreesZYX({0,yaw*RAD2DEG,0});ModelFrame frame;
         frame.position=Vector3Add(player,Vector3RotateByQuaternion(item.options.grip.position,rotation));
-        frame.rotation=QuaternionMultiply(rotation,item.options.grip.rotation);return frame;
+        frame.rotation=QuaternionMultiply(rotation,item.options.grip.rotation);ModelFrame current;std::string error;
+        if(!scene.modelFrame(id,current,error))throw std::runtime_error(error);frame.scale=current.scale;return frame;
     }
     void move(InstanceId id,const ModelFrame& pose){std::string error;Need(pose.valid(),"Pose do item inválida.");if(!scene.transformModel(id,pose,error))throw std::runtime_error(error);}
 };
@@ -75,7 +76,7 @@ InstanceId Inventory::spawn(const std::string& type,const ModelFrame* pose){
 void Inventory::collect(InstanceId id){auto& h=*impl_;auto& item=h.item(id);Need(item.state=="world","Item já está no inventário.");Need(h.bag.size()<64,"Inventário cheio: limite de 64 itens.");h.bag.push_back(id);item.state="stored";Present(h.scene,item.nodes,false,false);h.physics.syncScene(h.scene);h.change(id,"collect");}
 void Inventory::equip(InstanceId id){
     auto& h=*impl_;auto& item=h.item(id);Need(item.state=="stored"||item.state=="equipped","Colete o item antes de equipar.");Need(item.options.equipable,"Item não é equipável.");
-    if(h.equipped==id)return;h.move(id,h.held(item));unequip();item.state="equipped";h.equipped=id;Present(h.scene,item.nodes,true,false);h.physics.syncScene(h.scene);h.change(id,"equip");
+    if(h.equipped==id)return;h.move(id,h.held(id,item));unequip();item.state="equipped";h.equipped=id;Present(h.scene,item.nodes,true,false);h.physics.syncScene(h.scene);h.change(id,"equip");
 }
 void Inventory::unequip(){auto& h=*impl_;if(!h.equipped)return;const auto id=h.equipped;auto it=h.items.find(id);h.equipped=0;if(it!=h.items.end()){it->second.state="stored";Present(h.scene,it->second.nodes,false,false);h.change(id,"unequip");}h.physics.syncScene(h.scene);}
 void Inventory::drop(InstanceId id){
@@ -100,7 +101,7 @@ InstanceId Inventory::equipped()const{return impl_->scene.find(impl_->equipped)?
 void Inventory::update(Vector3 player,float yaw){
     auto& h=*impl_;h.player=player;h.yaw=yaw;
     for(auto it=h.items.begin();it!=h.items.end();)if(!h.scene.find(it->first)){const auto id=it->first;++it;h.forget(id);h.change(id,"remove");}else ++it;
-    if(h.equipped){auto& item=h.item(h.equipped);try{h.move(h.equipped,h.held(item));}catch(...){unequip();throw;}}
+    if(h.equipped){auto& item=h.item(h.equipped);try{h.move(h.equipped,h.held(h.equipped,item));}catch(...){unequip();throw;}}
 }
 std::vector<InventoryChange> Inventory::takeChanges(){std::vector<InventoryChange> result;result.swap(impl_->changes);return result;}
 }
