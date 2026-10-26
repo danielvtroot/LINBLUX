@@ -43,6 +43,7 @@ struct EditorUITestAccess {
     static const Part& proxy(EditorUI& ui){return ui.jointProxy_;}
     static bool dragging(EditorUI& ui){return ui.rigGizmo_.dragging();}
     static Gizmo& partGizmo(EditorUI& ui){return ui.gizmo_;}
+    static const Part* modelProxy(EditorUI& ui){return ui.modelTransform_.proxy();}
     static size_t undoCount(EditorUI& ui){return ui.history_.undoCount();}
     static bool partDragging(EditorUI& ui){return ui.transform_.active();}
 };
@@ -117,8 +118,21 @@ int main() {
             auto* model=scene.selection();CHECK(model&&model->instanceClass()==InstanceClass::Model);
             if(!model||model->instanceClass()!=InstanceClass::Model){capture("model-group-failure");rlImGuiShutdown();CloseWindow();return 1;}
             const auto id=model->id();CHECK(part->parent()==model&&second->parent()==model);
+            // Same visible gizmo, two real parts, one compound undo entry.
+            click("cmd-tool-1");frames(2);const auto* proxy=EditorUITestAccess::modelProxy(ui);CHECK(proxy);
+            const auto beforeDrag=projectio::toJson(scene);const auto undoBefore=EditorUITestAccess::undoCount(ui);
+            if(proxy){const auto viewport=ui.frontend()->viewport();auto& gizmo=EditorUITestAccess::partGizmo(ui);
+                const auto layout=gizmolayout::Build(*proxy,ToolMode::Move,camera,viewport,false,gizmo.visualSettings());
+                const auto point=layout.moveHandle[1],direction=layout.axisDirection[0];
+                event("mousemove "+std::to_string(int(point.x+viewport.x))+" "+std::to_string(int(point.y+viewport.y)));event("mousedown 1");
+                CHECK(gizmo.dragging());event("mousemove "+std::to_string(int(point.x+viewport.x+direction.x*26))+" "+std::to_string(int(point.y+viewport.y+direction.y*26)));event("mouseup 1");
+                CHECK(EditorUITestAccess::undoCount(ui)==undoBefore+1);CHECK(part->parent()==model);key("ctrl+z");
+                CHECK(SameProjectValue(nlohmann::json::parse(projectio::toJson(scene)),nlohmann::json::parse(beforeDrag)));
+            }
+
             clickVisible("prop-Model.Position.0");key("ctrl+a");event("type --clearmodifiers 20");key("Return");
             CHECK(NearlyEqual(part->position().x,16));CHECK(NearlyEqual(second->position().x,24));
+            key("ctrl+z");CHECK(NearlyEqual(part->position().x,14));key("ctrl+y");CHECK(NearlyEqual(part->position().x,16));
             clickVisible("prop-Model.Scale");key("ctrl+a");event("type --clearmodifiers 2");key("Return");CHECK(NearlyEqual(part->size().x,8));
             clickVisible("prop-Model.Rotation.1");key("ctrl+a");event("type --clearmodifiers 90");key("Return");CHECK(NearlyEqual(part->position().z,8,.01f));
             const auto original=part->position();clickVisible("prop-Pivot.Position.0");key("ctrl+a");event("type --clearmodifiers 30");key("Return");CHECK(NearlyEqual(part->position(),original));
