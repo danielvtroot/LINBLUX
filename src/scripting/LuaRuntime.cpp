@@ -393,7 +393,7 @@ struct LuaRuntime::Impl {
     }
     static int Components(lua_State* L) {
         auto& self=Host(L);auto& owner=self.instance(L,1);lua_newtable(L);int index=0;
-        for(const auto* child:owner.children())if(IsScriptClass(child->instanceClass())||IsSurfaceClass(child->instanceClass())){self.pushInstance(L,child,true);lua_rawseti(L,-2,++index);}return 1;
+        for(const auto* child:owner.children())if(IsScriptClass(child->instanceClass())||IsSurfaceClass(child->instanceClass())||child->instanceClass()==InstanceClass::Attachment){self.pushInstance(L,child,true);lua_rawseti(L,-2,++index);}return 1;
     }
     static nlohmann::json ReadStoredValue(lua_State* L,int index,int depth,std::size_t& nodes,std::size_t& bytes) {
         Require(depth<=8&&++nodes<=1024,"Estado excede profundidade ou quantidade de valores");index=lua_absindex(L,index);
@@ -449,7 +449,7 @@ struct LuaRuntime::Impl {
     }
     static int RemoveComponent(lua_State* L) {
         auto& self=Host(L);auto& owner=self.instance(L,1);auto& child=self.instance(L,2);
-        Require(child.parent()==&owner&&(IsScriptClass(child.instanceClass())||IsSurfaceClass(child.instanceClass())),"Componente não pertence a este objeto");
+        Require(child.parent()==&owner&&(IsScriptClass(child.instanceClass())||IsSurfaceClass(child.instanceClass())||child.instanceClass()==InstanceClass::Attachment),"Componente não pertence a este objeto");
         Require(self.runtime->mutableScene().remove(&child),"Componente protegido contra remoção");return 0;
     }
     static int SetMetatable(lua_State* L) {
@@ -487,14 +487,14 @@ struct LuaRuntime::Impl {
     }
     static int ModernNew(lua_State* L) {
         auto& self=Host(L);const char* kind=Text(L,1);
-        const bool part=Eq(kind,"part"),group=Eq(kind,"group"),model=Eq(kind,"model");
-        Require(part||group||model,"scene.create aceita part, group ou model");
+        const bool part=Eq(kind,"part"),group=Eq(kind,"group"),model=Eq(kind,"model"),attachment=Eq(kind,"attachment");
+        Require(part||group||model||attachment,"scene.create aceita part, group, model ou attachment");
         Require(lua_gettop(L)==1||lua_istable(L,2),"As opções devem ser uma tabela");
         Vector3 position{},rotation{},size{4,4,4},color{163,162,165};
         bool anchored=true,collidable=true;double transparency=0;
         PartMaterial material=PartMaterial::SmoothPlastic;PartShape shape=PartShape::Block;
         BodyProperties body;float modelScale=1;
-        std::string name=part?"Objeto":group?"Grupo":"Modelo";
+        std::string name=part?"Objeto":group?"Grupo":attachment?"Attachment":"Modelo";
         Instance* parent=self.runtime->mutableScene().workspace();
         if(lua_istable(L,2)) {
             // Reject typos before creating anything. Read raw fields, without invoking user metamethods.
@@ -502,7 +502,7 @@ struct LuaRuntime::Impl {
                 const char* key=Text(L,-2);bool known=false;
                 for(const char* allowed:{"name","parent","position","rotation","size","color","anchored","collidable","transparency","material","shape","body","scale"})known|=Eq(key,allowed);
                 Require(known,"Opção de criação desconhecida");
-                Require(part||Eq(key,"name")||Eq(key,"parent")||(model&&(Eq(key,"position")||Eq(key,"rotation")||Eq(key,"scale"))),"Grupo/Modelo não aceita esta propriedade de peça");Require(!part||!Eq(key,"scale"),"Peças usam size ou scale_by");lua_pop(L,1);
+                Require(part||Eq(key,"name")||Eq(key,"parent")||((model||attachment)&&(Eq(key,"position")||Eq(key,"rotation")||(model&&Eq(key,"scale")))),"Grupo/Modelo não aceita esta propriedade de peça");Require(!part||!Eq(key,"scale"),"Peças usam size ou scale_by");lua_pop(L,1);
             }
             Field(L,2,"name");if(!lua_isnil(L,-1)){name=Text(L,-1);Require(!name.empty()&&name.size()<=128&&name.size()==lua_rawlen(L,-1),"Nome deve ter de 1 a 128 bytes, sem NUL");}lua_pop(L,1);
             Field(L,2,"parent");if(!lua_isnil(L,-1))parent=&self.instance(L,-1);lua_pop(L,1);
@@ -519,14 +519,15 @@ struct LuaRuntime::Impl {
         Require(size.x>=kMinPartSize&&size.y>=kMinPartSize&&size.z>=kMinPartSize,"Tamanho mínimo é 0,2");
         Require(color.x>=0&&color.y>=0&&color.z>=0&&color.x<=255&&color.y<=255&&color.z<=255,"Cor requer canais de 0 a 255");
         Require(transparency>=0&&transparency<=1,"Transparência deve estar entre 0 e 1");
-        const ModelFrame modelFrame{position,QuatFromEulerDegreesZYX(rotation),modelScale};if(model)Require(modelFrame.valid(),"Pivô/escala do Modelo inválidos");
+        const ModelFrame modelFrame{position,QuatFromEulerDegreesZYX(rotation),modelScale};if(model||attachment)Require(modelFrame.valid(),"Pivô/escala do Modelo inválidos");
         self.nativeBudget(1,name.size()+128);auto& scene=self.runtime->mutableScene();
-        Instance* created=part?static_cast<Instance*>(scene.createPart(shape,position,size,name)):scene.createContainer(group?InstanceClass::Folder:InstanceClass::Model,parent,name);
+        Instance* created=part?static_cast<Instance*>(scene.createPart(shape,position,size,name)):attachment?static_cast<Instance*>(scene.createAttachment(parent,name)):scene.createContainer(group?InstanceClass::Folder:InstanceClass::Model,parent,name);
         Require(created,"Não foi possível criar o objeto");std::string error;
         if(!scene.reparent(created,parent,error)){scene.remove(created);throw std::runtime_error(error);}
         if(part){auto& object=static_cast<Part&>(*created);object.setRotationEulerDegrees(rotation);object.setColor({static_cast<unsigned char>(color.x),static_cast<unsigned char>(color.y),static_cast<unsigned char>(color.z),static_cast<unsigned char>((1-transparency)*255)});object.setAnchored(anchored);object.setCanCollide(collidable);object.setMaterial(material);}
         if(part)static_cast<Part&>(*created).setBodyProperties(body,error);
         if(model)scene.setModelPivot(created->id(),modelFrame,error);
+        if(attachment)static_cast<Attachment*>(created)->setLocalFrame(modelFrame);
         self.pushInstance(L,created,true);return 1;
     }
     // ---- NPCs -------------------------------------------------------------
@@ -1037,6 +1038,17 @@ struct LuaRuntime::Impl {
     }
     static int Index(lua_State* L) {
         auto& self=Host(L);const auto h=self.handle(L,1);const char* key=Text(L,2);
+        if(h.modern&&h.kind==Kind::Instance)if(const auto* object=self.runtime->scene().find(h.id);object&&object->instanceClass()==InstanceClass::Attachment) {
+            const auto& local=static_cast<const Attachment&>(*object).localFrame();
+            if(Eq(key,"position")){ModernVector(L,local.position);return 1;}
+            if(Eq(key,"rotation")){ModernVector(L,EulerDegreesZYXFromQuat(local.rotation));return 1;}
+            if(Eq(key,"transform")){PushModel(L,local);return 1;}
+            if(Eq(key,"world_position")||Eq(key,"world_rotation")||Eq(key,"direction")||Eq(key,"world_transform")){
+                ModelFrame world;std::string error;if(!self.runtime->scene().attachmentFrame(object->id(),world,error))throw std::runtime_error(error);
+                if(Eq(key,"world_transform"))PushModel(L,world);
+                else ModernVector(L,Eq(key,"world_position")?world.position:Eq(key,"world_rotation")?EulerDegreesZYXFromQuat(world.rotation):Vector3RotateByQuaternion({0,0,-1},world.rotation));return 1;
+            }
+        }
         if(h.modern&&h.kind==Kind::Instance)if(const auto* object=self.runtime->scene().find(h.id);object&&object->instanceClass()==InstanceClass::Model) {
             if(Eq(key,"transform")||Eq(key,"pivot")){PushModel(L,ModelPose(L,1));return 1;}
             if(Eq(key,"position")){ModernVector(L,ModelPose(L,1).position);return 1;}
@@ -1066,7 +1078,7 @@ struct LuaRuntime::Impl {
             if(Eq(key,"remove_component")){lua_pushcfunction(L,Safe<RemoveComponent>);return 1;}
             if(Eq(key,"alive")){lua_pushboolean(L,self.runtime->scene().find(h.id)!=nullptr);return 1;}
             if(Eq(key,"id")){self.instance(L,1);lua_pushinteger(L,lua_Integer(h.id));return 1;}
-            if(Eq(key,"type")){auto& object=self.instance(L,1);const auto type=object.instanceClass();lua_pushstring(L,object.isPart()?"part":type==InstanceClass::Folder?"group":type==InstanceClass::Model?"model":IsScriptClass(type)?"script":type==InstanceClass::Decal?"decal":type==InstanceClass::Texture?"texture":"service");return 1;}
+            if(Eq(key,"type")){auto& object=self.instance(L,1);const auto type=object.instanceClass();lua_pushstring(L,object.isPart()?"part":type==InstanceClass::Folder?"group":type==InstanceClass::Model?"model":IsScriptClass(type)?"script":type==InstanceClass::Decal?"decal":type==InstanceClass::Texture?"texture":type==InstanceClass::Attachment?"attachment":"service");return 1;}
             if(Eq(key,"velocity")){auto& object=self.instance(L,1);Require(object.isPart(),"Velocidade requer uma peça");ModernVector(L,self.runtime->partVelocity(object.id()));return 1;}
             if(Eq(key,"angular_velocity")){auto& object=PartObject(L,1);ModernVector(L,self.runtime->partVelocity(object.id(),true));return 1;}
             if(Eq(key,"mass")){auto& object=PartObject(L,1);lua_pushnumber(L,self.runtime->partMass(object.id()));return 1;}
@@ -1164,6 +1176,18 @@ struct LuaRuntime::Impl {
         auto& self=Host(L);const auto h=self.handle(L,1);const char* key=Text(L,2);
         if(h.modern&&h.kind==Kind::Player&&Eq(key,"velocity")){
             const auto value=ReadVector(L,3);std::string error;if(!self.runtime->playerMotion(value,game::PartMotion::Velocity,error))throw std::runtime_error(error);return 0;
+        }
+        if(h.modern&&h.kind==Kind::Instance)if(auto* object=self.runtime->mutableScene().find(h.id);object&&object->instanceClass()==InstanceClass::Attachment&&
+            (Eq(key,"position")||Eq(key,"rotation")||Eq(key,"transform")||Eq(key,"world_position")||Eq(key,"world_rotation")||Eq(key,"direction")||Eq(key,"world_transform"))) {
+            auto& attachment=static_cast<Attachment&>(*object);auto frame=attachment.localFrame();
+            if(Eq(key,"position"))frame.position=ReadVector(L,3);
+            else if(Eq(key,"rotation"))frame.rotation=QuatFromEulerDegreesZYX(ReadVector(L,3));
+            else if(Eq(key,"transform")){
+                Require(lua_istable(L,3),"Transformação local requer tabela");lua_pushnil(L);
+                while(lua_next(L,3)){const char* field=Text(L,-2);if(Eq(field,"position"))frame.position=ReadVector(L,-1);
+                    else if(Eq(field,"rotation"))frame.rotation=QuatFromEulerDegreesZYX(ReadVector(L,-1));else throw std::runtime_error("Campo do Attachment inválido");lua_pop(L,1);}
+            }else if(Eq(key,"world_position")||Eq(key,"world_rotation")||Eq(key,"direction")||Eq(key,"world_transform"))throw std::runtime_error("Transformação global do Attachment é somente leitura");
+            Require(attachment.setLocalFrame(frame),"Transformação local do Attachment inválida");return 0;
         }
         if(h.modern&&h.kind==Kind::Instance)if(const auto* object=self.runtime->scene().find(h.id);object&&object->instanceClass()==InstanceClass::Model) {
             if(Eq(key,"transform")){lua_remove(L,2);return SetModelPose<false>(L);}

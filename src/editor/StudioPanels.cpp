@@ -248,6 +248,16 @@ void EditorUI::drawInstanceProperties(Instance& object) {
         }
         ImGui::EndTable();
     }
+    if(object.isPart()||object.instanceClass()==InstanceClass::Model)if(ImGui::Button("Criar Attachment")){
+        if(auto* attachment=scene_.createAttachment(&object)){scene_.select(attachment);}ImGui::PopID();return;
+    }
+    if(object.instanceClass()==InstanceClass::Attachment){
+        auto& attachment=static_cast<Attachment&>(object);auto frame=attachment.localFrame();auto angles=EulerDegreesZYXFromQuat(frame.rotation);
+        bool changed=ImGui::InputFloat3("Posição local",&frame.position.x,"%.3f",ImGuiInputTextFlags_EnterReturnsTrue);
+        if(ImGui::InputFloat3("Rotação local",&angles.x,"%.2f",ImGuiInputTextFlags_EnterReturnsTrue)){frame.rotation=QuatFromEulerDegreesZYX(angles);changed=true;}
+        if(changed&&!attachment.setLocalFrame(frame))setStatus("Transformação do Attachment inválida.",true);
+        ModelFrame world;std::string error;if(scene_.attachmentFrame(object.id(),world,error))ImGui::Text("Posição global: %.3f %.3f %.3f",world.position.x,world.position.y,world.position.z);
+    }
     if(object.instanceClass()==InstanceClass::Model) {
         ModelFrame frame;std::string error;
         if(scene_.modelFrame(object.id(),frame,error)) {

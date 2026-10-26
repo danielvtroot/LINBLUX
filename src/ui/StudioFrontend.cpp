@@ -461,7 +461,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(action=="color-dialog"||action=="material-dialog"){prompt(action=="color-dialog"?"color":"material");return;}
         if(action=="edit-color"){prompt("color:"+v);return;}
         if(action=="choose-color"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
-        if(action=="insert-menu") {std::string menu;for(const auto& item:std::vector<std::pair<std::string,std::string>>{{"part","Part"},{"folder","Folder"},{"model","Model"},{"script","Script"},{"local-script","LocalScript"},{"module","ModuleScript"},{"r6","R6 rig"}})menu+=Button(item.first,item.second);el("context-menu")->SetInnerRML(i18n::Markup(menu));auto b=bounds("new-object");rect("context-menu",{b.x-160,b.y+23,184,183});display("context-menu",true);contextOpen=true;return;}
+        if(action=="insert-menu") {std::string menu;for(const auto& item:std::vector<std::pair<std::string,std::string>>{{"part","Part"},{"folder","Folder"},{"model","Model"},{"attachment","Attachment"},{"script","Script"},{"local-script","LocalScript"},{"module","ModuleScript"},{"r6","R6 rig"}})menu+=Button(item.first,item.second);el("context-menu")->SetInnerRML(i18n::Markup(menu));auto b=bounds("new-object");rect("context-menu",{b.x-160,b.y+23,184,206});display("context-menu",true);contextOpen=true;return;}
         if(action=="cancel-dialog") {dialogOpen=false;context->GetRootElement()->Focus();return;}
         if(action=="confirm-dialog") {const auto v=value(el("dialog-value"));const auto id=ui.scene_.selection()?ui.scene_.selection()->id():0;
             if(actions.dispatch({dialog,v,id})) {if(dialog=="import-image"||dialog=="import-sound"||dialog.rfind("rename-image:",0)==0||dialog.rfind("replace-image:",0)==0||dialog.rfind("delete-image:",0)==0)invalidateImages();dialogOpen=false;context->GetRootElement()->Focus();treeHash=0;}else text("dialog-error",ui.status_);return;}
@@ -611,6 +611,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                 auto it=p.attributes().find(entry.first);if(it!=p.attributes().end()){if(auto* text=std::get_if<std::string>(&it->second))v=*text;else if(auto* number=std::get_if<double>(&it->second))v=Num(*number);}
                 input(entry.first,v,entry.second);
             }
+            s+=Button("attachment","Criar Attachment","model","","property");
         } else if(node->instanceClass()==InstanceClass::Model) {
             ModelFrame frame;std::string error;
             if(ui.scene_.modelFrame(node->id(),frame,error)){
@@ -619,8 +620,16 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                     input("Model.Rotation."+std::to_string(axis),Num((&angles.x)[axis]),"Rotação "+std::string(1,char('X'+axis)));}
                 input("Model.Scale",Num(frame.scale),"Escala uniforme");group("Pivô sem mover as peças");
                 for(int axis=0;axis<3;++axis){input("Pivot.Position."+std::to_string(axis),Num((&frame.position.x)[axis]),"Pivô "+std::string(1,char('X'+axis)));}
-                s+=Button("ungroup","Desagrupar modelo","model");
+                s+=Button("attachment","Criar Attachment","model","","property")+Button("ungroup","Desagrupar modelo","model");
             }
+        } else if(node->instanceClass()==InstanceClass::Attachment) {
+            const auto& local=static_cast<const Attachment&>(*node).localFrame();const auto angles=EulerDegreesZYXFromQuat(local.rotation);
+            group("Attachment · transformação local");
+            for(int axis=0;axis<3;++axis){input("Attachment.Position."+std::to_string(axis),Num((&local.position.x)[axis]),"Posição local "+std::string(1,char('X'+axis)));
+                input("Attachment.Rotation."+std::to_string(axis),Num((&angles.x)[axis]),"Rotação local "+std::string(1,char('X'+axis)));}
+            ModelFrame world;std::string error;if(ui.scene_.attachmentFrame(node->id(),world,error)){
+                group("Transformação global · somente leitura");
+                s+="<div class=\"property\"><label>Posição global</label><span>"+Num(world.position.x)+", "+Num(world.position.y)+", "+Num(world.position.z)+"</span></div>";}
         } else if(IsSurfaceClass(node->instanceClass())) {
             const auto& surface=static_cast<const Surface&>(*node);const auto& value=surface.properties();group("Superfície");
             s+=ImagePicker(value.image,"apply-surface-image","surface","image-query-surface");

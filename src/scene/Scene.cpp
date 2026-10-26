@@ -93,7 +93,8 @@ Instance* Scene::ensureService(InstanceClass type, InstanceId forcedId) {
 bool Scene::accepts(InstanceClass type, const Instance* parent) const {
     if (!parent || find(parent->id())!=parent || IsRootServiceClass(type)) return false;
     const auto p=parent->instanceClass();
-    if(IsSurfaceClass(p)) return false;
+    if(IsSurfaceClass(p)||p==InstanceClass::Attachment) return false;
+    if(type==InstanceClass::Attachment)return parent->isPart()||p==InstanceClass::Model;
     if(IsSurfaceClass(type)) return parent->isPart() && static_cast<const Part*>(parent)->shape()==PartShape::Block;
     if (IsScriptClass(type)) return p!=InstanceClass::Lighting && !IsScriptClass(p);
     if (p!=InstanceClass::Workspace && p!=InstanceClass::Folder && p!=InstanceClass::Model &&
@@ -368,6 +369,32 @@ Part* Scene::duplicatePart(const Part& source) {
     return copy;
 }
 
+Attachment* Scene::createAttachment(Instance* parent,const std::string& name,InstanceId forcedId) {
+    if(!accepts(InstanceClass::Attachment,parent)||(forcedId&&find(forcedId)))return nullptr;
+    auto node=std::make_unique<Attachment>(forcedId?forcedId:allocateId(),forcedId?name:makeUniqueName(name));
+    auto* raw=node.get();return adopt(std::move(node),parent)?raw:nullptr;
+}
+bool Scene::attachmentParentFrame(const Instance* owner,ModelFrame& frame,std::string& error) const {
+    if(!owner||find(owner->id())!=owner){error="Pai do Attachment inexistente.";return false;}
+    frame={};
+
+    if(owner->isPart()){
+        const auto* part=static_cast<const Part*>(owner);frame.position=part->position();frame.rotation=part->rotation();
+        // Parts store world geometry. The nearest Model carries hierarchy scale.
+        for(auto* ancestor=owner->parent();ancestor;ancestor=ancestor->parent())if(ancestor->instanceClass()==InstanceClass::Model){
+            ModelFrame model;if(!modelFrame(ancestor->id(),model,error))return false;frame.scale=model.scale;break;}
+    }else if(!modelFrame(owner->id(),frame,error))return false;
+    error.clear();return true;
+}
+bool Scene::attachmentFrame(InstanceId id,ModelFrame& world,std::string& error) const {
+    const auto* node=find(id);
+    if(!node||node->instanceClass()!=InstanceClass::Attachment||!node->parent()){error="Attachment inexistente ou sem pai.";return false;}
+    ModelFrame parent;if(!attachmentParentFrame(node->parent(),parent,error))return false;
+    const auto& local=static_cast<const Attachment*>(node)->localFrame();
+    world.position=Vector3Add(parent.position,Vector3RotateByQuaternion(Vector3Scale(local.position,parent.scale),parent.rotation));
+    world.rotation=QuaternionNormalize(QuaternionMultiply(parent.rotation,local.rotation));world.scale=parent.scale;
+    error.clear();return true;
+}
 Surface* Scene::createSurface(InstanceClass type,Instance* parent,const std::string& name,InstanceId forcedId) {
     if(!IsSurfaceClass(type) || !accepts(type,parent) || (forcedId && find(forcedId)))return nullptr;
     const std::string requested=name.empty()?InstanceClassName(type):name;
@@ -423,7 +450,25 @@ bool Scene::reparent(Instance* object, Instance* parent, std::string& error) {
     if (!canParent(object,parent)) { error = "Parent invalido: ciclo, servico protegido, classe ou profundidade"; return false; }
     if (object->parent() == parent) return true;
     const auto previous=object->parent()?object->parent()->id():0;
+    auto* previousParent=object->parent();
+    struct AnchorState { Attachment* node;ModelFrame world,local; };
+    std::vector<AnchorState> anchors;
+    for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment&&object->isAncestorOf(node.get())){
+        ModelFrame world;if(!attachmentFrame(node->id(),world,error))return false;
+        anchors.push_back({static_cast<Attachment*>(node.get()),world,static_cast<const Attachment&>(*node).localFrame()});
+    }
     parent->attachChild(object);
+    for(auto& anchor:anchors){
+        ModelFrame owner;if(!attachmentParentFrame(anchor.node->parent(),owner,error))break;
+        ModelFrame local;local.position=Vector3Scale(Vector3RotateByQuaternion(Vector3Subtract(anchor.world.position,owner.position),QuaternionInvert(owner.rotation)),1/owner.scale);
+        local.rotation=QuaternionNormalize(QuaternionMultiply(QuaternionInvert(owner.rotation),anchor.world.rotation));
+        if(!anchor.node->setLocalFrame(local)){error="Attachment excede os limites após reparentar.";break;}
+    }
+    if(!error.empty()){
+        if(previousParent)previousParent->attachChild(object);
+        for(const auto& anchor:anchors)anchor.node->setLocalFrame(anchor.local);
+        return false;
+    }
     diag::Event event;event.subsystem="scene";event.name="reparent";event.entityId=object->id();
     event.result="ok";event.context={{"previous_parent",previous},{"parent",parent->id()},{"transform_space","world_preserved"}};
     diag::log(event);
@@ -480,14 +525,31 @@ Container* Scene::group(const std::vector<InstanceId>& ids,const std::string& na
     for(auto a:ids)for(auto b:ids)if(a!=b&&find(a)->isAncestorOf(find(b))){error="Selecione o Modelo ou seus filhos, sem sobreposição.";return nullptr;}
     auto* model=createContainer(InstanceClass::Model,workspace_,name);if(!model){error="Não foi possível criar o Modelo.";return nullptr;}
     for(auto id:ids)if(!canParent(find(id),model)){remove(model);error="Hierarquia não permite agrupar essa seleção.";return nullptr;}
-    for(auto id:ids)reparent(find(id),model,error);
+    std::map<Instance*,std::vector<Instance*>> parents;
+    std::vector<std::pair<Attachment*,ModelFrame>> anchors;
+    for(auto id:ids)parents.emplace(find(id)->parent(),find(id)->parent()->children());
+    for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment)anchors.push_back({static_cast<Attachment*>(node.get()),static_cast<Attachment*>(node.get())->localFrame()});
+    for(auto id:ids)if(!reparent(find(id),model,error)){
+        for(const auto& previous:parents){previous.first->children_=previous.second;for(auto* child:previous.second)child->parent_=previous.first;}
+        model->children_.clear();
+        for(const auto& anchor:anchors)anchor.first->setLocalFrame(anchor.second);
+        remove(model);return nullptr;
+    }
     ModelFrame frame;modelFrame(model->id(),frame,error);setModelPivot(model->id(),frame,error);select(model);return model;
 }
 bool Scene::ungroup(InstanceId id,std::string& error) {
     auto* model=find(id);if(!model||model->instanceClass()!=InstanceClass::Model||!model->parent()||!model->deletable()){error="Selecione um Modelo para desagrupar.";return false;}
     const auto children=model->children();auto* parent=model->parent();
     for(auto* child:children)if(!canParent(child,parent)){error="Hierarquia impede desagrupar este Modelo.";return false;}
-    for(auto* child:children)reparent(child,parent,error);
+    std::vector<std::pair<Attachment*,ModelFrame>> anchors;
+    for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment&&model->isAncestorOf(node.get()))anchors.push_back({static_cast<Attachment*>(node.get()),static_cast<Attachment*>(node.get())->localFrame()});
+    const auto parentChildren=parent->children();
+    for(auto* child:children)if(!reparent(child,parent,error)){
+        parent->children_=parentChildren;for(auto* node:parentChildren)node->parent_=parent;
+        model->children_=children;for(auto* node:children)node->parent_=model;
+        for(const auto& anchor:anchors)anchor.first->setLocalFrame(anchor.second);
+        return false;
+    }
     if(!remove(model)){error="Modelo protegido não pode ser removido.";return false;}
     if(!children.empty())select(children.front());error.clear();return true;
 }
@@ -497,6 +559,7 @@ Instance* Scene::duplicateTree(const Instance& source, Instance* parent) {
     if (!parent) parent = source.parent();
     if (source.isAncestorOf(parent)) return nullptr;
     Instance* copy = source.isPart() ? static_cast<Instance*>(duplicatePart(static_cast<const Part&>(source))) :
+        source.instanceClass()==InstanceClass::Attachment ? static_cast<Instance*>(createAttachment(parent,source.name())) :
         IsSurfaceClass(source.instanceClass()) ? static_cast<Instance*>(createSurface(source.instanceClass(),parent,source.name())) :
         IsScriptClass(source.instanceClass()) ? static_cast<Instance*>(createScript(source.instanceClass(),parent,source.name())) :
         createContainer(source.instanceClass(),parent,source.name());
@@ -504,6 +567,7 @@ Instance* Scene::duplicateTree(const Instance& source, Instance* parent) {
     for (const auto& pair:source.attributes()) copy->setAttribute(pair.first,pair.second);
     if(source.instanceClass()==InstanceClass::Model){const auto& model=static_cast<const Container&>(source);if(model.hasModelFrame_){std::string ignored;setModelPivot(copy->id(),model.modelFrame_,ignored);}}
 
+    if(source.instanceClass()==InstanceClass::Attachment)static_cast<Attachment*>(copy)->setLocalFrame(static_cast<const Attachment&>(source).localFrame());
     if(IsSurfaceClass(source.instanceClass())) static_cast<Surface*>(copy)->setProperties(static_cast<const Surface&>(source).properties());
     if (IsScriptClass(source.instanceClass())) {
         auto& script=static_cast<const Script&>(source); auto& cloned=static_cast<Script&>(*copy);

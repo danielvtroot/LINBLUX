@@ -73,6 +73,9 @@ int main(int argc,char** argv) {
         auto* portableModel=scene.group({partId},"Modelo portátil",bodyError);CHECK(portableModel);const auto modelId=portableModel->id();
         ModelFrame portableFrame;CHECK(scene.modelFrame(modelId,portableFrame,bodyError));portableFrame.scale=1.5f;portableFrame.rotation=QuatFromEulerDegrees({0,20,0});
         CHECK(scene.transformModel(modelId,portableFrame,bodyError));
+        auto* muzzle=scene.createAttachment(part,"BocaDoCano");CHECK(muzzle);const auto muzzleId=muzzle->id();
+        ModelFrame muzzleLocal;muzzleLocal.position={0,0,-2};CHECK(muzzle->setLocalFrame(muzzleLocal));
+        ModelFrame muzzleWorld;CHECK(scene.attachmentFrame(muzzleId,muzzleWorld,bodyError));
         const auto previous=author.activePlace();author.save(scene);CHECK(author.activePlace()!=previous);CHECK(fs::exists(previous));
         auto m=author.active()->manifest;m.name="Renamed";m.description="Updated description";author.updateMetadata(m);
         const auto goodManifest=Read(project.root/"experience.json");auto badMedia=m;badMedia.icon="assets/missing.png";
@@ -128,6 +131,9 @@ int main(int argc,char** argv) {
         for(const auto& rig:receivedScene.gameAssets().rigs)for(const auto& body:rig.bodies)
             if(!body.image.empty())CHECK(!game::ResolveImagePath(game::AssetsDir(),body.image).empty());
         CHECK(receivedScene.findPart(partId));CHECK(receivedScene.gameAssets().findRig(rigId));
+        CHECK(receivedScene.find(muzzleId)&&receivedScene.find(muzzleId)->parent()->id()==partId);
+        ModelFrame receivedMuzzle;CHECK(receivedScene.attachmentFrame(muzzleId,receivedMuzzle,bodyError));
+        CHECK(NearlyEqual(receivedMuzzle.position,muzzleWorld.position));CHECK(NearlyEqual(receivedMuzzle.rotation,muzzleWorld.rotation));
         ModelFrame receivedFrame;CHECK(receivedScene.modelFrame(modelId,receivedFrame,bodyError));CHECK(NearlyEqual(receivedFrame.scale,1.5f));
         CHECK(NearlyEqual(receivedFrame.rotation,portableFrame.rotation));CHECK(receivedScene.findPart(partId)->parent()->id()==modelId);
         const auto& receivedBody=receivedScene.findPart(partId)->bodyProperties();CHECK(NearlyEqual(receivedBody.density,2.5f));CHECK(NearlyEqual(receivedBody.friction,.3f));CHECK(NearlyEqual(receivedBody.restitution,.7f));CHECK(NearlyEqual(receivedBody.linearDamping,.2f));CHECK(NearlyEqual(receivedBody.angularDamping,.4f));

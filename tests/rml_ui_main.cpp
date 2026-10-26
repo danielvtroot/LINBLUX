@@ -138,7 +138,17 @@ int main() {
             clickVisible("prop-Model.Scale");key("ctrl+a");event("type --clearmodifiers 2");key("Return");CHECK(NearlyEqual(part->size().x,8));
             clickVisible("prop-Model.Rotation.1");key("ctrl+a");event("type --clearmodifiers 90");key("Return");CHECK(NearlyEqual(part->position().z,8,.01f));
             const auto original=part->position();clickVisible("prop-Pivot.Position.0");key("ctrl+a");event("type --clearmodifiers 30");key("Return");CHECK(NearlyEqual(part->position(),original));
+            clickVisible("node-"+std::to_string(part->id()));clickVisible("property-attachment-");
+            auto* anchor=scene.selection();CHECK(anchor&&anchor->instanceClass()==InstanceClass::Attachment);
+            if(!anchor||anchor->instanceClass()!=InstanceClass::Attachment){capture("attachment-create-failure");rlImGuiShutdown();CloseWindow();return 1;}
+            const auto anchorId=anchor->id();CHECK(anchor->parent()==part);
+            clickVisible("prop-Attachment.Position.2");key("ctrl+a");event("type --clearmodifiers -- -2");key("Return");
+            CHECK(NearlyEqual(static_cast<Attachment*>(anchor)->localFrame().position.z,-2));
+            ModelFrame anchorWorld;CHECK(scene.attachmentFrame(anchorId,anchorWorld,error));
+            const auto anchorPosition=anchorWorld.position;capture("attachment-properties");
             CHECK(projectio::save(scene,config.defaultProjectPath,error));Scene loaded;CHECK(projectio::load(loaded,config.defaultProjectPath,error));
+            CHECK(loaded.attachmentFrame(anchorId,anchorWorld,error));CHECK(NearlyEqual(anchorWorld.position,anchorPosition));
+            clickVisible("node-"+std::to_string(id));
             ModelFrame frame;CHECK(loaded.modelFrame(id,frame,error));CHECK(NearlyEqual(frame.position.x,30));CHECK(frame.scale==2);
             capture("model-properties");
             scene.createScript(InstanceClass::Script,nullptr,"ModeloPlay.lua")->source="local m=linblux.scene.find("+std::to_string(id)+");assert(m.scale==2);linblux.scene.root:set_attribute('model_play',true)";
@@ -147,6 +157,7 @@ int main() {
             key("shift+F5");frames(2);CHECK(!ui.playing());CHECK(NearlyEqual(part->position(),original));
             clickVisible("node-"+std::to_string(id));key("ctrl+shift+g");frames(2);
             CHECK(scene.find(id)==nullptr);CHECK(part->parent()==scene.workspace());CHECK(NearlyEqual(part->position(),original));
+            CHECK(scene.attachmentFrame(anchorId,anchorWorld,error));CHECK(NearlyEqual(anchorWorld.position,anchorPosition));
             CHECK(scene.validate(error));std::printf("Model UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
             rlImGuiShutdown();CloseWindow();return failures?1:0;
         }

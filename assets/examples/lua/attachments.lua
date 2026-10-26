@@ -1,0 +1,21 @@
+-- Attachment real: a boca acompanha posição, rotação e escala do Modelo.
+local v = linblux.vec3
+local rifle = linblux.scene.create("model", {name="Rifle fictício"})
+local corpo = linblux.scene.create("part", {name="Corpo",parent=rifle,position=v(0,2,0),size=v(2,2,2)})
+local cano = linblux.scene.create("part", {name="Cano",parent=rifle,position=v(0,2,-3),size=v(1,1,4)})
+local boca = linblux.scene.create("attachment", {name="BocaDoCano",parent=cano,position=v(0,0,-2)})
+assert(boca.type == "attachment" and boca.parent.id == cano.id)
+assert(math.abs(boca.world_position.z + 5) < 0.001)
+rifle.rotation = v(0,90,0)
+assert(math.abs(boca.world_position.x + 5) < 0.001)
+assert(math.abs(boca.direction.x + 1) < 0.001)
+rifle.scale = 2
+assert(math.abs(boca.world_position.x + 10) < 0.001)
+assert(math.abs(boca.world_position.y - 4) < 0.001)
+boca.position = v(0,0,-1)
+assert(math.abs(boca.world_position.x + 8) < 0.001)
+boca.rotation = v(0,90,0)
+assert(math.abs(boca.direction.z - 1) < 0.001)
+local copia = rifle:clone()
+assert(copia.id ~= rifle.id)
+linblux.scene.root:set_attribute("attachments_concluidos",true)

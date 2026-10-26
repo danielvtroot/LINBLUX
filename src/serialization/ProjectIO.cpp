@@ -213,6 +213,15 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
         if (out.source.size()>262144) { error=prefix+"Script source exceeds 256 KiB"; return false; }
         return true;
     }
+    if(out.instanceClass==InstanceClass::Attachment) {
+        if(!value.contains("attachment")){error="Attachment sem transformação local.";return false;}
+        const auto& frame=value["attachment"];
+        if(!frame.is_object()||!frame.contains("position")||!frame.contains("rotation")||!frame["rotation"].is_array()||frame["rotation"].size()!=4){error="Transformação local do Attachment inválida.";return false;}
+        if(!ReadVector3(frame["position"],"attachment.position",out.modelFrame.position,error))return false;
+        float q[4];for(int i=0;i<4;++i)if(!ReadFloat(frame["rotation"][i],"attachment.rotation",q[i],error))return false;
+        out.modelFrame.rotation={q[0],q[1],q[2],q[3]};
+        if(!out.modelFrame.valid()){error="Quaternion ou posição do Attachment inválidos.";return false;}return true;
+    }
     if (out.instanceClass == InstanceClass::Workspace ||
         (IsRootServiceClass(out.instanceClass) && out.instanceClass!=InstanceClass::Lighting) || out.instanceClass == InstanceClass::Folder ||
         out.instanceClass == InstanceClass::Model) {
@@ -497,7 +506,8 @@ std::string toJson(const Scene& scene) {
                 o->instanceClass()!=InstanceClass::Workspace && o->instanceClass()!=InstanceClass::Lighting);
     });
     const bool preciseModels=std::any_of(scene.objects().begin(),scene.objects().end(),[](const auto& object){return object->instanceClass()==InstanceClass::Model&&static_cast<const Container&>(*object).hasModelFrame();});
-    root["version"] = preciseModels ? 4 : hierarchy ? 3 : hasGame ? 2 : 1;
+    const bool attachments=std::any_of(scene.objects().begin(),scene.objects().end(),[](const auto& o){return o->instanceClass()==InstanceClass::Attachment;});
+    root["version"] = attachments ? 5 : preciseModels ? 4 : hierarchy ? 3 : hasGame ? 2 : 1;
     if (hasGame) root["game"] = gameData;
     root["nextId"] = scene.nextId();
 
@@ -549,6 +559,9 @@ std::string toJson(const Scene& scene) {
         if (!node->isPart()) {
             objects.push_back({{"id",node->id()},{"class",node->className()},
                 {"name",node->name()},{"parent",node->parent()?node->parent()->id():0}});
+            if(node->instanceClass()==InstanceClass::Attachment){const auto& frame=static_cast<const Attachment&>(*node).localFrame();
+                objects.back()["attachment"]={{"position",{frame.position.x,frame.position.y,frame.position.z}},
+                    {"rotation",{frame.rotation.x,frame.rotation.y,frame.rotation.z,frame.rotation.w}}};}
             if(IsSurfaceClass(node->instanceClass()))objects.back()["surface"]=game::EncodeSurface(static_cast<const Surface&>(*node).properties());
             if(node->instanceClass()==InstanceClass::Model){const auto& model=static_cast<const Container&>(*node);if(model.hasModelFrame()){
                 const auto& frame=model.modelFrame();
@@ -579,7 +592,7 @@ std::string toJson(const Scene& scene) {
                            {"material", PartMaterialName(part->material())},
                            {"anchored", part->anchored()},
                            {"canCollide", part->canCollide()}});
-        if(preciseModels){const auto q=part->rotation();objects.back()["orientation"]={q.x,q.y,q.z,q.w};}
+        if(preciseModels||attachments){const auto q=part->rotation();objects.back()["orientation"]={q.x,q.y,q.z,q.w};}
         const auto& body=part->bodyProperties();
         objects.back()["body"]={{"density",body.density},{"friction",body.friction},
             {"restitution",body.restitution},{"linearDamping",body.linearDamping},{"angularDamping",body.angularDamping}};
@@ -814,6 +827,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         if (IsRootServiceClass(object.instanceClass)) {
             continue;
         }
+        if(object.instanceClass==InstanceClass::Attachment){if(version<5){error="Attachment requer projeto versão 5.";return false;}continue;}
         if(IsSurfaceClass(object.instanceClass))continue; // Pais Part são criados primeiro.
         if (IsScriptClass(object.instanceClass)) {
             auto* script=staged.createScript(object.instanceClass,staged.workspace(),object.name,object.id);
@@ -858,11 +872,15 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         if(!surface||!surface->setProperties(object.surface)){error="Não foi possível restaurar a superfície "+object.name;return false;}
     }
     for (const auto& object : parsed) {
-        if (IsRootServiceClass(object.instanceClass)) continue;
+        if (IsRootServiceClass(object.instanceClass)||object.instanceClass==InstanceClass::Attachment) continue;
         auto* parent = object.parent == workspaceId ? staged.workspace() : staged.find(object.parent);
         if (!staged.reparent(staged.find(object.id),parent,error)) {
             error = "objeto '"+object.name+"': "+error; return false;
         }
+    }
+    for(const auto& object:parsed)if(object.instanceClass==InstanceClass::Attachment) {
+        auto* attachment=staged.createAttachment(staged.find(object.parent),object.name,object.id);
+        if(!attachment||!attachment->setLocalFrame(object.modelFrame)){error="Não foi possível restaurar Attachment "+object.name;return false;}
     }
     if (requestedNextId != 0) staged.setNextId(requestedNextId);
     for (const auto& value:root["objects"]) if (value.contains("attributes")) {

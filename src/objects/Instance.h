@@ -30,6 +30,7 @@ enum class InstanceClass {
     ReplicatedStorage,
     Decal,
     Texture,
+    Attachment,
 };
 
 
@@ -92,6 +93,20 @@ struct ModelFrame {
     Quaternion rotation{0,0,0,1};
     float scale=1;
     bool valid() const;
+};
+class Attachment final : public Instance {
+public:
+    Attachment(InstanceId id,std::string name):Instance(id,std::move(name)){}
+    const char* className() const override { return "Attachment"; }
+    InstanceClass instanceClass() const override { return InstanceClass::Attachment; }
+    const ModelFrame& localFrame() const { return local_; }
+    bool setLocalFrame(const ModelFrame& frame) {
+        if(!frame.valid()||frame.scale!=1)return false;
+        local_=frame;
+        return true;
+    }
+private:
+    ModelFrame local_;
 };
 // Groups have no physics body. Scene owns propagation of a Model's frame.
 class Container final : public Instance {
