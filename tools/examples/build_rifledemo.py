@@ -112,7 +112,7 @@ def build_world(item_source: str, demo_source: str, library: list[dict]) -> dict
         {"id": 17, "class": "Script", "name": "Item.lua", "parent": 10,
          "source": item_source, "enabled": True},
         dict(part(18, "Placa LINBLUX", 1, (14, 4, -14), (5, 5, 0.4), (40, 40, 46)),
-             attributes={"decal_image": "assets/logo.png", "decal_face": "Front"}),
+             attributes={"decal_image": "assets/logo.png", "decal_face": "Back", "decal_flip_u": True}),
     ]
     return {"format": "loblox-project", "version": 5, "nextId": 20,
             "objects": objects, "game": game}

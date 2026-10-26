@@ -37,8 +37,9 @@ entram no pacote.
 
 - Revisar obrigações da build FFmpeg GPL efetivamente usada, além dos componentes
   embutidos da raylib redistribuída; avisos técnicos não constituem liberação jurídica.
-- Atualizar/verificar a regressão gráfica histórica que exigia HUD/menu antigos;
-  executar a regressão abrangente após fechar esses requisitos.
+- A migração da regressão RmlUi excedeu180s após maximizar em1366×768, sem
+  aprovação. Diagnosticar maximizar/retomar/F10/F11 e concluir a migração
+  antes da regressão abrangente. O patch recuperável está no relatório34.
 - O modo de depuração `--ui legacy` conserva sua apresentação antiga. A interface
   Alpha suportada é RmlUi; o Player independente possui o novo menu.
 - Validar o candidato extraído e dependências em outra instalação Linux.

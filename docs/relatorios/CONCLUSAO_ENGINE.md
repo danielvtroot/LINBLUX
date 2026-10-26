@@ -44,7 +44,7 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 | Estado privado por experiência | PUBLICADO | e44b4e8f07c803fe3bea4198dd234910c42808fe, remoto confirmado. Relatório 17: ProgressStore, storage Lua, Studio/Player; FAST 14/14, IMPACT 18/18 e integração gráfica pertinente 4/4. | Não exportado, limites explícitos, sem backup externo configurado. Publicado; recuperação privada externa continua pendente. |
 | Volumes Bullet e controle Lua do jogador | PUBLICADO | 431efefd30b1cb03d0d288da75a62608e9fe35dd, remoto confirmado. Relatório 18: overlap_box/overlap_sphere reais, filtros, cotas, intenção de movimento, salto, velocidade, força/impulso. FAST/IMPACT 13/13. | script_input_ui 1/1 em 20,792 s; publicado. Regiões contínuas e NPCs pendentes. |
 | Áudio por Lua | IMPLEMENTADO/TESTADO | Relatório 28: `play` (volume/loop/owner), pause/resume/stop/stop_all, volume/loop, duration, device_ready, is_streaming, list; limite de 16 operações/quadro; `linblux_lua_player_validation` aprovado. | Sem 3D/atenuação nem mixer por categoria. |
-| UI por Lua | PENDENTE | Não há namespace documentado como implementado. | Dependência da Fase 6: modelo/render/input e UI protegida. |
+| UI por Lua | PUBLICADO | e22116d; relatório29, cinco widgets, eventos e renderização nos dois hosts; bb69e49 adiciona health_hud. | Widgets avançados fora do Alpha; controles de saída protegidos. |
 
 Não avançar para NPCs como se a Fase 1 estivesse completa. Resolver dependências
 de áudio/UI explicitamente, mantendo os estados parciais visíveis. Todo método
@@ -458,3 +458,20 @@ posteriores a esse instante serão protegidas também pelos commits de main.
 Próximo requisito sob controle do código: atualizar testes históricos de
 HUD/menu antes da regressão abrangente. Fonte binária GPL/raylib, áudio físico
 e outra instalação Linux continuam exigindo validação específica externa.
+
+
+## 26/10 — fechamento verificável e bloqueio de Release
+
+Empacotador PUBLICADO:f762dd5696e237426170b8f13fa04c6133ec0344, push confirmado.
+Qualidade gráfica migrou para o HUD real e foi aprovada. UV opt-in corrige
+orientação da logo na placa sem alterar a aparência legada; persistência .lo
+e desenho assimétrico verificados. Qualidade+Player2/2 em29,615s; captura
+inspecionada. FAST final4/4 em6,7s, escopo conhecido; relatório34.
+
+BLOQUEIO DE VALIDAÇÃO: regressão RmlUi atingiu180s, foi encerrada e não aprovou.
+Última captura foi pause-maximized-1366.png. Investigar maximizar/retomar/F10/F11
+em fixture curta. A proposta de migração está em34-rml-migration-wip.patch;
+não foi incluída como teste aprovado. Somente as alterações nossas daquele
+arquivo foram restauradas; todo WIP desenvolvimento funcional está publicado.
+Não executar FULL antes de resolver o cenário e a revisão GPL/raylib. Também
+faltam áudio físico e teste em outro sistema Linux. Não existe tag/Release.
