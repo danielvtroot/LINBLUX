@@ -302,3 +302,18 @@ Relatório25 registra correções reais e limites; sem FULL.
 PENDENTE imediato agora: inventário/E/Delete/hotbar (não confundir com
 inventory.py do TURBO). Depois demais fases Alpha já listadas. Não foi gerado
 pacote, tag ou Release; critérios de lançamento ainda não satisfeitos.
+
+## Alpha — inventário conectado ao Editor/Player
+
+Juntas PUBLICADAS em e6f6591, relatório87f3ad7, push confirmado.
+Inventário IMPLEMENTADO/TESTADO/VALIDADO NO PLAYER em e4863f372e8225aedd49b1f211964bba5e748039.
+Propriedades registram protótipos antes da VM, Lua controla instâncias reais,
+coleta/equipamento/descarte mantêm IDs/dados/scripts. Renderização/consultas
+ocultam representações guardadas e protótipos. Autoria permanece intacta.
+FAST15/15; IMPACT20/20 (global parcial); integração3/3 em57,581 s e captura
+inspecionada. Relatório26 e INVENTARIO.md registram APIs e limites Alpha.
+
+PENDENTE imediato: E por proximidade, Delete e hotbar. Ainda não implementados
+por este commit. Continuam pendentes áudio completo/UI Lua/combate/RifleDemo,
+HUD/menu, Demo, distribuição, validação final e licenças/segurança. Nenhuma
+tag/Release criada. Não confundir catálogo e bolsa runtime com lançamento.
