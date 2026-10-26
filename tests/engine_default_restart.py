@@ -71,7 +71,7 @@ def run(phase):
    xdo('windowmove',window,0,0);xdo('windowsize',window,1280,900);xdo('windowfocus','--sync',window);time.sleep(3)
    shot(phase+'-home')
    if phase=='first':
-    click(window,1152,318)
+    click(window,1130,425)
     opened=wait(lambda:next((e for e in events()[before:] if e.get('event')=='open' and 'engine-workspaces' in e.get('file','')),None))
     draft=Path(opened['file']);manifest=json.loads((draft/'experience.json').read_text());world=json.loads((draft/manifest['mainPlace']).read_text())
     assert world['game']['defaultRig']==expected['rig']
