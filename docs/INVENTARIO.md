@@ -74,3 +74,25 @@ Modele a hierarquia antes de spawn; adicionar/remover Parts de uma instância
 guardada/equipada não é suportado nesta etapa. Cor/material, transformações e
 atributos de comportamento permanecem programáveis. Estado automático entre
 partidas e transferência multiplayer também ficam fora deste incremento.
+
+## Ações programáveis de itens (Alpha)
+
+`linblux.items.configure(item,{magazine=12,reserve=24,consume=1,interval=.16,
+reload_time=1.6})` configura um estado de partida independente por ID.
+`activate(item)` e `reload(item)` retornam `sucesso,motivo`; exigem o item
+atualmente equipado. `deactivate`, `cancel_reload`, `set_ammo(item,pente,reserva)`
+e `combat(item)` completam a API. `combat` retorna ammo/reserve/magazine/consume,
+interval/reload_time/reload_progress/cooldown/reloading/active, ou nil.
+
+Pente0..100000, reserva0..1000000, consumo1..100000, intervalo/recarga0..60 s.
+Inteiros Lua são verificados antes da conversão C++; configurações inválidas
+não alteram o estado. `magazine=0` representa ferramenta sem munição.
+O evento `item_action` entrega item, action, ammo, reserve, magazine, reloading e
+active após cada transição. Ações: activate,deactivate,ammo,
+reload_start,reload_end,reload_cancel. Troca/soltura cancelam recarga;
+destruição remove estado, callbacks e UI. Stop limpa tudo. O autor define os
+efeitos em Lua — a engine não contém uma arma fixa.
+
+RifleDemo demonstra Attachment, raycast ignorando a subárvore do Modelo,
+munição, recarga, recoil, som por ID estável, UI, E/Delete/recoleta. Consulte
+[as instruções](../assets/examples/rifledemo/README.md).

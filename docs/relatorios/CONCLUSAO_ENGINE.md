@@ -22,8 +22,8 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 | 4 Imagens/decals | EM DESENVOLVIMENTO | 4bb803c/bf90835: consulta central de usos, nomes amigáveis, resolução de vínculos, exclusão segura, seletor, Surface persistida/renderizada e testes gráficos. Relatório 21. | Conferência final de todos os requisitos de imagens/Lua na integração abrangente; corrigir apenas defeitos novos reproduzidos. |
 | 5 Rosto de fábrica | PUBLICADO | 00898e2/bf90835: removida associação de fábrica e fallback visual de face/olhos; rig preservado e rosto legado explícito continua renderizado. Pixels e interação gráfica validados, relatório 21. | Não apagar imagens ou associações personalizadas antigas. |
 | 6 UI Lua | IMPLEMENTADO/TESTADO | Relatório 29: `linblux.ui` com panel/label/button/image/bar, âncoras 1280×720, eventos click/hover, limites, dono por script e limpeza; desenhado no Play do Studio e no Player pelo mesmo renderizador. `linblux_lua_interface` (FAST), `linblux_lua_ui_render`, `linblux_lua_ui_player` e `linblux_visual_studio` aprovados. | Sem imagens animadas, fontes por elemento, listas/scroll/campos; UI não é serializada (o script recria). |
-| 7 Vida circular | PENDENTE | Saúde real já existe no runtime. | Indicador circular vermelho, animação, dano/cura/respawn, personalização Lua. |
-| 8 Menu lateral | PENDENTE | Studio e Player têm apresentações distintas existentes. | Painel lateral compartilhado/coerente, funções preservadas, foco/teclado/controle e testes visuais. |
+| 7 Vida circular | PUBLICADO | bb69e49; relatório30, saúde real, renderizador compartilhado, pixels em720p/900p/1080p e Lua health_hud. | Regressão abrangente do Alpha. |
+| 8 Menu lateral | PUBLICADO | 4a0be64; relatório31, RmlUi/Player, animação, ações reais e testes de foco/layout/fullscreen. | Fallback ImGui histórico fora do Alpha; migrar seletores históricos. |
 | 9 Integração | PENDENTE | Resultados anteriores não cobrem recursos futuros. | Reabertura/exportação/importação, compatibilidade, Player, gráficos, IMPACT/FULL justificado. |
 
 ## Fase 1 — recursos separados (a fase inteira continua em desenvolvimento)
@@ -424,3 +424,23 @@ RifleDemo recuperado ainda em validação: corrigidos busca de Attachment na
 hierarquia e efeito menor que mínimo0,2. Teste headless de ciclo completo
 aprovado; falta comprovar fluxo gráfico real, persistência e publicar o WIP.
 Alpha continua sem pacote validado, tag ou Release; não está lançado.
+
+
+## 26/10 — RifleDemo / Demo integrada recuperados
+
+Menu PUBLICADO:4a0be641eefc0103136f46f81f782a5270e5f1ea, remoto confirmado.
+ItemActions, combate Lua e RifleDemo IMPLEMENTADOS/TESTADOS/VALIDADOS NO PLAYER.
+RifleDemo preservado do desenvolvimento, corrigido e ampliado:3 alvos com rig,
+guia animado em patrulha, decal oficial,5 sons de síntese originais, UI Lua,
+E/1/tiro/dano/R/Delete/recoleta mantendo ID. Corrigida reinicialização de
+controladores NPC que apagava rotas após os Scripts. Efeitos pertencem ao
+sistema do mundo e são removidos mesmo após destruir o item.
+FAST17/17, IMPACT23/23 (global parcial); controles no Studio39,79s; Player
+17,583s (fluxo/guia), final2/2 com limpeza/.lo em18,310s. Relatório32.
+Autoria permanece intacta e exportar/importar preserva scripts/sons/Modelos.
+
+Candidato interno Linux gerado, ainda sem validação final/publicação. Empacotador
+exclui MP4; build FFmpeg GPL requer revisão de obrigações antes de distribuir
+binários. Sem hardware de áudio nesta execução. Restam migração de expectativas
+gráficas históricas, regressão abrangente, instalação em outro sistema Linux e
+fechamento de licenças. NÃO há tag/Release nem conclusão integral da missão.

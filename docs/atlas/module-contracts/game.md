@@ -86,3 +86,11 @@ Runtime sincroniza itens world, coleta, slots1–9, páginas e Delete.
 interaction_completed usa o scheduler seguro de eventos. ExperienceOverlay
 é a apresentação compartilhada Studio/Player; não possui lógica de itens.
 Teste nativo InteractionControls e gráfico linblux_item_controls_ui.
+
+**Uso de itens:** ItemActions mantém intervalo, munição/recarga e transições por
+ID da instância; Runtime controla tick, cancelamento e descarte. O efeito/dano
+é Lua (RifleDemo), não uma classe de arma. Configure valida inteiros antes de
+narrowing, limites e estado; filas são limitadas. Raycast pode ignorar a subárvore
+do Modelo e ignora representações guardadas/protótipos. Testes: item_actions,
+rifledemo (inclui .lo) e rifledemo_player. attachAuthored não reinicializa NPC
+já configurado pelo Script durante startup; a demo verifica rota e clipe walk.
