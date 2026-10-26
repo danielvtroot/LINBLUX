@@ -5,6 +5,12 @@
 #include <utility>
 
 namespace loblox {
+bool ModelFrame::valid() const {
+    const auto finite=[](float v){return std::isfinite(v)&&std::fabs(v)<=1000000;};
+    const float norm=rotation.x*rotation.x+rotation.y*rotation.y+rotation.z*rotation.z+rotation.w*rotation.w;
+    return finite(position.x)&&finite(position.y)&&finite(position.z)&&finite(rotation.x)&&finite(rotation.y)&&finite(rotation.z)&&finite(rotation.w)&&
+        std::fabs(norm-1)<.001f&&std::isfinite(scale)&&scale>=.001f&&scale<=1000;
+}
 
 const char* InstanceClassName(InstanceClass instanceClass) {
     switch (instanceClass) {

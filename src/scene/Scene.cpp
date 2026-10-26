@@ -6,6 +6,7 @@
 #include <set>
 #include <utility>
 #include <stdexcept>
+#include <limits>
 
 namespace loblox {
 Part* Scene::pickPart(Ray ray,float maxDistance,Vector3* point) const {
@@ -427,6 +428,64 @@ bool Scene::reparent(Instance* object, Instance* parent, std::string& error) {
     return true;
 }
 
+bool Scene::modelFrame(InstanceId id,ModelFrame& frame,std::string& error) const {
+    const auto* object=find(id);if(!object||object->instanceClass()!=InstanceClass::Model){error="Selecione um Modelo.";return false;}
+    const auto& model=static_cast<const Container&>(*object);
+    if(model.hasModelFrame_){frame=model.modelFrame_;error.clear();return true;}
+    Vector3 low{1e30f,1e30f,1e30f},high{-1e30f,-1e30f,-1e30f};bool found=false;
+    for(const auto* part:parts_)if(model.isAncestorOf(part)) {
+        const auto half=part->halfExtents();
+        for(int bits=0;bits<8;++bits){const auto point=Vector3Add(part->position(),Vector3RotateByQuaternion({(bits&1)?half.x:-half.x,(bits&2)?half.y:-half.y,(bits&4)?half.z:-half.z},part->rotation()));
+            low=Vector3Min(low,point);high=Vector3Max(high,point);found=true;}
+    }
+    frame={};if(found)frame.position=Vector3Scale(Vector3Add(low,high),.5f);error.clear();return true;
+}
+bool Scene::setModelPivot(InstanceId id,const ModelFrame& frame,std::string& error) {
+    auto* object=find(id);if(!object||object->instanceClass()!=InstanceClass::Model||!frame.valid()){error="Pivô/escala do Modelo inválidos.";return false;}
+    auto& model=static_cast<Container&>(*object);model.modelFrame_=frame;model.hasModelFrame_=true;error.clear();return true;
+}
+bool Scene::transformModel(InstanceId id,const ModelFrame& target,std::string& error) {
+    ModelFrame before;if(!modelFrame(id,before,error))return false;
+    if(!target.valid()){error="Transformação do Modelo fora dos limites.";return false;}
+    const auto* model=find(id);const float factor=target.scale/before.scale;
+    const auto rotation=QuaternionNormalize(QuaternionMultiply(target.rotation,QuaternionInvert(before.rotation)));
+    const auto point=[&](Vector3 p){return Vector3Add(target.position,Vector3Scale(Vector3RotateByQuaternion(Vector3Subtract(p,before.position),rotation),factor));};
+    std::vector<std::pair<Part*,Transform>> parts;std::vector<std::pair<Container*,ModelFrame>> nested;
+    for(auto* part:parts_)if(model->isAncestorOf(part)) {
+        auto transform=part->transform();transform.position=point(transform.position);
+        transform.rotation=QuaternionNormalize(QuaternionMultiply(rotation,transform.rotation));transform.size=Vector3Scale(transform.size,factor);
+        const auto bounded=[](Vector3 v){return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z)&&std::fabs(v.x)<=1e6&&std::fabs(v.y)<=1e6&&std::fabs(v.z)<=1e6;};
+        if(!bounded(transform.position)||!bounded(transform.size)||transform.size.x<kMinPartSize||transform.size.y<kMinPartSize||transform.size.z<kMinPartSize){error="Transformação produziria uma peça fora dos limites.";return false;}
+        parts.emplace_back(part,transform);
+    }
+    for(const auto& object:objects_)if(object->instanceClass()==InstanceClass::Model&&model->isAncestorOf(object.get())) {
+        auto& child=static_cast<Container&>(*object);if(!child.hasModelFrame_)continue;
+        auto frame=child.modelFrame_;frame.position=point(frame.position);frame.rotation=QuaternionNormalize(QuaternionMultiply(rotation,frame.rotation));frame.scale*=factor;
+        if(!frame.valid()){error="Transformação produziria pivô filho inválido.";return false;}nested.emplace_back(&child,frame);
+    }
+    for(auto& [part,transform]:parts)part->setTransform(transform);
+    for(auto& [child,frame]:nested)child->modelFrame_=frame;
+    return setModelPivot(id,target,error);
+}
+Container* Scene::group(const std::vector<InstanceId>& ids,const std::string& name,std::string& error) {
+    if(ids.empty()||ids.size()>256||name.empty()||name.size()>128){error="Agrupe de 1 a 256 peças/modelos com nome válido.";return nullptr;}
+    std::set<InstanceId> unique;
+    for(auto id:ids){const auto* object=find(id);if(!object||(!object->isPart()&&object->instanceClass()!=InstanceClass::Model)||!object->deletable()||!unique.insert(id).second){error="Seleção contém objeto inválido, protegido ou repetido.";return nullptr;}}
+    for(auto a:ids)for(auto b:ids)if(a!=b&&find(a)->isAncestorOf(find(b))){error="Selecione o Modelo ou seus filhos, sem sobreposição.";return nullptr;}
+    auto* model=createContainer(InstanceClass::Model,workspace_,name);if(!model){error="Não foi possível criar o Modelo.";return nullptr;}
+    for(auto id:ids)if(!canParent(find(id),model)){remove(model);error="Hierarquia não permite agrupar essa seleção.";return nullptr;}
+    for(auto id:ids)reparent(find(id),model,error);
+    ModelFrame frame;modelFrame(model->id(),frame,error);setModelPivot(model->id(),frame,error);select(model);return model;
+}
+bool Scene::ungroup(InstanceId id,std::string& error) {
+    auto* model=find(id);if(!model||model->instanceClass()!=InstanceClass::Model||!model->parent()){error="Selecione um Modelo para desagrupar.";return false;}
+    const auto children=model->children();auto* parent=model->parent();
+    for(auto* child:children)if(!canParent(child,parent)){error="Hierarquia impede desagrupar este Modelo.";return false;}
+    for(auto* child:children)reparent(child,parent,error);
+    if(!remove(model)){error="Modelo protegido não pode ser removido.";return false;}
+    if(!children.empty())select(children.front());error.clear();return true;
+}
+
 Instance* Scene::duplicateTree(const Instance& source, Instance* parent) {
     if (find(source.id()) != &source || isService(&source)) return nullptr;
     if (!parent) parent = source.parent();
@@ -437,6 +496,8 @@ Instance* Scene::duplicateTree(const Instance& source, Instance* parent) {
         createContainer(source.instanceClass(),parent,source.name());
     if (!copy) return nullptr;
     for (const auto& pair:source.attributes()) copy->setAttribute(pair.first,pair.second);
+    if(source.instanceClass()==InstanceClass::Model){const auto& model=static_cast<const Container&>(source);if(model.hasModelFrame_){std::string ignored;setModelPivot(copy->id(),model.modelFrame_,ignored);}}
+
     if(IsSurfaceClass(source.instanceClass())) static_cast<Surface*>(copy)->setProperties(static_cast<const Surface&>(source).properties());
     if (IsScriptClass(source.instanceClass())) {
         auto& script=static_cast<const Script&>(source); auto& cloned=static_cast<Script&>(*copy);
@@ -470,9 +531,8 @@ void Scene::removeSubtree(Instance* object) {
     }
 
     notifyRemoval(object);
-    if (selection_ == object) {
-        select(nullptr);
-    }
+    selectionIds_.erase(std::remove(selectionIds_.begin(),selectionIds_.end(),object->id()),selectionIds_.end());
+    if(selection_==object)selection_=selectionIds_.empty()?nullptr:find(selectionIds_.back());
     if (object->parent() != nullptr) {
         object->parent()->detachChild(object);
     }
@@ -520,7 +580,7 @@ void Scene::clearObjects() {
     std::vector<Instance*> extra;
     for (const auto& object:objects_) if (!object->parent() && object.get()!=workspace_ && object.get()!=lighting_) extra.push_back(object.get());
     for (auto* root:extra) removeSubtree(root);
-    selection_ = nullptr;
+    selection_ = nullptr;selectionIds_.clear();
     rebuildParts();
 }
 
@@ -534,8 +594,8 @@ void Scene::replaceContentsFrom(Scene& source) {
     for (Part* part : parts_) {
         notifyRemoval(part);
     }
-    selection_ = nullptr;
-    source.selection_ = nullptr;
+    selection_ = nullptr;selectionIds_.clear();
+    source.selection_ = nullptr;source.selectionIds_.clear();
     objects_.swap(source.objects_);
     parts_.swap(source.parts_);
     byId_.swap(source.byId_);
@@ -558,6 +618,7 @@ Part* Scene::findPart(InstanceId id) const {
 void Scene::select(Instance* object) {
     if (object != nullptr && (byId_.find(object->id()) == byId_.end() ||
                              byId_.at(object->id()) != object)) object = nullptr;
+    selectionIds_.clear();if(object)selectionIds_.push_back(object->id());
     if (object == selection_) return;
     diag::Event event;
     event.subsystem = "scene";
@@ -567,6 +628,14 @@ void Scene::select(Instance* object) {
                      {"selected", object ? object->id() : kInvalidInstanceId}};
     diag::log(event);
     selection_ = object;
+}
+
+bool Scene::selected(InstanceId id) const{return std::find(selectionIds_.begin(),selectionIds_.end(),id)!=selectionIds_.end();}
+void Scene::toggleSelection(Instance* object) {
+    if(!object||find(object->id())!=object)return;
+    const auto it=std::find(selectionIds_.begin(),selectionIds_.end(),object->id());
+    if(it==selectionIds_.end())selectionIds_.push_back(object->id());else selectionIds_.erase(it);
+    selection_=selectionIds_.empty()?nullptr:find(selectionIds_.back());
 }
 
 std::string Scene::makeUniqueName(const std::string& base) const {
