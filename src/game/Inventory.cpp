@@ -15,7 +15,7 @@ std::vector<Instance*> Nodes(Instance* root){std::vector<Instance*> out;std::fun
 Snapshot Capture(const Instance* n){Snapshot s{n->id(),n->instanceClass()};if(n->isPart()){const auto* p=static_cast<const Part*>(n);s.anchored=p->anchored();s.collide=p->canCollide();s.alpha=p->color().a;}if(IsScriptClass(n->instanceClass()))s.enabled=static_cast<const Script*>(n)->enabled;return s;}
 void Present(Scene& scene,const std::vector<Snapshot>& nodes,bool visible,bool world,bool scripts=false,bool fall=false){
     for(const auto& s:nodes)if(auto* n=scene.find(s.id)){
-        if(n->isPart()){auto* p=static_cast<Part*>(n);auto c=p->color();c.a=visible?s.alpha:0;p->setColor(c);p->setAnchored(world?(fall?false:s.anchored):true);p->setCanCollide(world?s.collide:false);}
+        if(n->isPart()){auto* p=static_cast<Part*>(n);auto c=p->color();c.a=visible?s.alpha:0;p->setColor(c);p->setAttribute("_linblux_item_hidden",!visible);p->setAnchored(world?(fall?false:s.anchored):true);p->setCanCollide(world?s.collide:false);}
         if(scripts&&IsScriptClass(n->instanceClass()))static_cast<Script*>(n)->enabled=s.enabled;
     }
 }
@@ -46,10 +46,11 @@ void Inventory::registerType(const std::string& type,InstanceId prototype,ItemOp
     auto* root=h.model(prototype);Need(!h.items.count(prototype),"Item ativo não pode virar um protótipo.");
     for(const auto& active:h.items){auto* other=h.scene.find(active.first);Need(!other||(!root->isAncestorOf(other)&&!other->isAncestorOf(root)),"Protótipo não pode conter itens ativos nem pertencer a eles.");}
     for(const auto& t:h.types){auto* other=h.scene.find(t.second.prototype);Need(!other||(!root->isAncestorOf(other)&&!other->isAncestorOf(root)),"Protótipos de itens não podem se sobrepor.");}
+    Need(root->attributes().size()<=62,"Modelo precisa de espaço para metadados do item.");
     if(options.name.empty())options.name=root->name();Need(options.name.size()<=128&&options.name.find('\0')==std::string::npos&&options.icon.size()<=512&&options.grip.valid()&&options.grip.scale==1,"Configuração do item inválida.");
     if(!options.icon.empty()){options.icon=NormalizeImageReference(options.icon);Need(!ResolveImagePath(AssetsDir(),options.icon).empty(),"Ícone do item não encontrado nos recursos da experiência.");}
     const auto nodes=Nodes(root);Need(nodes.size()<=256,"Protótipo excede 256 componentes.");size_t parts=0;Impl::Type definition{prototype,options,{}};
-    for(auto* n:nodes){parts+=n->isPart();definition.nodes.push_back(Capture(n));}
+    for(auto* n:nodes){if(n->isPart()){const auto* p=static_cast<const Part*>(n);Need(!p->hasNpc(),"Protótipo de item não aceita controlador NPC.");Need(p->attributes().size()<64||p->attributes().count("_linblux_item_hidden"),"Peça precisa de espaço para metadados de visibilidade.");}parts+=n->isPart();definition.nodes.push_back(Capture(n));}
     Need(parts>0&&parts<=128,"Item requer de 1 a 128 peças.");
     for(const auto& n:h.scene.objects())if(n->instanceClass()==InstanceClass::Attachment){const auto target=static_cast<const Attachment&>(*n).jointTarget();if(target){auto* other=h.scene.find(target);Need(other&&root->isAncestorOf(n.get())==root->isAncestorOf(other),"Protótipo possui junta ligada a um objeto externo.");}}
 
