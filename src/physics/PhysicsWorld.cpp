@@ -1,3 +1,4 @@
+#include "game/Inventory.h"
 #include "physics/PhysicsWorld.h"
 #include "core/Diagnostics.h"
 
@@ -543,7 +544,7 @@ bool PhysicsWorld::raycast(Vector3 origin, Vector3 direction, float maxDistance,
         bool needsCollision(btBroadphaseProxy* proxy) const override {
             const auto* body = static_cast<const btCollisionObject*>(proxy->m_clientObject);
             const auto* part = static_cast<const Part*>(body->getUserPointer());
-            if (!part || part->id() == ignore) return false;
+            if (!part || part->id() == ignore || game::InventoryHidden(*part)) return false;
             if (solidOnly && !body->hasContactResponse()) return false;
             if (staticOnly && !body->isStaticObject()) return false;
             return ClosestRayResultCallback::needsCollision(proxy);

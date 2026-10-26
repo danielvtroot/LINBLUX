@@ -33,6 +33,7 @@ public:
     void contact(InstanceId first,InstanceId second,bool entering);
     void characterAdded();
     void healthChanged(float health,bool died);
+    void inventoryChanged(InstanceId item,const std::string& action);
     const std::vector<Message>& messages() const;
     std::size_t errorCount() const; // retained across stop, reset on the next Play
     void hostError(const std::string& text);

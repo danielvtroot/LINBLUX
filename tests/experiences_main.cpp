@@ -79,6 +79,7 @@ int main(int argc,char** argv) {
         auto* matePart=scene.createPart(PartShape::Block,{10,4,3},{1,1,1},"Encaixe portátil");CHECK(scene.reparent(matePart,portableModel,bodyError));
         auto* mate=scene.createAttachment(matePart,"Encaixe");CHECK(mate);const auto mateId=mate->id();
         CHECK(scene.connectAttachments(muzzleId,mateId,bodyError));
+        portableModel->setAttribute("_linblux_item_prototype",true);portableModel->setAttribute("item_type",std::string("portable_item"));portableModel->setAttribute("item_icon",project.manifest.icon);
         const auto previous=author.activePlace();author.save(scene);CHECK(author.activePlace()!=previous);CHECK(fs::exists(previous));
         auto m=author.active()->manifest;m.name="Renamed";m.description="Updated description";author.updateMetadata(m);
         const auto goodManifest=Read(project.root/"experience.json");auto badMedia=m;badMedia.icon="assets/missing.png";
@@ -136,6 +137,8 @@ int main(int argc,char** argv) {
         CHECK(receivedScene.findPart(partId));CHECK(receivedScene.gameAssets().findRig(rigId));
         CHECK(receivedScene.find(muzzleId)&&receivedScene.find(muzzleId)->parent()->id()==partId);
         ModelFrame receivedMuzzle;CHECK(receivedScene.attachmentFrame(muzzleId,receivedMuzzle,bodyError));
+        CHECK(std::get<bool>(receivedScene.find(modelId)->attributes().at("_linblux_item_prototype")));
+        CHECK(std::get<std::string>(receivedScene.find(modelId)->attributes().at("item_type"))=="portable_item");
         CHECK(static_cast<const Attachment*>(receivedScene.find(muzzleId))->jointTarget()==mateId);
         CHECK(NearlyEqual(receivedMuzzle.position,muzzleWorld.position));CHECK(NearlyEqual(receivedMuzzle.rotation,muzzleWorld.rotation));
         ModelFrame receivedFrame;CHECK(receivedScene.modelFrame(modelId,receivedFrame,bodyError));CHECK(NearlyEqual(receivedFrame.scale,1.5f));

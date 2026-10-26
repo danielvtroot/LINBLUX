@@ -604,6 +604,14 @@ Instance* Scene::duplicateTree(const Instance& source, Instance* parent) {
         createContainer(source.instanceClass(),parent,source.name());
     if (!copy) return nullptr;
     for (const auto& pair:source.attributes()) copy->setAttribute(pair.first,pair.second);
+    if(source.instanceClass()==InstanceClass::Model){
+        const auto mark=source.attributes().find("_linblux_item_prototype");
+        if(mark!=source.attributes().end()&&std::holds_alternative<bool>(mark->second)&&std::get<bool>(mark->second)){
+            const auto type=source.attributes().find("item_type");std::string base=type!=source.attributes().end()&&std::holds_alternative<std::string>(type->second)?std::get<std::string>(type->second):"item";
+            const auto suffix="-"+std::to_string(copy->id());base=base.substr(0,64-suffix.size())+suffix;
+            if(!copy->setAttribute("item_type",base)){removeSubtree(copy);return nullptr;}
+        }
+    }
     if(source.instanceClass()==InstanceClass::Model){const auto& model=static_cast<const Container&>(source);if(model.hasModelFrame_){std::string ignored;setModelPivot(copy->id(),model.modelFrame_,ignored);}}
 
     if(source.instanceClass()==InstanceClass::Attachment)static_cast<Attachment*>(copy)->setLocalFrame(static_cast<const Attachment&>(source).localFrame());

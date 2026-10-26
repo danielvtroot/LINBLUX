@@ -116,6 +116,40 @@ void ModelGizmoSession() {
     CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==after);
     CHECK(scene.remove(b));const auto missing=projectio::toJson(scene);CHECK(!session.applyEdit(edit,true,error));CHECK(projectio::toJson(scene)==missing);
 }
+void InventoryLifecycle() {
+    Scene scene;scene.buildDefaultScene();std::string error;
+    auto* prototype=scene.createContainer(InstanceClass::Model,nullptr,"Chave original");
+    auto* part=scene.createPart(PartShape::Block,{0,5,8},{1,1,2},"Corpo do item");part->setAnchored(true);part->setColor({220,40,60,200});CHECK(scene.reparent(part,prototype,error));
+    auto* script=scene.createScript(InstanceClass::Script,prototype,"Comportamento.lua");script->source="linblux.self:set_attribute('script_da_instancia',true)";
+    const auto original=projectio::toJson(scene);PhysicsWorld physics;physics.attach(scene);game::Inventory inventory(scene,physics);inventory.update({0,4,0},0);
+    inventory.registerType("chave",prototype->id());CHECK(part->color().a==0&&!part->canCollide());CHECK(!script->enabled);
+    ModelFrame pose;pose.position={4,3,5};pose.scale=2;const auto id=inventory.spawn("chave",&pose);CHECK(id!=prototype->id());
+    auto* item=scene.find(id);CHECK(item);auto nodes=item->children();CHECK(nodes.size()==2);auto* itemPart=static_cast<Part*>(nodes[0]);
+    CHECK(itemPart->color().a==200&&itemPart->anchored()&&itemPart->canCollide());CHECK(static_cast<Script*>(nodes[1])->enabled);
+    CHECK(item->setAttribute("dados",std::string("carga:37")));inventory.collect(id);CHECK(inventory.list().size()==1&&inventory.info(id).state=="stored");CHECK(itemPart->color().a==0);
+    bool duplicateRejected=false;try{inventory.collect(id);}catch(const std::exception&){duplicateRejected=true;}CHECK(duplicateRejected&&inventory.list().size()==1);
+    inventory.equip(id);CHECK(inventory.equipped()==id&&itemPart->color().a==200&&!itemPart->canCollide());
+    ModelFrame held;CHECK(scene.modelFrame(id,held,error));CHECK(NearlyEqual(held.scale,2));inventory.update({2,4,0},PI/2);CHECK(scene.modelFrame(id,held,error));CHECK(NearlyEqual(held.position,{0,4,-1},.001f));
+    inventory.unequip();CHECK(!inventory.equipped()&&inventory.list().size()==1);inventory.equip(id);inventory.drop(id);
+    CHECK(!inventory.equipped()&&inventory.list().empty()&&inventory.info(id).state=="world");CHECK(!itemPart->anchored()&&itemPart->canCollide());CHECK(std::get<std::string>(item->attributes().at("dados"))=="carga:37");
+    CHECK(Vector3Distance(itemPart->position(),{2,4,0})>2);inventory.collect(id);inventory.equip(id);CHECK(inventory.equipped()==id);
+    CHECK(scene.remove(item));inventory.update({2,4,0},0);CHECK(!inventory.equipped()&&inventory.list().empty());CHECK(!inventory.takeChanges().empty());
+    bool invalidType=false;try{inventory.registerType("../invalido",prototype->id());}catch(const std::exception&){invalidType=true;}CHECK(invalidType);
+    auto* sphereModel=scene.createContainer(InstanceClass::Model,nullptr,"Item esférico");
+    auto* sphere=scene.createPart(PartShape::Sphere,{10,10,10},{1,10,1},"Esfera");sphere->setAnchored(true);CHECK(scene.reparent(sphere,sphereModel,error));
+    inventory.registerType("esfera",sphereModel->id());const auto ball=inventory.spawn("esfera");inventory.collect(ball);inventory.equip(ball);inventory.drop(ball);
+    const auto* ballPart=static_cast<const Part*>(scene.find(ball)->children().front());
+    CHECK(Vector2Distance({ballPart->position().x,ballPart->position().z},{2,0})>ballPart->sphereRadius()+1);
+    // A session operates on its own copy; prototype flags never alter saved authoring.
+    Scene authored;CHECK(projectio::fromJson(authored,original,error));
+    auto* authoredPrototype=authored.find(prototype->id());authoredPrototype->setAttribute("_linblux_item_prototype",true);authoredPrototype->setAttribute("item_type",std::string("chave"));
+    static_cast<Script*>(authored.find(script->id()))->source="assert(linblux.items.info(linblux.self).name);linblux.self:set_attribute('rodou',true)";
+    auto* prototypeCopy=authored.duplicateTree(*authoredPrototype);CHECK(prototypeCopy);
+    CHECK(std::get<std::string>(prototypeCopy->attributes().at("item_type"))!="chave");
+    const auto authorBefore=projectio::toJson(authored);game::RuntimeSession runtime;CHECK(runtime.start(authored,error));CHECK(runtime.scripts().errorCount()==0);
+    const auto runtimeItem=runtime.inventory().spawn("chave");runtime.inventory().collect(runtimeItem);runtime.inventory().equip(runtimeItem);CHECK(!std::get<bool>(runtime.scene().find(runtimeItem)->attributes().at("_linblux_item_prototype")));runtime.update(1.f/60,{});
+    CHECK(runtime.scripts().errorCount()==0);CHECK(runtime.scene().find(runtimeItem)->attributes().count("rodou"));runtime.stop();CHECK(projectio::toJson(authored)==authorBefore);
+}
 void AttachmentJoints() {
     Scene scene;std::string error;auto* model=scene.createContainer(InstanceClass::Model,nullptr,"Articulação");
     auto* base=scene.createPart(PartShape::Block,{0,8,0},{2,2,2},"Base da junta");base->setAnchored(true);base->setCanCollide(false);
@@ -1585,6 +1619,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

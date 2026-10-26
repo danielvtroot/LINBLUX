@@ -1,3 +1,4 @@
+#include "game/Inventory.h"
 #include "rendering/SceneRenderer.h"
 #include "physics/PhysicsWorld.h"
 
@@ -1057,6 +1058,7 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
         if (part == nullptr) {
             continue;
         }
+        if(game::InventoryHidden(*part))continue;
         if (hasRigVisual(part->id())) {
             if (part->id() == selectedId) drawSelection(*part);
             continue;

@@ -312,6 +312,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(target->GetId()=="tool-search"||target->GetId()=="tool-category") {filterTools();return;}
             if(target->GetId().rfind("image-query",0)==0) {imageQuery=value(target);propertyMarkup.clear();advancedMarkup.clear();return;}
             if(attr(target,"type")=="checkbox"||target->GetTagName()=="select"||attr(target,"type")=="range")commit(target);
+            if(target->GetId()=="prop-Item.Prototype"){focusValue=value(target);target->Blur();propertyMarkup.clear();}
             return;
         }
         if(type=="mousedown") {
@@ -613,6 +614,14 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             }
             s+=Button("attachment","Criar Attachment","model","","property");
         } else if(node->instanceClass()==InstanceClass::Model) {
+            group("Item da experiência");const auto marker=node->attributes().find("_linblux_item_prototype");
+            const bool prototype=marker!=node->attributes().end()&&std::holds_alternative<bool>(marker->second)&&std::get<bool>(marker->second);
+            s+="<div class=\"property\"><label>Protótipo de item</label><input id=\"prop-Item.Prototype\" type=\"checkbox\" data-node=\""+id+"\" data-property=\"Item.Prototype\" "+(prototype?"checked=\"checked\"":"")+"/></div>";
+            if(prototype){const auto type=node->attributes().find("item_type"),icon=node->attributes().find("item_icon");
+                input("Item.Type",type!=node->attributes().end()&&std::holds_alternative<std::string>(type->second)?std::get<std::string>(type->second):"","Tipo de item");
+                const auto path=icon!=node->attributes().end()&&std::holds_alternative<std::string>(icon->second)?std::get<std::string>(icon->second):"";
+                s+=ImagePicker(path,"apply-item-icon","item","image-query-item")+Button("clear-item-icon","Remover ícone","delete","","item");
+            }
             ModelFrame frame;std::string error;
             if(ui.scene_.modelFrame(node->id(),frame,error)){
                 group("Transformação do Modelo");const auto angles=EulerDegreesZYXFromQuat(frame.rotation);
@@ -800,7 +809,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         // a blur cannot invalidate an iterator while an action changes focus.
         bool refreshImages=false;
         for(size_t i=0;i<commands.size();++i){const auto c=commands[i];actions.dispatch(c);if(c.action=="r6")showAdvanced("rig");
-            refreshImages|=c.action=="apply-surface-image"||c.action.rfind("apply-image",0)==0||c.action.rfind("apply-texture",0)==0||c.action=="remove-image"||c.action.rfind("delete-image:",0)==0||c.action.rfind("replace-image:",0)==0||c.action.rfind("rename-image:",0)==0;}
+            refreshImages|=c.action=="apply-item-icon"||c.action=="clear-item-icon"||c.action=="apply-surface-image"||c.action.rfind("apply-image",0)==0||c.action.rfind("apply-texture",0)==0||c.action=="remove-image"||c.action.rfind("delete-image:",0)==0||c.action.rfind("replace-image:",0)==0||c.action.rfind("rename-image:",0)==0;}
         commands.clear();if(refreshImages)invalidateImages();
     }
     void updateTooltip() {

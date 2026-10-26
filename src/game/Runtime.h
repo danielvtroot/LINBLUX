@@ -4,6 +4,7 @@
 #include <optional>
 #include <set>
 #include "game/Audio.h"
+#include "game/Inventory.h"
 #include "game/Npc.h"
 #include "game/Rig.h"
 #include "game/ScriptInput.h"
@@ -104,6 +105,8 @@ public:
     NpcSystem& npcs() { return npcs_; }
     const NpcSystem& npcs() const { return npcs_; }
     ProgressStore& storage(){return progress_;}
+    Inventory& inventory(){return *inventory_;}
+    const Inventory& inventory()const{return *inventory_;}
     AudioSystem& audio(){return audio_;}
     const AudioSystem& audio() const {return audio_;}
     const ScriptInput& scriptInput() const { return scriptInput_; }
@@ -165,6 +168,7 @@ private:
 
     std::unique_ptr<Scene> scene_;
     std::unique_ptr<PhysicsWorld> physics_;
+    std::unique_ptr<Inventory> inventory_;
     std::unique_ptr<btCapsuleShape> capsule_;
     std::unique_ptr<btDefaultMotionState> motion_;
     std::unique_ptr<btRigidBody> body_;
