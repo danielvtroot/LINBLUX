@@ -867,20 +867,20 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         part->clearDirty();
     }
 
-    for(const auto& object:parsed)if(object.instanceClass==InstanceClass::Attachment) {
-        auto* attachment=staged.createAttachment(staged.find(object.parent),object.name,object.id);
-        if(!attachment||!attachment->setLocalFrame(object.modelFrame)){error="Não foi possível restaurar Attachment "+object.name;return false;}
-    }
     for(const auto& object:parsed)if(IsSurfaceClass(object.instanceClass)) {
         auto* surface=staged.createSurface(object.instanceClass,staged.find(object.parent),object.name,object.id);
         if(!surface||!surface->setProperties(object.surface)){error="Não foi possível restaurar a superfície "+object.name;return false;}
     }
     for (const auto& object : parsed) {
-        if (IsRootServiceClass(object.instanceClass)) continue;
+        if (IsRootServiceClass(object.instanceClass)||object.instanceClass==InstanceClass::Attachment) continue;
         auto* parent = object.parent == workspaceId ? staged.workspace() : staged.find(object.parent);
         if (!staged.reparent(staged.find(object.id),parent,error)) {
             error = "objeto '"+object.name+"': "+error; return false;
         }
+    }
+    for(const auto& object:parsed)if(object.instanceClass==InstanceClass::Attachment) {
+        auto* attachment=staged.createAttachment(staged.find(object.parent),object.name,object.id);
+        if(!attachment||!attachment->setLocalFrame(object.modelFrame)){error="Não foi possível restaurar Attachment "+object.name;return false;}
     }
     if (requestedNextId != 0) staged.setNextId(requestedNextId);
     for (const auto& value:root["objects"]) if (value.contains("attributes")) {

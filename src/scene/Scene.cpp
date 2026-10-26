@@ -374,16 +374,22 @@ Attachment* Scene::createAttachment(Instance* parent,const std::string& name,Ins
     auto node=std::make_unique<Attachment>(forcedId?forcedId:allocateId(),forcedId?name:makeUniqueName(name));
     auto* raw=node.get();return adopt(std::move(node),parent)?raw:nullptr;
 }
+bool Scene::attachmentParentFrame(const Instance* owner,ModelFrame& frame,std::string& error) const {
+    if(!owner||find(owner->id())!=owner){error="Pai do Attachment inexistente.";return false;}
+    frame={};
+
+    if(owner->isPart()){
+        const auto* part=static_cast<const Part*>(owner);frame.position=part->position();frame.rotation=part->rotation();
+        // Parts store world geometry. The nearest Model carries hierarchy scale.
+        for(auto* ancestor=owner->parent();ancestor;ancestor=ancestor->parent())if(ancestor->instanceClass()==InstanceClass::Model){
+            ModelFrame model;if(!modelFrame(ancestor->id(),model,error))return false;frame.scale=model.scale;break;}
+    }else if(!modelFrame(owner->id(),frame,error))return false;
+    error.clear();return true;
+}
 bool Scene::attachmentFrame(InstanceId id,ModelFrame& world,std::string& error) const {
     const auto* node=find(id);
     if(!node||node->instanceClass()!=InstanceClass::Attachment||!node->parent()){error="Attachment inexistente ou sem pai.";return false;}
-    ModelFrame parent;const auto* owner=node->parent();
-    if(owner->isPart()){
-        const auto* part=static_cast<const Part*>(owner);parent.position=part->position();parent.rotation=part->rotation();
-        // Parts store world geometry. The nearest Model carries hierarchy scale.
-        for(auto* ancestor=owner->parent();ancestor;ancestor=ancestor->parent())if(ancestor->instanceClass()==InstanceClass::Model){
-            ModelFrame frame;if(!modelFrame(ancestor->id(),frame,error))return false;parent.scale=frame.scale;break;}
-    }else if(!modelFrame(owner->id(),parent,error))return false;
+    ModelFrame parent;if(!attachmentParentFrame(node->parent(),parent,error))return false;
     const auto& local=static_cast<const Attachment*>(node)->localFrame();
     world.position=Vector3Add(parent.position,Vector3RotateByQuaternion(Vector3Scale(local.position,parent.scale),parent.rotation));
     world.rotation=QuaternionNormalize(QuaternionMultiply(parent.rotation,local.rotation));world.scale=parent.scale;
@@ -444,7 +450,25 @@ bool Scene::reparent(Instance* object, Instance* parent, std::string& error) {
     if (!canParent(object,parent)) { error = "Parent invalido: ciclo, servico protegido, classe ou profundidade"; return false; }
     if (object->parent() == parent) return true;
     const auto previous=object->parent()?object->parent()->id():0;
+    auto* previousParent=object->parent();
+    struct AnchorState { Attachment* node;ModelFrame world,local; };
+    std::vector<AnchorState> anchors;
+    for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment&&object->isAncestorOf(node.get())){
+        ModelFrame world;if(!attachmentFrame(node->id(),world,error))return false;
+        anchors.push_back({static_cast<Attachment*>(node.get()),world,static_cast<const Attachment&>(*node).localFrame()});
+    }
     parent->attachChild(object);
+    for(auto& anchor:anchors){
+        ModelFrame owner;if(!attachmentParentFrame(anchor.node->parent(),owner,error))break;
+        ModelFrame local;local.position=Vector3Scale(Vector3RotateByQuaternion(Vector3Subtract(anchor.world.position,owner.position),QuaternionInvert(owner.rotation)),1/owner.scale);
+        local.rotation=QuaternionNormalize(QuaternionMultiply(QuaternionInvert(owner.rotation),anchor.world.rotation));
+        if(!anchor.node->setLocalFrame(local)){error="Attachment excede os limites após reparentar.";break;}
+    }
+    if(!error.empty()){
+        if(previousParent)previousParent->attachChild(object);
+        for(const auto& anchor:anchors)anchor.node->setLocalFrame(anchor.local);
+        return false;
+    }
     diag::Event event;event.subsystem="scene";event.name="reparent";event.entityId=object->id();
     event.result="ok";event.context={{"previous_parent",previous},{"parent",parent->id()},{"transform_space","world_preserved"}};
     diag::log(event);

@@ -494,7 +494,7 @@ struct LuaRuntime::Impl {
         bool anchored=true,collidable=true;double transparency=0;
         PartMaterial material=PartMaterial::SmoothPlastic;PartShape shape=PartShape::Block;
         BodyProperties body;float modelScale=1;
-        std::string name=part?"Objeto":group?"Grupo":"Modelo";
+        std::string name=part?"Objeto":group?"Grupo":attachment?"Attachment":"Modelo";
         Instance* parent=self.runtime->mutableScene().workspace();
         if(lua_istable(L,2)) {
             // Reject typos before creating anything. Read raw fields, without invoking user metamethods.

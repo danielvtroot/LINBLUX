@@ -611,7 +611,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                 auto it=p.attributes().find(entry.first);if(it!=p.attributes().end()){if(auto* text=std::get_if<std::string>(&it->second))v=*text;else if(auto* number=std::get_if<double>(&it->second))v=Num(*number);}
                 input(entry.first,v,entry.second);
             }
-            s+=Button("attachment","Criar Attachment","model");
+            s+=Button("attachment","Criar Attachment","model","","property");
         } else if(node->instanceClass()==InstanceClass::Model) {
             ModelFrame frame;std::string error;
             if(ui.scene_.modelFrame(node->id(),frame,error)){
@@ -620,7 +620,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                     input("Model.Rotation."+std::to_string(axis),Num((&angles.x)[axis]),"Rotação "+std::string(1,char('X'+axis)));}
                 input("Model.Scale",Num(frame.scale),"Escala uniforme");group("Pivô sem mover as peças");
                 for(int axis=0;axis<3;++axis){input("Pivot.Position."+std::to_string(axis),Num((&frame.position.x)[axis]),"Pivô "+std::string(1,char('X'+axis)));}
-                s+=Button("attachment","Criar Attachment","model")+Button("ungroup","Desagrupar modelo","model");
+                s+=Button("attachment","Criar Attachment","model","","property")+Button("ungroup","Desagrupar modelo","model");
             }
         } else if(node->instanceClass()==InstanceClass::Attachment) {
             const auto& local=static_cast<const Attachment&>(*node).localFrame();const auto angles=EulerDegreesZYXFromQuat(local.rotation);
