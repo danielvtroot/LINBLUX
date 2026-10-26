@@ -86,7 +86,6 @@ private:
     UiElement* mutableFind(std::uint64_t id, std::uint64_t owner, std::string& error);
     bool mutate();
     static Rectangle anchored(const UiElement& element, Rectangle parent);
-    static const char* const* anchors();
     std::map<std::uint64_t, UiElement> elements_;
     std::uint64_t next_ = 1;
     unsigned mutations_ = 0;
