@@ -159,8 +159,11 @@ def run(phase):
     # Retry because the Home transition can swallow the first press.
     time.sleep(1.2)
     start=None
+    # xdotool --window injects a synthetic event GLFW ignores; focus the real
+    # window and let XTEST deliver the shortcut to the editor.
+    xdo('windowfocus','--sync',window)
     for _ in range(4):
-     xdo('key','--window',window,'F5')
+     xdo('key','F5')
      deadline=time.monotonic()+5
      while time.monotonic()<deadline and not start:
       start=next((e for e in events()[before:] if e.get('subsystem')=='runtime' and e.get('event')=='start'),None)
