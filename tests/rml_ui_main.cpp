@@ -132,6 +132,8 @@ int main() {
 
             clickVisible("prop-Model.Position.0");key("ctrl+a");event("type --clearmodifiers 20");key("Return");
             CHECK(NearlyEqual(part->position().x,16));CHECK(NearlyEqual(second->position().x,24));
+            // The text field owns Ctrl+Z until focus returns to the editor.
+            clickVisible("node-"+std::to_string(id));CHECK(!ui.frontend()->textFocused());
             key("ctrl+z");CHECK(NearlyEqual(part->position().x,14));key("ctrl+y");CHECK(NearlyEqual(part->position().x,16));
             clickVisible("prop-Model.Scale");key("ctrl+a");event("type --clearmodifiers 2");key("Return");CHECK(NearlyEqual(part->size().x,8));
             clickVisible("prop-Model.Rotation.1");key("ctrl+a");event("type --clearmodifiers 90");key("Return");CHECK(NearlyEqual(part->position().z,8,.01f));
