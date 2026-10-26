@@ -29,6 +29,7 @@ public:
     void remove(InstanceId item);
     ItemInfo info(InstanceId item) const;
     std::vector<InstanceId> list() const;
+    std::vector<InstanceId> worldItems() const;
     InstanceId equipped() const;
     void update(Vector3 player,float yaw);
     std::vector<InventoryChange> takeChanges();

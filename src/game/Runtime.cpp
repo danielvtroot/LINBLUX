@@ -272,6 +272,7 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error,const Prog
         const bool spawnedDead=health_<=0;
         npcs_.reset(); // controladores de NPC sao sempre recriados por Play
         inventory_=std::make_unique<Inventory>(*scene_,*physics_);inventory_->update(position(),camera_.yaw());inventory_->loadAuthored();
+        interactions_=std::make_unique<InteractionSystem>(*scene_,*physics_);hotbarPage_=0;itemNotice_.clear();
         scripts_.start(*this); // errors are reported; safe native gameplay remains available
         npcs_.attachAuthored(*this,error); // NPCs autorados ganham controlador
         if(spawnedDead && health_<=0)scripts_.healthChanged(health_,true);
@@ -294,7 +295,7 @@ void RuntimeSession::stop(bool saveProgress) {
     scripts_.stop();npcs_.reset();audio_.stopAll();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
     if(saveProgress)try{progress_.flush();}catch(const std::exception& e){scripts_.hostError(e.what());}
     progress_.close();
-    inventory_.reset();destroyCharacter(); physics_.reset(); scene_.reset();
+    interactions_.reset();inventory_.reset();destroyCharacter(); physics_.reset(); scene_.reset();
     accumulator_ = 0; jumpPending_ = false; coyoteTime_=jumpBufferTime_=0; pose_ = {};
     blendFrom_ = {}; poseSource_.clear(); poseWalking_ = false; wasAirborne_ = false; blendTime_ = 0;
     shiftLockRequested_ = false; lastShiftKey_ = 0; // Stop nunca deixa o lock preso
@@ -305,6 +306,7 @@ void RuntimeSession::stop(bool saveProgress) {
 void RuntimeSession::pause() {
     if (state_ != RuntimeState::Playing) return;
     state_ = RuntimeState::Paused; jumpPending_ = false;jumpBufferTime_=0;
+    if(interactions_)interactions_->cancel();
     try{progress_.flush();}catch(const std::exception& e){scripts_.hostError(e.what());}
     Event("runtime", "pause", correlation_);
 }
@@ -692,6 +694,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     scripts_.update(dt);audio_.update(dt);
     if(inventory_)try{inventory_->update(position(),camera_.yaw());for(const auto& change:inventory_->takeChanges())scripts_.inventoryChanged(change.id,change.action);}catch(const std::exception& e){scripts_.hostError(e.what());}
     physics_->syncScene(*scene_);
+    updateItemControls(dt);
     damageCooldown_=std::max(0.f,damageCooldown_-dt);
     if(health_<=0) {
         deadTime_+=dt;
@@ -724,6 +727,27 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     for(auto id:fallen)scene_->removeById(id);
     if(inventory_)try{inventory_->update(position(),camera_.yaw());}catch(const std::exception& e){scripts_.hostError(e.what());}
     try{progress_.tick(dt);}catch(const std::exception& e){scripts_.hostError(e.what());}
+}
+void RuntimeSession::updateItemControls(float dt){
+    if(!inventory_||!interactions_)return;
+    if(itemNoticeTime_>0){itemNoticeTime_-=dt;if(itemNoticeTime_<=0)itemNotice_.clear();}
+    try{
+        const auto world=inventory_->worldItems();std::set<InstanceId> worldSet(world.begin(),world.end());interactions_->pruneItems(worldSet);
+        for(auto id:world)interactions_->ensureItem(id,inventory_->info(id).name);
+        const auto completed=interactions_->update(position(),scriptInput_,dt);
+        if(completed){if(worldSet.count(completed))inventory_->collect(completed);scripts_.interactionCompleted(completed);}
+        std::vector<InstanceId> slots;for(auto id:inventory_->list())if(inventory_->info(id).equipable)slots.push_back(id);
+        const unsigned pages=std::max(1u,unsigned((slots.size()+8)/9));hotbarPage_%=pages;
+        const auto pressed=[&](int key){return scriptInput_.keys[key]&&!previousScriptInput_.keys[key];};
+        if(pressed(KEY_PAGE_DOWN))hotbarPage_=(hotbarPage_+1)%pages;if(pressed(KEY_PAGE_UP))hotbarPage_=(hotbarPage_+pages-1)%pages;
+        for(int i=0;i<9;++i)if(pressed(KEY_ONE+i)&&hotbarPage_*9+i<slots.size()){
+            const auto id=slots[hotbarPage_*9+i];if(inventory_->equipped()==id)inventory_->unequip();else inventory_->equip(id);}
+        for(int direction:{-1,1}){const int button=direction<0?GAMEPAD_BUTTON_LEFT_TRIGGER_1:GAMEPAD_BUTTON_RIGHT_TRIGGER_1;
+            if(scriptInput_.gamepad&&scriptInput_.gamepadButtons[button]&&!previousScriptInput_.gamepadButtons[button]&&!slots.empty()){
+                const auto current=std::find(slots.begin(),slots.end(),inventory_->equipped());const int index=current==slots.end()?(direction>0?-1:0):int(current-slots.begin());
+                const auto next=(index+direction+int(slots.size()))%int(slots.size());inventory_->equip(slots[next]);hotbarPage_=unsigned(next/9);}}
+        if(pressed(KEY_DELETE)&&inventory_->equipped())inventory_->drop(inventory_->equipped());
+    }catch(const std::exception& e){itemNotice_=e.what();itemNoticeTime_=3;}
 }
 float RuntimeSession::cameraClearance(Vector3 from, Vector3 to, float radius) const {
     if (!physics_ || Vector3Distance(from, to) < .001f) return 1;

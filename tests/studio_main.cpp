@@ -116,6 +116,34 @@ void ModelGizmoSession() {
     CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==after);
     CHECK(scene.remove(b));const auto missing=projectio::toJson(scene);CHECK(!session.applyEdit(edit,true,error));CHECK(projectio::toJson(scene)==missing);
 }
+void InteractionControls() {
+    Scene scene;scene.buildDefaultScene();std::string error;PhysicsWorld physics;physics.attach(scene);game::InteractionSystem interactions(scene,physics);
+    auto* door=scene.createPart(PartShape::Block,{3,3,0},{1,2,1},"Porta");door->setAnchored(true);physics.syncScene(scene);
+    interactions.add(door->id(),{"Abrir porta",5,.5f,KEY_E});game::ScriptInput input;
+    CHECK(interactions.update({0,3,0},input,.1f)==0&&interactions.prompt().object==door->id());input.keys.set(KEY_E);
+    CHECK(interactions.update({0,3,0},input,.1f)==0&&interactions.prompt().progress>0);
+    input.keys.reset();interactions.update({0,3,0},input,.1f);CHECK(interactions.prompt().progress==0);
+    input.keys.set(KEY_E);interactions.update({0,3,0},input,.1f);interactions.update({30,3,0},input,.1f);CHECK(!interactions.prompt().object);
+    InstanceId completed=0;for(int i=0;i<6;++i)completed=std::max(completed,interactions.update({0,3,0},input,.1f));CHECK(completed==door->id());
+    CHECK(!interactions.update({0,3,0},input,.1f));input.keys.reset();interactions.update({0,3,0},input,.1f);
+    auto* wall=scene.createPart(PartShape::Block,{1.5f,3,0},{1,5,5},"Obstáculo");wall->setAnchored(true);physics.syncScene(scene);
+    CHECK(!interactions.update({0,3,0},input,.1f)&&!interactions.prompt().object);CHECK(scene.remove(wall));
+    const auto doorId=door->id();CHECK(scene.remove(door));interactions.pruneItems({});CHECK(!interactions.update({0,3,0},input,.1f));(void)doorId;
+    Scene author;author.buildDefaultScene();auto* setup=author.createScript(InstanceClass::Script,nullptr,"Controles.lua");
+    setup->source=R"(local v=linblux.vec3;local p=linblux.player.position
+local m=linblux.scene.create('model',{name='Coletável'})
+linblux.scene.create('part',{parent=m,name='Item',position=v(p.x+3,p.y,p.z),size=v(1,1,1)})
+linblux.items.register('controle',m);local item=linblux.items.spawn('controle');item:set_attribute('dados',37)
+linblux.events.on('interaction_completed',function(event) linblux.scene.root:set_attribute('interagiu',true) end))";
+    game::RuntimeSession runtime;CHECK(runtime.start(author,error));game::PlayerInput controls;runtime.update(.1f,controls);const auto world=runtime.inventory().worldItems();CHECK(world.size()==1);if(world.empty())return;const auto id=world.front();
+    CHECK(runtime.interactions().prompt().object==id);controls.script.keys.set(KEY_E);for(int i=0;i<8;++i)runtime.update(.1f,controls);
+    CHECK(runtime.inventory().list().size()==1);CHECK(runtime.scripts().errorCount()==0);CHECK(runtime.scene().workspace()->attributes().count("interagiu"));
+    controls.script.keys.reset();runtime.update(.01f,controls);controls.script.keys.set(KEY_ONE);runtime.update(.02f,controls);CHECK(runtime.inventory().equipped()==id);
+    controls.script.keys.reset();runtime.update(.01f,controls);controls.script.keys.set(KEY_DELETE);runtime.update(.02f,controls);CHECK(runtime.inventory().info(id).state=="world"&&runtime.inventory().list().empty());
+    CHECK(std::get<double>(runtime.scene().find(id)->attributes().at("dados"))==37);
+    controls.script.keys.reset();runtime.update(.02f,controls);controls.script.keys.set(KEY_E);for(int i=0;i<8;++i)runtime.update(.1f,controls);CHECK(runtime.inventory().list().size()==1);
+    runtime.pause();runtime.update(.1f,controls);CHECK(!runtime.interactions().prompt().object);runtime.stop();
+}
 void InventoryLifecycle() {
     Scene scene;scene.buildDefaultScene();std::string error;
     auto* prototype=scene.createContainer(InstanceClass::Model,nullptr,"Chave original");
@@ -1619,6 +1647,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

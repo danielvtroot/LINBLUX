@@ -111,6 +111,33 @@ int main() {
         // Optional fast iteration path; the registered CTest always exercises
         // the full editor + player sequence without this environment variable.
         capture("studio-1366");
+        if(std::getenv("LINBLUX_ITEM_CONTROLS_ONLY")) {
+            resizeWindow(1280,720);
+            scene.createScript(InstanceClass::Script,nullptr,"Coleta.lua")->source=R"(
+local v=linblux.vec3;local p=linblux.player.position
+local m=linblux.scene.create('model',{name='Coletável'})
+linblux.scene.create('part',{parent=m,name='Peça',position=v(p.x+3,p.y,p.z),size=v(1,1,1)})
+linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item:set_attribute('carga',37)
+)";
+            click("play");frames(6);auto& runtime=EditorUITestAccess::runtime(ui);CHECK(ui.playing());CHECK(runtime.scripts().errorCount()==0);
+            const auto world=runtime.inventory().worldItems();CHECK(world.size()==1);if(world.empty()){capture("item-start-failure");rlImGuiShutdown();CloseWindow();return 1;}
+            const auto id=world.front();const auto start=runtime.position();auto view=ui.frontend()->viewport();
+            event("mousemove "+std::to_string(int(view.x+view.width/2))+" "+std::to_string(int(view.y+view.height/2)));frames(2);
+            CHECK(runtime.interactions().prompt().object==id);capture("interaction-ready");
+            event("keydown e");frames(1);CHECK(runtime.interactions().prompt().progress>0&&runtime.interactions().prompt().progress<1);
+            capture("interaction-progress");event("keyup e");CHECK(runtime.interactions().prompt().progress==0);
+            std::string error;CHECK(runtime.teleportPlayer(Vector3Add(start,{20,0,0}),error));frames(2);CHECK(!runtime.interactions().prompt().object);
+            CHECK(runtime.teleportPlayer(start,error));frames(2);event("keydown e");frames(60);event("keyup e");
+            CHECK(runtime.inventory().list().size()==1);key("1");CHECK(runtime.inventory().equipped()==id);capture("hotbar-720");
+            key("Delete");CHECK(runtime.inventory().list().empty());CHECK(runtime.inventory().info(id).state=="world");
+            event("keydown e");frames(60);event("keyup e");CHECK(runtime.inventory().list().size()==1);CHECK(std::get<double>(runtime.scene().find(id)->attributes().at("carga"))==37);
+            for(int i=0;i<9;++i){const auto extra=runtime.inventory().spawn("coleta");runtime.inventory().collect(extra);}frames(2);key("Next");CHECK(runtime.hotbarPage()==1);
+            const auto slots=runtime.inventory().list();key("1");CHECK(runtime.inventory().equipped()==slots[9]);
+            resizeWindow(1920,1080);if(runtime.state()==game::RuntimeState::Paused)key("Escape");frames(2);capture("hotbar-1080-page2");
+            for(const auto item:runtime.inventory().list())runtime.inventory().remove(item);frames(2);CHECK(runtime.inventory().list().empty());capture("hotbar-empty");
+            key("shift+F5");CHECK(!ui.playing());std::printf("Item controls UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
         if(std::getenv("LINBLUX_MODELS_ONLY")) {
             auto* second=scene.createPart(PartShape::Block,{22,3,0},{4,6,1},"Segunda peça");second->setAnchored(true);frames(2);
             click("node-"+std::to_string(part->id()));event("keydown ctrl");click("node-"+std::to_string(second->id()));event("keyup ctrl");

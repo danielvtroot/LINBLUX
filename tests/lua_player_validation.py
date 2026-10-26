@@ -21,6 +21,8 @@ def main():
     example = (root / "assets/examples/lua/temporizadores.lua").read_text()
     example += '\nlinblux.events.on("stop", function() assert(linblux.scene.root:get_attribute("timer_concluido")) end)\n'
     cases = [
+        ("InteracaoPorta.lua",(root / "assets/examples/lua/interacao_porta.lua").read_text(),0,"erros Lua: 0"),
+        ("InteracaoInvalida.lua","local p=linblux.scene.create('part');linblux.interactions.register(p,{hold_seconds=-1})",1,"duração"),
         ("Inventario.lua",(root / "assets/examples/lua/inventario.lua").read_text(),0,"erros Lua: 0"),
         ("InventarioDuplicado.lua","local m=linblux.scene.create('model');linblux.scene.create('part',{parent=m});linblux.items.register('x',m);local a=linblux.items.spawn('x');linblux.items.collect(a);linblux.items.collect(a)",1,"já está no inventário"),
         ("InventarioTipoInvalido.lua","local m=linblux.scene.create('model');linblux.scene.create('part',{parent=m});linblux.items.register('../x',m)",1,"Identificador do tipo"),

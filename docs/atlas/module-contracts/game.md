@@ -79,3 +79,10 @@ Surfaces. Eventos inventory_changed usam o scheduler/listeners Lua existentes.
 Testes: InventoryLifecycle/studio, inventario.lua/Player, .lo/experiences,
 protótipo nas Propriedades/models_ui e pixels/decal_render. E/Delete/hotbar
 ainda requerem a camada de interação e apresentação; não são parte desta API.
+
+**Interação/controles:** InteractionSystem registra Parts/Modelos, testa
+alcance geométrico/linha de visão e conclui hold com cancelamento e latch.
+Runtime sincroniza itens world, coleta, slots1–9, páginas e Delete.
+interaction_completed usa o scheduler seguro de eventos. ExperienceOverlay
+é a apresentação compartilhada Studio/Player; não possui lógica de itens.
+Teste nativo InteractionControls e gráfico linblux_item_controls_ui.

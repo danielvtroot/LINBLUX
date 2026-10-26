@@ -1,3 +1,4 @@
+#include "rendering/ExperienceOverlay.h"
 #include "game/Inventory.h"
 #include "rendering/SceneRenderer.h"
 #include "physics/PhysicsWorld.h"
@@ -898,7 +899,8 @@ SceneRenderer::SceneRenderer() {
 }
 
 SceneRenderer::~SceneRenderer() {
-    if(--rendererCount==0) { 
+    if(--rendererCount==0) {
+        ClearExperienceOverlayResources();
         game::ClearImageTextures();
         UnloadProceduralSky();
     }
