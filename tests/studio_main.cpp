@@ -116,6 +116,35 @@ void ModelGizmoSession() {
     CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==after);
     CHECK(scene.remove(b));const auto missing=projectio::toJson(scene);CHECK(!session.applyEdit(edit,true,error));CHECK(projectio::toJson(scene)==missing);
 }
+void Attachments() {
+    Scene scene;std::string error;
+    auto* model=scene.createContainer(InstanceClass::Model,nullptr,"Rifle fictício");
+    auto* body=scene.createPart(PartShape::Block,{0,2,0},{2,2,2},"Corpo");
+    auto* barrel=scene.createPart(PartShape::Block,{0,2,-3},{1,1,4},"Cano");
+    CHECK(scene.reparent(body,model,error));CHECK(scene.reparent(barrel,model,error));
+    ModelFrame pivot;CHECK(scene.setModelPivot(model->id(),pivot,error));
+    auto* muzzle=scene.createAttachment(barrel,"BocaDoCano");CHECK(muzzle);if(!muzzle)return;
+    ModelFrame local;local.position={0,0,-2};CHECK(muzzle->setLocalFrame(local));
+    ModelFrame world;CHECK(scene.attachmentFrame(muzzle->id(),world,error));CHECK(NearlyEqual(world.position,{0,2,-5}));
+    pivot.rotation=QuatFromEulerDegreesZYX({0,90,0});CHECK(scene.transformModel(model->id(),pivot,error));
+    CHECK(scene.attachmentFrame(muzzle->id(),world,error));CHECK(NearlyEqual(world.position,{-5,2,0},.001f));
+    CHECK(NearlyEqual(Vector3RotateByQuaternion({0,0,-1},world.rotation),{-1,0,0},.001f));
+    pivot.scale=2;CHECK(scene.transformModel(model->id(),pivot,error));CHECK(scene.attachmentFrame(muzzle->id(),world,error));CHECK(NearlyEqual(world.position,{-10,4,0},.001f));
+    CHECK(!scene.createAttachment(scene.workspace()));CHECK(!scene.createAttachment(muzzle));
+    auto invalid=local;invalid.position.x=INFINITY;CHECK(!muzzle->setLocalFrame(invalid));
+    auto* direct=scene.createAttachment(model,"PontoDeEfeito");CHECK(direct);CHECK(direct->setLocalFrame(local));
+    auto* copy=scene.duplicateTree(*model);CHECK(copy);CHECK(scene.validate(error));
+    int clonedAttachments=0;for(const auto& node:scene.objects())if(copy->isAncestorOf(node.get())&&node->instanceClass()==InstanceClass::Attachment){++clonedAttachments;CHECK(node->id()!=muzzle->id());}
+    CHECK(clonedAttachments==2);
+    const auto original=projectio::toJson(scene);CHECK(nlohmann::json::parse(original)["version"]==5);
+    Scene loaded;CHECK(projectio::fromJson(loaded,original,error));CHECK(projectio::toJson(loaded)==original);
+    ModelFrame recovered;CHECK(loaded.attachmentFrame(muzzle->id(),recovered,error));CHECK(NearlyEqual(recovered.position,world.position));
+    Scene lua;CHECK(scenelua::fromLua(lua,scenelua::toLua(scene),error));CHECK(projectio::toJson(lua)==original);
+    auto bad=nlohmann::json::parse(original);for(auto& o:bad["objects"])if(o["id"]==muzzle->id())o["attachment"]["rotation"]={0,0,0,0};
+    CHECK(!projectio::fromJson(scene,bad.dump(),error));CHECK(projectio::toJson(scene)==original);
+    bad=nlohmann::json::parse(original);bad["version"]=4;CHECK(!projectio::fromJson(scene,bad.dump(),error));CHECK(projectio::toJson(scene)==original);
+    const auto muzzleId=muzzle->id();CHECK(scene.remove(barrel));CHECK(!scene.find(muzzleId));
+}
 void ModelTransforms() {
     Scene scene;std::string error;scene.buildDefaultScene();
     auto* a=scene.createPart(PartShape::Block,{10,4,0},{2,2,2},"A");a->setAnchored(true);
@@ -1518,6 +1547,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

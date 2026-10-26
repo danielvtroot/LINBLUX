@@ -65,6 +65,11 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="sphere")e.insertPart(PartShape::Sphere);
         else if(c.action=="spawn")e.insertSpawnLocation();
         else if(c.action=="folder")e.insertContainer(InstanceClass::Folder,e.scene_.find(c.instance));
+        else if(c.action=="attachment") {
+            auto* parent=e.scene_.find(c.instance);if(!parent)parent=e.scene_.selection();
+            auto* created=e.scene_.createAttachment(parent,"Attachment");
+            if(!created)throw std::runtime_error("Selecione uma peça ou Modelo para criar Attachment.");e.scene_.select(created);
+        }
         else if(c.action=="model")e.insertContainer(InstanceClass::Model,e.scene_.find(c.instance));
         else if(c.action=="script")e.insertScript(InstanceClass::Script);
         else if(c.action=="local-script")e.insertScript(InstanceClass::LocalScript);
@@ -208,6 +213,16 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                 e.endGizmoSession(true,"model_property");
                 const bool ok=e.modelTransform_.applyProperty(node->id(),frame,name.rfind("Pivot.",0)==0,error);
                 if(!ok)throw std::runtime_error(error);e.physics_.syncScene(e.scene_);
+            }
+            else if(node->instanceClass()==InstanceClass::Attachment&&name.rfind("Attachment.",0)==0) {
+                auto& attachment=static_cast<Attachment&>(*node);auto frame=attachment.localFrame();
+                const auto split=name.find_last_of('.');const int axis=std::stoi(name.substr(split+1));
+                if(axis<0||axis>2)throw std::runtime_error("Eixo do Attachment inválido.");
+                const auto value=Number(c.value);
+                if(name.find(".Position.")!=std::string::npos)(&frame.position.x)[axis]=value;
+                else if(name.find(".Rotation.")!=std::string::npos){auto angles=EulerDegreesZYXFromQuat(frame.rotation);(&angles.x)[axis]=value;frame.rotation=QuatFromEulerDegreesZYX(angles);}
+                else throw std::runtime_error("Propriedade do Attachment inválida.");
+                if(!attachment.setLocalFrame(frame))throw std::runtime_error("Transformação do Attachment inválida.");
             }
             else if(IsSurfaceClass(node->instanceClass())&&name.rfind("Surface.",0)==0) {
                 auto& surface=static_cast<Surface&>(*node);auto value=surface.properties();const float number=Number(c.value);

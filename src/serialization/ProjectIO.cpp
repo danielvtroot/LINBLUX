@@ -592,7 +592,7 @@ std::string toJson(const Scene& scene) {
                            {"material", PartMaterialName(part->material())},
                            {"anchored", part->anchored()},
                            {"canCollide", part->canCollide()}});
-        if(preciseModels){const auto q=part->rotation();objects.back()["orientation"]={q.x,q.y,q.z,q.w};}
+        if(preciseModels||attachments){const auto q=part->rotation();objects.back()["orientation"]={q.x,q.y,q.z,q.w};}
         const auto& body=part->bodyProperties();
         objects.back()["body"]={{"density",body.density},{"friction",body.friction},
             {"restitution",body.restitution},{"linearDamping",body.linearDamping},{"angularDamping",body.angularDamping}};
