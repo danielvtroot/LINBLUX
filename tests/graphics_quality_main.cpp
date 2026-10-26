@@ -25,6 +25,8 @@
 
 #include "rlgl.h"
 
+#include "rendering/ExperienceOverlay.h"
+#include "game/Runtime.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -590,6 +592,8 @@ int main(int argc, char** argv) {
             Rml::ElementDocument* hudDocument = hudContext->LoadDocument(hudPath.string());
             Check(hudDocument != nullptr, "HUD fixture document loaded");
             if (hudDocument) {
+                Scene hudScene;hudScene.buildDefaultScene();game::RuntimeSession healthRuntime;std::string healthError;
+                Check(healthRuntime.start(hudScene,healthError),"real health runtime starts: "+healthError);
                 hudDocument->Show();
                 hudContext->SetDimensions({hudWidth, hudHeight});
                 hudContext->Update();
@@ -605,6 +609,7 @@ int main(int argc, char** argv) {
                     renderer.BeginFrame();
                     hudContext->Render();
                     renderer.EndFrame();
+                    DrawHealthHud(healthRuntime,hudWidth,hudHeight);
                     EndDrawing();
                 };
                 drawHud();
@@ -627,6 +632,7 @@ int main(int argc, char** argv) {
                         renderer.BeginFrame();
                         hudContext->Render();
                         renderer.EndFrame();
+                        DrawHealthHud(healthRuntime,hudWidth,hudHeight);
                         EndDrawing();
                     }
                     const std::string capturePath =
@@ -655,7 +661,7 @@ int main(int argc, char** argv) {
                         Check(capsule.w == 102 && capsule.h == 46, "two controls share a 102x46 capsule");
                         Check(menuImage.w == 28 && menuImage.h == 28, "game logo preserves its square aspect at 28px");
                         Check(controlsImage.w == 26 && controlsImage.h == 26, "game menu icon is 26x26");
-                        Check(health.w == 180 && health.h == 20, "minimal health bar is 180x20, not an information card");
+                        Check(health.w == 0 && health.h == 0, "legacy RmlUi health bar is hidden");
 
                         const bool brightEdge=PixelLuma(background.color)<100;
                         const Color logoInk=GetImageColor(capture,menu.x+3,menu.y+menu.h/2);
@@ -666,33 +672,20 @@ int main(int argc, char** argv) {
                         const auto menuCoverage = MeasureArcCoverage(
                             capture,capsule.x+8.f,capsule.y+8.f,8.f,
                             .85f,1.45f,background.color,brightEdge,-1,&capsuleInk,true);
-                        const float healthRadius = health.h*.5f;
-                        const float corner=healthRadius;
-                        const Color healthInk=GetImageColor(capture,health.x+1,health.y+health.h/2);
-                        auto healthLeft = MeasureArcCoverage(
-                            capture, health.x + corner, health.y + corner, healthRadius,
-                            0.85f, 1.45f, background.color, brightEdge, -1,&healthInk);
-                        auto healthRight = MeasureArcCoverage(
-                            capture, health.x + health.w - corner, health.y + corner,
-                            healthRadius, 0.85f, 1.45f, background.color, brightEdge, 1,&healthInk);
-
-                        std::printf(
-                            "HUD %s logo edge: %d partial/%d samples, %d levels; menu edge: %d/%d, %d levels; "
-                            "health caps: %d/%d and %d/%d, levels %d/%d\n",
-                            background.name, logoCoverage.partial, logoCoverage.samples, logoCoverage.levels,
-                            menuCoverage.partial, menuCoverage.samples, menuCoverage.levels,
-                            healthLeft.partial, healthLeft.samples, healthRight.partial, healthRight.samples,
-                            healthLeft.levels, healthRight.levels);
-
+                        const float hs=std::clamp(hudHeight/720.f,.75f,1.5f);
+                        const Vector2 hc{hudWidth-52*hs,58*hs};int healthRed=0;
+                        for(int py=int(hc.y-42*hs);py<int(hc.y+42*hs);++py)
+                            for(int px=int(hc.x-42*hs);px<int(hc.x+42*hs);++px){
+                                const auto c=GetImageColor(capture,px,py);healthRed+=c.r>150&&c.g<90&&c.b<110;
+                            }
+                        Check(healthRed>400*hs*hs,"real circular health HUD paints a red arc");
+                        const auto hole=GetImageColor(capture,int(hc.x),int(hc.y-24*hs));
+                        Check(hole.r<100,"health ring retains its graphite centre");
                         const std::string page = std::string(" (") + background.name + " background)";
                         Check(logoCoverage.partial >= 3 && logoCoverage.levels >= 2,
                               "LINBLUX logo rounded corner has antialiased edge coverage" + page);
                         Check(menuCoverage.partial >= 3 && menuCoverage.levels >= 2,
                               "LINBLUX controls rounded corner has antialiased edge coverage" + page);
-                        Check(healthLeft.partial >= 8 && healthLeft.levels >= 2,
-                              "health bar left cap has antialiased edge coverage" + page);
-                        Check(healthRight.partial >= 8 && healthRight.levels >= 2,
-                              "health bar right cap has antialiased edge coverage" + page);
 
                         // The interior icon must still match the area-averaged
                         // filtered reference: MSAA smooths the circular edge

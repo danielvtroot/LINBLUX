@@ -24,6 +24,7 @@ unsigned long InputTestRootWindow();
 namespace loblox {
 struct EditorUITestAccess {
     static game::RuntimeSession& runtime(EditorUI& ui){return ui.runtime_;}
+    static Rectangle healthHud(EditorUI& ui){return ui.healthHud_;}
     static bool snap(EditorUI& ui){return ui.snapEnabled_;}
     static bool captured(EditorUI& ui){return ui.gameplayCapture_;}
     static ToolMode tool(EditorUI& ui){return ui.tool_;}
@@ -126,7 +127,7 @@ int main() {
                 const auto position=rt.position();event("keydown w");frames(5);event("keyup w");CHECK(Vector3Distance(position,rt.position())<.001f);
                 click("page-settings");const auto mode=rt.settings().cameraMode;click("camera-next");CHECK(rt.settings().cameraMode!=mode);
                 const float sensitivity=rt.settings().sensitivity;const auto slider=ui.frontend()->elementBounds("sensitivity-slider");clickAt({slider.x+slider.width*.7f,slider.y+slider.height/2});CHECK(rt.settings().sensitivity!=sensitivity);
-                const bool shift=rt.settings().enableShiftLock;click("shift-lock");CHECK(rt.settings().enableShiftLock!=shift);
+                const bool shift=rt.settings().enableShiftLock;clickVisible("shift-lock");CHECK(rt.settings().enableShiftLock!=shift);
                 click("page-audio");CHECK(ui.frontend()->elementBounds("master-volume").width>80);
                 click("page-video");CHECK(ui.frontend()->elementBounds("fullscreen-value").width>40);
                 click("page-controls");CHECK(ui.frontend()->elementText("controls-page").find("W A S D")!=std::string::npos);
@@ -728,17 +729,18 @@ end)
                 CHECK(!EditorUITestAccess::captured(ui));
                 key("Escape");CHECK(rt.state()==game::RuntimeState::Playing);
                 click("game-controls");CHECK(rt.state()==game::RuntimeState::Paused);
-                click("game-controls");CHECK(rt.state()==game::RuntimeState::Playing);
+                click("pause-close");frames(14);CHECK(rt.state()==game::RuntimeState::Playing);
                 click("game-controls");CHECK(rt.state()==game::RuntimeState::Paused);
-                click("respawn");key("Tab");key("Return");CHECK(rt.state()==game::RuntimeState::Playing);
+                click("respawn");click("resume");frames(14);CHECK(rt.state()==game::RuntimeState::Playing);
             }
-            frames(12);auto vp=ui.frontend()->viewport();auto hud=ui.frontend()->elementBounds("health");
+            frames(12);auto vp=ui.frontend()->viewport();auto hud=EditorUITestAccess::healthHud(ui);
             CHECK(hud.x>=vp.x && hud.y>=vp.y);CHECK(hud.x+hud.width<=vp.x+vp.width+1);CHECK(hud.y+hud.height<=vp.y+vp.height+1);
-            // Regression: keep the slim bar, never restore the rejected card.
-            CHECK(hud.width==180);CHECK(hud.height==20);
+            // One shared circular HUD; the old RmlUi bar must remain hidden.
+            CHECK(hud.width>50&&std::fabs(hud.height-hud.width)<1);
+            CHECK(ui.frontend()->elementBounds("health").width==0);
             CHECK(ui.frontend()->elementText("health").find("health-heading")==std::string::npos);
-            CHECK(hud.y-vp.y>=8 && hud.y-vp.y<=20);
-            CHECK(vp.x+vp.width-(hud.x+hud.width)>=8 && vp.x+vp.width-(hud.x+hud.width)<=20);
+            CHECK(hud.y-vp.y>=8 && hud.y-vp.y<=30);
+            CHECK(vp.x+vp.width-(hud.x+hud.width)>=8 && vp.x+vp.width-(hud.x+hud.width)<=25);
             if(size.x==1366) {
                 const auto logo=ui.frontend()->elementBounds("game-menu");
                 const auto menu=ui.frontend()->elementBounds("game-controls");
@@ -751,9 +753,7 @@ end)
                 CHECK(capsule.width>menu.width*2&&capsule.height==menu.height);
                 CHECK(settings.x>=menu.x+menu.width-1);
             }
-            const auto fill100=ui.frontend()->elementBounds("health-fill");
-            const auto track=ui.frontend()->elementBounds("health-track");
-            CHECK(fill100.width>=track.width-1);
+            CHECK(rt.healthHud().shown==1);
             capture("health-100-"+std::to_string(int(size.x)));
             // The captured Mouse Lock cursor is screen space: jumping, falling, walking and
             // resizing the window must never move it away from the viewport centre.
@@ -770,28 +770,27 @@ end)
             key("space");frames(8);checkReticle("jump");frames(42);checkReticle("fall");
             event("keydown d");frames(8);checkReticle("walk");event("keyup d");frames(2);
             CHECK(rt.takeDamage(75,error));frames(20);CHECK(rt.health()==25);capture("health-25-"+std::to_string(int(size.x)));
-            const auto fill25=ui.frontend()->elementBounds("health-fill");
-            CHECK(fill25.width>25 && fill25.width<hud.width*.45f);
+            CHECK(rt.healthHud().shown>=.25f&&rt.healthHud().shown<.45f);
             if(size.x==1366) {
                 CHECK(rt.heal(25,error));frames(18);CHECK(rt.health()==50);capture("health-50-1366");
-                CHECK(std::fabs(ui.frontend()->elementBounds("health-fill").width/track.width-.5f)<.02f);
+                CHECK(std::fabs(rt.healthHud().shown-.5f)<.02f);
                 CHECK(rt.takeDamage(30,error));frames(18);CHECK(rt.health()==20);capture("health-20-1366");
-                CHECK(std::fabs(ui.frontend()->elementBounds("health-fill").width/track.width-.2f)<.02f);
+                CHECK(std::fabs(rt.healthHud().shown-.2f)<.02f);
                 CHECK(rt.heal(5,error));frames(8);
             }
             if(size.x==1280) {
                 CHECK(rt.takeDamage(25,error));frames(1);CHECK(rt.health()==0);capture("health-0");
-                CHECK(ui.frontend()->elementBounds("health-fill").width<=1);
+                CHECK(rt.healthHud().shown==0);
                 CHECK(rt.respawn(error));CHECK(rt.takeDamage(30,error));frames(10);CHECK(rt.health()==70);capture("health-70");
                 CHECK(rt.heal(30,error));CHECK(rt.health()==100);capture("health-respawn");
-                CHECK(ui.frontend()->elementBounds("health-fill").width>=track.width-1);
+                CHECK(rt.healthHud().shown==1);
             }
             key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);CHECK(!EditorUITestAccess::captured(ui));
             CHECK(ui.frontend()->elementBounds("health").width==0);
-            const auto panel=ui.frontend()->elementBounds("pause-panel");
-            CHECK(panel.width>=vp.width*.8f&&panel.width<=vp.width*.96f);
+            frames(14);const auto panel=ui.frontend()->elementBounds("pause-panel");
+            CHECK(panel.width>350&&panel.width<=vp.width*.94f);
             CHECK(panel.x>=vp.x&&panel.x+panel.width<=vp.x+vp.width);
-            CHECK(panel.y>=vp.y+62&&panel.y+panel.height<=vp.y+vp.height);
+            CHECK(std::fabs(panel.y-vp.y)<1&&panel.y+panel.height<=vp.y+vp.height+1);
             auto overlay=ui.frontend()->elementBounds("pause");CHECK(std::fabs(overlay.x-vp.x)<1 && std::fabs(overlay.y-vp.y)<1);
             for(const char* id:{"page-game","leave","respawn","resume","game-maximize","game-fullscreen"}) {auto b=ui.frontend()->elementBounds(id);CHECK(b.x>=vp.x && b.y>=vp.y && b.x+b.width<=vp.x+vp.width+1 && b.y+b.height<=vp.y+vp.height+1);}
             capture("pause-game-"+std::to_string(int(size.x)));
@@ -819,7 +818,7 @@ end)
                 auto fullView=ui.frontend()->viewport();
                 CHECK(fullView.x==0&&fullView.y==0);
                 CHECK(fullView.width==GetScreenWidth()&&fullView.height==GetScreenHeight());
-                CHECK(ui.frontend()->elementBounds("health").width>150);
+                CHECK(EditorUITestAccess::healthHud(ui).width>50);
                 if(rt.shiftLockActive())checkReticle("fullscreen");
                 capture("game-fullscreen-1366");
                 key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);
@@ -842,18 +841,18 @@ end)
                 click("camera-next");CHECK(rt.settings().cameraMode!=originalCamera);
                 click("camera-previous");CHECK(rt.settings().cameraMode==originalCamera);
                 const bool firstPerson=rt.settings().allowFirstPerson;
-                click("first-person");CHECK(rt.settings().allowFirstPerson!=firstPerson);
-                click("first-person");CHECK(rt.settings().allowFirstPerson==firstPerson);
+                clickVisible("first-person");CHECK(rt.settings().allowFirstPerson!=firstPerson);
+                clickVisible("first-person");CHECK(rt.settings().allowFirstPerson==firstPerson);
                 const bool shift=rt.settings().enableShiftLock;
-                click("shift-lock");CHECK(rt.settings().enableShiftLock!=shift);
-                click("shift-lock");CHECK(rt.settings().enableShiftLock==shift);
-                click("sensitivity");key("ctrl+a");event("type --clearmodifiers 0.005");key("Return");CHECK(NearlyEqual(rt.settings().sensitivity,.005f));
-                click("sensitivity");key("ctrl+a");event("type --clearmodifiers nan");key("Return");CHECK(NearlyEqual(rt.settings().sensitivity,.005f));
+                clickVisible("shift-lock");CHECK(rt.settings().enableShiftLock!=shift);
+                clickVisible("shift-lock");CHECK(rt.settings().enableShiftLock==shift);
+                clickVisible("sensitivity");key("ctrl+a");event("type --clearmodifiers 0.005");key("Return");CHECK(NearlyEqual(rt.settings().sensitivity,.005f));
+                clickVisible("sensitivity");key("ctrl+a");event("type --clearmodifiers nan");key("Return");CHECK(NearlyEqual(rt.settings().sensitivity,.005f));
                 CHECK(!ui.frontend()->elementText("player-setting-error").empty());
-                click("sensitivity");key("ctrl+a");event("type --clearmodifiers 0.003");key("Return");CHECK(NearlyEqual(rt.settings().sensitivity,.003f));
+                clickVisible("sensitivity");key("ctrl+a");event("type --clearmodifiers 0.003");key("Return");CHECK(NearlyEqual(rt.settings().sensitivity,.003f));
                 const auto range=ui.frontend()->elementBounds("sensitivity-slider");
                 clickAt({range.x+range.width*.7f,range.y+range.height*.5f});frames(3);CHECK(rt.settings().sensitivity>.005f);
-                click("camera-distance");key("ctrl+a");event("type --clearmodifiers 15");key("Return");CHECK(NearlyEqual(rt.settings().cameraDistance,15));
+                clickVisible("camera-distance");key("ctrl+a");event("type --clearmodifiers 15");key("Return");CHECK(NearlyEqual(rt.settings().cameraDistance,15));
                 CHECK(NearlyEqual(rt.position(),position));CHECK(rt.health()==70||rt.health()==25);
                 capture("settings-interactive-1366");
             }
@@ -862,9 +861,9 @@ end)
             click("page-game");
             const auto generation=rt.characterGeneration();click("respawn");CHECK(rt.characterGeneration()==generation+1);CHECK(rt.health()==100);
             if(size.x==1366) {
-                // Focus after Respawn stays on that footer action: Tab reaches
-                // Resume; Space activates it once without also jumping.
-                key("Tab");CHECK(std::system("xdotool keydown space")==0);
+                // Resume retains focus when reopened; Space must activate once
+                // without leaking a jump into gameplay.
+                click("resume");key("Escape");frames(14);CHECK(std::system("xdotool keydown space")==0);
                 float resumePeak=-100.f;
                 for(int i=0;i<5;++i){frames(1);resumePeak=std::max(resumePeak,rt.velocity().y);}
                 event("keyup space");CHECK(rt.state()==game::RuntimeState::Playing);
