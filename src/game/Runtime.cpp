@@ -464,7 +464,7 @@ void RuntimeSession::updateContacts() {
         const auto id=[&](const btCollisionObject* object)->std::optional<InstanceId>{
             if(object==body_.get())return InstanceId(0);
             const auto* part=static_cast<const Part*>(object->getUserPointer());
-            if(part&&scene_->findPart(part->id())==part)return part->id();return std::nullopt;
+            if(part&&scene_->findPart(part->id())==part&&!InventoryHidden(*part))return part->id();return std::nullopt;
         };
         auto a=id(manifold->getBody0()),b=id(manifold->getBody1());if(!a||!b)continue;
         if(*a>*b)std::swap(a,b);
