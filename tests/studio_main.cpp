@@ -135,6 +135,11 @@ void InventoryLifecycle() {
     CHECK(Vector3Distance(itemPart->position(),{2,4,0})>2);inventory.collect(id);inventory.equip(id);CHECK(inventory.equipped()==id);
     CHECK(scene.remove(item));inventory.update({2,4,0},0);CHECK(!inventory.equipped()&&inventory.list().empty());CHECK(!inventory.takeChanges().empty());
     bool invalidType=false;try{inventory.registerType("../invalido",prototype->id());}catch(const std::exception&){invalidType=true;}CHECK(invalidType);
+    auto* sphereModel=scene.createContainer(InstanceClass::Model,nullptr,"Item esférico");
+    auto* sphere=scene.createPart(PartShape::Sphere,{10,10,10},{1,10,1},"Esfera");sphere->setAnchored(true);CHECK(scene.reparent(sphere,sphereModel,error));
+    inventory.registerType("esfera",sphereModel->id());const auto ball=inventory.spawn("esfera");inventory.collect(ball);inventory.equip(ball);inventory.drop(ball);
+    const auto* ballPart=static_cast<const Part*>(scene.find(ball)->children().front());
+    CHECK(Vector2Distance({ballPart->position().x,ballPart->position().z},{2,0})>ballPart->sphereRadius()+1);
     // A session operates on its own copy; prototype flags never alter saved authoring.
     Scene authored;CHECK(projectio::fromJson(authored,original,error));game::RuntimeSession runtime;CHECK(runtime.start(authored,error));
     const auto authorBefore=projectio::toJson(authored);runtime.inventory().registerType("chave",prototype->id());const auto runtimeItem=runtime.inventory().spawn("chave");runtime.inventory().collect(runtimeItem);runtime.inventory().equip(runtimeItem);runtime.stop();CHECK(projectio::toJson(authored)==authorBefore);

@@ -52,7 +52,7 @@ void Inventory::registerType(const std::string& type,InstanceId prototype,ItemOp
     if(options.name.empty())options.name=root->name();Need(options.name.size()<=128&&options.name.find('\0')==std::string::npos&&options.icon.size()<=512&&options.grip.valid()&&options.grip.scale==1,"Configuração do item inválida.");
     if(!options.icon.empty()){options.icon=NormalizeImageReference(options.icon);Need(options.icon.rfind("assets/",0)==0&&options.icon.find("..") == std::string::npos,"Ícone deve ser um recurso gerenciado em assets/.");Need(!ResolveImagePath(AssetsDir(),options.icon).empty(),"Ícone do item não encontrado nos recursos da experiência.");}
     const auto nodes=Nodes(root);Need(nodes.size()<=256,"Protótipo excede 256 componentes.");size_t parts=0;Impl::Type definition{prototype,options,{}};
-    for(auto* n:nodes){if(n->isPart()){const auto* p=static_cast<const Part*>(n);Need(!p->hasNpc(),"Protótipo de item não aceita controlador NPC.");Need(p->attributes().size()<64||p->attributes().count("_linblux_item_hidden"),"Peça precisa de espaço para metadados de visibilidade.");}parts+=n->isPart();definition.nodes.push_back(Capture(n));}
+    for(auto* n:nodes){Need(n->deletable(),"Protótipo não pode conter objetos protegidos.");if(n->isPart()){const auto* p=static_cast<const Part*>(n);Need(!p->hasNpc(),"Protótipo de item não aceita controlador NPC.");Need(p->attributes().size()<64||p->attributes().count("_linblux_item_hidden"),"Peça precisa de espaço para metadados de visibilidade.");}parts+=n->isPart();definition.nodes.push_back(Capture(n));}
     Need(parts>0&&parts<=128,"Item requer de 1 a 128 peças.");
     for(const auto& n:h.scene.objects())if(n->instanceClass()==InstanceClass::Attachment){const auto target=static_cast<const Attachment&>(*n).jointTarget();if(target){auto* other=h.scene.find(target);Need(other&&root->isAncestorOf(n.get())==root->isAncestorOf(other),"Protótipo possui junta ligada a um objeto externo.");}}
 
@@ -86,7 +86,7 @@ void Inventory::drop(InstanceId id){
     auto& h=*impl_;auto& item=h.item(id);Need(item.state!="world","Item já está no mundo.");
     ModelFrame current;std::string error;if(!h.scene.modelFrame(id,current,error))throw std::runtime_error(error);
     Vector3 low{INFINITY,INFINITY,INFINITY},high{-INFINITY,-INFINITY,-INFINITY};
-    for(const auto& snapshot:item.nodes)if(auto* part=h.scene.findPart(snapshot.id))for(int bits=0;bits<8;++bits){const auto half=part->halfExtents();const auto p=Vector3Add(part->position(),Vector3RotateByQuaternion({(bits&1)?half.x:-half.x,(bits&2)?half.y:-half.y,(bits&4)?half.z:-half.z},part->rotation()));low=Vector3Min(low,p);high=Vector3Max(high,p);}
+    for(const auto& snapshot:item.nodes)if(auto* part=h.scene.findPart(snapshot.id))for(const auto p:part->bounds().corners()){low=Vector3Min(low,p);high=Vector3Max(high,p);}
     const auto center=Vector3Scale(Vector3Add(low,high),.5f),half=Vector3Scale(Vector3Subtract(high,low),.5f);Need(std::isfinite(half.x)&&Vector3Length(half)<32,"Item vazio ou grande demais para soltar com segurança.");
     const float radius=std::sqrt(half.x*half.x+half.z*half.z)+2;bool found=false;ModelFrame target=current;
     h.physics.syncScene(h.scene);
