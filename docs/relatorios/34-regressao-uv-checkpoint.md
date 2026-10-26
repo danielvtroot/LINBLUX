@@ -7,7 +7,7 @@ agora aponta a face Back para o spawn e opta pela correção, sem logo espelhada
 Teste Player verifica o desenho assimétrico da logo (glifo à esquerda), além
 de executar o fluxo de inventário/combate e NPC animado. Reabertura/.lo
 verificam a persistência do atributo. Código:SceneRenderer.cpp, gerador/mundo
-RifleDemo e testes. Build Studio/Player/qualidade8,62s; teste nativo11,34s.
+RifleDemo e testes. Build Studio/Player/qualidade8,62s; build do teste nativo11,34s.
 
 `linblux_graphics_quality` foi migrado: compõe o HUD circular de Runtime real,
 mede arco/centro e confirma a ausência da barra RML, preservando os testes de
@@ -38,3 +38,7 @@ TURBO/timeout individual. Evitar repetir a bateria longa inteira para localizar
 o ponto exato. Depois concluir a migração, regressão abrangente e validar pacote
 em outra instalação. A Release segue bloqueada também pela revisão GPL/raylib
 registrada no relatório33, sem tag/publicação ou áudio físico aprovado.
+
+FAST20261026T234643Z-16356:4/4 em6,7s (escopo conhecido). IMPACT
+20261026T234748Z-16941:4/4 em3,6s, global parcial; as duas integrações gráficas
+específicas foram executadas separadamente no log citado acima.
