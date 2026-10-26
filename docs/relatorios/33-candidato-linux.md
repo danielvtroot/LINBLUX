@@ -29,3 +29,7 @@ Próximo: migrar testes históricos rml_ui_main.cpp/graphics_quality_main.cpp
 para o HUD compartilhado e menu lateral, rodar regressão abrangente com orçamento,
 validar dependências noutra instalação Linux e fechar os avisos/licenças antes
 de publicar v0.1.0-alpha.1. Candidato fica local em .turbo/dist, nunca no Git.
+
+ATLAS atualizado. FAST20261026T232925Z-7411 não associou testes de empacotamento
+(COBERTURA DESCONHECIDA, zero aprovações). Fallback técnico: teste real externo
+supervisionado acima, em vez de inventar aprovação. Nenhum FULL foi executado.

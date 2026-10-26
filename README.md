@@ -7,7 +7,7 @@ Studio e Player independentes para criar, editar e executar mundos locais. C++17
 
 Repositório oficial: **https://github.com/danielvtroot/LINBLUX** · branch `main`.
 
-**Alpha0.1.0: candidato interno; Release pública ainda bloqueada.**
+**Alpha 0.1.0: candidato interno; Release pública ainda bloqueada.**
 [Instalação/candidato, dependências e limites](docs/ALPHA_0_1_0.md) ·
 [Demo interativa](assets/examples/rifledemo/README.md) ·
 [Changelog](docs/CHANGELOG.md).
