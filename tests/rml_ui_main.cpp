@@ -662,7 +662,9 @@ end)
             CHECK(scene.gameAssets().findAnimation(scene.gameAssets().player.walkAnimation));
         }
         click("advanced-output");capture("output");
-        click("node-"+std::to_string(partId));click("advanced-assets");click("cmd-import-dialog-");
+        // The assets page owns its own scope so its controls never collide
+        // with the rig panel's import button.
+        click("node-"+std::to_string(partId));click("advanced-assets");click("assets-import-dialog-");
         Image image=GenImageChecked(64,64,8,8,{110,174,218,255},{232,195,106,255});
         const auto imagePath=std::string(directory)+"/source.png";CHECK(ExportImage(image,imagePath.c_str()));UnloadImage(image);
         // Paste as a user would: a blocking xdotool type of a long path can
