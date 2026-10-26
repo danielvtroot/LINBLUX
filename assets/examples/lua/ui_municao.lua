@@ -40,11 +40,17 @@ end
 
 paint()
 
+-- O exemplo funciona sem biblioteca de som: só toca se "tiro" existir.
+local shot_sound = false
+for _, sound in ipairs(linblux.audio.list()) do
+    if sound.id == "tiro" then shot_sound = true end
+end
+
 linblux.events.on("key_pressed", function(key)
     if key == "f" then
         if ammo > 0 then
             ammo = ammo - 1
-            linblux.audio.play("tiro") -- silencioso se o som não existir; nunca falha o HUD
+            if shot_sound then linblux.audio.play("tiro") end
             paint()
         end
     elseif key == "r" then
