@@ -126,10 +126,11 @@ void AttachmentJoints() {
     CHECK(!scene.connectAttachments(a->id(),a->id(),error));CHECK(!scene.reparent(a,model,error));
     CHECK(scene.validate(error));PhysicsWorld physics;physics.attach(scene);CHECK(physics.jointCount()==1&&physics.bodyCount()==2);
     for(int i=0;i<120;++i)physics.simulate(scene,1.f/60);
+    if(!NearlyEqual(arm->position(),position,.03f))std::fprintf(stderr,"Joint rest actual %.5f %.5f %.5f expected %.5f %.5f %.5f\n",arm->position().x,arm->position().y,arm->position().z,position.x,position.y,position.z);
     CHECK(NearlyEqual(arm->position(),position,.03f));
     auto pose=a->localFrame();pose.rotation=QuatFromEulerDegreesZYX({0,60,0});CHECK(a->setLocalFrame(pose));
     for(int i=0;i<120;++i)physics.simulate(scene,1.f/60);
-    const auto expected=Vector3Add(base->position(),Vector3RotateByQuaternion({4,0,0},pose.rotation));CHECK(NearlyEqual(arm->position(),expected,.05f));
+    const auto expected=Vector3Add(base->position(),Vector3RotateByQuaternion({4,0,0},pose.rotation));if(!NearlyEqual(arm->position(),expected,.05f))std::fprintf(stderr,"Joint animated actual %.5f %.5f %.5f expected %.5f %.5f %.5f\n",arm->position().x,arm->position().y,arm->position().z,expected.x,expected.y,expected.z);CHECK(NearlyEqual(arm->position(),expected,.05f));
     auto* clone=scene.duplicateTree(*model);CHECK(clone);physics.syncScene(scene);CHECK(physics.jointCount()==2);
     int remapped=0;for(const auto& node:scene.objects())if(clone->isAncestorOf(node.get())&&node->instanceClass()==InstanceClass::Attachment){
         const auto target=static_cast<const Attachment&>(*node).jointTarget();if(target){++remapped;CHECK(clone->isAncestorOf(scene.find(target)));CHECK(target!=b->id());}}
