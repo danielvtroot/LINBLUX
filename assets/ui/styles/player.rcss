@@ -16,12 +16,8 @@
 #game-topbar button:active { background-color: #5d6269e0; }
 #game-topbar button.selected { background-color: #ffffff19; }
 #game-topbar button:focus { border-color: #c8d9f5; }
-/* Restore the slim gameplay bar, not a labelled/debug information card. */
-#health { position: absolute; top: 14px; right: 14px; width: 180px; height: 20px; display: block; padding: 0; border: 2px #08090bee; border-radius: 10px; background-color: #3a3d42f2; pointer-events: none; }
-.health-track { height: 100%; width: 100%; border-radius: 8px; background-color: #5b5e63; position: relative; overflow: hidden; }
-#health-fill, #health-trail { position: absolute; left: 0; top: 0; height: 100%; width: 100%; border-radius: 8px; decorator: none; }
-#health-trail { background-color: #ffffff91; }
-#health-fill { background-color: #49d78a; }
+/* Health is rendered once in the shared gameplay texture. */
+#health { display: none; pointer-events: none; }
 /* The software cursor follows the captured virtual pointer supplied by C++.
    It is absent when capture is suspended, even if Shift Lock is requested. */
 #mouse-lock-cursor { position: absolute; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: -14px 0 0 -14px; pointer-events: none; focus: none; }

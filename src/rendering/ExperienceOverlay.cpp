@@ -2,14 +2,34 @@
 #include "game/Runtime.h"
 #include "game/ImageAssets.h"
 #include <algorithm>
+#include <cstdio>
 namespace loblox {
 namespace {Font overlayFont{};bool fontAttempted=false;
 Font OverlayFont(){if(!fontAttempted){fontAttempted=true;for(const char* file:{"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"})if(FileExists(file)){const auto loaded=LoadFontEx(file,32,nullptr,256);if(loaded.texture.id!=GetFontDefault().texture.id)overlayFont=loaded;if(overlayFont.texture.id)SetTextureFilter(overlayFont.texture,TEXTURE_FILTER_BILINEAR);break;}}return overlayFont.texture.id?overlayFont:GetFontDefault();}}
 Font ExperienceOverlayFont(){return OverlayFont();}
 void ClearExperienceOverlayResources(){if(overlayFont.texture.id){if(IsWindowReady())UnloadFont(overlayFont);else{UnloadFontData(overlayFont.glyphs,overlayFont.glyphCount);MemFree(overlayFont.recs);}}overlayFont={};fontAttempted=false;}
 
+void DrawHealthHud(const game::RuntimeSession& runtime,int width,int height,Font font){
+    if(runtime.state()!=game::RuntimeState::Playing||!runtime.healthHud().visible)return;
+    if(font.texture.id==GetFontDefault().texture.id)font=OverlayFont();
+    const float scale=std::clamp(height/720.f,.75f,1.5f),radius=34*scale;
+    const Vector2 center{width-52*scale,58*scale};
+    const float fraction=runtime.healthHud().sample(runtime.health(),runtime.settings().maxHealth,GetFrameTime());
+    DrawCircleV(center,radius+7*scale,{12,12,16,225});
+    DrawRing(center,radius-5*scale,radius,0,360,96,{62,57,63,255});
+    // raylib's ring starts at +X; -90 places zero at the top.
+    if(fraction>0)DrawRing(center,radius-5*scale,radius,-90,-90+360*fraction,96,{215,38,63,255});
+    char value[32];std::snprintf(value,sizeof(value),"%.0f",runtime.health());
+    const float size=21*scale;const auto measured=MeasureTextEx(font,value,size,scale);
+    DrawTextEx(font,value,{center.x-measured.x/2,center.y-13*scale},size,scale,{246,242,245,255});
+    std::snprintf(value,sizeof(value),"/ %.0f",runtime.settings().maxHealth);
+    const auto sub=MeasureTextEx(font,value,10*scale,.5f*scale);
+    DrawTextEx(font,value,{center.x-sub.x/2,center.y+11*scale},10*scale,.5f*scale,{185,177,184,255});
+}
+
 void DrawExperienceOverlay(const game::RuntimeSession& runtime,int width,int height,Font font){
     if(runtime.state()!=game::RuntimeState::Playing)return;
+    DrawHealthHud(runtime,width,height,font);
     if(font.texture.id==GetFontDefault().texture.id)font=OverlayFont();
     const float scale=std::clamp(height/720.f,1.f,1.4f);const Color panel{15,15,19,225},red{215,38,63,255},text{242,242,245,255},muted{185,185,195,255};
     auto label=[&](const std::string& value,float x,float y,float size,Color color){DrawTextEx(font,value.c_str(),{x,y},size*scale,scale,color);};

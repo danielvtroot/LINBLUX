@@ -306,6 +306,11 @@ if(XVFB_RUN_EXECUTABLE)
 
     # Script-built UI: the same raylib renderer the Studio Play texture and the
     # Player use, verified by framebuffer pixels at two window sizes.
+    add_executable(linblux_health_hud_tests tests/health_hud_main.cpp)
+    target_link_libraries(linblux_health_hud_tests PRIVATE linblux_renderer)
+    add_test(NAME linblux_health_hud COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_health_hud_tests>)
+    set_tests_properties(linblux_health_hud PROPERTIES TIMEOUT 40 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;player;ui;game")
+
     add_executable(linblux_lua_ui_render_tests tests/lua_ui_visual_main.cpp)
     target_link_libraries(linblux_lua_ui_render_tests PRIVATE linblux_renderer)
     add_test(NAME linblux_lua_ui_render COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_lua_ui_render_tests>)

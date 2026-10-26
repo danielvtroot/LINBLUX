@@ -932,7 +932,7 @@ if(c.action=="r6")showAdvanced("rig");
             el("pause-panel")->Animate("opacity",Rml::Property(1.f,Rml::Unit::NUMBER),.12f,Rml::Tween{},1,false,0,&from);
         }
         pauseWasOpen=paused;
-        display("pause",paused,"flex");display("health",active&&!paused);display("game-topbar",active,"flex");
+        display("pause",paused,"flex");display("health",false);display("game-topbar",active,"flex");
         const auto cursor=ui.gameplayCursor();
         display("mouse-lock-cursor",active&&cursor.visual==GameCursorVisual::MouseLock);
         style("mouse-lock-cursor","left",Num(cursor.position.x-view.x)+"px");
@@ -943,18 +943,7 @@ if(c.action=="r6")showAdvanced("rig");
         for(const auto* name:{"game","settings","controls","about"}) {display(std::string(name)+"-page",page==name);el(std::string("page-")+name)->SetClass("active",page==name);}
         if(!active)return;
         const float health=ui.runtime_.health(),maximum=std::max(1.f,ui.runtime_.settings().maxHealth);
-        // Snap at the ends so 0/100 and respawn are exact on the next frame;
-        // intermediate damage still animates.
-        if(health<=0.f||health>=maximum)shownHealth=health;
-        else shownHealth=Lerp(shownHealth,health,1-std::exp(-10*std::min(GetFrameTime(),.1f)));
-        if(health<=0.f||health>=maximum)healthTrail=health;
-        else healthTrail=std::max(shownHealth,Lerp(healthTrail,health,1-std::exp(-3*std::min(GetFrameTime(),.1f))));
         char s[64];std::snprintf(s,sizeof(s),"%.0f / %.0f",health,maximum);text("pause-health",s);
-        const std::string healthLabel="Health "+std::string(s);
-        if(attr(el("health"),"aria-label")!=healthLabel)el("health")->SetAttribute("aria-label",healthLabel);
-        style("health-fill","width",Num(100*std::clamp(shownHealth/maximum,0.f,1.f))+"%");
-        style("health-trail","width",Num(100*std::clamp(healthTrail/maximum,0.f,1.f))+"%");
-        style("health-fill","background-color",health/maximum<=.3f?"#f16b74":health/maximum<=.7f?"#edc464":"#49d78a");
         text("player-name",ui.runtime_.rig().name);text("map-name",std::filesystem::path(ui.projectPath_).filename().string());
         if(paused) {
             auto set=[&](const char* id,const std::string& v){if(auto* f=dynamic_cast<Rml::ElementFormControl*>(el(id));f&&context->GetFocusElement()!=f&&f->GetValue()!=v)f->SetValue(v);};

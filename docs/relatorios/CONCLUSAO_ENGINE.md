@@ -401,3 +401,13 @@ começa do zero e deve reutilizar o que já está pronto:
 
 Nada de combate foi implementado nesta sessão; o checkpoint publicado termina na
 UI por Lua. Alpha continua sem tag/Release e sem teste de instalação limpa.
+
+## 26/10 — HUD circular (retomada desenvolvimento)
+
+IMPLEMENTADO/TESTADO: indicador vermelho compartilhado Studio/Player, ligado à
+saúde real; dano/cura, morte/respawn, animação, escala, pausa, reinício e
+`linblux.ui.health_hud(bool)` validados. Relatório30: FAST16/16 (global parcial),
+3/3 gráficos supervisionados em28,948 s. Captura720p inspecionada. Trabalho
+desenvolvimento de combate/RifleDemo preservado; continua sem validação/publicação.
+Próximo: menu lateral e atualização dos testes antigos de apresentação;
+seguem Demo, pacote, instalação limpa, segurança/licenças e lançamento.
