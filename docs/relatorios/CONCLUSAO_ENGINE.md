@@ -275,3 +275,17 @@ foram preservados; validação integral futura ainda necessária.
 
 Encerramento solicitado por limite de créditos; a missão NÃO está concluída.
 Retomar pelo relatório23 e MODELOS.md, preservando os diffs alheios restantes.
+
+## Alpha 0.1.0 — retomada de 26/10/2026
+
+Base main7d1c470 confirmada, AutoBackup ativo; diffs alheios preservados.
+Attachments: IMPLEMENTADO/TESTADO/VALIDADO NO PLAYER em e9d257e4c2e5deb69cbc94145c927c858b831514.
+Criação e edição no Explorador/Propriedades, pose local/global, direção Lua,
+clone/remoção, JSONv5, reabertura e pacote .lo/Mundo Padrão conferidos.
+FAST17/17; IMPACT17/17 (global parcial); models_ui47,226 s aprovado e captura
+inspecionada. Relatório24 e ATTACHMENTS.md contêm evidência/limites.
+
+PENDENTE imediato: juntas/vínculos físicos. Depois inventário/E/Delete/hotbar,
+áudio completo, UI Lua, combate/RifleDemo, HUD/menu e Demo integrada.
+Alpha NÃO pronto para Release: pacote/instalação limpa, regressão final,
+segurança e licenças ainda precisam validação. Não foi criado tag/Release.

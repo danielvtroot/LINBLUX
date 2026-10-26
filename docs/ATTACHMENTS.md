@@ -11,7 +11,7 @@ vem do Modelo ancestral mais próximo. Alterar Part.size altera a geometria,
 sem redefinir a unidade local do Attachment. Escalar o Modelo escala os offsets.
 Reparentar conserva a pose global das âncoras, ajustando os offsets locais.
 Desagrupar um Modelo que tenha Attachments diretamente nele é recusado quando
-o destino não aceita Attachments; remova ou reparentie a âncora antes.
+o destino não aceita Attachments; remova ou mova a âncora para outro pai antes.
 
 ```lua
 local v = linblux.vec3
@@ -25,7 +25,7 @@ print(boca.world_position.x, boca.direction.z)
 
 `position`, `rotation`, `transform` são locais e editáveis. `world_position`,
 `world_rotation`, `world_transform` e `direction` são calculados e somente
-leitura. Transformação local aceita apenas position/rotation; escala local é1.
+leitura. Transformação local aceita apenas position/rotation; escala local é 1.
 `name`, `id`, `parent`, clonagem, destruição e enumeração/remoção de componentes
 usam os mecanismos existentes. Referência destruída não vira ponteiro livre.
 Exemplo executável completo: assets/examples/lua/attachments.lua.
