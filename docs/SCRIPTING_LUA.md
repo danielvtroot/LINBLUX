@@ -600,3 +600,33 @@ Exemplos reais:
   música em loop com controle de volume e pausa por teclas.
 - [audio_som_interacao.lua](../assets/examples/lua/audio_som_interacao.lua):
   som ao entrar/sair do contato com uma peça.
+
+## UI por Lua
+
+`linblux.ui` cria painéis, textos, botões, imagens e indicadores pertencentes ao
+script que os criou. O modelo é desenhado pelo mesmo renderizador no Play do
+Studio e no Player, com âncoras em uma tela virtual 1280×720, limites
+explícitos e limpeza automática quando o script termina.
+
+```lua
+local hud = linblux.ui.create("panel", {anchor = "bottom-right", x = -24, y = -24,
+    width = 240, height = 96})
+local ammo = linblux.ui.create("label", {parent = hud, x = 16, y = 12,
+    text = "30 / 30"})
+local fire = linblux.ui.create("button", {parent = hud, anchor = "bottom-right",
+    x = -16, y = -16, width = 120, height = 32, text = "Atirar"})
+
+linblux.ui.on(fire, "click", function()
+    linblux.ui.set(ammo, "text", "29 / 30")
+end)
+```
+
+API completa, propriedades, eventos e limites: [UI_LUA.md](UI_LUA.md).
+
+Exemplos reais:
+
+- [ui_municao.lua](../assets/examples/lua/ui_municao.lua): contador de munição.
+- [ui_notificacao.lua](../assets/examples/lua/ui_notificacao.lua): notificação
+  interativa com aceitar/dispensar.
+- [ui_hud_vida.lua](../assets/examples/lua/ui_hud_vida.lua): HUD de vida ligado
+  ao personagem.

@@ -84,7 +84,7 @@ end)
                 EndDrawing();
             }
         };
-        auto checkLayout = [&](const char* phase) {
+        auto checkLayout = [&](const char* phase, bool expect_red) {
             const auto* panel = runtime.ui().find(panelId);
             const auto* button = runtime.ui().find(buttonId);
             require(panel && button, std::string(phase) + ": elements missing");
@@ -99,11 +99,15 @@ end)
             const auto pixel = Pixel(image, int(panelRect.x + panelRect.width * .5f),
                                      int(panelRect.y + panelRect.height * .2f));
             UnloadImage(image);
-            require(Reddish(pixel), std::string(phase) + ": panel was not drawn (pixel " +
+            // The panel is injected with a solid LINBLUX red and turns green
+            // after the click; either way it must be painted, not background.
+            const bool painted = expect_red ? Reddish(pixel)
+                : (pixel.g > 140 && pixel.r < 120 && pixel.a > 200);
+            require(painted, std::string(phase) + ": panel was not drawn (pixel " +
                 std::to_string(pixel.r) + "," + std::to_string(pixel.g) + "," + std::to_string(pixel.b) + ")");
             return panelRect;
         };
-        checkLayout("960x600");
+        checkLayout("960x600", true);
         require(runtime.scene().workspace()->attributes().count("clicked") == 0, "clicked before the click");
         {
             const auto* button = runtime.ui().find(buttonId);
@@ -125,7 +129,7 @@ end)
         // A real resize keeps the anchored layout and the drawing visible.
         SetWindowSize(1280, 720);
         for (int i = 0; i < 30 && (GetScreenWidth() != 1280 || GetScreenHeight() != 720); ++i) renderFrames(1);
-        checkLayout("1280x720");
+        checkLayout("1280x720", false);
         runtime.stop(false);
         require(runtime.ui().count() == 0, "UI survived stop");
         std::printf("Lua UI render: anchored panel drawn and clicked at 960x600 and 1280x720\n");
