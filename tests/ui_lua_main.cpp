@@ -31,9 +31,6 @@ const game::UiElement* findKind(const game::UiModel& ui, game::UiKind kind, cons
         if (element->kind == kind && (text.empty() || element->text == text)) return element;
     return nullptr;
 }
-bool hasAttribute(const Instance& object, const char* name) {
-    return object.attributes().count(name) != 0;
-}
 double attributeNumber(const Instance& object, const char* name) {
     const auto it = object.attributes().find(name);
     if (it == object.attributes().end()) return 0;
@@ -64,7 +61,6 @@ struct Fixture {
     }
 };
 void expectError(const std::string& source, const std::string& needle) {
-    std::fprintf(stderr, "expectError: %s\n", needle.c_str());
     Fixture fixture(source);
     game::RuntimeSession runtime;
     std::string error;
@@ -163,25 +159,17 @@ end)
         require(ui.count() == 0, "UI survived RuntimeSession::stop");
 
         // ---- Validation, budgets and ownership --------------------------
-        {
-            Fixture probe("print(type(linblux.ui), type(linblux.ui.set), type(linblux.ui.create), linblux.ui.count())");
-            game::RuntimeSession session;
-            require(session.start(probe.scene, error), "probe: " + error);
-            session.update(1.f / 60, {});
-            for (const auto& message : session.scripts().messages())
-                std::fprintf(stderr, "PROBE %d %s\n", int(message.error), message.text.c_str());
-            session.stop(false);
-        }
         expectError("linblux.ui.set(9999, \"text\", \"x\")", "não existe");
         expectError("linblux.ui.create(\"spaceship\", {})", "tipo de UI desconhecido");
         expectError(R"(local e = linblux.ui.create("label", {})
 linblux.ui.set(e, "text", string.rep("a", 600)))", "512 bytes");
         expectError(R"(local e = linblux.ui.create("image", {image = "assets/missing.png"}))", "não existe nos recursos");
-        expectError(R"(local a = linblux.ui.create("panel", {})
+        expectError(R"lua(local a = linblux.ui.create("panel", {})
 local b = linblux.ui.create("panel", {parent = a})
 local c = linblux.ui.create("panel", {parent = b})
 local d = linblux.ui.create("panel", {parent = c})
-linblux.ui.create("panel", {parent = d})", "Profundidade máxima");
+linblux.ui.create("panel", {parent = d})
+)lua", "Profundidade máxima");
         expectError(R"(for i = 1, 100 do linblux.ui.create("label", {text = "x"}) end)", "Limite de alterações");
         expectError(R"(local e = linblux.ui.create("button", {text = "x"})
 linblux.ui.on(e, "teleport", function() end))", "evento de UI desconhecido");
