@@ -96,6 +96,8 @@ local function atirar()
     tocar(SOM_TIRO, 0.7)
     local origem = boca.world_position
     local direcao = boca.direction
+    -- Consulte antes de criar efeitos: o traçante também é uma Part visível.
+    local acerto = linblux.physics.raycast(origem, direcao, 200, arma)
     faisca(v(origem.x + direcao.x * 0.4, origem.y + direcao.y * 0.4, origem.z + direcao.z * 0.4))
     -- Traçante é uma Part física real: a física existente a move e o tempo a limpa.
     local tracer = linblux.scene.create("part", {name="Tracante",
@@ -108,7 +110,6 @@ local function atirar()
         if tracer then tracer:destroy() end
     end)
     -- Dano: consulta física real a partir do Attachment, ignorando o próprio item.
-    local acerto = linblux.physics.raycast(origem, direcao, 200, arma)
     if acerto then
         faisca(acerto.point)
         tocar(SOM_IMPACTO, 0.5)

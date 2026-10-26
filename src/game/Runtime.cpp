@@ -903,7 +903,7 @@ bool RuntimeSession::raycastParts(Vector3 origin,Vector3 direction,float distanc
         bool needsCollision(btBroadphaseProxy* proxy) const override {
             const auto* body=static_cast<const btCollisionObject*>(proxy->m_clientObject);
             const auto* part=static_cast<const Part*>(body->getUserPointer());
-            if(!part)return false;
+            if(!part||InventoryHidden(*part))return false;
             if(part->id()==ignored)return false;
             if(ignored)for(const auto* node=part->parent();node;node=node->parent())if(node->id()==ignored)return false;
             return ClosestRayResultCallback::needsCollision(proxy);
