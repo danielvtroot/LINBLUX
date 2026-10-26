@@ -389,8 +389,8 @@ add_test(NAME linblux_engine_default_paths COMMAND linblux_engine_default_paths_
 # Script-built UI: model, layout, events, budgets, cleanup and the examples.
 add_executable(linblux_ui_lua_tests tests/ui_lua_main.cpp)
 target_link_libraries(linblux_ui_lua_tests PRIVATE linblux_engine)
-add_test(NAME linblux_ui_lua COMMAND linblux_ui_lua_tests)
-set_tests_properties(linblux_ui_lua PROPERTIES TIMEOUT 60)
+add_test(NAME linblux_lua_interface COMMAND linblux_ui_lua_tests)
+set_tests_properties(linblux_lua_interface PROPERTIES TIMEOUT 60)
 
 # Preserve notices for every static third-party component shipped in the application.
 install(FILES LICENSE DESTINATION share/linblux/licenses COMPONENT Linblux RENAME LINBLUX-MIT.txt)
@@ -485,7 +485,7 @@ linblux_turbo_headless(linblux_help "smoke;headless;app")
 linblux_turbo_headless(linblux_defaults "unit;headless;core;experiences;serialization")
 linblux_turbo_headless(linblux_engine_default_lifecycle "unit;headless;core;experiences;serialization")
 linblux_turbo_headless(linblux_engine_default_paths "unit;headless;core;experiences;serialization")
-linblux_turbo_headless(linblux_ui_lua "unit;headless;scripting;ui;game")
+linblux_turbo_headless(linblux_lua_interface "unit;headless;scripting;ui;game")
 linblux_turbo_headless(linblux_atlas "unit;headless;tooling;atlas")
 
 linblux_turbo_graphics(linblux_decal_render "graphics;integration;rendering;game")
