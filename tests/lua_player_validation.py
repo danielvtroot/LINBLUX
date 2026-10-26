@@ -21,6 +21,7 @@ def main():
     example = (root / "assets/examples/lua/temporizadores.lua").read_text()
     example += '\nlinblux.events.on("stop", function() assert(linblux.scene.root:get_attribute("timer_concluido")) end)\n'
     cases = [
+        ("SurfacePlayer.lua","local p=linblux.scene.find('SurfacePart');local c=p:components();assert(#c==1 and c[1].type=='decal');p:remove_component(c[1]);assert(#p:components()==0)",0,"erros Lua: 0"),
         ("CorposRigidos.lua",(root / "assets/examples/lua/corpos_rigidos.lua").read_text()+'\nlinblux.events.on("stop",function() assert(linblux.scene.root:get_attribute("corpos_rigidos_concluido")) end)',0,"erros Lua: 0"),
         ("CorpoInvalido.lua","linblux.scene.create('part',{body={density=-1}})",1,"Propriedades físicas fora dos limites"),
         ("ConsultasControle.lua",(root / "assets/examples/lua/consultas_controle.lua").read_text()+'\nlinblux.events.on("stop",function() assert(linblux.scene.root:get_attribute("consultas_controle_concluido")) end)',0,"erros Lua: 0"),
@@ -65,6 +66,13 @@ def main():
                 scene["objects"].append({"class": "Script", "id": scene["nextId"], "name": "MuitasMensagens.lua",
                     "parent": workspace, "source": "for i=1,300 do print('buffer', i) end", "enabled": True})
                 scene["nextId"] += 1
+            if name == "SurfacePlayer.lua":
+                parent=scene["nextId"];scene["nextId"]+=2
+                scene["objects"].append({"class":"Part","id":parent,"name":"SurfacePart","parent":workspace,
+                    "shape":"Block","position":[40,2,0],"rotation":[0,0,0],"size":[2,2,2],"color":[255,255,255,255],
+                    "material":"SmoothPlastic","anchored":True,"canCollide":True})
+                scene["objects"].append({"class":"Decal","id":parent+1,"name":"Adesivo","parent":parent,
+                    "surface":{"image":"assets/builtin/character-face.png","face":0,"rotation":27,"transparency":0.3}})
             path = Path(temporary) / (name + ".json")
             path.write_text(json.dumps(scene, ensure_ascii=False))
             before = path.read_bytes()
