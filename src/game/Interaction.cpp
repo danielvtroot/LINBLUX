@@ -40,7 +40,7 @@ InstanceId InteractionSystem::update(Vector3 player,const ScriptInput& input,flo
         selected=candidate.id;break;}
     if(!selected){prompt_={};elapsed_=0;return 0;}
     if(prompt_.object!=selected){elapsed_=0;prompt_={};}
-    const auto& options=entries_.at(selected);prompt_.object=selected;prompt_.label=options.label;prompt_.key="E";
+    const auto& options=entries_.at(selected);prompt_.object=selected;prompt_.label=options.label;prompt_.key="E";prompt_.gamepad=input.gamepad;
     for(const auto& key:ScriptKeys)if(key.code==options.key){prompt_.key=key.name;for(auto& c:prompt_.key)if(c>='a'&&c<='z')c=char(c-'a'+'A');break;}
     const bool held=input.keys[options.key]||pad;
     if(!held||latched_)elapsed_=0;else elapsed_+=dt;

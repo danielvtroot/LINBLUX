@@ -21,7 +21,7 @@ void DrawExperienceOverlay(const game::RuntimeSession& runtime,int width,int hei
         if(slots.size()>9)label("PgUp / PgDn · página "+std::to_string(runtime.hotbarPage()+1),start,y-22*scale,13,muted);
     }
     const auto& prompt=runtime.interactions().prompt();if(prompt.object){const float w=std::min(380*scale,float(width)-32),x=(width-w)/2,y=height-(visible?168:112)*scale;
-        DrawRectangleRounded({x,y,w,76*scale},.12f,6,panel);label("Segure "+prompt.key+" / X",x+16*scale,y+10*scale,14,muted);
+        DrawRectangleRounded({x,y,w,76*scale},.12f,6,panel);label("Segure "+prompt.key+(prompt.gamepad?" / botão X":""),x+16*scale,y+10*scale,14,muted);
         const auto name=fit(prompt.label,w-32*scale,19);label(name==prompt.label?name:name+"...",x+16*scale,y+31*scale,19,text);
         DrawRectangle(int(x+16*scale),int(y+63*scale),int(w-32*scale),int(4*scale),{60,60,68,255});DrawRectangle(int(x+16*scale),int(y+63*scale),int((w-32*scale)*prompt.progress),int(4*scale),red);
     }

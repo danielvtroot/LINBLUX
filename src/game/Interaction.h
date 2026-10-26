@@ -7,7 +7,7 @@
 namespace loblox {class Scene;class PhysicsWorld;}
 namespace loblox::game {
 struct InteractionOptions {std::string label;float distance=6,holdSeconds=.6f;int key=KEY_E;bool automaticItem=false;};
-struct InteractionPrompt {InstanceId object=0;std::string label,key;float progress=0;};
+struct InteractionPrompt {InstanceId object=0;std::string label,key;float progress=0;bool gamepad=false;};
 class InteractionSystem {
 public:
     InteractionSystem(Scene& scene,PhysicsWorld& physics):scene_(scene),physics_(physics){}
