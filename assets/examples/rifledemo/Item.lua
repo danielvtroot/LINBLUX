@@ -17,11 +17,12 @@ local SOM_VAZIO = "assets/vazio.wav"
 
 local painel, rotulo, ferrolho, boca
 
-for _, filho in ipairs(arma:children()) do
-    if filho.name == "Ferrolho" then ferrolho = filho end
+for _, filho in ipairs(arma:descendants()) do
+    if string.sub(filho.name, 1, 8) == "Ferrolho" then ferrolho = filho end
 end
--- Cópias recebem sufixo numérico: o Attachment é localizado pelo prefixo.
-for _, filho in ipairs(arma:children()) do
+-- A boca pertence à Part do cano, não diretamente ao Modelo. Percorra a
+-- hierarquia real; cópias recebem sufixos e são localizadas pelo prefixo.
+for _, filho in ipairs(arma:descendants()) do
     if string.sub(filho.name, 1, 10) == "BocaDoCano" then boca = filho end
 end
 

@@ -17,14 +17,14 @@ try:
         found=subprocess.run(['xdotool','search','--onlyvisible','--pid',str(process.pid)],capture_output=True,text=True,timeout=3)
         if found.returncode==0:window=found.stdout.splitlines()[-1]
         time.sleep(.1)
-    assert window,'no Player window';command('windowfocus',window);command('windowmove',window,0,0);time.sleep(.3)
+    assert window,'no Player window';command('windowfocus',window);command('windowmove',window,0,0);time.sleep(2)
     def key(value):
-        command('keydown',value);time.sleep(.08);command('keyup',value);time.sleep(.3)
-    def click(x,y):command('mousemove','--window',window,int(x),int(y));command('mousedown',1);time.sleep(.08);command('mouseup',1);time.sleep(.25)
+        command('keydown',value);time.sleep(.25);command('keyup',value);time.sleep(.3)
+    def click(x,y):command('mousemove','--window',window,int(x),int(y));command('mousedown',1);time.sleep(.25);command('mouseup',1);time.sleep(.25)
     def shot(name):
         path=root/(name+'.png');subprocess.run(['scrot','-o','-u',str(path)],check=True,timeout=5);return Image.open(path).convert('RGB')
     for width,height in [(1280,720),(1920,1080)]:
-        command('windowsize',window,width,height);time.sleep(.5);key('Escape');image=shot('menu-'+str(width))
+        command('windowsize',window,width,height);time.sleep(1);key('Escape');image=shot('menu-'+str(width))
         # Actual left panel covers the window edge; the world remains visible right.
         r,g,b=image.getpixel((8,180));assert max(r,g,b)<45,(r,g,b)
         scale=height/720;click(int(70*scale),int(270*scale));shot('audio-'+str(width))
