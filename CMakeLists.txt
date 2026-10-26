@@ -138,7 +138,7 @@ add_library(linblux_editing STATIC
 target_link_libraries(linblux_editing PUBLIC linblux_engine)
 add_library(linblux_core INTERFACE) # transitional test/embedding facade
  target_link_libraries(linblux_core INTERFACE linblux_engine linblux_editing)
-add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp src/rendering/ExperienceOverlay.cpp src/rendering/LuaUiRenderer.cpp)
+add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp src/rendering/PlayerMenu.cpp src/rendering/ExperienceOverlay.cpp src/rendering/LuaUiRenderer.cpp)
 target_link_libraries(linblux_renderer PUBLIC linblux_engine)
 add_library(linblux_presentation STATIC src/ui/Localization.cpp)
 target_link_libraries(linblux_presentation PUBLIC linblux_engine)
@@ -307,6 +307,11 @@ if(XVFB_RUN_EXECUTABLE)
 
     # Script-built UI: the same raylib renderer the Studio Play texture and the
     # Player use, verified by framebuffer pixels at two window sizes.
+    add_test(NAME linblux_player_menu COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_menu.py $<TARGET_FILE:linblux_player>)
+    set_tests_properties(linblux_player_menu PROPERTIES TIMEOUT 55 LABELS "graphics;integration;player;ui")
+    add_test(NAME linblux_player_menu_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
+    set_tests_properties(linblux_player_menu_ui PROPERTIES TIMEOUT 75 ENVIRONMENT "LINBLUX_PLAYER_MENU_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;player;ui")
+
     add_executable(linblux_health_hud_tests tests/health_hud_main.cpp)
     target_link_libraries(linblux_health_hud_tests PRIVATE linblux_renderer)
     add_test(NAME linblux_health_hud COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_health_hud_tests>)

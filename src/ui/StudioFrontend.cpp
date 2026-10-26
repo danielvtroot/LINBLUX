@@ -313,7 +313,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         }
         const auto action=attr(e,"data-action"),property=attr(e,"data-property"),setting=attr(e,"data-setting");
         std::string v=value(e);if(attr(e,"type")=="checkbox")v=e->HasAttribute("checked")?"true":"false";
-        if(action=="player-volume"){try{SetMasterVolume(std::clamp(std::stof(v),0.f,1.f));}catch(...){}return;}
+        if(action=="player-volume"){if(ui.runtime_.state()!=game::RuntimeState::Paused||!IsAudioDeviceReady())return;try{SetMasterVolume(std::clamp(std::stof(v),0.f,1.f));}catch(...){}return;}
         if(action=="choose-material"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
         if(!property.empty())commands.push_back({"property:"+property,v,e->GetAttribute<InstanceId>("data-node",0)});
         else if(!action.empty())commands.push_back({action,v});
@@ -946,7 +946,8 @@ if(c.action=="r6")showAdvanced("rig");
         const float health=ui.runtime_.health(),maximum=std::max(1.f,ui.runtime_.settings().maxHealth);
         char s[64];std::snprintf(s,sizeof(s),"%.0f / %.0f",health,maximum);text("pause-health",s);
         text("pause-experience",std::filesystem::path(ui.projectPath_).stem().string());
-        text("master-volume-label",std::to_string(int(GetMasterVolume()*100))+"%");
+        if(IsAudioDeviceReady())el("master-volume")->RemoveAttribute("disabled");else el("master-volume")->SetAttribute("disabled","");
+        text("master-volume-label",IsAudioDeviceReady()?std::to_string(int(GetMasterVolume()*100))+"%":"Dispositivo de áudio indisponível nesta sessão.");
         text("player-name",ui.runtime_.rig().name);text("map-name",std::filesystem::path(ui.projectPath_).filename().string());
         if(paused) {
             auto set=[&](const char* id,const std::string& v){if(auto* f=dynamic_cast<Rml::ElementFormControl*>(el(id));f&&context->GetFocusElement()!=f&&f->GetValue()!=v)f->SetValue(v);};

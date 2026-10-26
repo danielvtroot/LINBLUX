@@ -111,6 +111,30 @@ int main() {
         // Optional fast iteration path; the registered CTest always exercises
         // the full editor + player sequence without this environment variable.
         capture("studio-1366");
+        if(std::getenv("LINBLUX_PLAYER_MENU_ONLY")) {
+            for(auto size:{Vector2{1280,720},Vector2{1920,1080}}){
+                resizeWindow(int(size.x),int(size.y));click("play");frames(6);auto& rt=EditorUITestAccess::runtime(ui);
+                CHECK(rt.takeDamage(40,error));key("Escape");frames(16);CHECK(rt.state()==game::RuntimeState::Paused);CHECK(!EditorUITestAccess::captured(ui));
+                const auto vp=ui.frontend()->viewport(),panel=ui.frontend()->elementBounds("pause-panel");
+                CHECK(std::fabs(panel.x-vp.x)<2);CHECK(panel.width<=vp.width*.94f);CHECK(panel.height>=vp.height-2);
+                for(const char* id:{"resume","page-game","page-settings","page-controls","page-audio","page-video","page-about","leave","pause-close"}){
+                    const auto r=ui.frontend()->elementBounds(id);CHECK(r.width>20&&r.height>20);CHECK(r.x>=vp.x&&r.y>=vp.y&&r.x+r.width<=vp.x+vp.width+2&&r.y+r.height<=vp.y+vp.height+2);
+                }
+                capture("side-menu-"+std::to_string(int(size.x)));
+                const auto position=rt.position();event("keydown w");frames(5);event("keyup w");CHECK(Vector3Distance(position,rt.position())<.001f);
+                click("page-settings");const auto mode=rt.settings().cameraMode;click("camera-next");CHECK(rt.settings().cameraMode!=mode);
+                const float sensitivity=rt.settings().sensitivity;const auto slider=ui.frontend()->elementBounds("sensitivity-slider");clickAt({slider.x+slider.width*.7f,slider.y+slider.height/2});CHECK(rt.settings().sensitivity!=sensitivity);
+                const bool shift=rt.settings().enableShiftLock;click("shift-lock");CHECK(rt.settings().enableShiftLock!=shift);
+                click("page-audio");CHECK(ui.frontend()->elementBounds("master-volume").width>80);
+                click("page-video");CHECK(ui.frontend()->elementBounds("fullscreen-value").width>40);
+                click("page-controls");CHECK(ui.frontend()->elementText("controls-page").find("W A S D")!=std::string::npos);
+                click("page-about");capture("side-help-"+std::to_string(int(size.x)));
+                click("page-game");click("respawn");frames(4);CHECK(rt.health()==rt.settings().maxHealth);
+                if(rt.state()!=game::RuntimeState::Paused)key("Escape");frames(14);click("pause-close");frames(14);CHECK(rt.state()==game::RuntimeState::Playing);
+                key("Escape");frames(14);click("leave");CHECK(!ui.playing());
+            }
+            std::printf("Player side menu: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
         if(std::getenv("LINBLUX_ITEM_CONTROLS_ONLY")) {
             resizeWindow(1280,720);
             scene.createScript(InstanceClass::Script,nullptr,"Coleta.lua")->source=R"(

@@ -56,11 +56,11 @@ int main(int argc,char** argv) {
         SceneRenderer renderer;PlayerMenu menu;const auto logo=game::AssetTexture(game::BuiltinAssetPath("logo.png"));int rendered=0;
         while(!WindowShouldClose()&&(!frames||rendered++<frames)) {
             const Rectangle menuButton{16,16,104,52};
-            if(IsKeyPressed(KEY_ESCAPE)||(CheckCollisionPointRec(GetMousePosition(),menuButton)&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT))){if(runtime.state()==game::RuntimeState::Paused)runtime.resume();else runtime.pause();EnableCursor();}
+            if(IsKeyPressed(KEY_ESCAPE)||(CheckCollisionPointRec(GetMousePosition(),menuButton)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))){if(runtime.state()==game::RuntimeState::Paused)runtime.resume();else runtime.pause();EnableCursor();}
             const bool paused=runtime.state()==game::RuntimeState::Paused;
             game::PlayerInput input;
             if(!paused)input.script=game::CaptureScriptInput();
-            if(!paused){input.movement={float(IsKeyDown(KEY_D)-IsKeyDown(KEY_A)),float(IsKeyDown(KEY_W)-IsKeyDown(KEY_S))};input.jump=IsKeyDown(KEY_SPACE);input.shiftKey=IsKeyDown(KEY_LEFT_SHIFT);input.zoom=GetMouseWheelMove();if(!runtime.playerCamera().scripted()&&(IsMouseButtonDown(MOUSE_BUTTON_RIGHT)||runtime.shiftLockActive())){if(!IsCursorHidden())DisableCursor();input.look=GetMouseDelta();}else if(IsCursorHidden())EnableCursor();}
+            if(!paused){input.movement={float(IsKeyDown(KEY_D)-IsKeyDown(KEY_A)),float(IsKeyDown(KEY_W)-IsKeyDown(KEY_S))};input.jump=IsKeyDown(KEY_SPACE);input.shiftKey=IsKeyDown(KEY_LEFT_SHIFT);input.zoom=GetMouseWheelMove();if(!runtime.playerCamera().scripted()&&(IsMouseButtonDown(MOUSE_BUTTON_RIGHT)||runtime.shiftLockActive()||runtime.playerCamera().firstPerson()||runtime.settings().cameraLock)){if(!IsCursorHidden())DisableCursor();input.look=GetMouseDelta();}else if(IsCursorHidden())EnableCursor();}
             // Script UI click boxes are viewport pixels. A hidden cursor means
             // the camera owns the pointer, so HUD buttons must not fire.
             if(!paused&&!IsCursorHidden()) {
