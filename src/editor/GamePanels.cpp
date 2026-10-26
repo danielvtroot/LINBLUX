@@ -1,4 +1,5 @@
 #include "rendering/ExperienceOverlay.h"
+#include "rendering/LuaUiRenderer.h"
 #include "ui/Localization.h"
 #include "ui/ExperienceUI.h"
 #include "editor/EditorUI.h"
@@ -284,6 +285,15 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
         if (context.hovered || gameplayCapture_) input.zoom = raw.wheel;
     }
     gameplaySkipDelta_ = false;
+    if(runtime_.state()==game::RuntimeState::Playing) {
+        // Script UI uses viewport-local pixels. The right-button capture keeps
+        // owning the pointer, so a camera drag never clicks a HUD button.
+        const Vector2 local{raw.mouse.x-image.x,raw.mouse.y-image.y};
+        if(local.x>=0&&local.y>=0&&local.x<viewportWidth_&&local.y<viewportHeight_&&!gameplayCapture_) {
+            runtime_.uiPointer(local,float(viewportWidth_),float(viewportHeight_));
+            if(raw.leftPressed&&runtime_.uiClickAt(local,float(viewportWidth_),float(viewportHeight_)))context.hovered=false;
+        }
+    }
     runtime_.update(GetFrameTime(), input);
     // The runtime consumes the Shift edge once. Capture follows its resulting
     // state in this same frame, including zoom to first person and respawn.
@@ -302,6 +312,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     renderer_.drawScene(runtime_.scene(), runtime_.playerCamera().camera(), viewportWidth_, viewportHeight_,
         kInvalidInstanceId, runtime_.playerCamera().avatarHidden() ? nullptr : &character, false);
     DrawExperienceOverlay(runtime_,viewportWidth_,viewportHeight_);
+    DrawLuaUi(runtime_,viewportWidth_,viewportHeight_);
     EndTextureMode();
     resolveViewport();
     if(frontend_)return; // RML owns gameplay presentation; no duplicate HUD/menu.

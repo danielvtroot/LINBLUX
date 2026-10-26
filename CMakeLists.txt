@@ -93,6 +93,7 @@ add_library(linblux_engine STATIC
   src/game/Navigation.cpp
   src/game/Npc.cpp
   src/game/Audio.cpp
+  src/game/Ui.cpp
   src/game/ProgressStore.cpp
   src/game/Spawn.cpp
   src/core/Diagnostics.cpp
@@ -136,7 +137,7 @@ add_library(linblux_editing STATIC
 target_link_libraries(linblux_editing PUBLIC linblux_engine)
 add_library(linblux_core INTERFACE) # transitional test/embedding facade
  target_link_libraries(linblux_core INTERFACE linblux_engine linblux_editing)
-add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp src/rendering/ExperienceOverlay.cpp)
+add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp src/rendering/ExperienceOverlay.cpp src/rendering/LuaUiRenderer.cpp)
 target_link_libraries(linblux_renderer PUBLIC linblux_engine)
 add_library(linblux_presentation STATIC src/ui/Localization.cpp)
 target_link_libraries(linblux_presentation PUBLIC linblux_engine)
@@ -303,6 +304,13 @@ if(XVFB_RUN_EXECUTABLE)
     add_test(NAME linblux_visual_studio COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_visual_studio_tests>)
     set_tests_properties(linblux_visual_studio PROPERTIES TIMEOUT 180 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
 
+    # Script-built UI: the same raylib renderer the Studio Play texture and the
+    # Player use, verified by framebuffer pixels at two window sizes.
+    add_executable(linblux_lua_ui_render_tests tests/lua_ui_visual_main.cpp)
+    target_link_libraries(linblux_lua_ui_render_tests PRIVATE linblux_renderer)
+    add_test(NAME linblux_lua_ui_render COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_lua_ui_render_tests>)
+    set_tests_properties(linblux_lua_ui_render PROPERTIES TIMEOUT 120 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
+
     add_executable(linblux_sky_capture_tests tests/sky_capture_main.cpp)
     target_link_libraries(linblux_sky_capture_tests PRIVATE linblux_editor)
     add_test(NAME linblux_sky_capture COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_sky_capture_tests>)
@@ -378,6 +386,11 @@ add_test(NAME linblux_engine_default_lifecycle COMMAND linblux_engine_default_te
 add_executable(linblux_engine_default_paths_tests tests/defaults_paths_main.cpp)
 target_link_libraries(linblux_engine_default_paths_tests PRIVATE linblux_engine)
 add_test(NAME linblux_engine_default_paths COMMAND linblux_engine_default_paths_tests)
+# Script-built UI: model, layout, events, budgets, cleanup and the examples.
+add_executable(linblux_ui_lua_tests tests/ui_lua_main.cpp)
+target_link_libraries(linblux_ui_lua_tests PRIVATE linblux_engine)
+add_test(NAME linblux_lua_interface COMMAND linblux_ui_lua_tests)
+set_tests_properties(linblux_lua_interface PROPERTIES TIMEOUT 60)
 
 # Preserve notices for every static third-party component shipped in the application.
 install(FILES LICENSE DESTINATION share/linblux/licenses COMPONENT Linblux RENAME LINBLUX-MIT.txt)
@@ -394,6 +407,11 @@ if(Python3_Interpreter_FOUND AND XVFB_RUN_EXECUTABLE AND XDOTOOL_EXECUTABLE)
       ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/engine_default_restart.py
       $<TARGET_FILE:linblux> $<TARGET_FILE:linblux_engine_default_tests>)
     set_tests_properties(linblux_engine_default_restart PROPERTIES TIMEOUT 150 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
+    add_test(NAME linblux_lua_ui_player
+      COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24"
+              ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/lua_ui_player.py
+              $<TARGET_FILE:linblux_player>)
+    set_tests_properties(linblux_lua_ui_player PROPERTIES TIMEOUT 120 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
   else()
     message(WARNING "Teste de reinicializacao do Mundo Padrao requer python3-pil")
   endif()
@@ -467,6 +485,7 @@ linblux_turbo_headless(linblux_help "smoke;headless;app")
 linblux_turbo_headless(linblux_defaults "unit;headless;core;experiences;serialization")
 linblux_turbo_headless(linblux_engine_default_lifecycle "unit;headless;core;experiences;serialization")
 linblux_turbo_headless(linblux_engine_default_paths "unit;headless;core;experiences;serialization")
+linblux_turbo_headless(linblux_lua_interface "unit;headless;scripting;ui;game")
 linblux_turbo_headless(linblux_atlas "unit;headless;tooling;atlas")
 
 linblux_turbo_graphics(linblux_decal_render "graphics;integration;rendering;game")
@@ -476,6 +495,8 @@ linblux_turbo_graphics(linblux_experience_ui "graphics;integration;experiences;u
 linblux_turbo_graphics(linblux_rml_ui "graphics;integration;ui;editor;slow")
 linblux_turbo_graphics(linblux_rig_decals_ui "graphics;integration;editor;rendering;rig;slow")
 linblux_turbo_graphics(linblux_mouse_lock "graphics;integration;editor;ui;game;slow")
+linblux_turbo_graphics(linblux_lua_ui_render "graphics;integration;ui;scripting;rendering")
+linblux_turbo_graphics(linblux_lua_ui_player "graphics;integration;ui;scripting;player")
 linblux_turbo_graphics(linblux_script_input_ui "graphics;integration;editor;ui;game;scripting")
 linblux_turbo_graphics(linblux_models_ui "graphics;integration;editor;ui;scene;scripting")
 linblux_turbo_graphics(linblux_body_properties_ui "graphics;integration;editor;ui;physics;scripting")

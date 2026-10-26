@@ -273,6 +273,7 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error,const Prog
         npcs_.reset(); // controladores de NPC sao sempre recriados por Play
         inventory_=std::make_unique<Inventory>(*scene_,*physics_);inventory_->update(position(),camera_.yaw());inventory_->loadAuthored();
         interactions_=std::make_unique<InteractionSystem>(*scene_,*physics_);hotbarPage_=0;itemNotice_.clear();
+        ui_.clear(); // a new Play never inherits nodes from a previous script VM
         scripts_.start(*this); // errors are reported; safe native gameplay remains available
         npcs_.attachAuthored(*this,error); // NPCs autorados ganham controlador
         if(spawnedDead && health_<=0)scripts_.healthChanged(health_,true);
@@ -292,7 +293,7 @@ void RuntimeSession::stop(bool saveProgress) {
     state_ = RuntimeState::StoppingPlay;
     if (!activeAnimation_.empty()) Event("animation", "stop", correlation_, {{"clip", activeAnimation_}});
     activeAnimation_.clear();
-    scripts_.stop();npcs_.reset();audio_.stopAll();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
+    scripts_.stop();ui_.clear();npcs_.reset();audio_.stopAll();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
     if(saveProgress)try{progress_.flush();}catch(const std::exception& e){scripts_.hostError(e.what());}
     progress_.close();
     interactions_.reset();inventory_.reset();destroyCharacter(); physics_.reset(); scene_.reset();
@@ -692,6 +693,12 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     const bool jumpPressed = input.jump && !lastJumpDown_ && !suppressJump_;
     lastJumpDown_ = input.jump;
     previousScriptInput_=scriptInput_;scriptInput_=input.script;
+    // Pointer events are produced by the host renderer, which owns the
+    // viewport rectangle; the runtime drains them before scripts run.
+    ui_.beginFrame();
+    for(std::uint64_t id=ui_.takeClick();id;id=ui_.takeClick())scripts_.uiClick(id);
+    std::uint64_t hoverId=0;bool entering=false;
+    while(ui_.takeHover(hoverId,entering))scripts_.uiHover(hoverId,entering);
     scripts_.update(dt);audio_.update(dt,scene_.get());
     if(inventory_)try{inventory_->update(position(),camera_.yaw());for(const auto& change:inventory_->takeChanges())scripts_.inventoryChanged(change.id,change.action);}catch(const std::exception& e){scripts_.hostError(e.what());}
     physics_->syncScene(*scene_);

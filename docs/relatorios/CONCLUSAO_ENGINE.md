@@ -21,7 +21,7 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 | 3 Áudio | IMPLEMENTADO/TESTADO | Relatório 28: metadados FFmpeg com timeout (PCM 1 h, RSS +6,2 MiB), voz com `owner`, `device_ready`/`is_streaming`, duração persistida/Lua, prévia e exclusão transacional no Studio, Player abre dispositivo antes dos scripts. | Sem áudio 3D/mixer; validar novamente na integração abrangente. |
 | 4 Imagens/decals | EM DESENVOLVIMENTO | 4bb803c/bf90835: consulta central de usos, nomes amigáveis, resolução de vínculos, exclusão segura, seletor, Surface persistida/renderizada e testes gráficos. Relatório 21. | Conferência final de todos os requisitos de imagens/Lua na integração abrangente; corrigir apenas defeitos novos reproduzidos. |
 | 5 Rosto de fábrica | PUBLICADO | 00898e2/bf90835: removida associação de fábrica e fallback visual de face/olhos; rig preservado e rosto legado explícito continua renderizado. Pixels e interação gráfica validados, relatório 21. | Não apagar imagens ou associações personalizadas antigas. |
-| 6 UI Lua | PENDENTE | Nenhuma UI Lua declarada pronta. | Componentes reais, eventos, renderização, persistência, separação da UI protegida. |
+| 6 UI Lua | IMPLEMENTADO/TESTADO | Relatório 29: `linblux.ui` com panel/label/button/image/bar, âncoras 1280×720, eventos click/hover, limites, dono por script e limpeza; desenhado no Play do Studio e no Player pelo mesmo renderizador. `linblux_lua_interface` (FAST), `linblux_lua_ui_render`, `linblux_lua_ui_player` e `linblux_visual_studio` aprovados. | Sem imagens animadas, fontes por elemento, listas/scroll/campos; UI não é serializada (o script recria). |
 | 7 Vida circular | PENDENTE | Saúde real já existe no runtime. | Indicador circular vermelho, animação, dano/cura/respawn, personalização Lua. |
 | 8 Menu lateral | PENDENTE | Studio e Player têm apresentações distintas existentes. | Painel lateral compartilhado/coerente, funções preservadas, foco/teclado/controle e testes visuais. |
 | 9 Integração | PENDENTE | Resultados anteriores não cobrem recursos futuros. | Reabertura/exportação/importação, compatibilidade, Player, gráficos, IMPACT/FULL justificado. |
@@ -327,8 +327,25 @@ solta sem perder ID/dados; slots/páginas dinâmicos funcionam no Studio/Player.
 FAST15/15; IMPACT20/20 (global parcial); GUI final31,350 s,720p/1080p,
 fonte vetorial e captura inspecionada. Relatório27 e INTERACOES.md.
 
-PENDENTE imediato: UI Lua. Depois RifleDemo, HUD/menu, Demo, pacote/instalação
-limpa e revisão final. Alpha ainda sem tag/Release.
+PENDENTE imediato: combate genérico e RifleDemo. Depois HUD circular, menu
+lateral, Demo, pacote/instalação limpa e revisão final. Alpha ainda sem
+tag/Release.
+
+## Alpha — UI por Lua
+
+UI Lua IMPLEMENTADA/TESTADA (relatório 29): `game::UiModel` com cinco tipos,
+âncoras em tela virtual 1280×720, ids monotônicos, dono por script, limites de
+128 elementos/4 níveis/64 mutações por quadro/512 bytes, eventos `click` e
+`hover` entregues como tarefas, limpeza ao desabilitar o script ou parar o Play.
+Renderização compartilhada (`DrawLuaUi`) na textura do Studio e na tela do
+Player; cliques só sem captura de câmera. Três exemplos públicos: munição,
+notificação interativa e HUD de vida ligado a `health_changed`.
+
+Evidência: FAST 15/15 com `linblux_lua_interface` (modelo, layout, eventos,
+limites, limpeza e os três exemplos); `linblux_lua_ui_render` (pixels em 960×600
+e 1280×720); `linblux_lua_ui_player` (Player real, exemplo validado e pintado);
+`linblux_visual_studio` 213 verificações sem falha, com o painel Lua encontrado
+no framebuffer do Studio durante o Play.
 
 ## Alpha — áudio concluído e regressões de teste
 

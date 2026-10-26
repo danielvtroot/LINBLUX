@@ -50,6 +50,11 @@ int main() {
     studio::Apply();
     {
         Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();scene.gameAssets().player.enableShiftLock=true;
+        // Script-built UI must reach the Studio Play texture, not only the Player.
+        auto* luaHud=scene.createScript(InstanceClass::Script,scene.ensureService(InstanceClass::ServerScriptService),"LuaHud.lua");
+        luaHud->source=R"lua(
+linblux.ui.create("panel", {anchor="center", width=220, height=120, background="#FF00FFFF"})
+)lua";
         auto* folder=scene.createContainer(InstanceClass::Folder,nullptr,"Buildings");
         auto* model=scene.createContainer(InstanceClass::Model,folder,"House");
         auto* part=scene.createPart(PartShape::Block,{9,3,0},{7,6,1},"Wall");part->setAnchored(true);
@@ -91,6 +96,10 @@ int main() {
             const float health=runtime.health();frames(5);CHECK(runtime.health()==health);
             capture("hud-"+std::to_string(int(size.x)));
             if(size.x==1280) {
+                // The panel is drawn into the Play texture by DrawLuaUi.
+                {const auto frameImage=LoadImageFromScreen();int painted=0;
+                 for(int y=0;y<frameImage.height;y+=2)for(int x=0;x<frameImage.width;x+=2){const auto pixel=GetImageColor(frameImage,x,y);if(pixel.r>200&&pixel.g<70&&pixel.b>200)++painted;}
+                 UnloadImage(frameImage);CHECK(painted>200);}
                 CHECK(runtime.takeDamage(25,error));frames(12);CHECK(runtime.health()==75);capture("health-75");
                 CHECK(runtime.takeDamage(50,error));frames(20);CHECK(runtime.health()==25);capture("health-25");
                 CHECK(runtime.heal(75,error));frames(12);CHECK(runtime.health()==100);
