@@ -18,7 +18,7 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 | 0 AutoBackup | PUBLICADO | cd4fb406cfccc6b030e56eadbede0c3965ef66f3, push main confirmado. Monitor labubu ativo via cron, @reboot/watchdog, checkpoints e push automático isolados. Clone remoto recuperou 315 arquivos; índice/main intactos; reinício em 20,005 s. Offline 20/20 e IMPACT 17/17, cobertura global parcial. Relatório 13. | Destino externo privado não informado (cópia externa não configurada). Backend systemd não executável neste host. |
 | 1 Lua/scripting | EM DESENVOLVIMENTO | Runtime, eventos, física, entrada, câmera e persistência existentes; 9fe720b amplia Modelos/hierarquia/transformações e scripts. | Componentes restantes, UI programável e integração final de todas as APIs; não declarar Lua completo. |
 | 2 NPCs/navegação | EM DESENVOLVIMENTO | 5f29424: A* XZ, patrulha/perseguição, vida/dano/morte/respawn; 93fe7e5: rigs e clipes idle/walk/run/attack/hurt/death integrados ao renderer/Player. | Combate com armas/projéteis e conjunto completo de demonstrações. Não refazer navegação ou animações existentes. |
-| 3 Áudio | EM DESENVOLVIMENTO | 00898e2: base MP3/WAV/OGG, biblioteca persistida e controle Lua 2D. | Completar/verificar prévia, substituição, gerenciamento de referências e streaming de músicas no Editor/Player; não recriar a base. |
+| 3 Áudio | IMPLEMENTADO/TESTADO | Relatório 28: metadados FFmpeg com timeout (PCM 1 h, RSS +6,2 MiB), voz com `owner`, `device_ready`/`is_streaming`, duração persistida/Lua, prévia e exclusão transacional no Studio, Player abre dispositivo antes dos scripts. | Sem áudio 3D/mixer; validar novamente na integração abrangente. |
 | 4 Imagens/decals | EM DESENVOLVIMENTO | 4bb803c/bf90835: consulta central de usos, nomes amigáveis, resolução de vínculos, exclusão segura, seletor, Surface persistida/renderizada e testes gráficos. Relatório 21. | Conferência final de todos os requisitos de imagens/Lua na integração abrangente; corrigir apenas defeitos novos reproduzidos. |
 | 5 Rosto de fábrica | PUBLICADO | 00898e2/bf90835: removida associação de fábrica e fallback visual de face/olhos; rig preservado e rosto legado explícito continua renderizado. Pixels e interação gráfica validados, relatório 21. | Não apagar imagens ou associações personalizadas antigas. |
 | 6 UI Lua | PENDENTE | Nenhuma UI Lua declarada pronta. | Componentes reais, eventos, renderização, persistência, separação da UI protegida. |
@@ -43,7 +43,7 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 | Persistência de scripts/autoria | PUBLICADO | ProjectIO + LinbluxExamples: salvar/reabrir e executar. | Persistência de estado de gameplay/configurações via API controlada ainda PENDENTE. |
 | Estado privado por experiência | PUBLICADO | e44b4e8f07c803fe3bea4198dd234910c42808fe, remoto confirmado. Relatório 17: ProgressStore, storage Lua, Studio/Player; FAST 14/14, IMPACT 18/18 e integração gráfica pertinente 4/4. | Não exportado, limites explícitos, sem backup externo configurado. Publicado; recuperação privada externa continua pendente. |
 | Volumes Bullet e controle Lua do jogador | PUBLICADO | 431efefd30b1cb03d0d288da75a62608e9fe35dd, remoto confirmado. Relatório 18: overlap_box/overlap_sphere reais, filtros, cotas, intenção de movimento, salto, velocidade, força/impulso. FAST/IMPACT 13/13. | script_input_ui 1/1 em 20,792 s; publicado. Regiões contínuas e NPCs pendentes. |
-| Áudio por Lua | PENDENTE | Não há namespace documentado como implementado. | Dependência da Fase 3: backend/importação/streaming/referências reais. |
+| Áudio por Lua | IMPLEMENTADO/TESTADO | Relatório 28: `play` (volume/loop/owner), pause/resume/stop/stop_all, volume/loop, duration, device_ready, is_streaming, list; limite de 16 operações/quadro; `linblux_lua_player_validation` aprovado. | Sem 3D/atenuação nem mixer por categoria. |
 | UI por Lua | PENDENTE | Não há namespace documentado como implementado. | Dependência da Fase 6: modelo/render/input e UI protegida. |
 
 Não avançar para NPCs como se a Fase 1 estivesse completa. Resolver dependências
@@ -327,6 +327,22 @@ solta sem perder ID/dados; slots/páginas dinâmicos funcionam no Studio/Player.
 FAST15/15; IMPACT20/20 (global parcial); GUI final31,350 s,720p/1080p,
 fonte vetorial e captura inspecionada. Relatório27 e INTERACOES.md.
 
-PENDENTE imediato: áudio (ProbeAudio ainda decodifica tudo para duração; Player
-inicializa dispositivo após scripts). Depois UI Lua, RifleDemo, HUD/menu, Demo,
-pacote/instalação limpa e revisão final. Alpha ainda sem tag/Release.
+PENDENTE imediato: UI Lua. Depois RifleDemo, HUD/menu, Demo, pacote/instalação
+limpa e revisão final. Alpha ainda sem tag/Release.
+
+## Alpha — áudio concluído e regressões de teste
+
+Áudio da Fase 3 IMPLEMENTADO/TESTADO (relatório 28): `ProbeAudio` usa metadados
+FFmpeg com orçamento de 2 s e whitelist (PCM esparso de 1 h: 3600,00 s com
++6,2 MiB de pico RSS, sem decodificar o arquivo), vozes aceitam `owner` e caem
+com o objeto, `device_ready`/`is_streaming`/`duration` expostos em Lua, Player
+abre o dispositivo antes dos scripts, Studio tem prévia e exclusão transacional
+(backup temporário + rollback em falha de salvamento).
+
+Regressões gráficas de persistência corrigidas: `linblux_editor_restart`
+compara rotações com tolerância float32 explícita (sem esconder valores
+ausentes ou eixos trocados) e `linblux_engine_default_restart` localiza os
+controles por cor/posição relativa em vez de coordenadas absolutas frágeis.
+Nenhum código de imagens, NPCs ou modelos foi refeito. `linblux_rml_ui`
+integral não foi reexecutado (aprovado em 456,4 s antes destas mudanças).
+
