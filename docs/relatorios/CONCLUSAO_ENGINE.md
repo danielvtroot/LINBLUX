@@ -411,3 +411,16 @@ saúde real; dano/cura, morte/respawn, animação, escala, pausa, reinício e
 desenvolvimento de combate/RifleDemo preservado; continua sem validação/publicação.
 Próximo: menu lateral e atualização dos testes antigos de apresentação;
 seguem Demo, pacote, instalação limpa, segurança/licenças e lançamento.
+
+## 26/10 — menu lateral
+
+HUD PUBLICADO: bb69e491844c352957ed522c8b53da453bc280ee, remoto confirmado.
+Menu RmlUi do Studio e Player independente IMPLEMENTADO/TESTADO: navegação
+vertical, animação180ms, pausa/foco, câmera, áudio real quando disponível,
+respawn/continuar/parar/sair e fullscreen sem bordas. GUI Studio43,36s e
+Player16,42s aprovados, capturas720p/1080p inspecionadas. Relatório31 registra
+falhas corrigidas e limites (fallback ImGui histórico e seletores antigos).
+RifleDemo recuperado ainda em validação: corrigidos busca de Attachment na
+hierarquia e efeito menor que mínimo0,2. Teste headless de ciclo completo
+aprovado; falta comprovar fluxo gráfico real, persistência e publicar o WIP.
+Alpha continua sem pacote validado, tag ou Release; não está lançado.

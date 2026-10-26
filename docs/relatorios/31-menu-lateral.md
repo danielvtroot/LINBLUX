@@ -27,3 +27,8 @@ Limites: não foi ouvido áudio neste ambiente sem dispositivo. O fallback
 ImGui histórico de depuração ainda usa seu menu anterior; o Studio Alpha usa
 RmlUi. Seletores históricos de regressão que exigiam o menu central e a barra
 RML ainda precisam migrar antes do fechamento de regressão/Release.
+
+FAST final20261026T225715Z-20329:17/17 em8,8 s, cobertura global desconhecida.
+A rodada anterior encontrou o defeito real do RifleDemo em andamento (resolvido
+no exemplo; não incluído no commit deste menu). Núcleo recompilado: studio,
+core e UI Lua3/3 aprovados; não há aprovação global/FULL implícita.
