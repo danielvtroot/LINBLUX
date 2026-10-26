@@ -68,3 +68,14 @@ Imagens: DescribeImageUsage é a fonte única para usos em atributos conhecidos,
 Surface, Body.image, RigDecal e manifesto. Descritores preservam IDs/propriedade
 e recusam edição obsoleta. ImageInUse/ReplaceImageReferences delegam à consulta.
 Nomes amigáveis são metadados versionados no projeto, não caminhos novos.
+
+**Inventário da sessão:** Inventory possui tipos/instâncias identificados pelos
+IDs de Modelos existentes. Propriedades autorais marcam protótipos; catálogo
+carregado antes da VM desativa scripts de protótipo e ativa apenas os clones.
+Bolsa/equipamento são temporários; RuntimeSession mantém isolamento da autoria.
+Descarte usa limites reais da geometria, raycast e teste de espaço Bullet.
+InventoryHidden é a regra central para desenho/consultas/contatos, incluindo
+Surfaces. Eventos inventory_changed usam o scheduler/listeners Lua existentes.
+Testes: InventoryLifecycle/studio, inventario.lua/Player, .lo/experiences,
+protótipo nas Propriedades/models_ui e pixels/decal_render. E/Delete/hotbar
+ainda requerem a camada de interação e apresentação; não são parte desta API.
