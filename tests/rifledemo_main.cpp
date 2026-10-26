@@ -3,6 +3,7 @@
 // Delete). Prova coleta, equipamento, tiro com dano real, munição, recarga,
 // soltura e recoleta — e que nada disso depende de C++ específico de arma.
 #include "core/Diagnostics.h"
+#include "experiences/ExperienceManager.h"
 #include "game/Audio.h"
 #include "game/ImageAssets.h"
 #include "game/Runtime.h"
@@ -58,6 +59,7 @@ int main() {
         std::string error;
         require(projectio::load(world, (demo / "world.loblox.json").string(), error), "load: " + error);
 
+        const auto authored=projectio::toJson(world);
         game::RuntimeSession runtime;
         require(runtime.start(world, error), "start: " + error);
         auto step = [&](int frames, game::PlayerInput input) {
@@ -156,6 +158,20 @@ int main() {
         }
         require(sounds >= 4, "the demo must publish its activation/reload/impact/equip sounds");
 
+        runtime.stop(false);
+        require(projectio::toJson(world)==authored,"Play modified authored world");
+        const auto temporary=fs::temp_directory_path()/("linblux-rifle-roundtrip-"+experiences::newId());
+        struct Cleanup {fs::path path;~Cleanup(){std::error_code e;fs::remove_all(path,e);}} cleanup{temporary};
+        experiences::ExperienceManager library(temporary/"source",{},temporary/"defaults");
+        const auto installed=library.importLegacy(demo/"world.loblox.json","RifleDemo");
+        Scene saved;library.open(installed,saved);library.save(saved);
+        library.exportPackage(installed,temporary/"RifleDemo.lo");
+        experiences::ExperienceManager restored(temporary/"restored",{},temporary/"defaults2");
+        const auto imported=restored.importPackage(temporary/"RifleDemo.lo");Scene reopened;restored.open(imported,reopened);
+        require(runtime.start(reopened,error),"package start: "+error);step(120,{});
+        require(runtime.scripts().errorCount()==0,"package lost scripts/resources: "+scriptErrors(runtime));
+        require(runtime.inventory().worldItems().size()==1,"package lost item prototype");
+        for(const auto& sound:runtime.scene().gameAssets().sounds){double seconds=0;require(runtime.audio().probe(sound.reference,seconds,error),"package lost sound: "+error);}
         runtime.stop(false);
         std::printf("RifleDemo: E coleta, 1 equipa, clique atira, R recarrega, Delete solta e E recolhe; "
                     "%zu sons válidos\n", sounds);
