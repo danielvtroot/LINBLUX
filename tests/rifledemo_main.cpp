@@ -68,6 +68,11 @@ int main() {
         step(12, {});
         require(runtime.scripts().errorCount() == 0, "startup errors:\n" + scriptErrors(runtime));
 
+        InstanceId guide=0;for(const auto& object:runtime.scene().objects())if(object->name()=="Guia LINBLUX")guide=object->id();
+        require(guide&&!runtime.npcs().rig(guide).empty(),"demo lost animated guide rig");
+        const auto guideStart=runtime.scene().findPart(guide)->position();step(60,{});
+        require(Vector3Distance(guideStart,runtime.scene().findPart(guide)->position())>.5f,"guide did not patrol");
+        require(runtime.npcs().clip(guide)==game::NpcClip::Walk,"guide did not select walk animation");
         auto alvos = targets(runtime.scene());
         require(alvos.size() == 3, "demo did not create the three targets");
         for (const auto id : alvos) {

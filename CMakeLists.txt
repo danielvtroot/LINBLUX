@@ -200,7 +200,14 @@ add_custom_target(linblux_media_assets ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/logo.png ${CMAKE_CURRENT_SOURCE_DIR}/midia/careditfullhd.mp4 ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia)
 add_dependencies(linblux linblux_media_assets)
-install(FILES midia/logo.png midia/careditfullhd.mp4 DESTINATION share/linblux/midia COMPONENT Linblux)
+# The development Home keeps its video; public installs require explicit rights.
+option(LINBLUX_INSTALL_BACKGROUND_VIDEO "Instalar vídeo com redistribuição autorizada" OFF)
+install(FILES midia/logo.png DESTINATION share/linblux/midia COMPONENT Linblux)
+if(LINBLUX_INSTALL_BACKGROUND_VIDEO)
+  install(FILES midia/careditfullhd.mp4 DESTINATION share/linblux/midia COMPONENT Linblux)
+endif()
+install(DIRECTORY assets/examples/rifledemo DESTINATION share/linblux/examples COMPONENT Linblux)
+install(FILES README.md DESTINATION share/linblux COMPONENT Linblux)
 install(TARGETS linblux RUNTIME DESTINATION bin COMPONENT Linblux)
 install(DIRECTORY assets/ui/ DESTINATION share/linblux/ui COMPONENT Linblux)
 install(DIRECTORY assets/templates/ DESTINATION share/linblux/templates COMPONENT Linblux)
