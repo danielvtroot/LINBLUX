@@ -7,7 +7,7 @@ root=Path(tempfile.mkdtemp(prefix='linblux-rifle-player-'));shutil.copytree(demo
 world=json.loads((demo/'world.loblox.json').read_text())
 watchdog='''
 local collects,equips,drops,fires,reloads=0,0,0,0,0
-local original,damaged
+local original,damaged,guideStart,walked
 linblux.events.on('inventory_changed',function(e)
  if e.action=='collect' then
   collects=collects+1
@@ -21,12 +21,18 @@ linblux.events.on('item_action',function(e)
 end)
 linblux.events.on('update',function()
  for _,o in ipairs(linblux.scene.root:children()) do
+  if o.name=='Guia LINBLUX' then
+   local p=o.position
+   if not guideStart then guideStart=p end
+   if (p.x-guideStart.x)^2+(p.z-guideStart.z)^2>1 and linblux.npc.animation(o)=='walk' then walked=true end
+  end
   if o:get_attribute('alvo') and linblux.npc.health(o)<100 then damaged=true end
  end
 end)
 task.spawn(function()
  task.wait(11)
  assert(collects>=2 and equips>=2 and drops>=1,'E/1/Delete/recoleta não executados')
+ assert(walked,'guia não caminhou com animação')
  assert(fires>=2 and reloads>=1 and damaged,'tiro, recarga ou dano não executados')
  assert(#linblux.items.list()==1 and linblux.items.equipped(),'inventário final inválido')
  linblux.ui.create('panel',{anchor='bottom-left',x=16,y=-16,width=150,height=24,background='#00FFAEFF'})
