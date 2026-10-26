@@ -70,6 +70,7 @@ public:
     bool reparent(Instance* object, Instance* parent, std::string& error);
     bool modelFrame(InstanceId model,ModelFrame& frame,std::string& error) const;
     bool setModelPivot(InstanceId model,const ModelFrame& frame,std::string& error);
+    bool clearModelPivot(InstanceId model,std::string& error);
     bool transformModel(InstanceId model,const ModelFrame& frame,std::string& error);
     Container* group(const std::vector<InstanceId>& objects,const std::string& name,std::string& error);
     bool ungroup(InstanceId model,std::string& error);

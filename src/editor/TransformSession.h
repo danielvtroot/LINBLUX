@@ -27,7 +27,7 @@ public:
 
     GizmoUpdateResult update(ToolMode mode, Part* part, const EditorCamera& camera,
                              Rectangle viewport, bool hovered, bool allowInput,
-                             const GizmoInput& input);
+                             const GizmoInput& input,bool physical=true);
     void cancel(Part* part, bool restoreTransform, const char* reason = "cancel");
     void commit(Part* part, const char* reason = "commit");
 
@@ -42,6 +42,7 @@ private:
     void endDiagnostics(bool cancelled, InstanceId id, const char* reason);
 
     Gizmo& gizmo_;
+    bool physical_=true;
     PhysicsWorld& physics_;
     std::string correlationId_;
     const char* lastError_ = nullptr;
