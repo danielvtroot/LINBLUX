@@ -86,6 +86,12 @@ int main() {
         auto& rig = scene.gameAssets().createLinbluxCharacter();
         const std::string rigId = rig.id;
         rig.bodies[game::Head].image = reference;
+        auto* independent=scene.createSurface(InstanceClass::Texture,decalPart,"Textura independente");
+        SurfaceProperties full;full.image=reference;full.face=3;full.rotation=27;full.transparency=.35f;
+        full.tint={20,40,60,180};full.studsPerTileU=2;full.studsPerTileV=3;full.offsetU=.2f;full.offsetV=.4f;
+        require(independent->setProperties(full),"Surface de teste inválida");const auto surfaceId=independent->id();
+        auto& rigDecal=rig.addDecal(game::Torso);rigDecal.surface=full;const auto rigDecalId=rigDecal.id;
+
         require(game::ImageInUse(scene, reference), "Uso da imagem não foi detectado na cena");
 
         library.save(scene);
@@ -101,6 +107,16 @@ int main() {
                 "Imagem do rig não sobreviveu ao salvamento");
         require(!game::ResolveImagePath(game::AssetsDir(), reference).empty(),
                 "Referência salva não resolve para o arquivo da experiência");
+
+        const auto* restoredSurface=static_cast<const Surface*>(reopened.find(surfaceId));
+        require(restoredSurface&&restoredSurface->properties().image==reference,"Surface não persistiu");
+        require(restoredSurface->properties().rotation==27&&restoredSurface->properties().tint.a==180&&restoredSurface->properties().studsPerTileV==3,"Surface perdeu propriedades");
+        auto* restoredRig=reopened.gameAssets().findRig(rigId);
+        require(restoredRig&&restoredRig->findDecal(rigDecalId)->surface.rotation==27,"Adesivo do rig perdeu rotação");
+        auto bad=json::parse(projectio::toJson(reopened));for(auto& o:bad["objects"])if(o["id"]==surfaceId)o["surface"]["face"]=9;
+        const auto beforeInvalid=projectio::toJson(reopened);std::string invalidError;
+        require(!projectio::fromJson(reopened,bad.dump(),invalidError),"Face inválida aceita");
+        require(projectio::toJson(reopened)==beforeInvalid,"Carga inválida alterou a cena");
 
         // Nome amigável é só metadado: não altera arquivo, ID nem referências.
         std::string nameError;
@@ -221,14 +237,21 @@ int main() {
         require(!game::ResolveImagePath(game::AssetsDir(), reference).empty(),
                 "Imagem herdada não resolve na nova experiência");
 
+        const auto package=root/"recursos.lo";library.exportPackage(derived,package);
+        experiences::ExperienceManager receiver(root/"receiver",root/"factory",root/"receiver-defaults");
+        const auto received=receiver.importPackage(package);Scene imported;receiver.open(received,imported);
+        require(imported.find(surfaceId)&&static_cast<Surface*>(imported.find(surfaceId))->properties().image==reference,"Pacote perdeu Surface ou imagem");
+        require(game::ImageDisplayName(game::AssetsDir(),reference)=="Textura azul","Pacote perdeu nome amigável");
+        receiver.close();library.open(derived,derivedScene);derivedPart=derivedScene.findPart(decalPart->id());
+
         // Remoção segura: em uso na cena ou na apresentação é recusada.
         bool refused = false;
         try { library.removeAsset(reference, true); } catch (const std::exception&) { refused = true; }
         require(refused && fs::is_regular_file(derived.root / reference), "Asset em uso foi apagado");
 
         derivedPart->removeAttribute("decal_image");
-        for (auto& body : derivedScene.gameAssets().rigs.front().bodies) body.image.clear();
-        for (auto& body : derivedScene.gameAssets().rigs.front().bodies) body.decals.clear();
+        for(auto& assetRig:derivedScene.gameAssets().rigs)for(auto& body:assetRig.bodies){body.image.clear();body.decals.clear();}
+        auto* derivedSurface=static_cast<Surface*>(derivedScene.find(surfaceId));auto cleared=derivedSurface->properties();cleared.image.clear();require(derivedSurface->setProperties(cleared),"Limpar Surface falhou");
         auto manifest = library.active()->manifest;
         manifest.icon = reference;
         library.updateMetadata(manifest);

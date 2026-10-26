@@ -31,6 +31,25 @@ RigidTransform ReadTransform(const json& v) {
     return t;
 }
 }
+nlohmann::json EncodeSurface(const SurfaceProperties& s) {
+    return {{"image",NormalizeImageReference(s.image)},{"face",s.face},{"transparency",s.transparency},
+        {"rotation",s.rotation},{"tint",{s.tint.r,s.tint.g,s.tint.b,s.tint.a}},
+        {"studsPerTileU",s.studsPerTileU},{"studsPerTileV",s.studsPerTileV},{"offsetU",s.offsetU},{"offsetV",s.offsetV}};
+}
+SurfaceProperties DecodeSurface(const nlohmann::json& value) {
+    Require(value.is_object(),"Superfície deve ser objeto.");SurfaceProperties s;
+    s.image=NormalizeImageReference(value.value("image",std::string()));
+    if(value.contains("face"))s.face=ReadInt(value.at("face"),0,5);
+    s.transparency=value.value("transparency",0.f);s.rotation=value.value("rotation",0.f);
+    s.studsPerTileU=value.value("studsPerTileU",4.f);s.studsPerTileV=value.value("studsPerTileV",4.f);
+    s.offsetU=value.value("offsetU",0.f);s.offsetV=value.value("offsetV",0.f);
+    if(value.contains("tint")) {
+        const auto& c=value.at("tint");Require(c.is_array()&&c.size()==4,"Cor da superfície requer RGBA.");
+        s.tint={static_cast<unsigned char>(ReadInt(c[0],0,255)),static_cast<unsigned char>(ReadInt(c[1],0,255)),
+            static_cast<unsigned char>(ReadInt(c[2],0,255)),static_cast<unsigned char>(ReadInt(c[3],0,255))};
+    }
+    Require(s.valid()&&s.image.find('\0')==std::string::npos,"Propriedades de superfície inválidas.");return s;
+}
 nlohmann::json EncodeAssets(const GameAssets& a) {
     json j{{"version", 1}, {"defaultRig", a.defaultRig}, {"rigs", json::array()}, {"animations", json::array()}};
     if(!a.sounds.empty()) {
@@ -52,8 +71,7 @@ nlohmann::json EncodeAssets(const GameAssets& a) {
             if (!b.image.empty()) body["image"] = game::NormalizeImageReference(b.image);
             if(!b.decals.empty()) {
                 body["decals"]=json::array();
-                for(const auto& d:b.decals)body["decals"].push_back({{"id",d.id},{"name",d.name},
-                    {"image",game::NormalizeImageReference(d.surface.image)},{"face",d.surface.face},{"transparency",d.surface.transparency}});
+                for(const auto& d:b.decals){auto encoded=EncodeSurface(d.surface);encoded["id"]=d.id;encoded["name"]=d.name;body["decals"].push_back(std::move(encoded));}
             }
             rig["bodies"].push_back(std::move(body));
         }
@@ -129,8 +147,7 @@ bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& erro
                     Require(b["decals"].is_array()&&b["decals"].size()<=64,"invalid rig decals array");
                     for(const auto& d:b["decals"]) {
                         RigDecal decal;decal.id=d.at("id").get<std::string>();decal.name=d.at("name").get<std::string>();
-                        decal.surface.image=game::NormalizeImageReference(d.at("image").get<std::string>());decal.surface.face=ReadInt(d.at("face"),0,5);
-                        decal.surface.transparency=d.value("transparency",0.f);body.decals.push_back(std::move(decal));
+                        decal.surface=DecodeSurface(d);body.decals.push_back(std::move(decal));
                     }
                 }
             }

@@ -191,7 +191,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(current.empty())s+="<span class=\"image-current-name muted\">Nenhuma imagem aplicada</span>";
         else {
             const auto path=game::ResolveImagePath(assets,current);
-            if(!path.empty())s+="<img class=\"image-current-thumb\" src=\""+Escape(path)+"\"/>";
+            if(!path.empty())s+="<img class=\"image-current-thumb\" src=\""+Escape(std::filesystem::absolute(path).string())+"\"/>";
             s+="<span class=\"image-current-name\">"+Escape(game::ImageDisplayName(assets,current))+"</span>";
             if(path.empty())s+="<span class=\"image-missing\" title=\"O arquivo não está em assets/. Importe a imagem novamente ou remova a referência.\">Ausente</span>";
             s+=Button("clear-image","Remover imagem","delete",clearValue);
@@ -226,7 +226,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         text("viewport-hint",ui.activeDocument_==0?"RMB + WASD · Q / E":"Ctrl+S save · Ctrl+W close");
     }
     void prompt(const std::string& kind) {
-        if(auto* confirm=dynamic_cast<Rml::ElementFormControl*>(el("dialog-confirm")))confirm->SetDisabled(false);
+        if(auto* confirm=el("dialog-confirm")){confirm->SetClass("image-locked",false);confirm->RemoveAttribute("disabled");}
         if(experiences&&kind=="import-image"){experiences->chooseAsset();return;}
         if(experiences&&kind=="open"){experiences->enqueue("import");return;}
         if(experiences&&kind=="save-as"&&experiences->handlesSave()){experiences->enqueue("export-current");return;}
@@ -441,12 +441,12 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                 std::string rows="<div class=\"image-usages\">";
                 for(std::size_t i=0;i<imageUses.size();++i)rows+="<div class=\"image-usage\"><span>"+Escape(imageUses[i].where+" · "+imageUses[i].property)+"</span>"+Button("image-use","Localizar","focus",std::to_string(i),"usage")+Button("image-unlink","Remover associação","delete",std::to_string(i),"usage")+"</div>";
                 rows+="</div>";el("appearance-controls")->SetInnerRML(i18n::Markup(rows));
-                if(auto* confirm=dynamic_cast<Rml::ElementFormControl*>(el("dialog-confirm")))confirm->SetDisabled(!imageUses.empty());
+                if(auto* confirm=el("dialog-confirm")){confirm->SetClass("image-locked",!imageUses.empty());if(!imageUses.empty())confirm->SetAttribute("disabled","");else confirm->RemoveAttribute("disabled");}
                 dialog="delete-image:"+v;text("dialog-title","Excluir imagem");text("dialog-description",report);
                 field->SetDisabled(true);field->SetValue(displayName);display("dialog-overlay",true,"flex");context->GetRootElement()->Focus();return;
             }
             field->SetDisabled(false);
-            if(auto* confirm=dynamic_cast<Rml::ElementFormControl*>(el("dialog-confirm")))confirm->SetDisabled(false);
+            if(auto* confirm=el("dialog-confirm")){confirm->SetClass("image-locked",false);confirm->RemoveAttribute("disabled");}
             if(action=="rename-image") {
                 dialog="rename-image:"+v;text("dialog-title","Renomear imagem");
                 text("dialog-description","Só o nome exibido muda: o arquivo e o ID técnico continuam iguais, então nenhuma referência quebra. Nomes repetidos são permitidos.");

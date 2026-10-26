@@ -195,3 +195,5 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 #dialog { max-height: 88%; overflow: auto; }
 .image-picker, .image-query, .image-options, .image-option { box-sizing: border-box; }
 .asset-card { box-sizing: border-box; }
+
+button.image-locked { opacity: 0.45; pointer-events: none; }

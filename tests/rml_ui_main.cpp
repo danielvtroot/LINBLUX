@@ -413,7 +413,9 @@ end)
             clickVisible("prop-Surface.Transparency");key("ctrl+a");event("type --clearmodifiers 0.5");key("Return");
             CHECK(NearlyEqual(surface->properties().transparency,.5f));
             CHECK(projectio::save(scene,config.defaultProjectPath,error));CHECK(projectio::load(roundTrip,config.defaultProjectPath,error));
-            CHECK(static_cast<Surface*>(roundTrip.find(surface->id()))->properties().image=="assets/front.png");
+            auto* loadedSurface=roundTrip.find(surface->id());CHECK(loadedSurface&&IsSurfaceClass(loadedSurface->instanceClass()));
+            if(!loadedSurface){std::fprintf(stderr,"Surface persistence: %s\n",error.c_str());capture("surface-save-failure");rlImGuiShutdown();CloseWindow();return 1;}
+            CHECK(static_cast<Surface*>(loadedSurface)->properties().image=="assets/front.png");
             capture("surface-properties");clickVisible("cmd-clear-image-surface");CHECK(surface->properties().image.empty());
             CHECK(scene.find(surface->id())==surface);
             CHECK(scene.validate(error));capture("rig-decals-deleted");
