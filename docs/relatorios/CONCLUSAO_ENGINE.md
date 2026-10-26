@@ -289,3 +289,16 @@ PENDENTE imediato: juntas/vínculos físicos. Depois inventário/E/Delete/hotbar
 áudio completo, UI Lua, combate/RifleDemo, HUD/menu e Demo integrada.
 Alpha NÃO pronto para Release: pacote/instalação limpa, regressão final,
 segurança e licenças ainda precisam validação. Não foi criado tag/Release.
+
+## Alpha — juntas fixas
+
+Attachments PUBLICADO em e9d257e, relatório90fab49; push confirmado.
+Juntas IMPLEMENTADAS/TESTADAS/VALIDADAS NO PLAYER em e6f65914de0664343d004fe6c4e89e2853bfaae1.
+Conexão no Bullet preserva poses, quadros locais animam destino dinâmico;
+clone remapeia vínculos e JSONv6/.lo/defaults preservam IDs. Lua e seletor
+visual funcionais. FAST17/17; IMPACT17/17 (global parcial); GUI45,444 s.
+Relatório25 registra correções reais e limites; sem FULL.
+
+PENDENTE imediato agora: inventário/E/Delete/hotbar (não confundir com
+inventory.py do TURBO). Depois demais fases Alpha já listadas. Não foi gerado
+pacote, tag ou Release; critérios de lançamento ainda não satisfeitos.
