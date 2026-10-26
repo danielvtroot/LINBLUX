@@ -17,9 +17,11 @@ linblux.events.on("rifle.efeito",function(dados)
         color=v(255,210,110),anchored=not tracer,collidable=false,material="emissive"})
     efeito:set_attribute("efeito_rifle",true)
     if tracer then efeito.velocity=v(dados.dx*220,dados.dy*220,dados.dz*220) end
+    local id=tonumber(efeito.id)
     task.spawn(function()
         task.wait(tracer and .9 or .08)
-        if linblux.scene.find(tonumber(efeito.id)) then efeito:destroy() end
+        local restante=linblux.scene.find(id)
+        if restante then restante:destroy() end
     end)
 end)
 
