@@ -1422,11 +1422,18 @@ struct LuaRuntime::Impl {
         std::uint64_t id=0;std::string error;
         requireUi(self.runtime->ui().create(kind,self.executing,parent,id,error),error);
         if(lua_gettop(L)>1&&lua_istable(L,2)) {
-            lua_pushnil(L);
-            while(lua_next(L,2)) {
-                const char* key=Text(L,-2);
-                if(!Eq(key,"parent"))self.applyUiProperty(L,id,key,-1);
-                lua_pop(L,1);
+            // Uma propriedade inválida não pode deixar um elemento órfão: o
+            // script nunca recebeu o id, logo não teria como destruí-lo.
+            try {
+                lua_pushnil(L);
+                while(lua_next(L,2)) {
+                    const char* key=Text(L,-2);
+                    if(!Eq(key,"parent"))self.applyUiProperty(L,id,key,-1);
+                    lua_pop(L,1);
+                }
+            } catch(...) {
+                std::string ignored;self.runtime->ui().destroy(id,self.executing,ignored);
+                throw;
             }
         }
         lua_pushinteger(L,lua_Integer(id));return 1;

@@ -60,10 +60,16 @@ const char* kItemScript = R"lua(
 -- Todo item programável usa a mesma API: este script não é de rifle, apenas
 -- reage a item_action e desenha munição quando o item está equipado.
 local arma = linblux.self
+local raiz = linblux.scene.root
+local execucoes = (raiz:get_attribute("debug_execs") or 0) + 1
+raiz:set_attribute("debug_execs", execucoes)
+local criacoes = 0
 local painel, rotulo
 
 local function criar()
-    painel = linblux.ui.create("panel", {anchor="bottom_right", x=-24, y=-24,
+    criacoes = criacoes + 1
+    raiz:set_attribute("debug_criacoes", criacoes)
+    painel = linblux.ui.create("panel", {anchor="bottom-right", x=-24, y=-24,
         width=200, height=52, background="#101014E6"})
     rotulo = linblux.ui.create("label", {parent=painel, anchor="center", width=180,
         height=26, text="", color="#FFFFFF", font_size=16})
@@ -73,7 +79,10 @@ end
 local function atualizar()
     local estado = linblux.items.combat(arma)
     if not estado then return end
-    if linblux.items.equipped() ~= arma then
+    local equipado = linblux.items.equipped()
+    raiz:set_attribute("debug_equip", equipado and equipado.id or 0)
+    raiz:set_attribute("debug_painel", painel and 1 or 0)
+    if equipado ~= arma then
         if painel then linblux.ui.destroy(painel); painel = nil; rotulo = nil
             arma:set_attribute("ui_rotulo", 0) end
         return
@@ -251,7 +260,12 @@ int main() {
             runtime.update(1.f / 60, {});
             ++frames;
         }
-        require(attributeBool(*workspace, "fim"), "driver script did not finish:\n" + scriptErrors(runtime));
+        require(attributeBool(*workspace, "fim"), "driver script did not finish (execs=" +
+                std::to_string(attributeNumber(*workspace, "debug_execs")) + " creates=" +
+                std::to_string(attributeNumber(*workspace, "debug_criacoes")) + ", equip=" +
+                std::to_string(attributeNumber(*workspace, "debug_equip")) + ", painel=" +
+                std::to_string(attributeNumber(*workspace, "debug_painel")) + ", ui=" +
+                std::to_string(runtime.ui().count()) + "):\n" + scriptErrors(runtime));
         require(runtime.scripts().errorCount() == 0, "script errors:\n" + scriptErrors(runtime));
         const auto itemId = InstanceId(attributeNumber(*workspace, "item_id"));
         const auto cloneId = InstanceId(attributeNumber(*workspace, "clone_id"));
