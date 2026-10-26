@@ -4,7 +4,7 @@ Missão integral **não concluída**. Estados: PENDENTE, EM DESENVOLVIMENTO,
 IMPLEMENTADO, TESTADO, VALIDADO NO PLAYER, PUBLICADO, BLOQUEADO. Uma publicação
 de incremento não encerra sua fase quando ainda faltam requisitos obrigatórios.
 
-## Ponto de partida confirmado nesta execução
+## Ponto de partida histórico desta missão
 
 HEAD local/remoto main: cf53b096be2c00693b56dbf7775ef93828b53537.
 Scripts clonados/reativação, destruição, contatos Bullet, passo fixo e entrada
@@ -16,11 +16,11 @@ substituem os testes futuros. Alterações locais de outras tarefas preservadas.
 | Fase | Estado | Implementação/evidência atual | Próximo requisito obrigatório |
 | --- | --- | --- | --- |
 | 0 AutoBackup | PUBLICADO | cd4fb406cfccc6b030e56eadbede0c3965ef66f3, push main confirmado. Monitor labubu ativo via cron, @reboot/watchdog, checkpoints e push automático isolados. Clone remoto recuperou 315 arquivos; índice/main intactos; reinício em 20,005 s. Offline 20/20 e IMPACT 17/17, cobertura global parcial. Relatório 13. | Destino externo privado não informado (cópia externa não configurada). Backend systemd não executável neste host. |
-| 1 Lua/scripting | EM DESENVOLVIMENTO | Commits 5139c20, 5380967, cf53b09; guia SCRIPTING_LUA e testes studio/script_input_ui existentes. | Componentes/transformações/câmera/tempo/persistência restantes; áudio e UI integrados nas fases dependentes; novos testes. |
-| 2 NPCs/navegação | EM DESENVOLVIMENTO | 5f29424: NPC como Part com `NpcProperties` persistidas + `NpcSystem`; grade de navegação XZ + A*; vida/dano/morte/respawn; `linblux.npc` (create/attach/move_to/health/...); degrau ≤1,2. Relatório 20. Studio 1824 verificações, FAST 13/13, IMPACT 22/22, quatro casos NPC no Player. | Rigs/animações de NPC, combate com armas/projéteis e as oito demonstrações completas da fase. |
-| 3 Áudio | PENDENTE | Nenhuma API de áudio anunciada como pronta. | Importação MP3/WAV/OGG, streaming, Editor/Player/Lua, referências, persistência/exportação. |
-| 4 Imagens/decals | PENDENTE | Há infraestrutura de imagens e superfícies a auditar com ATLAS. | Verificar/ampliar operações de assets, propriedades/Lua, exclusão segura, persistência/exportação. |
-| 5 Rosto de fábrica | PENDENTE | Não remover imagens de experiências existentes. | Identificar aplicação automática e alterar só fábrica com testes de rig/spawn. |
+| 1 Lua/scripting | EM DESENVOLVIMENTO | Runtime, eventos, física, entrada, câmera e persistência existentes; 9fe720b amplia Modelos/hierarquia/transformações e scripts. | Componentes restantes, UI programável e integração final de todas as APIs; não declarar Lua completo. |
+| 2 NPCs/navegação | EM DESENVOLVIMENTO | 5f29424: A* XZ, patrulha/perseguição, vida/dano/morte/respawn; 93fe7e5: rigs e clipes idle/walk/run/attack/hurt/death integrados ao renderer/Player. | Combate com armas/projéteis e conjunto completo de demonstrações. Não refazer navegação ou animações existentes. |
+| 3 Áudio | EM DESENVOLVIMENTO | 00898e2: base MP3/WAV/OGG, biblioteca persistida e controle Lua 2D. | Completar/verificar prévia, substituição, gerenciamento de referências e streaming de músicas no Editor/Player; não recriar a base. |
+| 4 Imagens/decals | EM DESENVOLVIMENTO | 4bb803c/bf90835: consulta central de usos, nomes amigáveis, resolução de vínculos, exclusão segura, seletor, Surface persistida/renderizada e testes gráficos. Relatório 21. | Conferência final de todos os requisitos de imagens/Lua na integração abrangente; corrigir apenas defeitos novos reproduzidos. |
+| 5 Rosto de fábrica | PUBLICADO | 00898e2/bf90835: removida associação de fábrica e fallback visual de face/olhos; rig preservado e rosto legado explícito continua renderizado. Pixels e interação gráfica validados, relatório 21. | Não apagar imagens ou associações personalizadas antigas. |
 | 6 UI Lua | PENDENTE | Nenhuma UI Lua declarada pronta. | Componentes reais, eventos, renderização, persistência, separação da UI protegida. |
 | 7 Vida circular | PENDENTE | Saúde real já existe no runtime. | Indicador circular vermelho, animação, dano/cura/respawn, personalização Lua. |
 | 8 Menu lateral | PENDENTE | Studio e Player têm apresentações distintas existentes. | Painel lateral compartilhado/coerente, funções preservadas, foco/teclado/controle e testes visuais. |
@@ -242,7 +242,7 @@ o teste: quaternion passou a ser persistido e a orientação dos filhos é confe
 FAST 20261026T004226Z-7953: build286,1 s; 17/17 em12,4 s, total299 s; cobertura
 global desconhecida devido ao novo teste/CMake. Build final focado2,37 s.
 IMPACT 20261026T020406Z-15199: 20/20 em53,8 s (54,3 s totais), cobertura parcial.
-linblux_models_ui aprovado em29,644 s, captura inspecionada; publicação em andamento.
+linblux_models_ui aprovado em29,644 s, captura inspecionada; PUBLICADO em9fe720b, push confirmado.
 
 PENDENTE dentro da integração de Modelos: gizmos de conjunto e undo composto.
 Depois: Attachments e vínculos físicos; inventário, coleta E, Delete, hotbar;
@@ -252,3 +252,26 @@ implementação desses itens escondida neste incremento.
 Relatório 22 e MODELOS.md registram APIs, formato v4, testes e limites.
 Próximo requisito: integrar gizmos/undo do conjunto e Attachments/vínculos,
 sem reimplementar os sistemas de imagem/NPCs já publicados.
+
+## Checkpoint final desta sessão — gizmos e undo
+
+Código IMPLEMENTADO e TESTADO: 271a5cbf684bc367fc8da4dd807f5a1f846dcddf. Modelos agora usam os gizmos
+existentes para mover/girar/escalar uniformemente, com undo composto e
+cancelamento exato, sem corpo Bullet auxiliar. Propriedades/pivôs entram no
+histórico. Corrigido bloqueio de Ctrl+Z/Y por painéis passivos RmlUi.
+FAST final17/17; IMPACT20/20; models_ui supervisionado23,394 s aprovado,
+captura inspecionada. Cobertura global parcial; sem FULL. Relatório23.
+
+O item histórico “gizmos/undo pendentes” acima está resolvido por este commit.
+PUBLICADO: recuperação4bb803c/bf90835 e Modelos9fe720b, push confirmado.
+Publicação do novo código e deste relatório: conferir main remoto e relatório
+de entrega desta sessão. AutoBackup ativo e checkpoint remoto confirmado.
+
+Próximo requisito PENDENTE: Attachments/juntas, antes de inventário/E/Delete/
+hotbar. Depois: gerenciamento completo de áudio, UI Lua, combate/RifleDemo,
+HUD circular, menu lateral e integração abrangente. Não confundir a base de
+áudio/NPCs existente com conclusão dessas fases. Mundo Padrão/projetos antigos
+foram preservados; validação integral futura ainda necessária.
+
+Encerramento solicitado por limite de créditos; a missão NÃO está concluída.
+Retomar pelo relatório23 e MODELOS.md, preservando os diffs alheios restantes.
