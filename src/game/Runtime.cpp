@@ -274,6 +274,7 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error,const Prog
         inventory_=std::make_unique<Inventory>(*scene_,*physics_);inventory_->update(position(),camera_.yaw());inventory_->loadAuthored();
         interactions_=std::make_unique<InteractionSystem>(*scene_,*physics_);hotbarPage_=0;itemNotice_.clear();
         ui_.clear(); // a new Play never inherits nodes from a previous script VM
+        itemActions_.clear(); // munição/recarga são estado temporário de partida
         scripts_.start(*this); // errors are reported; safe native gameplay remains available
         npcs_.attachAuthored(*this,error); // NPCs autorados ganham controlador
         if(spawnedDead && health_<=0)scripts_.healthChanged(health_,true);
@@ -294,6 +295,7 @@ void RuntimeSession::stop(bool saveProgress) {
     if (!activeAnimation_.empty()) Event("animation", "stop", correlation_, {{"clip", activeAnimation_}});
     activeAnimation_.clear();
     scripts_.stop();ui_.clear();npcs_.reset();audio_.stopAll();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
+    itemActions_.clear();
     if(saveProgress)try{progress_.flush();}catch(const std::exception& e){scripts_.hostError(e.what());}
     progress_.close();
     interactions_.reset();inventory_.reset();destroyCharacter(); physics_.reset(); scene_.reset();
@@ -700,9 +702,18 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     std::uint64_t hoverId=0;bool entering=false;
     while(ui_.takeHover(hoverId,entering))scripts_.uiHover(hoverId,entering);
     scripts_.update(dt);audio_.update(dt,scene_.get());
-    if(inventory_)try{inventory_->update(position(),camera_.yaw());for(const auto& change:inventory_->takeChanges())scripts_.inventoryChanged(change.id,change.action);}catch(const std::exception& e){scripts_.hostError(e.what());}
+    if(inventory_)try{inventory_->update(position(),camera_.yaw());for(const auto& change:inventory_->takeChanges()){
+            scripts_.inventoryChanged(change.id,change.action);
+            // Um item que saiu das mãos/destruído não pode manter recarga ou
+            // ativação pendente: o estado é encerrado antes de qualquer uso novo.
+            if(change.action=="unequip"||change.action=="drop"||change.action=="remove")itemActions_.itemUnavailable(change.id);
+            if(change.action=="remove")itemActions_.forget(change.id);
+        }}catch(const std::exception& e){scripts_.hostError(e.what());}
     physics_->syncScene(*scene_);
     updateItemControls(dt);
+    itemActions_.tick(dt,inventory_?inventory_->equipped():0);
+    for(const auto& change:itemActions_.takeChanges())scripts_.itemAction(change.item,change.action,change.state.ammo,
+        change.state.reserve,change.state.config.magazine,change.state.reloading,change.state.active);
     damageCooldown_=std::max(0.f,damageCooldown_-dt);
     if(health_<=0) {
         deadTime_+=dt;
@@ -886,10 +897,15 @@ bool RuntimeSession::raycastParts(Vector3 origin,Vector3 direction,float distanc
     struct Ray final:btCollisionWorld::ClosestRayResultCallback {
         InstanceId ignored;
         Ray(btVector3 from,btVector3 to,InstanceId skip):ClosestRayResultCallback(from,to),ignored(skip){}
+        // `ignored` pode ser uma Part ou um Modelo inteiro: a subárvore é pulada,
+        // para que uma origem no Attachment do próprio item nunca o atinja.
         bool needsCollision(btBroadphaseProxy* proxy) const override {
             const auto* body=static_cast<const btCollisionObject*>(proxy->m_clientObject);
             const auto* part=static_cast<const Part*>(body->getUserPointer());
-            return part&&part->id()!=ignored&&ClosestRayResultCallback::needsCollision(proxy);
+            if(!part)return false;
+            if(part->id()==ignored)return false;
+            if(ignored)for(const auto* node=part->parent();node;node=node->parent())if(node->id()==ignored)return false;
+            return ClosestRayResultCallback::needsCollision(proxy);
         }
     } result(from,to,ignored);
     physics_->world_->rayTest(from,to,result);if(!result.hasHit())return false;

@@ -20,7 +20,7 @@ namespace loblox::scripting {
 namespace {
 enum class Kind { Instance,Game,Players,Player,RunService,AnimationService,Character,Humanoid,Animator,Signal,Connection,Task };
 enum Signal { Spawn=1,Heartbeat,HealthChanged,Died,EngineStart,EngineStop,EngineDestroy,PhysicsUpdate,CollisionEnter,CollisionExit,
-    KeyPressed,KeyReleased,MousePressed,MouseReleased,GamepadPressed,GamepadReleased,InventoryChanged,InteractionCompleted };
+    KeyPressed,KeyReleased,MousePressed,MouseReleased,GamepadPressed,GamepadReleased,InventoryChanged,InteractionCompleted,ItemAction };
 struct Handle { Kind kind; InstanceId id; unsigned generation; unsigned avatar=0; bool modern=false; };
 constexpr std::size_t kNativeContentLimit=8*1024*1024, kNativeNodes=10000;
 bool Eq(const char* a,const char* b) { return std::strcmp(a,b)==0; }
@@ -410,6 +410,58 @@ struct LuaRuntime::Impl {
     static int ItemsInfo(lua_State* L){auto& h=Host(L);const auto info=h.runtime->inventory().info(h.instance(L,1).id());lua_newtable(L);
         for(const auto& field:std::vector<std::pair<const char*,std::string>>{{"type",info.type},{"name",info.name},{"icon",info.icon},{"state",info.state}}){lua_pushlstring(L,field.second.data(),field.second.size());lua_setfield(L,-2,field.first);}lua_pushboolean(L,info.equipable);lua_setfield(L,-2,"equipable");return 1;}
     static int ItemsState(lua_State* L){auto& h=Host(L);const auto info=h.runtime->inventory().info(h.instance(L,1).id());lua_pushlstring(L,info.state.data(),info.state.size());return 1;}
+    // Ações genéricas de uso: qualquer item equipável pode configurar pente,
+    // intervalo e recarga. O efeito (raio, projétil, som, luz) fica no script.
+    static int ItemsConfigure(lua_State* L){
+        auto& h=Host(L);const auto id=h.instance(L,1).id();Require(lua_istable(L,2),"configure requer tabela de configuração");
+        game::ItemConfig config;
+        lua_pushnil(L);while(lua_next(L,2)){
+            const char* key=Text(L,-2);
+            const auto integer=[&](){Require(lua_isinteger(L,-1),"Campos de munição requerem inteiros");return int(lua_tointeger(L,-1));};
+            if(Eq(key,"magazine"))config.magazine=integer();
+            else if(Eq(key,"reserve"))config.reserve=integer();
+            else if(Eq(key,"consume"))config.consume=integer();
+            else if(Eq(key,"interval"))config.interval=float(Number(L,-1));
+            else if(Eq(key,"reload_time"))config.reloadSeconds=float(Number(L,-1));
+            else throw std::runtime_error("Opção de configuração de item desconhecida");
+            lua_pop(L,1);
+        }
+        h.modelBudget();std::string error;Require(h.runtime->itemActions().configure(id,config,error),error.c_str());return 0;
+    }
+    static int ItemsActivate(lua_State* L){
+        auto& h=Host(L);const auto id=h.instance(L,1).id();
+        Require(h.runtime->inventory().info(id).state=="equipped","Ative somente o item equipado.");
+        h.modelBudget();std::string error;const bool ok=h.runtime->itemActions().activate(id,error);
+        lua_pushboolean(L,ok);lua_pushlstring(L,error.data(),error.size());return 2;
+    }
+    static int ItemsDeactivate(lua_State* L){
+        auto& h=Host(L);std::string error;Require(h.runtime->itemActions().deactivate(h.instance(L,1).id(),error),error.c_str());return 0;
+    }
+    static int ItemsReload(lua_State* L){
+        auto& h=Host(L);const auto id=h.instance(L,1).id();
+        Require(h.runtime->inventory().info(id).state=="equipped","Recarregue somente o item equipado.");
+        std::string error;const bool ok=h.runtime->itemActions().reload(id,error);
+        lua_pushboolean(L,ok);lua_pushlstring(L,error.data(),error.size());return 2;
+    }
+    static int ItemsCancelReload(lua_State* L){
+        auto& h=Host(L);std::string error;Require(h.runtime->itemActions().cancelReload(h.instance(L,1).id(),error),error.c_str());return 0;
+    }
+    static int ItemsSetAmmo(lua_State* L){
+        auto& h=Host(L);Require(lua_isinteger(L,2)&&lua_isinteger(L,3),"set_ammo requer inteiros para pente e reserva");
+        std::string error;Require(h.runtime->itemActions().setAmmo(h.instance(L,1).id(),int(lua_tointeger(L,2)),int(lua_tointeger(L,3)),error),error.c_str());return 0;
+    }
+    static void PushCombat(lua_State* L,const game::ItemRuntimeState& state){
+        lua_createtable(L,0,10);
+        lua_pushinteger(L,state.ammo);lua_setfield(L,-2,"ammo");lua_pushinteger(L,state.reserve);lua_setfield(L,-2,"reserve");
+        lua_pushinteger(L,state.config.magazine);lua_setfield(L,-2,"magazine");lua_pushinteger(L,state.config.consume);lua_setfield(L,-2,"consume");
+        lua_pushnumber(L,state.config.interval);lua_setfield(L,-2,"interval");lua_pushnumber(L,state.config.reloadSeconds);lua_setfield(L,-2,"reload_time");
+        lua_pushboolean(L,state.reloading);lua_setfield(L,-2,"reloading");lua_pushnumber(L,state.reloadProgress());lua_setfield(L,-2,"reload_progress");
+        lua_pushnumber(L,state.cooldown);lua_setfield(L,-2,"cooldown");lua_pushboolean(L,state.active);lua_setfield(L,-2,"active");
+    }
+    static int ItemsCombat(lua_State* L){
+        auto& h=Host(L);const auto* state=h.runtime->itemActions().state(h.instance(L,1).id());
+        if(!state){lua_pushnil(L);return 1;}PushCombat(L,*state);return 1;
+    }
     template<bool Disconnect> static int LinkAttachment(lua_State* L){
         auto& self=Host(L);const auto source=self.instance(L,1).id();
         const auto target=Disconnect?0:self.instance(L,2).id();self.modelBudget();std::string error;
@@ -920,7 +972,7 @@ struct LuaRuntime::Impl {
             Eq(topic,"physics_update")?PhysicsUpdate:Eq(topic,"collision_enter")?CollisionEnter:Eq(topic,"collision_exit")?CollisionExit:
             Eq(topic,"key_pressed")?KeyPressed:Eq(topic,"key_released")?KeyReleased:
             Eq(topic,"mouse_pressed")?MousePressed:Eq(topic,"mouse_released")?MouseReleased:
-            Eq(topic,"gamepad_pressed")?GamepadPressed:Eq(topic,"gamepad_released")?GamepadReleased:Eq(topic,"inventory_changed")?InventoryChanged:Eq(topic,"interaction_completed")?InteractionCompleted:0;
+            Eq(topic,"gamepad_pressed")?GamepadPressed:Eq(topic,"gamepad_released")?GamepadReleased:Eq(topic,"inventory_changed")?InventoryChanged:Eq(topic,"interaction_completed")?InteractionCompleted:Eq(topic,"item_action")?ItemAction:0;
     }
     static const char* Topic(lua_State* L) {
         const char* topic=Text(L,1);const auto length=lua_rawlen(L,1);
@@ -1532,7 +1584,8 @@ struct LuaRuntime::Impl {
         lua_pushcfunction(L,Safe<AudioList>);lua_setfield(L,-2,"list");
         lua_setfield(L,-2,"audio");
         lua_newtable(L);
-        const std::pair<const char*,lua_CFunction> items[]={{"register",Safe<ItemsRegister>},{"spawn",Safe<ItemsSpawn>},{"collect",Safe<ItemsAction<0>>},{"add",Safe<ItemsAction<0>>},{"equip",Safe<ItemsAction<1>>},{"unequip",Safe<ItemsAction<2>>},{"drop",Safe<ItemsAction<3>>},{"remove",Safe<ItemsAction<4>>},{"list",Safe<ItemsList>},{"equipped",Safe<ItemsEquipped>},{"info",Safe<ItemsInfo>},{"state",Safe<ItemsState>}};
+        const std::pair<const char*,lua_CFunction> items[]={{"register",Safe<ItemsRegister>},{"spawn",Safe<ItemsSpawn>},{"collect",Safe<ItemsAction<0>>},{"add",Safe<ItemsAction<0>>},{"equip",Safe<ItemsAction<1>>},{"unequip",Safe<ItemsAction<2>>},{"drop",Safe<ItemsAction<3>>},{"remove",Safe<ItemsAction<4>>},{"list",Safe<ItemsList>},{"equipped",Safe<ItemsEquipped>},{"info",Safe<ItemsInfo>},{"state",Safe<ItemsState>},
+            {"configure",Safe<ItemsConfigure>},{"activate",Safe<ItemsActivate>},{"deactivate",Safe<ItemsDeactivate>},{"reload",Safe<ItemsReload>},{"cancel_reload",Safe<ItemsCancelReload>},{"combat",Safe<ItemsCombat>},{"set_ammo",Safe<ItemsSetAmmo>}};
         for(const auto& entry:items){lua_pushcfunction(L,entry.second);lua_setfield(L,-2,entry.first);}lua_setfield(L,-2,"items");
         lua_newtable(L);        lua_pushcfunction(L,Safe<InteractionRegister>);lua_setfield(L,-2,"register");lua_pushcfunction(L,Safe<InteractionRemove>);lua_setfield(L,-2,"unregister");lua_pushcfunction(L,Safe<InteractionPrompt>);lua_setfield(L,-2,"prompt");lua_setfield(L,-2,"interactions");
         lua_newtable(L);
@@ -1549,6 +1602,22 @@ struct LuaRuntime::Impl {
     static int EmitInventory(lua_State* L){auto& h=Host(L);const int ref=int(lua_tointeger(L,1));const auto id=InstanceId(lua_tointeger(L,2));const std::string action=Text(L,3);const auto connection=InstanceId(lua_tointeger(L,4));
         lua_settop(L,0);lua_rawgeti(L,LUA_REGISTRYINDEX,ref);lua_newtable(L);h.pushInstance(L,h.runtime->scene().find(id),true);lua_setfield(L,-2,"item");h.pushInstance(L,h.runtime->scene().find(id),true);lua_setfield(L,-2,"object");
         const auto key=std::to_string(id);lua_pushlstring(L,key.data(),key.size());lua_setfield(L,-2,"id");lua_pushlstring(L,action.data(),action.size());lua_setfield(L,-2,"action");SpawnTask(L);h.jobs.back().connection=connection;return 0;}
+    static int EmitItemAction(lua_State* L){auto& h=Host(L);const int ref=int(lua_tointeger(L,1));const auto id=InstanceId(lua_tointeger(L,2));const std::string action=Text(L,3);
+        const int ammo=int(lua_tointeger(L,4)),reserve=int(lua_tointeger(L,5)),magazine=int(lua_tointeger(L,6));const bool reloading=lua_toboolean(L,7)!=0,active=lua_toboolean(L,8)!=0;const auto connection=InstanceId(lua_tointeger(L,9));
+        lua_settop(L,0);lua_rawgeti(L,LUA_REGISTRYINDEX,ref);lua_newtable(L);
+        h.pushInstance(L,h.runtime->scene().find(id),true);lua_setfield(L,-2,"item");h.pushInstance(L,h.runtime->scene().find(id),true);lua_setfield(L,-2,"object");
+        const auto key=std::to_string(id);lua_pushlstring(L,key.data(),key.size());lua_setfield(L,-2,"id");lua_pushlstring(L,action.data(),action.size());lua_setfield(L,-2,"action");
+        lua_pushinteger(L,ammo);lua_setfield(L,-2,"ammo");lua_pushinteger(L,reserve);lua_setfield(L,-2,"reserve");lua_pushinteger(L,magazine);lua_setfield(L,-2,"magazine");
+        lua_pushboolean(L,reloading);lua_setfield(L,-2,"reloading");lua_pushboolean(L,active);lua_setfield(L,-2,"active");
+        SpawnTask(L);h.jobs.back().connection=connection;return 0;}
+    void itemActionChanged(InstanceId id,const std::string& action,int ammo,int reserve,int magazine,bool reloading,bool active){
+        if(!state)return;pruneListeners();
+        for(const auto& pair:listeners)if(pair.second.signal==ItemAction&&listenerAlive(pair.second)){
+            executing=pair.second.script;lua_pushcfunction(state,Safe<EmitItemAction>);lua_pushinteger(state,pair.second.ref);
+            lua_pushinteger(state,lua_Integer(id));lua_pushlstring(state,action.data(),action.size());
+            lua_pushinteger(state,ammo);lua_pushinteger(state,reserve);lua_pushinteger(state,magazine);
+            lua_pushboolean(state,reloading);lua_pushboolean(state,active);lua_pushinteger(state,lua_Integer(pair.first));
+            if(lua_pcall(state,9,0,0)!=LUA_OK){message(true,executing,lua_tostring(state,-1));lua_pop(state,1);}}}
     void entityChanged(int signal,InstanceId id,const std::string& action){if(!state)return;pruneListeners();for(const auto& pair:listeners)if(pair.second.signal==signal){
         executing=pair.second.script;lua_pushcfunction(state,Safe<EmitInventory>);lua_pushinteger(state,pair.second.ref);lua_pushinteger(state,lua_Integer(id));lua_pushlstring(state,action.data(),action.size());lua_pushinteger(state,lua_Integer(pair.first));
         if(lua_pcall(state,4,0,0)!=LUA_OK){message(true,executing,lua_tostring(state,-1));lua_pop(state,1);}}}
@@ -1791,6 +1860,8 @@ void LuaRuntime::interactionCompleted(InstanceId id){impl_->entityChanged(Intera
 void LuaRuntime::uiClick(std::uint64_t element){impl_->dispatchUi(element,"click",0);}
 void LuaRuntime::uiHover(std::uint64_t element,bool entering){impl_->dispatchUi(element,"hover",entering?1:2);}
 void LuaRuntime::inventoryChanged(InstanceId id,const std::string& action){impl_->entityChanged(InventoryChanged,id,action);}
+void LuaRuntime::itemAction(InstanceId id,const std::string& action,int ammo,int reserve,int magazine,bool reloading,bool active){
+    impl_->itemActionChanged(id,action,ammo,reserve,magazine,reloading,active);}
 void LuaRuntime::healthChanged(float health,bool died){impl_->event(HealthChanged,health);if(died)impl_->event(Died);}
 const std::vector<Message>& LuaRuntime::messages()const{return impl_->output;}
 std::size_t LuaRuntime::errorCount()const{return impl_->errors;}

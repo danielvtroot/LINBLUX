@@ -89,6 +89,7 @@ add_library(linblux_engine STATIC
   src/game/JpegImage.cpp
   src/game/Runtime.cpp
   src/game/Inventory.cpp
+  src/game/ItemActions.cpp
   src/game/Interaction.cpp
   src/game/Navigation.cpp
   src/game/Npc.cpp
