@@ -46,21 +46,22 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
   if(hover&&IsMouseButtonDown(MOUSE_BUTTON_LEFT))value=min+std::clamp((mouse.x-x)/available,0.f,1.f)*(max-min);
   if(paused&&id==focus_){if(IsKeyPressed(KEY_LEFT))value=std::max(min,value-(max-min)/20);if(IsKeyPressed(KEY_RIGHT))value=std::min(max,value+(max-min)/20);}
   DrawRectangle(int(x),int(y+9*s),int(available),int(4*s),{65,56,64,255});
-  DrawRectangle(int(x),int(y+9*s),int(available*std::clamp((value-min)/(max-min),0.f,1.f)),int(4*s),red);
-  DrawCircleV({x+available*std::clamp((value-min)/(max-min),0.f,1.f),y+11*s},6*s,white);y+=46*s;
+  DrawRectangle(int(x),int(y+9*s),int(available*std::clamp((value-min)/std::max(.0001f,max-min),0.f,1.f)),int(4*s),red);
+  DrawCircleV({x+available*std::clamp((value-min)/std::max(.0001f,max-min),0.f,1.f),y+11*s},6*s,white);y+=46*s;
  };
  auto& settings=runtime.settings();
  if(page_==0){line(runtime.rig().name);line("Vida: "+std::to_string(int(runtime.health()))+" / "+std::to_string(int(settings.maxHealth)));if(action("Renascer personagem")){std::string error;runtime.resetCharacter(error);}}
  if(page_==1){
   const char* modes[]={"Livre","Acompanhar","Primeira pessoa"};
   if(action(std::string("Modo: ")+modes[int(settings.cameraMode)]))settings.cameraMode=game::CameraMode((int(settings.cameraMode)+1)%3);
-  slider("Distância",settings.cameraDistance,settings.minZoom,settings.maxZoom);
+  const float oldDistance=settings.cameraDistance;slider("Distância",settings.cameraDistance,settings.minZoom,settings.maxZoom);
+  if(settings.cameraDistance!=oldDistance)runtime.playerCamera().setDistance(settings.cameraDistance);
   if(action(settings.cameraLock?"Trava permanente: ativada":"Trava permanente: desativada"))settings.cameraLock=!settings.cameraLock;
   if(action(settings.enableShiftLock?"Shift Lock: ativado":"Shift Lock: desativado"))settings.enableShiftLock=!settings.enableShiftLock;
   if(action(settings.allowFirstPerson?"Primeira pessoa: permitida":"Primeira pessoa: bloqueada"))settings.allowFirstPerson=!settings.allowFirstPerson;
  }
  if(page_==2){slider("Sensibilidade",settings.sensitivity,.0001f,.03f);line("WASD: mover · Espaço: pular");line("Botão direito: girar câmera");line("E: segurar para interagir");line("1–9: equipar · Delete: soltar");line("PgUp / PgDn: trocar página");line("Esc: abrir e fechar menu");}
- if(page_==3){float volume=GetMasterVolume();slider("Volume geral",volume,0,1);if(paused)SetMasterVolume(volume);}
+ if(page_==3){if(IsAudioDeviceReady()){float volume=GetMasterVolume();slider("Volume geral",volume,0,1);if(paused)SetMasterVolume(volume);}else line("Dispositivo de áudio indisponível.");}
  if(page_==4){if(action(IsWindowFullscreen()?"Sair da tela cheia":"Entrar em tela cheia"))ToggleFullscreen();line("Ajuste a resolução pela janela.");}
  if(page_==5){line("LINBLUX Player · Alpha em desenvolvimento");line("Experiências locais com Lua e Bullet.");line("Use Esc para retornar ao jogo.");line("Menu protegido: scripts não o removem.");}
  EndScissorMode();count_=std::max(1,current);focus_=std::clamp(focus_,0,count_-1);return quit;
