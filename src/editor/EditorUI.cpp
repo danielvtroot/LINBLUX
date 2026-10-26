@@ -1256,6 +1256,9 @@ void EditorUI::drawMainMenuBar() {
         if (ImGui::MenuItem(i18n::Label("Insert Spawn"))) insertSpawnLocation();
         if (ImGui::MenuItem(i18n::Label("Insert Folder"))) insertContainer(InstanceClass::Folder);
         if (ImGui::MenuItem(i18n::Label("Insert Model"))) insertContainer(InstanceClass::Model);
+        if(ImGui::MenuItem("Agrupar seleção")){endGizmoSession(true,"group");std::string error;if(!scene_.group(scene_.selectedIds(),"Modelo",error))setStatus(error,true);}
+        if(ImGui::MenuItem("Desagrupar modelo")){endGizmoSession(true,"ungroup");std::string error;if(!scene_.selection()||!scene_.ungroup(scene_.selection()->id(),error))setStatus(error.empty()?"Selecione um Modelo.":error,true);}
+
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu(i18n::Label("Model"))) {

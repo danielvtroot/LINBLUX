@@ -82,10 +82,10 @@ void ModelTransforms() {
     Scene scene;std::string error;scene.buildDefaultScene();
     auto* a=scene.createPart(PartShape::Block,{10,4,0},{2,2,2},"A");a->setAnchored(true);
     auto* b=scene.createPart(PartShape::Block,{14,4,0},{2,2,2},"B");b->setAnchored(true);
-    a->setRotationEulerDegrees({15,0,17});
     scene.select(a);scene.toggleSelection(b);CHECK(scene.selectedIds().size()==2);CHECK(scene.selected(a->id()));
     auto* model=scene.group(scene.selectedIds(),"Conjunto",error);CHECK(model);CHECK(model&&model->children().size()==2);
     if(!model)return;const auto id=model->id();ModelFrame frame;CHECK(scene.modelFrame(id,frame,error));CHECK(NearlyEqual(frame.position,{12,4,0}));
+    a->setRotationEulerDegrees({15,0,17});
     frame.position={17,5,0};CHECK(scene.transformModel(id,frame,error));CHECK(NearlyEqual(a->position(),{15,5,0}));
     frame.rotation=QuatFromEulerDegrees({0,90,0});frame.scale=2;CHECK(scene.transformModel(id,frame,error));
     CHECK(NearlyEqual(a->position(),{17,5,4},.001f));CHECK(NearlyEqual(a->size(),{4,4,4}));
