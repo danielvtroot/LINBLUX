@@ -211,3 +211,15 @@ hotbar e RifleDemo. Esses recursos NÃO estão implementados nesta recuperação
 Áudio 2D/Lua existe na base 00898e2; gerenciamento completo, prévia e integração
 adicional continuam a verificar/completar. UI Lua, HUD circular, menu lateral e
 integração abrangente seguem pendentes. Não reimplementar NPCs/áudio já existentes.
+
+VALIDAÇÃO FINAL DA RECUPERAÇÃO: três testes gráficos aprovados em74,874 s
+(decal_render, rig_image, rig_decals_ui), com pixels de cabeça sem face e rosto
+legado explícito, Surface renderizada/transparente e fluxo X11 de recursos.
+Corrigida a falta de codec/renderização de Surface descoberta no teste.
+IMPACT final 20261026T000837Z-21049: 17/17 em12,9 s, cobertura global parcial.
+Após ajuste final de altura, rig_decals_ui passou novamente em67,334 s e a captura
+foi inspecionada. Relatório 21 documenta fontes, falhas corrigidas e evidências.
+Código pronto para publicação deste incremento. A missão integral segue aberta.
+Próxima fase: Modelos reais com pivô/transformações e seleção múltipla, antes de
+Attachments/inventário/E/Delete/hotbar. Não reiniciar investigação de imagens
+sem um defeito concreto novo.

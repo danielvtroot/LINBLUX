@@ -35,3 +35,8 @@ compatibilidade quebrar. Atualize `experiences`/`scene` quando necessário.
 **Limites:** cenas com recursos muito novos podem ser rejeitadas por versão;
 não há banco de dados ou migração automática de campos desconhecidos. A
 serialização conhece o formato R6 atual, não esqueletos arbitrários.
+
+Objetos Decal/Texture v3 persistem `surface` via EncodeSurface/DecodeSurface,
+compartilhado com RigDecal. Leitura em candidato valida campos/face/UVs e cria
+as superfícies após as Parts, independente da ordem do arquivo. Projetos antigos
+continuam aceitos; parâmetros novos de adesivos usam defaults compatíveis.
