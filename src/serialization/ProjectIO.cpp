@@ -218,8 +218,8 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
         out.instanceClass == InstanceClass::Model) {
         if(out.instanceClass==InstanceClass::Model&&value.contains("modelPivot")) {
             const auto& pivot=value["modelPivot"];Vector3 angles{};
-            if(!pivot.is_object()||!pivot.contains("position")||!pivot.contains("rotation")||!pivot.contains("scale")||
-               !ReadVector3(pivot["position"],"modelPivot.position",out.modelFrame.position,error)||
+            if(!pivot.is_object()||!pivot.contains("position")||!pivot.contains("rotation")||!pivot.contains("scale")){error="Pivô do Modelo requer posição, rotação e escala.";return false;}
+            if(!ReadVector3(pivot["position"],"modelPivot.position",out.modelFrame.position,error)||
                !ReadVector3(pivot["rotation"],"modelPivot.rotation",angles,error)||!ReadFloat(pivot["scale"],"modelPivot.scale",out.modelFrame.scale,error))return false;
             out.modelFrame.rotation=QuatFromEulerDegrees(angles);out.hasModelFrame=true;
             if(!out.modelFrame.valid()){error="Pivô do Modelo inválido.";return false;}

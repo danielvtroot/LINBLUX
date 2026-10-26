@@ -21,6 +21,7 @@ def main():
     example = (root / "assets/examples/lua/temporizadores.lua").read_text()
     example += '\nlinblux.events.on("stop", function() assert(linblux.scene.root:get_attribute("timer_concluido")) end)\n'
     cases = [
+        ("Modelos.lua",(root / "assets/examples/lua/modelos.lua").read_text()+'\nlinblux.events.on("stop",function() assert(linblux.scene.root:get_attribute("modelos_concluido")) end)',0,"erros Lua: 0"),
         ("SurfacePlayer.lua","local p=linblux.scene.find('SurfacePart');local c=p:components();assert(#c==1 and c[1].type=='decal');p:remove_component(c[1]);assert(#p:components()==0)",0,"erros Lua: 0"),
         ("CorposRigidos.lua",(root / "assets/examples/lua/corpos_rigidos.lua").read_text()+'\nlinblux.events.on("stop",function() assert(linblux.scene.root:get_attribute("corpos_rigidos_concluido")) end)',0,"erros Lua: 0"),
         ("CorpoInvalido.lua","linblux.scene.create('part',{body={density=-1}})",1,"Propriedades físicas fora dos limites"),
