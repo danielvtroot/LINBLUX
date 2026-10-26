@@ -37,8 +37,8 @@ bool SoundInUse(const Scene& scene, const std::string& reference);
 // Lista os áudios existentes em assets/ (usada pela UI de importação).
 std::vector<SoundAsset> ListAudioAssets(const std::string& assetsDir);
 
-// Decodifica o container para descobrir duração real. Funciona sem dispositivo
-// de áudio no host (dr_wav/dr_mp3/stb_vorbis), então serve de teste headless.
+// Lê metadados com orçamento/timeout, sem decodificar o arquivo inteiro.
+// Headless usa FFmpeg; sem ele, a raylib requer dispositivo de áudio aberto.
 bool ProbeAudio(const std::string& resolvedPath, double& duration, std::string& error);
 
 // Reprodução 2D global. Cada voice é independente: play devolve um handle

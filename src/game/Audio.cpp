@@ -1,6 +1,12 @@
 #include "game/Audio.h"
 
 #include <algorithm>
+#include <chrono>
+#ifdef LINBLUX_AUDIO_METADATA_FFMPEG
+extern "C" {
+#include <libavformat/avformat.h>
+}
+#endif
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -90,16 +96,37 @@ bool ProbeAudio(const std::string& resolvedPath, double& duration, std::string& 
             return true;
         }
     }
-    Wave wave = LoadWave(resolvedPath.c_str());
-    if (!wave.data || wave.frameCount <= 0 || wave.sampleRate <= 0) {
-        if (wave.data) UnloadWave(wave);
-        error = "Falha ao decodificar áudio: " + resolvedPath;
-        return false;
+#ifdef LINBLUX_AUDIO_METADATA_FFMPEG
+    AVFormatContext* format=avformat_alloc_context();
+    if(!format){error="Memória insuficiente para inspecionar áudio.";return false;}
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(2);
+    format->interrupt_callback.callback=[](void* data){return std::chrono::steady_clock::now()>*static_cast<const std::chrono::steady_clock::time_point*>(data)?1:0;};
+    format->interrupt_callback.opaque=const_cast<void*>(static_cast<const void*>(&deadline));
+    format->flags|=AVFMT_FLAG_NOBUFFER;
+    AVDictionary* options=nullptr;av_dict_set(&options,"protocol_whitelist","file",0);av_dict_set(&options,"format_whitelist","wav,ogg,mp3",0);
+    av_dict_set_int(&options,"probesize",262144,0);av_dict_set_int(&options,"analyzeduration",200000,0);
+    const int opened=avformat_open_input(&format,resolvedPath.c_str(),nullptr,&options);av_dict_free(&options);
+    if(opened<0){if(format)avformat_close_input(&format);error="Container de áudio inválido ou não suportado.";return false;}
+    const int found=avformat_find_stream_info(format,nullptr);bool audio=false;
+    for(unsigned i=0;i<format->nb_streams;++i)if(format->streams[i]->codecpar->codec_type==AVMEDIA_TYPE_AUDIO){
+        const auto* stream=format->streams[i];audio=true;
+        if(stream->codecpar->codec_id==AV_CODEC_ID_OPUS){audio=false;break;}
+        if(stream->duration!=AV_NOPTS_VALUE&&stream->duration>0)duration=std::max(duration,stream->duration*av_q2d(stream->time_base));
     }
-    duration = double(wave.frameCount) / double(wave.sampleRate);
-    UnloadWave(wave);
+    if(format->duration!=AV_NOPTS_VALUE&&format->duration>0)duration=std::max(duration,double(format->duration)/AV_TIME_BASE);
+    avformat_close_input(&format);
+    if(found<0||!audio||!std::isfinite(duration)||duration<=0){error="Não foi possível obter duração válida de WAV/MP3/OGG Vorbis.";return false;}
+#else
+    // raylib can inspect a stream when its audio device has already been opened.
+    if(!IsAudioDeviceReady()){error="Inspeção de áudio sem dispositivo requer FFmpeg nesta compilação.";return false;}
+    Music probe=LoadMusicStream(resolvedPath.c_str());
+    if(!probe.stream.buffer){error="Falha ao abrir stream de áudio.";return false;}
+    duration=GetMusicTimeLength(probe);UnloadMusicStream(probe);
+    if(!std::isfinite(duration)||duration<=0){error="Duração de áudio inválida.";return false;}
+#endif
     {
         std::lock_guard<std::mutex> lock(probeMutex);
+        if(probeCache.size()>=1024)probeCache.erase(probeCache.begin());
         probeCache[resolvedPath] = {size, modified, duration};
     }
     return true;
@@ -168,6 +195,7 @@ int AudioSystem::play(const std::string& reference, float volume, bool loop, std
     voice.duration = seconds;
     if (deviceReady()) {
         voice.music = LoadMusicStream(path.c_str());
+        if (!voice.music.stream.buffer) {error="O backend não conseguiu abrir o áudio importado.";return 0;}
         if (voice.music.stream.buffer) {
             voice.stream = true;
             voice.music.looping = loop;
