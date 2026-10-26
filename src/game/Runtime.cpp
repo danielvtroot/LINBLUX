@@ -271,6 +271,7 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error,const Prog
         state_ = RuntimeState::Playing;
         const bool spawnedDead=health_<=0;
         npcs_.reset(); // controladores de NPC sao sempre recriados por Play
+        inventory_=std::make_unique<Inventory>(*scene_,*physics_);inventory_->update(position(),camera_.yaw());
         scripts_.start(*this); // errors are reported; safe native gameplay remains available
         npcs_.attachAuthored(*this,error); // NPCs autorados ganham controlador
         if(spawnedDead && health_<=0)scripts_.healthChanged(health_,true);
@@ -293,7 +294,7 @@ void RuntimeSession::stop(bool saveProgress) {
     scripts_.stop();npcs_.reset();audio_.stopAll();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
     if(saveProgress)try{progress_.flush();}catch(const std::exception& e){scripts_.hostError(e.what());}
     progress_.close();
-    destroyCharacter(); physics_.reset(); scene_.reset();
+    inventory_.reset();destroyCharacter(); physics_.reset(); scene_.reset();
     accumulator_ = 0; jumpPending_ = false; coyoteTime_=jumpBufferTime_=0; pose_ = {};
     blendFrom_ = {}; poseSource_.clear(); poseWalking_ = false; wasAirborne_ = false; blendTime_ = 0;
     shiftLockRequested_ = false; lastShiftKey_ = 0; // Stop nunca deixa o lock preso
@@ -689,6 +690,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     lastJumpDown_ = input.jump;
     previousScriptInput_=scriptInput_;scriptInput_=input.script;
     scripts_.update(dt);audio_.update(dt);
+    if(inventory_)try{inventory_->update(position(),camera_.yaw());for(const auto& change:inventory_->takeChanges())scripts_.inventoryChanged(change.id,change.action);}catch(const std::exception& e){scripts_.hostError(e.what());}
     physics_->syncScene(*scene_);
     damageCooldown_=std::max(0.f,damageCooldown_-dt);
     if(health_<=0) {
@@ -720,6 +722,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     std::vector<InstanceId> fallen;
     for(auto* part:scene_->parts()) if(!part->anchored() && part->deletable() && part->position().y<scene_->workspace()->fallenPartsDestroyHeight())fallen.push_back(part->id());
     for(auto id:fallen)scene_->removeById(id);
+    if(inventory_)try{inventory_->update(position(),camera_.yaw());}catch(const std::exception& e){scripts_.hostError(e.what());}
     try{progress_.tick(dt);}catch(const std::exception& e){scripts_.hostError(e.what());}
 }
 float RuntimeSession::cameraClearance(Vector3 from, Vector3 to, float radius) const {

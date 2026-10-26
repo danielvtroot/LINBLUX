@@ -13,9 +13,9 @@ void Need(bool condition,const char* message){if(!condition)throw std::runtime_e
 struct Snapshot {InstanceId id;InstanceClass type;bool anchored=false,collide=false,enabled=false;unsigned char alpha=255;};
 std::vector<Instance*> Nodes(Instance* root){std::vector<Instance*> out;std::function<void(Instance*)> visit=[&](Instance* n){out.push_back(n);for(auto* c:n->children())visit(c);};visit(root);return out;}
 Snapshot Capture(const Instance* n){Snapshot s{n->id(),n->instanceClass()};if(n->isPart()){const auto* p=static_cast<const Part*>(n);s.anchored=p->anchored();s.collide=p->canCollide();s.alpha=p->color().a;}if(IsScriptClass(n->instanceClass()))s.enabled=static_cast<const Script*>(n)->enabled;return s;}
-void Present(Scene& scene,const std::vector<Snapshot>& nodes,bool visible,bool world,bool scripts=false){
+void Present(Scene& scene,const std::vector<Snapshot>& nodes,bool visible,bool world,bool scripts=false,bool fall=false){
     for(const auto& s:nodes)if(auto* n=scene.find(s.id)){
-        if(n->isPart()){auto* p=static_cast<Part*>(n);auto c=p->color();c.a=visible?s.alpha:0;p->setColor(c);p->setAnchored(world?false:true);p->setCanCollide(world?s.collide:false);}
+        if(n->isPart()){auto* p=static_cast<Part*>(n);auto c=p->color();c.a=visible?s.alpha:0;p->setColor(c);p->setAnchored(world?(fall?false:s.anchored):true);p->setCanCollide(world?s.collide:false);}
         if(scripts&&IsScriptClass(n->instanceClass()))static_cast<Script*>(n)->enabled=s.enabled;
     }
 }
@@ -88,7 +88,7 @@ void Inventory::drop(InstanceId id){
         if(h.physics.raycast(Vector3Add(candidate,{0,6,0}),{0,-1,0},36,nullptr,&ground,nullptr,true))candidate.y=ground.y+half.y+.15f;
         if(h.physics.isSpaceClear(candidate,half,0)){target.position=Vector3Add(current.position,Vector3Subtract(candidate,center));found=target.valid();}}
     Need(found,"Não há espaço livre para soltar o item próximo ao jogador.");h.move(id,target);
-    h.bag.erase(std::remove(h.bag.begin(),h.bag.end(),id),h.bag.end());if(h.equipped==id)h.equipped=0;item.state="world";Present(h.scene,item.nodes,true,true);h.physics.syncScene(h.scene);h.change(id,"drop");
+    h.bag.erase(std::remove(h.bag.begin(),h.bag.end(),id),h.bag.end());if(h.equipped==id)h.equipped=0;item.state="world";Present(h.scene,item.nodes,true,true,false,true);h.physics.syncScene(h.scene);h.change(id,"drop");
 }
 void Inventory::remove(InstanceId id){auto& h=*impl_;h.item(id);Need(h.scene.remove(h.scene.find(id)),"Não foi possível remover o item.");h.forget(id);h.change(id,"remove");}
 ItemInfo Inventory::info(InstanceId id)const{auto& h=*impl_;const auto& item=h.item(id);return {id,item.type,item.options.name,item.options.icon,item.state,item.options.equipable};}
