@@ -2,6 +2,7 @@
 // the same RuntimeSession the Studio and the Player use, without a window.
 #include "core/Diagnostics.h"
 #include "experiences/ExperienceManager.h"
+#include "game/ImageAssets.h"
 #include "game/Runtime.h"
 #include "objects/Part.h"
 #include "scene/Scene.h"
@@ -63,6 +64,7 @@ struct Fixture {
     }
 };
 void expectError(const std::string& source, const std::string& needle) {
+    std::fprintf(stderr, "expectError: %s\n", needle.c_str());
     Fixture fixture(source);
     game::RuntimeSession runtime;
     std::string error;
