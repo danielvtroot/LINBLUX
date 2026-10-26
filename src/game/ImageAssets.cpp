@@ -4,6 +4,8 @@
 #include "objects/Part.h"
 #include "scene/Scene.h"
 #include "serialization/ProjectIO.h"
+#include "nlohmann/json.hpp"
+#include "experiences/ExperienceManager.h"
 
 #include <algorithm>
 #include <cctype>
@@ -12,6 +14,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <unordered_map>
 #include <unistd.h>
 
@@ -50,6 +53,64 @@ std::string LowerExt(const std::filesystem::path& path) {
 // GL_EXT_texture_filter_anisotropic is optional. Asking for
 // GL_MAX_ANISOTROPY_EXT on a driver without it is a GL error, so the
 // extension is probed once before any texture asks for anisotropic filtering.
+std::filesystem::path NamesPath(const std::string& assetsDir) {
+    return std::filesystem::path(assetsDir) / "image-names.json";
+}
+
+std::map<std::string, std::string> ReadImageNames(const std::string& assetsDir) {
+    std::map<std::string, std::string> names;
+    std::error_code ec;const auto file=NamesPath(assetsDir);
+    if(std::filesystem::is_symlink(std::filesystem::symlink_status(file,ec))||!std::filesystem::is_regular_file(file,ec)||std::filesystem::file_size(file,ec)>512*1024||ec)return names;
+    std::ifstream input(file, std::ios::binary);
+    if (!input) return names;
+    const std::string text((std::istreambuf_iterator<char>(input)), {});
+    if (text.empty() || text.size() > 512 * 1024) return names;
+    try {
+        const auto json = nlohmann::json::parse(text);
+        if (!json.is_object() || json.value("version", 0) != 1) return names;
+        const auto it = json.find("names");
+        if (it == json.end() || !it->is_object()) return names;
+        for (auto entry = it->begin(); entry != it->end(); ++entry) {
+            if (!entry.value().is_string()) continue;
+            const auto name = entry.value().get<std::string>();
+            if (!name.empty() && name.size() <= 80) names[entry.key()] = name;
+        }
+    } catch (const std::exception&) {
+        // Arquivo de nomes corrompido não impede abrir o projeto; ele é
+        // simplesmente regenerado no próximo rename.
+    }
+    return names;
+}
+
+bool WriteImageNames(const std::string& assetsDir, const std::map<std::string, std::string>& names,
+                     std::string& error) {
+    nlohmann::json json;
+    json["version"] = 1;
+    json["names"] = names;
+    std::error_code fsError;
+    std::filesystem::create_directories(assetsDir, fsError);
+    if (fsError) { error = "Não foi possível criar " + assetsDir + ": " + fsError.message(); return false; }
+    return projectio::writeFileAtomically(NamesPath(assetsDir).string(), json.dump(2), error);
+}
+
+std::string FileKey(const std::string& reference) {
+    const auto path=std::filesystem::path(NormalizeImageReference(reference)).lexically_normal();
+    if(path.is_absolute()||(!path.parent_path().empty()&&path.parent_path()!="assets")||path.filename()==".."||path.filename()==".")return {};
+    return path.filename().string();
+}
+
+std::string ShortId(const std::string& filename) {
+    const auto stem = std::filesystem::path(filename).stem().string();
+    return stem.size() <= 4 ? stem : stem.substr(stem.size() - 4);
+}
+
+std::string TrimName(const std::string& value) {
+    std::size_t begin = 0, end = value.size();
+    while (begin < end && std::isspace(static_cast<unsigned char>(value[begin]))) ++begin;
+    while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1]))) --end;
+    return value.substr(begin, end - begin);
+}
+
 bool AnisotropicFilteringSupported() {
 #if defined(LINBLUX_GL_HEADER)
     static const bool supported = []() {
@@ -106,25 +167,8 @@ std::string NormalizeImageReference(const std::string& reference) {
     return text;
 }
 
-bool ImageInUse(const Scene& scene, const std::string& reference) {
-    if(reference.empty())return false;
-    const auto wanted=std::filesystem::path(NormalizeImageReference(reference)).filename().string();
-    if(wanted.empty())return false;
-    const auto matches=[&](const std::string& value) {
-        return !value.empty()&&std::filesystem::path(value).filename().string()==wanted;
-    };
-    for(const Part* part:scene.parts()) {
-        if(!part)continue;
-        for(const auto& attribute:part->attributes()) {
-            if(attribute.first.find("image")==std::string::npos&&attribute.first!="FaceTexture")continue;
-            if(const auto* text=std::get_if<std::string>(&attribute.second))if(matches(*text))return true;
-        }
-    }
-    for(const auto& rig:scene.gameAssets().rigs) {
-        for(const auto& body:rig.bodies)if(matches(body.image))return true;
-        for(const auto& body:rig.bodies)for(const auto& decal:body.decals)if(matches(decal.surface.image))return true;
-    }
-    return false;
+bool ImageInUse(const Scene& scene,const std::string& reference) {
+    return !DescribeImageUsage(scene,reference).empty();
 }
 
 bool RemoveAssetFile(const std::string& assetsDir, const std::string& filename,
@@ -135,10 +179,12 @@ bool RemoveAssetFile(const std::string& assetsDir, const std::string& filename,
     if(name!=filename||name.empty()){error="Use apenas o nome do arquivo em assets/.";return false;}
     const std::filesystem::path root=std::filesystem::path(assetsDir).lexically_normal();
     const std::filesystem::path target=root/name;
+    if(std::filesystem::is_symlink(std::filesystem::symlink_status(root))){error="Diretório de assets não pode ser link simbólico.";return false;}
     std::error_code fsError;
     if(!std::filesystem::is_regular_file(target,fsError)){error="Asset não encontrado: "+name;return false;}
     if(std::filesystem::is_symlink(std::filesystem::symlink_status(target,fsError))){error="Symlink não pode ser removido como asset.";return false;}
     if(!std::filesystem::remove(target,fsError)||fsError){error="Falha ao remover "+name+": "+fsError.message();return false;}
+    ForgetImageAssetName(assetsDir,name);
     ClearImageTextures();
     return true;
 }
@@ -246,17 +292,22 @@ bool ImportMediaTo(const std::string& assetsDir, const std::string& sourcePath,
     }
     const std::filesystem::path target =
         std::filesystem::path(assetsDir) / (id + ext);
+    const auto rememberName=[&] {
+        if(IsAudioExtension(ext)||source.stem()==target.stem())return;
+        const auto names=ReadImageNames(assetsDir);if(names.count(target.filename().string()))return;
+        std::string ignored;RenameImageAsset(assetsDir,target.filename().string(),source.stem().string(),ignored);
+    };
     // Mesmo arquivo => mesmo destino; reuso sem reescrever.
     if (std::filesystem::exists(target, fsError)) {
         if(std::filesystem::is_symlink(std::filesystem::symlink_status(target))){error="Asset destination is a symlink";return false;}
         std::ifstream existing(target,std::ios::binary);
         const std::string saved((std::istreambuf_iterator<char>(existing)),{});
         if(saved!=content){error="Image asset ID collision; existing image was preserved";return false;}
-        outAssetPath = target.string();
+        outAssetPath = target.string();rememberName();
         return true;
     }
     if(!projectio::writeFileAtomically(target.string(),content,error))return false;
-    outAssetPath = target.string();
+    outAssetPath = target.string();rememberName();
     return true;
 }
 
@@ -267,16 +318,153 @@ bool ImportImageTo(const std::string& assetsDir, const std::string& sourcePath,
 
 std::vector<ImageAsset> ListImages(const std::string& assetsDir) {
     std::vector<ImageAsset> list;
+    const auto names = ReadImageNames(assetsDir);
     std::error_code fsError;
     for (const auto& entry : std::filesystem::directory_iterator(assetsDir, fsError)) {
-        if (!entry.is_regular_file(fsError)) continue;
+        if (entry.is_symlink(fsError)||!entry.is_regular_file(fsError)) continue;
         const std::string ext = LowerExt(entry.path());
         if (ext != ".png" && ext != ".jpg" && ext != ".jpeg") continue;
-        list.push_back({entry.path().stem().string(), entry.path().filename().string()});
+        ImageAsset asset;
+        asset.id = entry.path().stem().string();
+        asset.filename = entry.path().filename().string();
+        const auto named = names.find(asset.filename);
+        asset.name = named != names.end() ? named->second : "Imagem " + ShortId(asset.filename);
+        list.push_back(std::move(asset));
     }
-    std::sort(list.begin(), list.end(),
-              [](const ImageAsset& a, const ImageAsset& b) { return a.filename < b.filename; });
+    std::sort(list.begin(), list.end(), [](const ImageAsset& a, const ImageAsset& b) {
+        if (a.name != b.name) return a.name < b.name;
+        return a.filename < b.filename;
+    });
     return list;
+}
+
+std::string ImageDisplayName(const std::string& assetsDir, const std::string& reference) {
+    const auto filename = FileKey(reference);
+    if (filename.empty()) return {};
+    const auto names = ReadImageNames(assetsDir);
+    if (const auto it = names.find(filename); it != names.end()) return it->second;
+    return "Imagem " + ShortId(filename);
+}
+
+bool RenameImageAsset(const std::string& assetsDir, const std::string& reference,
+                      const std::string& name, std::string& error) {
+    error.clear();
+    const auto filename = FileKey(reference);
+    if (filename.empty()) { error = "Selecione uma imagem da experiência para renomear."; return false; }
+    std::error_code fsError;
+    if (std::filesystem::is_symlink(std::filesystem::symlink_status(std::filesystem::path(assetsDir)/filename,fsError))||!std::filesystem::is_regular_file(std::filesystem::path(assetsDir) / filename, fsError)) {
+        error = "Imagem não encontrada em assets/: " + filename;
+        return false;
+    }
+    const auto trimmed = TrimName(name);
+    if (trimmed.empty() || trimmed.size() > 80) {
+        error = "O nome da imagem deve ter entre 1 e 80 caracteres.";
+        return false;
+    }
+    for (unsigned char c : trimmed)
+        if (c < 32 || c == 127) { error = "O nome da imagem não pode ter caracteres de controle."; return false; }
+    auto names = ReadImageNames(assetsDir);
+    names[filename] = trimmed;
+    return WriteImageNames(assetsDir, names, error);
+}
+
+void ForgetImageAssetName(const std::string& assetsDir, const std::string& reference) {
+    const auto filename = FileKey(reference);
+    if (filename.empty()) return;
+    auto names = ReadImageNames(assetsDir);
+    if (names.erase(filename) == 0) return;
+    std::string error;
+    WriteImageNames(assetsDir, names, error);
+}
+
+bool ImageReferenceMatches(const std::string& a,const std::string& b) {
+    const auto key=[](const std::string& raw){
+        if(raw.empty())return std::string();
+        auto value=NormalizeImageReference(raw);
+        if(value.find('/')==std::string::npos&&value!="."&&value!="..")value="assets/"+value;
+        return std::filesystem::path(value).lexically_normal().generic_string();
+    };
+    return !a.empty()&&!b.empty()&&key(a)==key(b);
+}
+bool IsImageProperty(const std::string& key) {
+    return key=="image"||key=="decal_image"||key=="texture_image"||key=="FaceTexture"||
+        key=="skyFront"||key=="skyBack"||key=="skyLeft"||key=="skyRight"||key=="skyUp"||key=="skyDown";
+}
+std::vector<ImageUsage> DescribeImageUsage(const Scene& scene,const std::string& reference) {
+    std::vector<ImageUsage> uses;
+    const auto add=[&](ImageUsage use){if(ImageReferenceMatches(use.reference,reference))uses.push_back(std::move(use));};
+    for(const auto& object:scene.objects()) {
+        for(const auto& [key,value]:object->attributes()) {
+            const auto* image=std::get_if<std::string>(&value);if(!image||!IsImageProperty(key))continue;
+            ImageUsage use;use.object=object->id();use.property=key;use.reference=*image;
+            use.kind=key.rfind("texture",0)==0?"texture":"decal";
+            use.where=object->name()+" · "+key;add(std::move(use));
+        }
+        if(IsSurfaceClass(object->instanceClass())) {
+            const auto& surface=static_cast<const Surface&>(*object);
+            ImageUsage use;use.object=surface.id();use.property="surface.image";use.reference=surface.properties().image;
+            use.kind=surface.instanceClass()==InstanceClass::Texture?"texture":"decal";
+            use.where=(surface.parent()?surface.parent()->name()+" / ":"")+surface.name()+" · imagem";add(std::move(use));
+        }
+    }
+    for(const auto& rig:scene.gameAssets().rigs)for(int i=0;i<kBodyCount;++i) {
+        const auto& body=rig.bodies[i];ImageUsage use;use.rig=rig.id;use.body=i;
+        use.where="Personagem \""+rig.name+"\" / "+BodyDisplayName(body.name);
+        use.kind="body";use.property="image";use.reference=body.image;add(use);
+        for(const auto& decal:body.decals){auto child=use;child.kind="decal";child.decal=decal.id;
+            child.property="surface.image";child.reference=decal.surface.image;child.where+=" / "+decal.name;add(std::move(child));}
+    }
+    return uses;
+}
+std::vector<ImageUsage> DescribeImageUsage(const experiences::Manifest& manifest,const std::string& reference) {
+    std::vector<ImageUsage> uses;
+    const std::string* values[]={&manifest.icon,&manifest.banner,&manifest.loadingBackground,&manifest.faceImage};
+    const char* fields[]={"icon","banner","loadingBackground","faceImage"};
+    const char* names[]={"Ícone da experiência","Banner da experiência","Fundo de carregamento","Rosto legado da experiência"};
+    for(int i=0;i<4;++i)if(ImageReferenceMatches(*values[i],reference)){
+        ImageUsage use;use.kind="presentation";use.property=fields[i];use.reference=*values[i];use.where=names[i];uses.push_back(std::move(use));}
+    return uses;
+}
+bool SetImageUsage(Scene& scene,const ImageUsage& use,const std::string& replacement,std::string& error) {
+    error="A referência foi alterada; consulte os usos da imagem novamente.";
+    const auto target=NormalizeImageReference(replacement);
+    if(target.size()>512||target.find('\0')!=std::string::npos){error="Referência de imagem inválida.";return false;}
+    if(!use.rig.empty()) {
+        auto* rig=scene.gameAssets().findRig(use.rig);if(!rig||use.body<0||use.body>=kBodyCount)return false;
+        auto& body=rig->bodies[use.body];
+        if(use.decal.empty()){if(use.property!="image"||body.image!=use.reference)return false;body.image=target;}
+        else {auto it=std::find_if(body.decals.begin(),body.decals.end(),[&](const RigDecal& d){return d.id==use.decal;});
+            if(it==body.decals.end()||it->surface.image!=use.reference)return false;it->surface.image=target;}
+    }else {
+        auto* object=scene.find(use.object);if(!object)return false;
+        if(IsSurfaceClass(object->instanceClass())&&use.property=="surface.image") {
+            auto& surface=static_cast<Surface&>(*object);auto value=surface.properties();if(value.image!=use.reference)return false;
+            value.image=target;if(!surface.setProperties(value))return false;
+        }else {
+            if(!IsImageProperty(use.property))return false;
+            const auto it=object->attributes().find(use.property);if(it==object->attributes().end())return false;
+            const auto* value=std::get_if<std::string>(&it->second);if(!value||*value!=use.reference)return false;
+            if(target.empty())object->removeAttribute(use.property);
+            else if(!object->setAttribute(use.property,target)){error="Limite de atributos atingido.";return false;}
+        }
+    }
+    error.clear();return true;
+}
+std::size_t ReplaceImageReferences(Scene& scene,const std::string& from,const std::string& to) {
+    const auto target=NormalizeImageReference(to);if(target.empty()||target.size()>512)return 0;
+    const auto uses=DescribeImageUsage(scene,from);std::size_t count=0;
+    for(const auto& use:uses){std::string error;if(!SetImageUsage(scene,use,target,error))throw std::runtime_error(error);++count;}
+    return count;
+}
+
+std::string BodyDisplayName(const std::string& bodyName) {
+    if (bodyName == "Head") return "Cabeça";
+    if (bodyName == "Torso") return "Torso";
+    if (bodyName == "Left Arm") return "Braço esquerdo";
+    if (bodyName == "Right Arm") return "Braço direito";
+    if (bodyName == "Left Leg") return "Perna esquerda";
+    if (bodyName == "Right Leg") return "Perna direita";
+    return bodyName;
 }
 
 std::string ResolveImagePath(const std::string& assetsDir, const std::string& assetPath) {

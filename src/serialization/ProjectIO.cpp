@@ -43,6 +43,7 @@ struct ParsedObject {
     bool anchored = false;
     bool canCollide = true;
     BodyProperties bodyProperties;
+    SurfaceProperties surface;
     bool hasNpc = false;
     NpcProperties npcProperties;
     std::string source;
@@ -360,6 +361,10 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
         return true;
     }
 
+    if(IsSurfaceClass(out.instanceClass)) {
+        if(!value.contains("surface")){error=prefix+"Superfície sem propriedades.";return false;}
+        out.surface=game::DecodeSurface(value["surface"]);return true;
+    }
     // Parts (Part, Baseplate, SpawnLocation).
     const json* shapeField = FindField(value, "shape", error);
     if (shapeField == nullptr || !shapeField->is_string() ||
@@ -470,7 +475,7 @@ std::string toJson(const Scene& scene) {
     const bool hierarchy = scene.workspace()->fallenPartsDestroyHeight()!=-500 || std::any_of(scene.objects().begin(),scene.objects().end(),[](const auto& o) {
         return o->instanceClass() == InstanceClass::Folder || o->instanceClass() == InstanceClass::Model ||
             !o->attributes().empty() ||
-            IsScriptClass(o->instanceClass()) || (IsRootServiceClass(o->instanceClass()) &&
+            IsSurfaceClass(o->instanceClass()) || IsScriptClass(o->instanceClass()) || (IsRootServiceClass(o->instanceClass()) &&
                 o->instanceClass()!=InstanceClass::Workspace && o->instanceClass()!=InstanceClass::Lighting);
     });
     root["version"] = hierarchy ? 3 : hasGame ? 2 : 1;
@@ -525,6 +530,7 @@ std::string toJson(const Scene& scene) {
         if (!node->isPart()) {
             objects.push_back({{"id",node->id()},{"class",node->className()},
                 {"name",node->name()},{"parent",node->parent()?node->parent()->id():0}});
+            if(IsSurfaceClass(node->instanceClass()))objects.back()["surface"]=game::EncodeSurface(static_cast<const Surface&>(*node).properties());
             if (IsScriptClass(node->instanceClass())) {
                 const auto& script=static_cast<const Script&>(*node);
                 objects.back()["source"]=script.source; objects.back()["enabled"]=script.enabled;
@@ -783,6 +789,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         if (IsRootServiceClass(object.instanceClass)) {
             continue;
         }
+        if(IsSurfaceClass(object.instanceClass))continue; // Pais Part são criados primeiro.
         if (IsScriptClass(object.instanceClass)) {
             auto* script=staged.createScript(object.instanceClass,staged.workspace(),object.name,object.id);
             if (!script) { error="falha ao criar Script "+object.name; return false; }
@@ -820,6 +827,10 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         part->clearDirty();
     }
 
+    for(const auto& object:parsed)if(IsSurfaceClass(object.instanceClass)) {
+        auto* surface=staged.createSurface(object.instanceClass,staged.find(object.parent),object.name,object.id);
+        if(!surface||!surface->setProperties(object.surface)){error="Não foi possível restaurar a superfície "+object.name;return false;}
+    }
     for (const auto& object : parsed) {
         if (IsRootServiceClass(object.instanceClass)) continue;
         auto* parent = object.parent == workspaceId ? staged.workspace() : staged.find(object.parent);
