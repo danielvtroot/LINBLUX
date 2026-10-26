@@ -3,9 +3,14 @@
 #include "game/ImageAssets.h"
 #include <algorithm>
 namespace loblox {
+namespace {Font overlayFont{};bool fontAttempted=false;
+Font OverlayFont(){if(!fontAttempted){fontAttempted=true;for(const char* file:{"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"})if(FileExists(file)){overlayFont=LoadFontEx(file,32,nullptr,256);if(overlayFont.texture.id)SetTextureFilter(overlayFont.texture,TEXTURE_FILTER_BILINEAR);break;}}return overlayFont.texture.id?overlayFont:GetFontDefault();}}
+void ClearExperienceOverlayResources(){if(overlayFont.texture.id)UnloadFont(overlayFont);overlayFont={};fontAttempted=false;}
+
 void DrawExperienceOverlay(const game::RuntimeSession& runtime,int width,int height,Font font){
     if(runtime.state()!=game::RuntimeState::Playing)return;
-    const float scale=std::clamp(height/720.f,.8f,1.4f);const Color panel{15,15,19,225},red{215,38,63,255},text{242,242,245,255},muted{185,185,195,255};
+    if(font.texture.id==GetFontDefault().texture.id)font=OverlayFont();
+    const float scale=std::clamp(height/720.f,1.f,1.4f);const Color panel{15,15,19,225},red{215,38,63,255},text{242,242,245,255},muted{185,185,195,255};
     auto label=[&](const std::string& value,float x,float y,float size,Color color){DrawTextEx(font,value.c_str(),{x,y},size*scale,scale,color);};
     auto fit=[&](std::string value,float available,float size){while(!value.empty()&&MeasureTextEx(font,(value+"...").c_str(),size*scale,scale).x>available){size_t i=value.size()-1;while(i&&(static_cast<unsigned char>(value[i])&0xc0)==0x80)--i;value.resize(i);}return value;};
     std::vector<InstanceId> slots;for(auto id:runtime.inventory().list())if(runtime.inventory().info(id).equipable)slots.push_back(id);
@@ -16,7 +21,7 @@ void DrawExperienceOverlay(const game::RuntimeSession& runtime,int width,int hei
             DrawRectangleRounded({x,y,slot,60*scale},.14f,6,panel);DrawRectangle(int(x),int(y+57*scale),int(slot),int(3*scale),active?red:Color{65,65,74,230});
             label(std::to_string(i+1),x+7*scale,y+5*scale,13,active?red:muted);
             bool iconDrawn=false;if(!item.icon.empty()){const auto path=game::ResolveImagePath(game::AssetsDir(),item.icon);if(!path.empty()){const auto texture=game::AssetTexture(path);if(texture.id){const float side=30*scale;DrawTexturePro(texture,{0,0,float(texture.width),float(texture.height)},{x+(slot-side)/2,y+4*scale,side,side},{0,0},0,WHITE);iconDrawn=true;}}}
-            const auto name=fit(item.name,slot-12*scale,13);label(name==item.name?name:name+"...",x+6*scale,y+(iconDrawn?38:29)*scale,13,text);
+            const auto name=fit(item.name,slot-12*scale,17);label(name==item.name?name:name+"...",x+6*scale,y+(iconDrawn?38:29)*scale,17,text);
         }
         if(slots.size()>9)label("PgUp / PgDn · página "+std::to_string(runtime.hotbarPage()+1),start,y-22*scale,13,muted);
     }
