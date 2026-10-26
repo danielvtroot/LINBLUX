@@ -376,3 +376,28 @@ fora da tela). `linblux_editor_restart` e `linblux_engine_default_restart`
 aprovados, além de `linblux_experience_startup`. Nenhum código de imagens, NPCs
 ou modelos foi refeito.
 
+
+## Retomada exata — combate genérico e RifleDemo
+
+Confirmado no ATLAS: não existe hoje código de arma, projétil ou combate além de
+`NpcSystem::attack` e de `takeDamage`/`heal` do jogador. O próximo incremento
+começa do zero e deve reutilizar o que já está pronto:
+
+1. `src/game/Weapon.{h,cpp}` (novo, em `linblux_engine`): definição validada
+   (`id`, `damage`, `range`, `cooldown`, `spread`, `ammoItem`, `sound`, `rig`),
+   estado por sessão (cooldown, munição) e `fire()` com raycast por
+   `RuntimeSession::raycastParts` + `NpcSystem::damage`/`takeDamage`.
+2. Attachment de arma no rig/modelo pelo sistema existente de Attachments; sem
+   duplicar hierarquia nem física.
+3. Lua: `linblux.combat.define/equip/fire/state` com as mesmas cotas de
+   `resourceOperations`, recusando referências inexistentes e nunca disparando
+   dentro do passo da Bullet.
+4. Munição no inventário existente (`linblux.items`) e som por `linblux.audio`.
+5. UI: `assets/examples/lua/rifle_demo.lua` usando `linblux.ui` para mira,
+   munição e notificação de acerto; sem criar UI nativa paralela.
+6. Testes: headless `linblux_combat` (dano, alcance, cooldown, munição, alvo
+   morto, limpeza ao parar) + um gráfico curto do RifleDemo no Player.
+7. Só depois: HUD circular vermelho, menu lateral, Demo integrada e pacote.
+
+Nada de combate foi implementado nesta sessão; o checkpoint publicado termina na
+UI por Lua. Alpha continua sem tag/Release e sem teste de instalação limpa.
