@@ -273,10 +273,6 @@ bool Scene::adopt(std::unique_ptr<Instance> object, Instance* parent) {
         }
     } else {
         if (!accepts(object->instanceClass(),parent)) return false;
-    if(object->instanceClass()==InstanceClass::Attachment&&!parent->isPart()){
-        if(static_cast<const Attachment*>(object)->jointTarget())return false;
-        for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment&&static_cast<const Attachment&>(*node).jointTarget()==object->id())return false;
-    }
     }
 
     Instance* raw = object.get();
@@ -460,9 +456,9 @@ bool Scene::canParent(const Instance* object, const Instance* parent) const {
         isService(object) || object == parent || object->isAncestorOf(parent)) return false;
     if (!accepts(object->instanceClass(),parent)) return false;
     if(object->instanceClass()==InstanceClass::Attachment){
-        const auto* target=find(static_cast<const Attachment*>(object)->jointTarget());
-        if(target&&target->parent()==parent)return false;
-        for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment&&static_cast<const Attachment&>(*node).jointTarget()==object->id()&&node->parent()==parent)return false;
+        const auto linked=static_cast<const Attachment*>(object)->jointTarget();const auto* target=find(linked);
+        if(linked&&(!parent->isPart()||(target&&target->parent()==parent)))return false;
+        for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment&&static_cast<const Attachment&>(*node).jointTarget()==object->id()&&(!parent->isPart()||node->parent()==parent))return false;
     }
     unsigned depth = 0;
     for (auto* p = parent; p; p = p->parent()) if (++depth > 128) return false;
