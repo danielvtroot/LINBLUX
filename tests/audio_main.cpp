@@ -14,6 +14,8 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <sys/resource.h>
+#include <cstdint>
 
 using namespace loblox;
 namespace fs = std::filesystem;
@@ -51,6 +53,16 @@ int main() {
         diag::configure((root / "audio.jsonl").string());
         fs::create_directories(root / "assets");
         game::SetProjectAssetRoot(root.string());
+
+        // One hour of PCM in a sparse file: probing must never decode it all.
+        const auto longFile=root/"long.wav";constexpr uint32_t bytes=44100u*2u*3600u;
+        {std::ofstream file(longFile,std::ios::binary);auto u16=[&](uint16_t n){char b[2]={char(n),char(n>>8)};file.write(b,2);};auto u32=[&](uint32_t n){char b[4]={char(n),char(n>>8),char(n>>16),char(n>>24)};file.write(b,4);};
+         file.write("RIFF",4);u32(bytes+36);file.write("WAVEfmt ",8);u32(16);u16(1);u16(1);u32(44100);u32(88200);u16(2);u16(16);file.write("data",4);u32(bytes);file.seekp(uint64_t(bytes)+43);file.put(0);}
+        rusage before{},after{};getrusage(RUSAGE_SELF,&before);double longSeconds=0;std::string longError;
+        require(game::ProbeAudio(longFile.string(),longSeconds,longError),longError.c_str());getrusage(RUSAGE_SELF,&after);
+        require(std::fabs(longSeconds-3600)<1,"Duração da música longa incorreta");
+        require(after.ru_maxrss-before.ru_maxrss<64*1024,"Probe decodificou a música inteira na RAM");
+        std::printf("Probe PCM1h: duração%.2fs, aumento de pico RSS%ldKiB\n",longSeconds,after.ru_maxrss-before.ru_maxrss);
 
         // MP3, WAV e OGG reais: a importação valida o container e a decodificação.
         std::string wav, ogg, mp3, error;
