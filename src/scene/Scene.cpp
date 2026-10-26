@@ -392,7 +392,11 @@ bool Scene::connectAttachments(InstanceId source,InstanceId target,std::string& 
     auto* a=find(source);auto* b=find(target);
     if(!a||a->instanceClass()!=InstanceClass::Attachment){error="Selecione um Attachment de origem.";return false;}
     auto& anchor=static_cast<Attachment&>(*a);
-    if(!target){anchor.jointTarget_=0;error.clear();return true;}
+    if(!target){
+        anchor.jointTarget_=0;
+        for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment&&static_cast<const Attachment&>(*node).jointTarget()==source)static_cast<Attachment*>(node.get())->jointTarget_=0;
+        error.clear();return true;
+    }
     if(!b||b->instanceClass()!=InstanceClass::Attachment||a==b||!a->parent()->isPart()||!b->parent()->isPart()||a->parent()==b->parent()){
         error="A junta requer Attachments de duas peças distintas.";return false;}
     for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment&&node.get()!=a){
@@ -455,6 +459,11 @@ bool Scene::canParent(const Instance* object, const Instance* parent) const {
     if (!object || !parent || find(object->id()) != object || find(parent->id()) != parent ||
         isService(object) || object == parent || object->isAncestorOf(parent)) return false;
     if (!accepts(object->instanceClass(),parent)) return false;
+    if(object->instanceClass()==InstanceClass::Attachment){
+        const auto* target=find(static_cast<const Attachment*>(object)->jointTarget());
+        if(target&&target->parent()==parent)return false;
+        for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment&&static_cast<const Attachment&>(*node).jointTarget()==object->id()&&node->parent()==parent)return false;
+    }
     unsigned depth = 0;
     for (auto* p = parent; p; p = p->parent()) if (++depth > 128) return false;
     // Account for descendants too, so reparent cannot bypass the depth budget.

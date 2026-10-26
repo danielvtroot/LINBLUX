@@ -403,7 +403,7 @@ void PhysicsWorld::syncJoints(Scene& scene) {
             auto* constraint=new btFixedConstraint(*bodies_.at(aid).body,*bodies_.at(bid).body,frameA,frameB);
             world_->addConstraint(constraint,true);joints_[a.id()]={constraint,other->id(),aid,bid};it=joints_.find(a.id());
             bodies_.at(aid).body->activate(true);bodies_.at(bid).body->activate(true);
-        }else if(it->second.constraint->getFrameOffsetA()!=frameA||it->second.constraint->getFrameOffsetB()!=frameB){
+        }else if(!(it->second.constraint->getFrameOffsetA()==frameA)||!(it->second.constraint->getFrameOffsetB()==frameB)){
             it->second.constraint->setFrames(frameA,frameB);bodies_.at(aid).body->activate(true);bodies_.at(bid).body->activate(true);
         }
         it->second.constraint->setEnabled(!isPartEditing(aid)&&!isPartEditing(bid));live.insert(a.id());
