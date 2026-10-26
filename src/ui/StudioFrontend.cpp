@@ -61,6 +61,26 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     std::set<InstanceId> collapsed;InstanceId dragNode=0,dragTarget=0;Vector2 dragStart{};
     bool dragging=false,mouseOwned=false,escapeConsumed=false,dialogOpen=false,treeKeyboard=false,restoreFocus=false;
     bool initialized=false,syncing=false,keyboardOwned=false;float shownHealth=100,healthTrail=100;int w=0,h=0;
+    // Diagnostic geometry for automated tests: LOBLOX_TRACE_UI prints the
+    // element boxes with their absolute offsets after every window resize, so
+    // a harness can target a control by id instead of a guessed coordinate.
+    int tracedW=0,tracedH=0;
+    void traceBoxes() {
+        if(!std::getenv("LOBLOX_TRACE_UI"))return;
+        tracedW=GetScreenWidth();tracedH=GetScreenHeight();
+        std::fprintf(stderr,"RML layout %dx%d\n",tracedW,tracedH);
+        std::function<void(Rml::Element*,int)> trace=[&](Rml::Element* e,int depth) {
+            if(depth>3)return;
+            const auto size=e->GetBox().GetSize(Rml::BoxArea::Border);
+            const auto offset=e->GetAbsoluteOffset(Rml::BoxArea::Border);
+            std::fprintf(stderr,"RML box %d %s #%s .%s: %.1fx%.1f at %.1f,%.1f display=%s width=%s\n",
+                depth,e->GetTagName().c_str(),e->GetId().c_str(),e->GetClassNames().c_str(),
+                size.x,size.y,offset.x,offset.y,e->GetProperty("display")->ToString().c_str(),
+                e->GetProperty("width")->ToString().c_str());
+            for(int i=0;i<e->GetNumChildren();++i)trace(e->GetChild(i),depth+1);
+        };
+        trace(document,0);
+    }
     game::AudioSystem previewAudio;int previewVoice=0;std::string previewRoot;
     std::vector<game::ImageUsage> imageUses;
     std::vector<EditorCommand> commands;
@@ -988,9 +1008,7 @@ bool StudioFrontend::initialize(std::string& error) {
     for(const char* type:{"click","dblclick","change","focus","blur","mousedown"})p.document->AddEventListener(type,&p,true);
     p.document->Show();p.display("context-menu",false);p.display("tooltip",false);p.display("dialog-overlay",false);p.display("game-layer",false);p.display("advanced-content",false);
     p.syncing=true;p.loadLayout();p.layout();p.ribbon();p.tree();p.properties();p.context->Update();p.syncing=false;
-    if(std::getenv("LOBLOX_TRACE_UI")) {
-        std::function<void(Rml::Element*,int)> trace=[&](Rml::Element* e,int depth){if(depth>3)return;const auto b=e->GetBox().GetSize(Rml::BoxArea::Border);std::fprintf(stderr,"RML box %d %s #%s .%s: %.1fx%.1f display=%s width=%s\n",depth,e->GetTagName().c_str(),e->GetId().c_str(),e->GetClassNames().c_str(),b.x,b.y,e->GetProperty("display")->ToString().c_str(),e->GetProperty("width")->ToString().c_str());for(int i=0;i<e->GetNumChildren();++i)trace(e->GetChild(i),depth+1);};trace(p.document,0);
-    }
+    p.traceBoxes();
     rlImGuiDeferPopupRendering(true);error.clear();return true;
 }
 void StudioFrontend::draw() {
@@ -1006,7 +1024,7 @@ void StudioFrontend::draw() {
             p.experienceInput();p.context->Update();rlImGuiSetExternalTextInput(p.editing());return;
         }
     }
-    p.layout();p.input();p.syncing=true;p.ribbon();p.tree();p.properties();p.commonAdvanced();p.documents();
+    p.layout();if(p.w!=p.tracedW||p.h!=p.tracedH)p.traceBoxes();p.input();p.syncing=true;p.ribbon();p.tree();p.properties();p.commonAdvanced();p.documents();
     p.ui.explorerFocused_=p.treeKeyboard&&!p.editing();
     if(!p.advanced.empty()&&!p.ui.runtime_.active()&&!p.dialogOpen) {
         p.ui.showScriptEditor_=p.advanced=="script";p.ui.showAnimationEditor_=p.advanced=="animation";p.ui.showRigEditor_=p.advanced=="rig";p.ui.showGameSettings_=false;p.ui.showOutput_=p.advanced=="output";
