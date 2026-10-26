@@ -668,6 +668,7 @@ bool RuntimeSession::setAnimation(const std::string& state,const std::string& id
     error.clear();return true;
 }
 void RuntimeSession::update(float dt, const PlayerInput& input) {
+    if(state_==RuntimeState::Paused&&scene_)audio_.update(std::clamp(dt,0.f,.1f),scene_.get());
     if (state_ != RuntimeState::Playing || !body_ || !std::isfinite(dt) || dt < 0) return;
     std::string settingsError;
     if (!settings_.validate(settingsError)) {
@@ -691,7 +692,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     const bool jumpPressed = input.jump && !lastJumpDown_ && !suppressJump_;
     lastJumpDown_ = input.jump;
     previousScriptInput_=scriptInput_;scriptInput_=input.script;
-    scripts_.update(dt);audio_.update(dt);
+    scripts_.update(dt);audio_.update(dt,scene_.get());
     if(inventory_)try{inventory_->update(position(),camera_.yaw());for(const auto& change:inventory_->takeChanges())scripts_.inventoryChanged(change.id,change.action);}catch(const std::exception& e){scripts_.hostError(e.what());}
     physics_->syncScene(*scene_);
     updateItemControls(dt);

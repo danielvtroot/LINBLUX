@@ -464,6 +464,7 @@ bool GameAssets::validate(std::string& error) const {
         if (sound.id.empty() || sound.id.size() > 128 || sound.reference.size() > 512 || !soundIds.insert(sound.id).second) {
             error = "game: invalid or duplicate sound id"; return false;
         }
+        if(!std::isfinite(sound.durationSeconds)||sound.durationSeconds<0){error="Duração de áudio inválida.";return false;}
         if (!std::isfinite(sound.volume) || sound.volume < 0 || sound.volume > 1) { error = "game: sound volume out of range"; return false; }
         if (sound.reference.rfind("assets/", 0) != 0) { error = "game: sound reference must live in assets/"; return false; }
     }
