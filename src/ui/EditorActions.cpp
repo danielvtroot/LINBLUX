@@ -206,7 +206,7 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                     else throw std::runtime_error("Propriedade do Modelo inválida.");
                 }
                 e.endGizmoSession(true,"model_property");
-                const bool ok=name.rfind("Pivot.",0)==0?e.scene_.setModelPivot(node->id(),frame,error):e.scene_.transformModel(node->id(),frame,error);
+                const bool ok=e.modelTransform_.applyProperty(node->id(),frame,name.rfind("Pivot.",0)==0,error);
                 if(!ok)throw std::runtime_error(error);e.physics_.syncScene(e.scene_);
             }
             else if(IsSurfaceClass(node->instanceClass())&&name.rfind("Surface.",0)==0) {

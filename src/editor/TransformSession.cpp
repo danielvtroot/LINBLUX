@@ -20,7 +20,7 @@ TransformSession::~TransformSession() {
 GizmoUpdateResult TransformSession::update(ToolMode mode, Part* part,
                                            const EditorCamera& camera, Rectangle viewport,
                                            bool hovered, bool allowInput,
-                                           const GizmoInput& input) {
+                                           const GizmoInput& input,bool physical) {
     const GizmoUpdateResult result =
         gizmo_.update(mode, part, camera, viewport, hovered, allowInput, input);
     if (result.error && result.error != lastError_) {
@@ -36,12 +36,13 @@ GizmoUpdateResult TransformSession::update(ToolMode mode, Part* part,
     }
     lastError_ = result.error;
     if (result.started) {
-        physics_.setPartEditing(result.partId, true);
+        physical_=physical;
+        if(physical_)physics_.setPartEditing(result.partId, true);
         beginDiagnostics(mode);
     }
-    if(part&&(gizmo_.dragging()||result.ended))physics_.applyChanges(part);
+    if(physical_&&part&&(gizmo_.dragging()||result.ended))physics_.applyChanges(part);
     if (result.ended) {
-        if (part && part->id() == result.partId) physics_.applyChanges(part);
+        if (physical_&&part && part->id() == result.partId) physics_.applyChanges(part);
         releasePhysics(result.partId);
         endDiagnostics(result.cancelled, result.partId,
                        result.cancelled ? "context_changed" : "mouse_release");
@@ -55,7 +56,7 @@ void TransformSession::cancel(Part* part, bool restoreTransform, const char* rea
         endDiagnostics(true, id, reason);
     }
     gizmo_.cancel(part, restoreTransform);
-    if (id != kInvalidInstanceId && part && part->id() == id) physics_.applyChanges(part);
+    if (physical_&&id != kInvalidInstanceId && part && part->id() == id) physics_.applyChanges(part);
     releasePhysics(id);
 }
 
@@ -63,12 +64,12 @@ void TransformSession::commit(Part* part, const char* reason) {
     const InstanceId id = gizmo_.sessionPartId();
     if (gizmo_.dragging()) endDiagnostics(false, id, reason);
     gizmo_.cancel(part, false);
-    if (id != kInvalidInstanceId && part && part->id() == id) physics_.applyChanges(part);
+    if (physical_&&id != kInvalidInstanceId && part && part->id() == id) physics_.applyChanges(part);
     releasePhysics(id);
 }
 
 void TransformSession::releasePhysics(InstanceId id) {
-    if (id != kInvalidInstanceId) {
+    if (physical_&&id != kInvalidInstanceId) {
         physics_.setPartEditing(id, false);
     }
 }

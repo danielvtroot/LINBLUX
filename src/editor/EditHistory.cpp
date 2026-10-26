@@ -1,6 +1,7 @@
 #include "editor/EditHistory.h"
 
 #include <cmath>
+#include <algorithm>
 
 #include "raylib.h"
 #include "raymath.h"
@@ -19,10 +20,22 @@ bool SameTransform(const Transform& a, const Transform& b) {
 
 bool EditHistory::record(InstanceId id, const Transform& before, const Transform& after) {
     if (id == kInvalidInstanceId || SameTransform(before, after)) return false;
+    return record(TransformEdit{id,before,after});
+}
+bool EditHistory::record(TransformEdit edit) {
+    if(!edit.id)return false;
+    bool changed=edit.parts.empty()&&edit.pivots.empty()&&!SameTransform(edit.before,edit.after);
+    for(const auto& part:edit.parts)changed|=!SameTransform(part.before,part.after);
+    for(const auto& pivot:edit.pivots)changed|=pivot.beforeExplicit!=pivot.afterExplicit||
+        !SameTransform({pivot.before.position,pivot.before.rotation,{pivot.before.scale,pivot.before.scale,pivot.before.scale}},
+                       {pivot.after.position,pivot.after.rotation,{pivot.after.scale,pivot.after.scale,pivot.after.scale}});
+    if(!changed)return false;
     // Qualquer edicao nova invalida o ramo refeito.
     redo_.clear();
-    undo_.push_back(TransformEdit{id, before, after});
+    undo_.push_back(std::move(edit));
     while (undo_.size() > kLimit) undo_.pop_front();
+    std::size_t transforms=0;for(const auto& entry:undo_)transforms+=std::max<std::size_t>(1,entry.parts.size()+entry.pivots.size());
+    while(transforms>32768&&!undo_.empty()){transforms-=std::max<std::size_t>(1,undo_.front().parts.size()+undo_.front().pivots.size());undo_.pop_front();}
     return true;
 }
 

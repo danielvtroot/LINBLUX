@@ -469,6 +469,10 @@ bool Scene::transformModel(InstanceId id,const ModelFrame& target,std::string& e
     for(auto& [child,frame]:nested)child->modelFrame_=frame;
     return setModelPivot(id,target,error);
 }
+bool Scene::clearModelPivot(InstanceId id,std::string& error) {
+    auto* model=find(id);if(!model||model->instanceClass()!=InstanceClass::Model){error="Modelo inexistente.";return false;}
+    static_cast<Container&>(*model).hasModelFrame_=false;error.clear();return true;
+}
 Container* Scene::group(const std::vector<InstanceId>& ids,const std::string& name,std::string& error) {
     if(ids.empty()||ids.size()>256||name.empty()||name.size()>128){error="Agrupe de 1 a 256 peças/modelos com nome válido.";return nullptr;}
     std::set<InstanceId> unique;

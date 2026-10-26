@@ -54,6 +54,14 @@ o mesmo documento e preservam IDs, hierarquia e referências de recursos.
 
 Agrupar não cria corpo rígido ou solda automaticamente. Parts dinâmicas ainda
 são simuladas individualmente; vínculos físicos e Attachments são a próxima
-etapa. Transformar Modelos por gizmos de conjunto e undo composto ainda requer
-integração adicional; nesta entrega as transformações do conjunto são realizadas
-pelas Propriedades e Lua. Os gizmos individuais existentes foram preservados.
+etapa. Mover, girar e escalar usam os mesmos gizmos das Parts, aplicados ao
+conjunto. A escala do Modelo é uniforme, inclusive ao arrastar uma alça de eixo.
+O pivô e as transformações pelas Propriedades também participam de Ctrl+Z/Ctrl+Y.
+
+Um arraste inteiro gera uma única operação de histórico, com as poses das Parts
+e os pivôs dos Modelos aninhados. Cancelar restaura o estado inicial exato,
+inclusive pivôs implícitos antigos. Durante o arraste, os corpos dos filhos ficam
+em edição; o auxiliar do gizmo não cria corpo Bullet. Referências removidas ou
+retiradas da hierarquia invalidam a restauração antes de alterar qualquer peça.
+O histórico limita-se a 128 operações e 32.768 registros de poses/pivôs.
+Agrupar/desagrupar e outras mudanças de topologia ainda não têm undo estrutural.

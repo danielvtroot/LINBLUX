@@ -127,6 +127,7 @@ add_library(linblux_editing STATIC
   src/editor/Gizmo.cpp
   src/editor/TransformMetrics.cpp
   src/editor/TransformSession.cpp
+  src/editor/ModelTransformSession.cpp
   src/rendering/EditorCamera.cpp
   src/editor/SceneRendererAdapter.cpp
 )

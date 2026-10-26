@@ -12,7 +12,7 @@ snapshots de transformação e configurações de câmera/gizmo.
 **Saídas:** mutações na cena (via comandos/transformações), histórico de
 desfazer/refazer, câmera e estado de UI. Não possui física runtime nem Lua.
 
-**APIs principais:** `EditHistory`, `TransformSession`, `Gizmo`,
+**APIs principais:** `EditHistory`, `TransformSession`, `ModelTransformSession`, `Gizmo`,
 `GizmoLayout`, `TransformMetrics`, `EditorCamera`, `EditorUI`.
 
 **Invariantes:** transformações preservam hierarquia e IDs; undo/redo restaura
@@ -37,3 +37,12 @@ remoção/física. Mantenha a separação `editing` → `engine`.
 **Limites:** a UI ainda compartilha `Scene` e listeners com o domínio; testes
 visuais dependem de software rendering e podem ser lentos. O parser ATLAS não
 prova chamadas de UI.
+
+**Modelos:** `ModelTransformSession` reutiliza o gizmo com proxy fora da cena e
+do Bullet. Captura Parts e pivôs aninhados para um único undo/redo por gesto;
+cancelamento restaura inclusive pivôs implícitos. Valida todas as referências
+antes da restauração e suspende/libera os corpos filhos durante o arraste.
+Histórico limitado a 128 operações/32.768 poses. Regressão headless em
+`linblux_studio` (`ModelGizmoSession`); interação X11, propriedades, salvar/Play
+e undo composto em `linblux_models_ui` (TURBO obrigatório, timeout de 60 s).
+Agrupar/desagrupar não oferece undo estrutural; não cria soldas físicas.

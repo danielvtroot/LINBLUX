@@ -13,6 +13,9 @@
 #include "core/Diagnostics.h"
 #include "core/NumberFormat.h"
 #include "editor/EditHistory.h"
+#include "editor/ModelTransformSession.h"
+#include "editor/GizmoLayout.h"
+#include "rendering/EditorCamera.h"
 #include "editor/TransformMetrics.h"
 
 using namespace loblox;
@@ -77,6 +80,41 @@ void Hierarchy() {
     CHECK(projectio::fromJson(roundtrip,projectio::toJson(large),error)); CHECK(roundtrip.objects().size()==1002);
     std::printf("1000-node hierarchy create/validate/round-trip: %.2f ms\n",
         std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count());
+}
+void ModelGizmoSession() {
+    Scene scene;std::string error;
+    auto* a=scene.createPart(PartShape::Block,{10,6,0},{2,2,2},"A");auto* b=scene.createPart(PartShape::Block,{14,6,0},{2,2,2},"B");
+    auto* model=scene.group({a->id(),b->id()},"Movimento de conjunto",error);CHECK(model);if(!model)return;
+    PhysicsWorld physics;physics.attach(scene);Gizmo gizmo;gizmo.setSnap(0,0,0);TransformSession base(gizmo,physics);EditHistory history;
+    ModelTransformSession session(scene,physics,base,history);EditorCamera camera;camera.setOrbit({12,6,0},30,.65f,.43f);const Rectangle view{0,0,800,600};
+    GizmoInput input;session.update(ToolMode::Move,model,camera,view,true,true,input);CHECK(session.proxy());
+    const auto before=projectio::toJson(scene);const auto originA=a->position(),originB=b->position();
+    auto layout=gizmolayout::Build(*session.proxy(),ToolMode::Move,camera,view,false,gizmo.visualSettings());
+    input.mousePosition=layout.moveHandle[1];input.leftPressed=input.leftDown=true;
+    CHECK(session.update(ToolMode::Move,model,camera,view,true,true,input).started);CHECK(physics.isPartEditing(a->id())&&physics.isPartEditing(b->id()));
+    CHECK(physics.bodyCount()==2&&!physics.hasBody(model->id()));
+    input.leftPressed=false;input.mousePosition=Vector2Add(input.mousePosition,Vector2Scale(layout.axisDirection[0],30));
+    session.update(ToolMode::Move,model,camera,view,true,true,input);
+    CHECK(Vector3Distance(a->position(),originA)>.01f);CHECK(NearlyEqual(Vector3Subtract(a->position(),originA),Vector3Subtract(b->position(),originB),.001f));
+    input.leftDown=false;CHECK(session.update(ToolMode::Move,model,camera,view,true,true,input).ended);
+    CHECK(!session.active()&&!physics.isPartEditing(a->id())&&!physics.isPartEditing(b->id()));CHECK(history.undoCount()==1);const auto after=projectio::toJson(scene);
+    TransformEdit edit;CHECK(history.undo(edit));CHECK(edit.parts.size()==2);CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==before);
+    CHECK(history.redo(edit));CHECK(session.applyEdit(edit,true,error));CHECK(projectio::toJson(scene)==after);
+    input={};session.update(ToolMode::Move,model,camera,view,true,true,input);layout=gizmolayout::Build(*session.proxy(),ToolMode::Move,camera,view,false,gizmo.visualSettings());
+    input.mousePosition=layout.moveHandle[1];input.leftPressed=input.leftDown=true;session.update(ToolMode::Move,model,camera,view,true,true,input);
+    input.leftPressed=false;input.mousePosition=Vector2Add(input.mousePosition,Vector2Scale(layout.axisDirection[0],23));session.update(ToolMode::Move,model,camera,view,true,true,input);
+    session.end(true,"cancel_test");CHECK(projectio::toJson(scene)==after);CHECK(history.undoCount()==1);CHECK(!physics.isPartEditing(a->id()));
+    input={};session.update(ToolMode::Scale,model,camera,view,true,true,input);
+    layout=gizmolayout::Build(*session.proxy(),ToolMode::Scale,camera,view,false,gizmo.visualSettings());
+    input.mousePosition=layout.scaleHandle[1];input.leftPressed=input.leftDown=true;
+    CHECK(session.update(ToolMode::Scale,model,camera,view,true,true,input).started);
+    input.leftPressed=false;input.mousePosition=Vector2Add(input.mousePosition,Vector2Scale(layout.axisDirection[0],28));
+    session.update(ToolMode::Scale,model,camera,view,true,true,input);
+    CHECK(a->size().x>2);CHECK(NearlyEqual(a->size().x,a->size().y,.001f));
+    session.end(true,"scale_cancel_test");CHECK(projectio::toJson(scene)==after);CHECK(physics.bodyCount()==2);
+    ModelFrame frame;CHECK(scene.modelFrame(model->id(),frame,error));frame.scale*=1.25f;CHECK(session.applyProperty(model->id(),frame,false,error));CHECK(history.undoCount()==2);
+    CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==after);
+    CHECK(scene.remove(b));const auto missing=projectio::toJson(scene);CHECK(!session.applyEdit(edit,true,error));CHECK(projectio::toJson(scene)==missing);
 }
 void ModelTransforms() {
     Scene scene;std::string error;scene.buildDefaultScene();
@@ -1480,6 +1518,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }
