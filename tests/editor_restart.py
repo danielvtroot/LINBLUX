@@ -68,7 +68,22 @@ def close_window(window):
     xlib.XCloseDisplay(display)
 
 
+def f32(value):
+    """The writer stores Bullet/transform values as float32."""
+    import struct
+    return struct.unpack("f", struct.pack("f", value))[0]
+
+
+def body_defaults():
+    """Persisted defaults the writer adds to a Part that has no body block."""
+    return {"density": 1.0, "friction": f32(0.8), "restitution": 0.0,
+            "linearDamping": f32(0.02), "angularDamping": f32(0.1)}
+
+
 def equivalent(a, b):
+    # Rotations are radians converted to float32 degrees, so 15 becomes
+    # 14.999998.  The 1e-4 absolute tolerance accepts only that round-trip;
+    # a wrong axis or a real rotation change (>=0.01 degree) still fails.
     if isinstance(a, (int, float)) and isinstance(b, (int, float)):
         return math.isclose(a, b, abs_tol=0.0001, rel_tol=0.00001)
     if type(a) is not type(b):
@@ -163,10 +178,12 @@ def main():
                       if o["parent"] == 0 and o["class"] not in ("Workspace", "Lighting")),
                      len(document["objects"]))
     for index in range(2):
+        # Seed the body block the editor persists for a default Part; omitting
+        # it made the comparison fail on added keys instead of on transforms.
         document["objects"].insert(insert_at + index, dict(id=20 + index, parent=1, name=f"RestartPart{index}",
             **{"class": "Part"}, shape="Block", position=[8 * index, 12, -3],
             rotation=[15, 30, 45], size=[8, 2, 4], color=[70, 160, 90, 255],
-            material="Wood", anchored=True, canCollide=bool(index)))
+            material="Wood", anchored=True, canCollide=bool(index), body=body_defaults()))
     document["nextId"] = 30
     project = root / "edited.json"
     project.write_text(json.dumps(document))
