@@ -241,9 +241,14 @@ perda de precisão na conversão de rotações de 90° ao salvar. Não enfraquec
 o teste: quaternion passou a ser persistido e a orientação dos filhos é conferida.
 FAST 20261026T004226Z-7953: build286,1 s; 17/17 em12,4 s, total299 s; cobertura
 global desconhecida devido ao novo teste/CMake. Build final focado2,37 s.
-IMPACT e linblux_models_ui em execução; não marcar publicado antes de confirmar.
+IMPACT 20261026T020406Z-15199: 20/20 em53,8 s (54,3 s totais), cobertura parcial.
+linblux_models_ui aprovado em29,644 s, captura inspecionada; publicação em andamento.
 
 PENDENTE dentro da integração de Modelos: gizmos de conjunto e undo composto.
 Depois: Attachments e vínculos físicos; inventário, coleta E, Delete, hotbar;
 áudio completo/UI Lua, combate/RifleDemo; HUD/menu e integração final. Não há
 implementação desses itens escondida neste incremento.
+
+Relatório 22 e MODELOS.md registram APIs, formato v4, testes e limites.
+Próximo requisito: integrar gizmos/undo do conjunto e Attachments/vínculos,
+sem reimplementar os sistemas de imagem/NPCs já publicados.
