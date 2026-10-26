@@ -64,6 +64,24 @@ def edit_default_target(path):
  # The card action is right-aligned; keep it relative to the window width so
  # resizing or a shifted card cannot send the click into the copy area.
  return (tile[2]-128,tile[1])
+def dialog_primary(path):
+ # The confirmation dialog is centred; keep the scan in its lower half so a
+ # red object in the 3D viewport cannot be mistaken for the primary action.
+ image=Image.open(path).convert('RGB');rows=[]
+ x0=max(8,image.width//2-180);x1=min(image.width-8,image.width//2+300)
+ y0=max(0,image.height//2-140);y1=min(image.height-8,image.height//2+260)
+ for y in range(y0,y1):
+  start=None
+  for x in range(x0,x1):
+   r,g,b=image.getpixel((x,y));red=abs(r-186)<18 and abs(g-40)<15 and abs(b-56)<18
+   if red and start is None:start=x
+   if (not red or x==x1-1) and start is not None:
+    if x-start>70:rows.append((y,start,x))
+    start=None
+ if not rows:return None
+ bottom=max(y for y,_,_ in rows);group=[r for r in rows if bottom-24<=r[0]<=bottom]
+ left=min(r[1] for r in group);right=max(r[2] for r in group)
+ return ((left+right)//2,sum(y for y,_,_ in group)//len(group))
 def footer_primary(path):
  image=Image.open(path).convert('RGB')
  rows=[]
@@ -124,7 +142,7 @@ def run(phase):
     confirm=None
     deadline=time.monotonic()+15
     while time.monotonic()<deadline:
-     confirm=primary_block(shot('actual-default-confirm'),min_y=350)
+     confirm=dialog_primary(shot('actual-default-confirm'))
      if confirm:break
      time.sleep(.2)
     assert confirm,f'Save confirmation did not appear: {root}'
