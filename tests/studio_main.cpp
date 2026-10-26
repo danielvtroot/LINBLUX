@@ -104,6 +104,14 @@ void ModelGizmoSession() {
     input.mousePosition=layout.moveHandle[1];input.leftPressed=input.leftDown=true;session.update(ToolMode::Move,model,camera,view,true,true,input);
     input.leftPressed=false;input.mousePosition=Vector2Add(input.mousePosition,Vector2Scale(layout.axisDirection[0],23));session.update(ToolMode::Move,model,camera,view,true,true,input);
     session.end(true,"cancel_test");CHECK(projectio::toJson(scene)==after);CHECK(history.undoCount()==1);CHECK(!physics.isPartEditing(a->id()));
+    input={};session.update(ToolMode::Scale,model,camera,view,true,true,input);
+    layout=gizmolayout::Build(*session.proxy(),ToolMode::Scale,camera,view,false,gizmo.visualSettings());
+    input.mousePosition=layout.scaleHandle[1];input.leftPressed=input.leftDown=true;
+    CHECK(session.update(ToolMode::Scale,model,camera,view,true,true,input).started);
+    input.leftPressed=false;input.mousePosition=Vector2Add(input.mousePosition,Vector2Scale(layout.axisDirection[0],28));
+    session.update(ToolMode::Scale,model,camera,view,true,true,input);
+    CHECK(a->size().x>2);CHECK(NearlyEqual(a->size().x,a->size().y,.001f));
+    session.end(true,"scale_cancel_test");CHECK(projectio::toJson(scene)==after);CHECK(physics.bodyCount()==2);
     ModelFrame frame;CHECK(scene.modelFrame(model->id(),frame,error));frame.scale*=1.25f;CHECK(session.applyProperty(model->id(),frame,false,error));CHECK(history.undoCount()==2);
     CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==after);
     CHECK(scene.remove(b));const auto missing=projectio::toJson(scene);CHECK(!session.applyEdit(edit,true,error));CHECK(projectio::toJson(scene)==missing);

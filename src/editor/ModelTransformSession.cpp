@@ -77,6 +77,7 @@ GizmoUpdateResult ModelTransformSession::update(ToolMode mode,Instance* model,co
         if(!applyEdit(edit_,false,error)||!scene_.transformModel(edit_.id,target,error)){
             end(true,"model_transform_rejected");result.ended=true;result.cancelled=true;result.consumed=true;return result;}
         physics_.syncScene(scene_);
+        if(mode==ToolMode::Scale){auto display=proxy_->transform();display.size=Vector3Scale(startProxy_.size,target.scale/startFrame_.scale);proxy_->setTransform(display);}
         if(result.ended){complete(edit_);history_.record(edit_);release();}
     }
     return result;
