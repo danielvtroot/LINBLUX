@@ -119,6 +119,10 @@ int main() {
         audio.stopAll();
         require(audio.voiceCount() == 0, "stop_all deixou vozes ativas");
 
+        Scene ownerScene;auto* owner=ownerScene.createPart(PartShape::Block,{0,5,0});
+        const auto ownedVoice=audio.play(wavRef,1,true,error,owner->id());require(ownedVoice>0,error.c_str());
+        audio.update(.01f,&ownerScene);require(audio.voiceCount()==1,"Voz associada não foi criada");ownerScene.remove(owner);audio.update(.01f,&ownerScene);require(audio.voiceCount()==0,"Voz sobreviveu ao objeto destruído");
+
         // Biblioteca persistida com a cena + API Lua real no RuntimeSession.
         experiences::ExperienceManager::writeFactoryResources(root / "factory");
         fs::create_directories(root / "defaults");
@@ -130,6 +134,7 @@ int main() {
         library.open(created, scene);
         const auto storedRef = library.importAsset(fixture("tone.ogg"));
         auto& entry = scene.gameAssets().addSound(storedRef, "Tom de teste");
+        entry.durationSeconds=.25;
         entry.volume = .4f;
         entry.loop = true;
         entry.kind = "music";
@@ -185,8 +190,14 @@ int main() {
         try { library.removeAsset(storedRef, game::SoundInUse(reopened, storedRef)); }
         catch (const std::exception&) { refused = true; }
         require(refused && fs::is_regular_file(created.root / storedRef), "Áudio em uso foi apagado");
-        library.removeAsset(storedRef, false); // sem uso declarado: remove o arquivo
-        require(!fs::exists(created.root / storedRef), "Remoção autorizada não apagou o áudio");
+        refused=false;try{library.removeAsset(storedRef,false);}catch(const std::exception&){refused=true;}
+        require(refused,"Flag do chamador burlou referências na cena salva");
+        require(reopened.removeById(script->id()),"Não removeu script que usa áudio");
+        const auto originalScene=projectio::toJson(reopened);
+        require(!game::RemoveSoundAsset(reopened,(created.root/"assets").string(),storedRef,[](std::string& e){e="Falha simulada de salvamento";return false;},error),"Exclusão ignorou falha de salvamento");
+        require(fs::exists(created.root/storedRef)&&projectio::toJson(reopened)==originalScene,"Falha de salvamento perdeu arquivo ou metadados");
+        require(game::RemoveSoundAsset(reopened,(created.root/"assets").string(),storedRef,[&](std::string& e){try{library.save(reopened);return true;}catch(const std::exception& ex){e=ex.what();return false;}},error),error.c_str());
+        require(!fs::exists(created.root / storedRef)&&reopened.gameAssets().sounds.empty(),"Remoção autorizada não apagou o áudio");
 
         std::printf("AUDIO: MP3/WAV/OGG reais, contrato de reprodução, API Lua, persistência e remoção segura passaram. Fixture: %s\n",
                     root.c_str());

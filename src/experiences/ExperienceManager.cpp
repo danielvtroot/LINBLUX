@@ -617,7 +617,7 @@ void ExperienceManager::removeAsset(const std::string& reference,bool usedByScen
     const auto uses=game::DescribeImageUsage(current.manifest,normalized);
     if(!uses.empty())throw std::runtime_error("A imagem é usada em "+uses.front().where+"; remova ou substitua essa referência antes de excluir.");
     Scene saved;loadWorld(saved,current);
-    if(game::ImageInUse(saved,normalized))throw std::runtime_error("A imagem ainda é usada pela cena salva. Remova as referências e salve a experiência antes de excluir.");
+    if(game::ImageInUse(saved,normalized)||game::SoundInUse(saved,normalized))throw std::runtime_error("A imagem ainda é usada pela cena salva. Remova as referências e salve a experiência antes de excluir.");
     std::string error;
     if(!game::RemoveAssetFile((root/"assets").string(),tail,usedByScene,error))throw std::runtime_error(error);
     event("asset_removed",root);

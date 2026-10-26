@@ -43,7 +43,7 @@ bool IsAudioReference(const std::string& reference) {
 }
 
 std::vector<SoundUse> DescribeSoundUsage(const Scene& scene,const std::string& reference){
-    std::vector<SoundUse> uses;const auto canonical=NormalizeImageReference(reference);const auto file=std::filesystem::path(canonical).filename().string();if(file.empty())return uses;
+    std::vector<SoundUse> uses;if(!IsAudioReference(reference))return uses;const auto canonical=NormalizeImageReference(reference);const auto file=std::filesystem::path(canonical).filename().string();if(file.empty())return uses;
     std::vector<std::string> tokens{file,std::filesystem::path(file).stem().string()};
     for(const auto& sound:scene.gameAssets().sounds)if(NormalizeImageReference(sound.reference)==canonical){tokens.push_back(sound.id);tokens.push_back(sound.name);}
     for(const auto& node:scene.objects()){
@@ -53,7 +53,7 @@ std::vector<SoundUse> DescribeSoundUsage(const Scene& scene,const std::string& r
     }return uses;
 }
 bool SoundInUse(const Scene& scene,const std::string& reference,bool includeLibrary){
-    const auto canonical=NormalizeImageReference(reference);
+    if(!IsAudioReference(reference))return false;const auto canonical=NormalizeImageReference(reference);
     if(includeLibrary)for(const auto& sound:scene.gameAssets().sounds)if(NormalizeImageReference(sound.reference)==canonical)return true;
     return !DescribeSoundUsage(scene,reference).empty();
 }

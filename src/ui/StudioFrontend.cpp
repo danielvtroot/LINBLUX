@@ -849,7 +849,7 @@ if(c.action=="r6")showAdvanced("rig");
     void commonAdvanced() {
         const bool common=advanced=="settings"||advanced=="assets";
         display("advanced-content",common);if(!common)return;
-        if(editing())return;
+        if(editing()||ImGui::IsMouseDown(0))return;
         std::string s;
         if(advanced=="settings") {
             const auto& a=ui.scene_.gameAssets();const auto& p=a.player;
@@ -891,8 +891,8 @@ if(c.action=="r6")showAdvanced("rig");
             s+="<div class=\"asset-grid\">";
             for(const auto& file:sounds){const auto* saved=ui.scene_.gameAssets().findSound(file.reference);const auto& sound=saved?*saved:file;
                 s+="<div class=\"asset-card\"><span class=\"asset-name\">"+Escape(saved?sound.name:"Som não catalogado")+"</span><span class=\"asset-meta\">"+Escape(file.reference)+(sound.durationSeconds>0?" · "+Num(sound.durationSeconds)+" s":"")+"</span>";
-                s+=Button("preview-sound","Ouvir","play",file.reference)+Button("pause-sound","Pausar / continuar","pause",file.reference)+Button("stop-sound","Parar","stop",file.reference);
-                s+="<label>Volume<input type=\"range\" min=\"0\" max=\"1\" step=\"0.05\" value=\""+Num(sound.volume)+"\" data-action=\"sound-volume:"+Escape(sound.id)+"\"/></label><label>Repetir<input type=\"checkbox\" data-action=\"sound-loop:"+Escape(sound.id)+"\" "+(sound.loop?"checked=\"checked\"":"")+"/></label>";
+                s+=Button("preview-sound","Ouvir","play",file.reference)+Button("pause-sound","Pausar / continuar","",file.reference)+Button("stop-sound","Parar","stop",file.reference);
+                s+="<label>Volume<input id=\"audio-volume-"+Escape(sound.id)+"\" type=\"range\" min=\"0\" max=\"1\" step=\"0.05\" value=\""+Num(sound.volume)+"\" data-action=\"sound-volume:"+Escape(sound.id)+"\"/></label><label>Repetir<input id=\"audio-loop-"+Escape(sound.id)+"\" type=\"checkbox\" data-action=\"sound-loop:"+Escape(sound.id)+"\" "+(sound.loop?"checked=\"checked\"":"")+"/></label>";
                 s+=Button("rename-sound","Renomear","edit",file.reference)+Button("remove-sound","Excluir","delete",file.reference)+"</div>";}
 
             s+="</div>";
