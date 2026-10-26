@@ -146,7 +146,7 @@
    "class": "Script",
    "name": "Demo.lua",
    "parent": 5,
-   "source": "--[[\nRifleDemo: uma experiência real usando apenas APIs públicas.\n\nO Modelo \"RifleDemo\" é um protótipo autoral (marcador _linblux_item_prototype),\nregistrado antes dos scripts. Aqui ele é instanciado no chão e usado pelo\njogador: E coleta, 1 equipa, clique atira, R recarrega e Delete solta.\n]]\nlocal v = linblux.vec3\nlocal raiz = linblux.scene.root\n\nlocal dica, dicaRotulo\n\nlocal function dica(texto)\n    if not dica then\n        dica = linblux.ui.create(\"panel\", {anchor=\"top\", x=0, y=16, width=620,\n            height=46, background=\"#101014CC\"})\n        dicaRotulo = linblux.ui.create(\"label\", {parent=dica, anchor=\"center\",\n            width=600, height=24, text=texto, color=\"#F2F2F5\", font_size=16})\n        raiz:set_attribute(\"dica_painel\", dica)\n        raiz:set_attribute(\"dica_rotulo\", dicaRotulo)\n    else\n        linblux.ui.set(dicaRotulo, \"text\", texto)\n    end\nend\n\nlocal function criarAlvo(x, z)\n    local peca = linblux.npc.create{name=\"Alvo\", position=v(x, 4, z),\n        size=v(2.4, 7, 2.4), color=v(214, 66, 58), max_health=100,\n        speed=0, respawn_delay=4}\n    peca:set_attribute(\"alvo\", true)\n    return peca\nend\n\ncriarAlvo(-7, -30)\ncriarAlvo(7, -30)\n\nlocal item = linblux.items.spawn(\"fuzil\", {position=v(0, 1.6, -9)})\nraiz:set_attribute(\"item_demo\", item.id)\n\ndica(\"Segure E perto do rifle para coletar\")\n\nlinblux.events.on(\"inventory_changed\", function(evento)\n    if not evento.item or evento.item.id ~= item.id then return end\n    if evento.action == \"collect\" then\n        dica(\"1 equipa   ·   clique atira   ·   R recarrega   ·   Delete solta\")\n    elseif evento.action == \"drop\" then\n        dica(\"Segure E para recolher o rifle\")\n    end\nend)\n",
+   "source": "--[[\nRifleDemo: uma experiência real usando apenas APIs públicas.\n\nO Modelo \"RifleDemo\" é um protótipo autoral (marcador _linblux_item_prototype),\nregistrado antes dos scripts. Aqui ele é instanciado no chão e usado pelo\njogador: E coleta, 1 equipa, clique atira, R recarrega e Delete solta.\n]]\nlocal v = linblux.vec3\nlocal raiz = linblux.scene.root\n\nlocal dica, dicaRotulo\n\nlocal function mostrarDica(texto)\n    if not dica then\n        dica = linblux.ui.create(\"panel\", {anchor=\"top\", x=0, y=16, width=620,\n            height=46, background=\"#101014CC\"})\n        dicaRotulo = linblux.ui.create(\"label\", {parent=dica, anchor=\"center\",\n            width=600, height=24, text=texto, color=\"#F2F2F5\", font_size=16})\n        raiz:set_attribute(\"dica_painel\", dica)\n        raiz:set_attribute(\"dica_rotulo\", dicaRotulo)\n    else\n        linblux.ui.set(dicaRotulo, \"text\", texto)\n    end\nend\n\nlocal function criarAlvo(x, z)\n    local peca = linblux.npc.create{name=\"Alvo\", position=v(x, 4, z),\n        size=v(2.4, 7, 2.4), color=v(214, 66, 58), max_health=100,\n        speed=0, respawn_delay=4}\n    peca:set_attribute(\"alvo\", true)\n    return peca\nend\n\ncriarAlvo(-7, -30)\ncriarAlvo(7, -30)\n\nlocal item = linblux.items.spawn(\"fuzil\", {position=v(0, 1.6, -9)})\nraiz:set_attribute(\"item_demo\", item.id)\n\nmostrarDica(\"Segure E perto do rifle para coletar\")\n\nlinblux.events.on(\"inventory_changed\", function(evento)\n    if not evento.item or evento.item.id ~= item.id then return end\n    if evento.action == \"collect\" then\n        mostrarDica(\"1 equipa   ·   clique atira   ·   R recarrega   ·   Delete solta\")\n    elseif evento.action == \"drop\" then\n        mostrarDica(\"Segure E para recolher o rifle\")\n    end\nend)\n",
    "enabled": true
   },
   {
@@ -156,9 +156,9 @@
    "parent": 1,
    "modelPivot": {
     "position": [
-     0.0,
+     60.0,
      2.0,
-     0.0
+     60.0
     ],
     "rotation": [
      0.0,
@@ -180,9 +180,9 @@
    "parent": 10,
    "shape": "Block",
    "position": [
-    0.0,
+    60.0,
     2.0,
-    0.0
+    60.0
    ],
    "rotation": [
     0.0,
@@ -211,9 +211,9 @@
    "parent": 10,
    "shape": "Block",
    "position": [
-    0.0,
+    60.0,
     2.15,
-    -4.2
+    55.8
    ],
    "rotation": [
     0.0,
@@ -242,9 +242,9 @@
    "parent": 10,
    "shape": "Block",
    "position": [
-    0.0,
+    60.0,
     1.9,
-    3.2
+    63.2
    ],
    "rotation": [
     0.0,
@@ -273,9 +273,9 @@
    "parent": 10,
    "modelPivot": {
     "position": [
-     0.0,
+     60.0,
      2.3,
-     0.6
+     60.6
     ],
     "rotation": [
      0.0,
@@ -293,9 +293,9 @@
    "parent": 14,
    "shape": "Block",
    "position": [
-    0.0,
+    60.0,
     2.3,
-    0.6
+    60.6
    ],
    "rotation": [
     0.0,

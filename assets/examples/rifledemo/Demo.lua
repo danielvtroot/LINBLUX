@@ -10,7 +10,7 @@ local raiz = linblux.scene.root
 
 local dica, dicaRotulo
 
-local function dica(texto)
+local function mostrarDica(texto)
     if not dica then
         dica = linblux.ui.create("panel", {anchor="top", x=0, y=16, width=620,
             height=46, background="#101014CC"})
@@ -31,19 +31,20 @@ local function criarAlvo(x, z)
     return peca
 end
 
-criarAlvo(-7, -30)
-criarAlvo(7, -30)
+criarAlvo(-8, -30)
+criarAlvo(0, -30)
+criarAlvo(8, -30)
 
-local item = linblux.items.spawn("fuzil", {position=v(0, 1.6, -9)})
+local item = linblux.items.spawn("fuzil", {position=v(0, 1.6, -5)})
 raiz:set_attribute("item_demo", item.id)
 
-dica("Segure E perto do rifle para coletar")
+mostrarDica("Segure E perto do rifle para coletar")
 
 linblux.events.on("inventory_changed", function(evento)
     if not evento.item or evento.item.id ~= item.id then return end
     if evento.action == "collect" then
-        dica("1 equipa   ·   clique atira   ·   R recarrega   ·   Delete solta")
+        mostrarDica("1 equipa   ·   clique atira   ·   R recarrega   ·   Delete solta")
     elseif evento.action == "drop" then
-        dica("Segure E para recolher o rifle")
+        mostrarDica("Segure E para recolher o rifle")
     end
 end)
