@@ -1,6 +1,13 @@
 #include "game/Audio.h"
 
 #include <algorithm>
+#include <chrono>
+#include <unistd.h>
+#ifdef LINBLUX_AUDIO_METADATA_FFMPEG
+extern "C" {
+#include <libavformat/avformat.h>
+}
+#endif
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -35,23 +42,37 @@ bool IsAudioReference(const std::string& reference) {
     return extension == ".wav" || extension == ".ogg" || extension == ".mp3";
 }
 
-bool SoundInUse(const Scene& scene, const std::string& reference) {
-    if (reference.empty()) return false;
-    const auto filename = std::filesystem::path(reference).filename().string();
-    if (filename.empty()) return false;
-    for (const auto& sound : scene.gameAssets().sounds)
-        if (std::filesystem::path(sound.reference).filename().string() == filename) return true;
-    for (const auto& owned : scene.objects()) {
-        const Instance* object = owned.get();
-        if (!object) continue;
-        for (const auto& attribute : object->attributes()) {
-            const auto* text = std::get_if<std::string>(&attribute.second);
-            if (text && text->find(filename) != std::string::npos) return true;
-        }
-        if (IsScriptClass(object->instanceClass()) &&
-            static_cast<const Script*>(object)->source.find(filename) != std::string::npos) return true;
-    }
-    return false;
+std::vector<SoundUse> DescribeSoundUsage(const Scene& scene,const std::string& reference){
+    std::vector<SoundUse> uses;if(!IsAudioReference(reference))return uses;const auto canonical=NormalizeImageReference(reference);const auto file=std::filesystem::path(canonical).filename().string();if(file.empty())return uses;
+    std::vector<std::string> tokens{file,std::filesystem::path(file).stem().string()};
+    for(const auto& sound:scene.gameAssets().sounds)if(NormalizeImageReference(sound.reference)==canonical){tokens.push_back(sound.id);tokens.push_back(sound.name);}
+    for(const auto& node:scene.objects()){
+        for(const auto& attr:node->attributes())if(const auto* value=std::get_if<std::string>(&attr.second)){
+            if(NormalizeImageReference(*value)==canonical||std::find(tokens.begin(),tokens.end(),*value)!=tokens.end())uses.push_back({node->id(),node->name(),attr.first});}
+        if(IsScriptClass(node->instanceClass()))for(const auto& token:tokens)if(!token.empty()&&static_cast<const Script&>(*node).source.find(token)!=std::string::npos){uses.push_back({node->id(),node->name(),"source"});break;}
+    }return uses;
+}
+bool SoundInUse(const Scene& scene,const std::string& reference,bool includeLibrary){
+    if(!IsAudioReference(reference))return false;const auto canonical=NormalizeImageReference(reference);
+    if(includeLibrary)for(const auto& sound:scene.gameAssets().sounds)if(NormalizeImageReference(sound.reference)==canonical)return true;
+    return !DescribeSoundUsage(scene,reference).empty();
+}
+bool RemoveSoundAsset(Scene& scene,const std::string& assetsDir,const std::string& reference,const std::function<bool(std::string&)>& save,std::string& error){
+    error.clear();const auto ref=NormalizeImageReference(reference);const auto file=ref.rfind("assets/",0)==0?ref.substr(7):std::string();
+    if(file.empty()||file.find('/')!=std::string::npos||file.find('\\')!=std::string::npos||!IsAudioReference(file)){error="Selecione um áudio gerenciado da experiência.";return false;}
+    const auto uses=DescribeSoundUsage(scene,ref);if(!uses.empty()){error="Áudio em uso: ";for(const auto& use:uses)error+=use.where+" · "+use.property+"; ";return false;}
+    const auto directory=std::filesystem::path(assetsDir),path=directory/file;std::error_code ec;
+    if(std::filesystem::is_symlink(std::filesystem::symlink_status(directory,ec))||std::filesystem::is_symlink(std::filesystem::symlink_status(path,ec))||!std::filesystem::is_regular_file(path,ec)){error="Caminho de áudio inválido ou link simbólico.";return false;}
+    std::string temporary=(directory/".linblux-audio-delete-XXXXXX").string();std::vector<char> name(temporary.begin(),temporary.end());name.push_back(0);
+    const int fd=mkstemp(name.data());if(fd<0){error="Não foi possível preparar exclusão do áudio.";return false;}close(fd);temporary=name.data();
+    std::filesystem::rename(path,temporary,ec);if(ec){std::filesystem::remove(temporary);error="Falha ao preparar exclusão: "+ec.message();return false;}
+    const auto before=scene.gameAssets().sounds;auto& sounds=scene.gameAssets().sounds;
+    sounds.erase(std::remove_if(sounds.begin(),sounds.end(),[&](const auto& sound){return NormalizeImageReference(sound.reference)==ref;}),sounds.end());
+    bool saved=false;try{saved=save(error);}catch(const std::exception& e){error=e.what();}
+    if(!saved){sounds=before;if(!std::filesystem::exists(path))std::filesystem::rename(temporary,path,ec);else ec=std::make_error_code(std::errc::file_exists);
+        if(ec)error+=" Backup preservado para recuperação: "+temporary;else if(error.empty())error="Áudio preservado: a experiência não pôde ser salva.";return false;}
+    if(!std::filesystem::remove(temporary,ec)||ec){error="Metadados salvos, mas o backup temporário não pôde ser removido: "+temporary;return false;}
+    return true;
 }
 
 std::vector<SoundAsset> ListAudioAssets(const std::string& assetsDir) {
@@ -90,16 +111,37 @@ bool ProbeAudio(const std::string& resolvedPath, double& duration, std::string& 
             return true;
         }
     }
-    Wave wave = LoadWave(resolvedPath.c_str());
-    if (!wave.data || wave.frameCount <= 0 || wave.sampleRate <= 0) {
-        if (wave.data) UnloadWave(wave);
-        error = "Falha ao decodificar áudio: " + resolvedPath;
-        return false;
+#ifdef LINBLUX_AUDIO_METADATA_FFMPEG
+    AVFormatContext* format=avformat_alloc_context();
+    if(!format){error="Memória insuficiente para inspecionar áudio.";return false;}
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(2);
+    format->interrupt_callback.callback=[](void* data){return std::chrono::steady_clock::now()>*static_cast<const std::chrono::steady_clock::time_point*>(data)?1:0;};
+    format->interrupt_callback.opaque=const_cast<void*>(static_cast<const void*>(&deadline));
+    format->flags|=AVFMT_FLAG_NOBUFFER;
+    AVDictionary* options=nullptr;av_dict_set(&options,"protocol_whitelist","file",0);av_dict_set(&options,"format_whitelist","wav,ogg,mp3",0);
+    av_dict_set_int(&options,"probesize",262144,0);av_dict_set_int(&options,"analyzeduration",200000,0);
+    const int opened=avformat_open_input(&format,resolvedPath.c_str(),nullptr,&options);av_dict_free(&options);
+    if(opened<0){if(format)avformat_close_input(&format);error="Container de áudio inválido ou não suportado.";return false;}
+    const int found=avformat_find_stream_info(format,nullptr);bool audio=false;
+    for(unsigned i=0;i<format->nb_streams;++i)if(format->streams[i]->codecpar->codec_type==AVMEDIA_TYPE_AUDIO){
+        const auto* stream=format->streams[i];audio=true;
+        if(stream->codecpar->codec_id==AV_CODEC_ID_OPUS){audio=false;break;}
+        if(stream->duration!=AV_NOPTS_VALUE&&stream->duration>0)duration=std::max(duration,stream->duration*av_q2d(stream->time_base));
     }
-    duration = double(wave.frameCount) / double(wave.sampleRate);
-    UnloadWave(wave);
+    if(format->duration!=AV_NOPTS_VALUE&&format->duration>0)duration=std::max(duration,double(format->duration)/AV_TIME_BASE);
+    avformat_close_input(&format);
+    if(found<0||!audio||!std::isfinite(duration)||duration<=0){error="Não foi possível obter duração válida de WAV/MP3/OGG Vorbis.";return false;}
+#else
+    // raylib can inspect a stream when its audio device has already been opened.
+    if(!IsAudioDeviceReady()){error="Inspeção de áudio sem dispositivo requer FFmpeg nesta compilação.";return false;}
+    Music probe=LoadMusicStream(resolvedPath.c_str());
+    if(!probe.stream.buffer){error="Falha ao abrir stream de áudio.";return false;}
+    duration=GetMusicTimeLength(probe);UnloadMusicStream(probe);
+    if(!std::isfinite(duration)||duration<=0){error="Duração de áudio inválida.";return false;}
+#endif
     {
         std::lock_guard<std::mutex> lock(probeMutex);
+        if(probeCache.size()>=1024)probeCache.erase(probeCache.begin());
         probeCache[resolvedPath] = {size, modified, duration};
     }
     return true;
@@ -139,7 +181,7 @@ bool AudioSystem::probe(const std::string& reference, double& seconds, std::stri
     return ProbeAudio(path, seconds, error);
 }
 
-int AudioSystem::play(const std::string& reference, float volume, bool loop, std::string& error) {
+int AudioSystem::play(const std::string& reference, float volume, bool loop, std::string& error,std::uint64_t owner) {
     error.clear();
     if (!std::isfinite(volume) || volume < 0 || volume > 1) {
         error = "Volume deve estar entre 0 e 1.";
@@ -161,6 +203,7 @@ int AudioSystem::play(const std::string& reference, float volume, bool loop, std
     double seconds = 0;
     if (!ProbeAudio(path, seconds, error)) return 0;
     Voice voice;
+    voice.owner=owner;
     voice.path = path;
     voice.reference = reference;
     voice.volume = volume;
@@ -168,6 +211,7 @@ int AudioSystem::play(const std::string& reference, float volume, bool loop, std
     voice.duration = seconds;
     if (deviceReady()) {
         voice.music = LoadMusicStream(path.c_str());
+        if (!voice.music.stream.buffer) {if(voice.music.ctxData)UnloadMusicStream(voice.music);error="O backend não conseguiu abrir o áudio importado.";return 0;}
         if (voice.music.stream.buffer) {
             voice.stream = true;
             voice.music.looping = loop;
@@ -258,10 +302,12 @@ double AudioSystem::duration(int handle) const {
     return voice ? voice->duration : 0;
 }
 
-void AudioSystem::update(float dt) {
+bool AudioSystem::streaming(int handle)const{const auto* voice=find(handle);return voice&&voice->stream;}
+void AudioSystem::update(float dt,const Scene* scene) {
     if (!std::isfinite(dt) || dt < 0) return;
     for (auto it = voices_.begin(); it != voices_.end();) {
         Voice& voice = it->second;
+        if(voice.owner&&scene&&!scene->find(voice.owner)){release(voice);it=voices_.erase(it);continue;}
         if (voice.paused) {
             ++it;
             continue;

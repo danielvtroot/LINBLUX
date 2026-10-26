@@ -546,40 +546,53 @@ gravado.
   ou `rig:add_decal`.
 - Remover: `ExperienceManager::removeAsset(ref, usado)` recusa assets citados
   pelo manifesto (ícone/banner/rosto) e o editor recusa quando
-  `ImageInUse`/`SoundInUse` encontram a referência na cena, em atributos, na
-  biblioteca de sons ou no código de um Script.
+  `ImageInUse`/`DescribeSoundUsage` encontram a referência na cena, em atributos,
+  na biblioteca de sons ou no código de um Script.
 - O rosto da fábrica não é mais obrigatório: uma experiência sem `faceImage`
   é válida; o rig do personagem é a fonte visual e o render só usa o rosto
   embutido quando o projeto não define nenhum.
 
 ## Áudio MP3, WAV e OGG
 
-Importe em **Studio → Imagens/Sons**; o arquivo vai para `assets/` da
-experiência e a biblioteca do projeto (`GameAssets.sounds`) guarda
-`id/nome/referência/volume/loop/kind`. O MP3/WAV/OGG é validado pelo container
-e decodificado (`LoadWave`) na importação, então um arquivo renomeado é
-recusado antes de ser gravado.
+Importe em **Studio → Recursos → Sons locais**; o arquivo vai para `assets/`
+da experiência e a biblioteca do projeto (`GameAssets.sounds`) guarda
+`id/nome/referência/duração/volume/loop/kind`. A importação lê apenas os
+metadados do container (FFmpeg, com orçamento de 2 s e whitelist de
+container/`file`) e recusa MP3/WAV/OGG inválidos, Opus e duração não finita
+antes de gravar o arquivo.
 
 ```lua
 local handle = linblux.audio.play("musica_fundo", { volume = 0.4, loop = true })
-linblux.audio.play("assets/<id>.ogg", { volume = 1 })
+linblux.audio.play("assets/<id>.ogg", { volume = 1, owner = peca })
 linblux.audio.pause(handle)      linblux.audio.resume(handle)
 linblux.audio.set_volume(handle, 0.6)   linblux.audio.volume(handle)
 linblux.audio.set_loop(handle, false)   linblux.audio.looping(handle)
 linblux.audio.is_playing(handle)        linblux.audio.is_paused(handle)
-linblux.audio.duration(handle)       -- segundos reais decodificados
+linblux.audio.duration(handle)       -- segundos reais (metadados)
 linblux.audio.duration("musica_fundo")
+linblux.audio.is_streaming(handle)   -- true quando o backend abriu um Music
+linblux.audio.device_ready()         -- false em CI/headless
 linblux.audio.stop(handle)       linblux.audio.stop_all()
-for _, som in ipairs(linblux.audio.list()) do print(som.id, som.kind) end
+for _, som in ipairs(linblux.audio.list()) do print(som.id, som.kind, som.duration) end
 ```
 
 Reprodução 2D global, sem atenuação por distância; cada `play` devolve um
-handle independente (até 64 vozes simultâneas). `Studio` e `Player` chamam
-`InitAudioDevice` depois da janela; sem dispositivo (CI/headless) o runtime
-mantém o mesmo contrato de handles/pause/stop e conduz o término pela duração
-decodificada, sem fingir um stream. `stop()` da sessão encerra todas as vozes.
-Limitação real: não há áudio 3D/espacial, mixer por categoria nem streaming
-parcial — o arquivo inteiro é decodificado na importação.
+handle independente (até 64 vozes simultâneas). O `owner` opcional amarra a voz
+a um objeto: quando ele é removido da cena, a voz é liberada no próximo
+`update`. `Studio` e `Player` abrem o dispositivo de áudio **antes** de iniciar
+os scripts. Sem dispositivo (CI/headless) o runtime mantém o mesmo contrato de
+handles/pause/stop e conduz o término pela duração real dos metadados, sem
+fingir um stream. `stop()` da sessão encerra todas as vozes.
+
+Exclusão segura de áudio: `DescribeSoundUsage` identifica objeto/atributo/script
+que cita a referência, o `id` ou o nome; `RemoveSoundAsset` recusa enquanto
+houver uso, move o arquivo para um backup temporário, salva a cena e restaura
+arquivo + metadados se o salvamento falhar. O arquivo externo original do
+usuário nunca é apagado.
+
+Limitação real: não há áudio 3D/espacial nem mixer por categoria. `Studio`
+pré-escuta com um `AudioSystem` próprio (volume/loop/pausa/parar); o `Player`
+usa o dispositivo da janela.
 
 Exemplos reais:
 

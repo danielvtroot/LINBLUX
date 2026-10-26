@@ -29,6 +29,8 @@ int main(int argc,char** argv) {
         else if(path.filename()=="experience.json"||std::filesystem::is_directory(path)){const auto experience=library.inspect(path.filename()=="experience.json"?path.parent_path():path);library.loadReadOnly(experience,authoring);storageIdentity="experience:"+experience.manifest.installationId;}
         else {if(!projectio::load(authoring,project,error))throw std::runtime_error(error);game::SetProjectAssetRoot(std::filesystem::absolute(path).parent_path().string());storageIdentity="scene:"+std::filesystem::weakly_canonical(path).string();}
     }catch(const std::exception& e){std::fprintf(stderr,"Falha ao abrir experiência: %s\n",e.what());return 1;}
+    struct AudioDeviceGuard {bool owned=false;~AudioDeviceGuard(){if(owned&&IsAudioDeviceReady())CloseAudioDevice();}} audioDevice;
+    if(!validate){InitAudioDevice();audioDevice.owned=IsAudioDeviceReady();}
     game::RuntimeSession runtime;if(!runtime.start(authoring,error,{storageIdentity,{},!validate})){std::fprintf(stderr,"Falha na execução: %s\n",error.c_str());return 1;}
     if(validate){
         for(int i=0;i<120;++i)runtime.update(1.f/60,{});
@@ -45,7 +47,6 @@ int main(int argc,char** argv) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_VSYNC_HINT);InitWindow(1280,720,"LINBLUX Player");
     if(!IsWindowReady()){runtime.stop(false);std::fprintf(stderr,"Falha ao criar a janela gráfica do LINBLUX Player.\n");return 1;}
     SetExitKey(KEY_NULL);SetWindowMinSize(900,560);SetTargetFPS(60);
-    InitAudioDevice(); // som 2D global; sem dispositivo, AudioSystem segue sem stream
     Image icon=LoadImage(game::BuiltinAssetPath("logo.png").c_str());if(icon.data){SetWindowIcon(icon);UnloadImage(icon);}
     Font font=GetFontDefault();bool customFont=false;
     for(const char* path:{"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"})if(FileExists(path)){font=LoadFontEx(path,24,nullptr,256);customFont=font.texture.id!=0;break;}
@@ -72,5 +73,5 @@ int main(int argc,char** argv) {
         }
         runtime.stop();game::ClearImageTextures();
     }
-    if(customFont)UnloadFont(font);if(IsAudioDeviceReady())CloseAudioDevice();CloseWindow();return checkScripts&&runtime.scripts().errorCount()>0?1:0;
+    if(customFont)UnloadFont(font);CloseWindow();return checkScripts&&runtime.scripts().errorCount()>0?1:0;
 }

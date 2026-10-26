@@ -34,7 +34,7 @@ bool EditTransform(const char* id, game::RigidTransform& transform, bool positio
     }
     if (changed && !game::Valid(transform)) {
         transform = before; changed = false;
-        ImGui::TextColored({1,.3f,.2f,1}, "Transform rejected: use finite values and a valid quaternion.");
+        ImGui::TextColored({1,.3f,.2f,1}, i18n::Label("Transform rejected: use finite values and a valid quaternion."));
         diag::Event event; event.level = diag::Level::Warning;
         event.subsystem = "rig"; event.name = "validation_error";
         event.error = "nonfinite UI transform rejected"; event.context = {{"field", id}}; diag::log(event);
@@ -65,7 +65,7 @@ void CameraSettings(game::PlayerSettings& p, float* sensitivityRect = nullptr) {
     std::string error;
     if (!p.validate(error)) {
         p = previous;
-        ImGui::TextColored({1,.3f,.2f,1}, "Camera settings rejected: finite, in-range values required.");
+        ImGui::TextColored({1,.3f,.2f,1}, i18n::Label("Camera settings rejected: finite, in-range values required."));
     }
 }
 void AnimationChoice(const char* label, std::string& id, const game::GameAssets& assets,bool optional=false) {

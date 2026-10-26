@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
@@ -23,6 +25,7 @@ struct SoundAsset {
     std::string name;
     std::string filename;
     std::string reference;
+    double durationSeconds=0;
     float volume = 1.f;
     bool loop = false;
     std::string kind = "sound"; // "sound" ou "music"
@@ -32,13 +35,17 @@ bool IsAudioReference(const std::string& reference);
 
 // true quando a biblioteca de sons, um atributo de som ou o código de um
 // Script ainda cita o arquivo. A remoção consulta isto antes de apagar.
-bool SoundInUse(const Scene& scene, const std::string& reference);
+struct SoundUse {std::uint64_t object=0;std::string where,property;};
+std::vector<SoundUse> DescribeSoundUsage(const Scene& scene,const std::string& reference);
+bool SoundInUse(const Scene& scene, const std::string& reference,bool includeLibrary=true);
+bool RemoveSoundAsset(Scene& scene,const std::string& assetsDir,const std::string& reference,
+    const std::function<bool(std::string&)>& save,std::string& error);
 
 // Lista os áudios existentes em assets/ (usada pela UI de importação).
 std::vector<SoundAsset> ListAudioAssets(const std::string& assetsDir);
 
-// Decodifica o container para descobrir duração real. Funciona sem dispositivo
-// de áudio no host (dr_wav/dr_mp3/stb_vorbis), então serve de teste headless.
+// Lê metadados com orçamento/timeout, sem decodificar o arquivo inteiro.
+// Headless usa FFmpeg; sem ele, a raylib requer dispositivo de áudio aberto.
 bool ProbeAudio(const std::string& resolvedPath, double& duration, std::string& error);
 
 // Reprodução 2D global. Cada voice é independente: play devolve um handle
@@ -54,7 +61,7 @@ public:
 
     bool deviceReady() const;
     // reference precisa ser `assets/<arquivo>` resolvido dentro do projeto.
-    int play(const std::string& reference, float volume, bool loop, std::string& error);
+    int play(const std::string& reference, float volume, bool loop, std::string& error,std::uint64_t owner=0);
     bool stop(int handle);
     bool pause(int handle);
     bool resume(int handle);
@@ -67,7 +74,8 @@ public:
     std::string reference(int handle) const;
     double duration(int handle) const;
     std::size_t voiceCount() const { return voices_.size(); }
-    void update(float dt);
+    bool streaming(int handle) const;
+    void update(float dt,const Scene* scene=nullptr);
     void stopAll();
     // Recalcula duração a partir do arquivo; usado antes de play e por Lua.
     bool probe(const std::string& reference, double& seconds, std::string& error) const;
@@ -81,6 +89,7 @@ private:
         bool paused = false;
         double duration = 0;
         double played = 0;
+        std::uint64_t owner=0;
         Music music{};
         bool stream = false;
     };

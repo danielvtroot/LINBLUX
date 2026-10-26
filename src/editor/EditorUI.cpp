@@ -2695,7 +2695,7 @@ void EditorUI::duplicateSelection() {
         copy.id="rig-"+diag::newCorrelationId();copy.name=copy.name.substr(0,122)+" Copy";
         copy.root.position.x+=5;
         const auto id=copy.id;scene_.gameAssets().rigs.push_back(std::move(copy));
-        selectRig(id);checkInvariants("duplicate_rig");setStatus("Rig duplicated");return;
+        selectRig(id);checkInvariants("duplicate_rig");setStatus("Rig duplicated.");return;
     }
     Instance* selection = scene_.selection();
     if (!selection) return;

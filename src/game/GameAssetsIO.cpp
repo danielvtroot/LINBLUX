@@ -55,7 +55,7 @@ nlohmann::json EncodeAssets(const GameAssets& a) {
     if(!a.sounds.empty()) {
         j["sounds"]=json::array();
         for(const auto& sound:a.sounds)j["sounds"].push_back({{"id",sound.id},{"name",sound.name},
-            {"reference",sound.reference},{"volume",sound.volume},{"loop",sound.loop},{"kind",sound.kind}});
+            {"reference",sound.reference},{"duration",sound.durationSeconds},{"volume",sound.volume},{"loop",sound.loop},{"kind",sound.kind}});
     }
     for (const auto& r : a.rigs) {
         json rig{{"id", r.id}, {"name", r.name}, {"root", Transform(r.root)},
@@ -189,6 +189,7 @@ bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& erro
                 sound.id=value.at("id").get<std::string>();sound.name=value.at("name").get<std::string>();
                 sound.reference=value.at("reference").get<std::string>();
                 sound.filename=std::filesystem::path(sound.reference).filename().string();
+                sound.durationSeconds=value.value("duration",0.);
                 sound.volume=value.value("volume",1.f);sound.loop=value.value("loop",false);
                 sound.kind=value.value("kind",std::string("sound"));
                 a.sounds.push_back(std::move(sound));
