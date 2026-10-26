@@ -341,8 +341,17 @@ abre o dispositivo antes dos scripts, Studio tem prévia e exclusão transaciona
 
 Regressões gráficas de persistência corrigidas: `linblux_editor_restart`
 compara rotações com tolerância float32 explícita (sem esconder valores
-ausentes ou eixos trocados) e `linblux_engine_default_restart` localiza os
-controles por cor/posição relativa em vez de coordenadas absolutas frágeis.
-Nenhum código de imagens, NPCs ou modelos foi refeito. `linblux_rml_ui`
-integral não foi reexecutado (aprovado em 456,4 s antes destas mudanças).
+ausentes ou eixos trocados) e `linblux_engine_default_restart` localiza o cartão
+por cor e o Play pelo id do elemento no diagnóstico `LOBLOX_TRACE_UI`, que
+agora imprime deslocamentos absolutos e é reemitido a cada redimensionamento.
+`linblux_experience_startup` deixou de exigir `faceImage` (a fábrica não impõe
+mais rosto) e `linblux_rml_ui` voltou a apontar para o botão de importação da
+página de recursos (`assets-import-dialog-`), que usa escopo próprio.
+
+Validação gráfica desta etapa: `linblux_rml_ui` integral, 1051 verificações e 0
+falhas em tela 1920x1080 supervisionada (a execução anterior exigia o mesmo
+ambiente; uma tentativa em 1600x1000 falhava só porque o Play de 1920 ficava
+fora da tela). `linblux_editor_restart` e `linblux_engine_default_restart`
+aprovados, além de `linblux_experience_startup`. Nenhum código de imagens, NPCs
+ou modelos foi refeito.
 

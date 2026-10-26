@@ -47,6 +47,22 @@ apenas a unidade de áudio já implementada e agora validada.
   duração salva, recusa de exclusão em uso, reversão em falha de salvamento e
   remoção autorizada com arquivo + metadados apagados.
 
+## Regressões de integração corrigidas nesta etapa
+
+- `linblux_editor_restart`: a comparação aceita apenas o arredondamento float32
+  da rotação persistida (15° → 14,999998) e o bloco `body` padrão que o editor
+  grava, sem tolerar eixo trocado ou rotação ausente.
+- `linblux_engine_default_restart`: cartão do mundo padrão localizado pela cor
+  da marca e Play localizado pelo id `play` no diagnóstico de geometria
+  (`LOBLOX_TRACE_UI`), reemitido após cada redimensionamento.
+- `linblux_experience_startup`: `faceImage` vazio é válido desde a remoção do
+  rosto obrigatório de fábrica.
+- `linblux_rml_ui`: a página de recursos usa o escopo `assets`, então o botão de
+  importação é `assets-import-dialog-`; o teste também confirma que a seção de
+  sons locais é construída mesmo sem dispositivo de áudio.
+- Execução integral supervisionada de `linblux_rml_ui` em 1920x1080: 1051
+  verificações, 0 falhas.
+
 ## Limitações
 
 - Sem áudio 3D/atenuação por distância e sem mixer por categoria.
