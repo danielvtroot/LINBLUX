@@ -1,6 +1,7 @@
 #include "editor/EditHistory.h"
 
 #include <cmath>
+#include <algorithm>
 
 #include "raylib.h"
 #include "raymath.h"

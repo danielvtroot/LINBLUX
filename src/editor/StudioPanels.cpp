@@ -258,9 +258,9 @@ void EditorUI::drawInstanceProperties(Instance& object) {
                 if(row("Escala uniforme"))changed|=ImGui::InputFloat("##ModelScale",&candidate.scale,0,0,"%.3f",ImGuiInputTextFlags_EnterReturnsTrue);
                 ImGui::EndTable();
             }
-            if(changed){endGizmoSession(true,"model_property");if(!scene_.transformModel(object.id(),candidate,error))setStatus(error,true);else physics_.syncScene(scene_);}
+            if(changed){endGizmoSession(true,"model_property");if(!modelTransform_.applyProperty(object.id(),candidate,false,error))setStatus(error,true);else physics_.syncScene(scene_);}
             auto pivot=frame.position;
-            if(ImGui::InputFloat3("Pivô sem mover peças",&pivot.x,"%.3f",ImGuiInputTextFlags_EnterReturnsTrue)){frame.position=pivot;if(!scene_.setModelPivot(object.id(),frame,error))setStatus(error,true);}
+            if(ImGui::InputFloat3("Pivô sem mover peças",&pivot.x,"%.3f",ImGuiInputTextFlags_EnterReturnsTrue)){frame.position=pivot;if(!modelTransform_.applyProperty(object.id(),frame,true,error))setStatus(error,true);}
             if(ImGui::Button("Desagrupar modelo")){if(!scene_.ungroup(object.id(),error))setStatus(error,true);ImGui::PopID();return;}
         }
     }

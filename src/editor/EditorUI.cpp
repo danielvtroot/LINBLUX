@@ -619,6 +619,7 @@ EditorUI::EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera,
       config_(config),
       gizmo_(),
       transform_(gizmo_, physics_),
+      modelTransform_(scene_,physics_,transform_,history_),
       projectPath_(config.defaultProjectPath) {
     std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
     cameraMoveSpeed_ = camera_.moveSpeed();
@@ -649,6 +650,7 @@ bool EditorUI::enableModernFrontend(std::string& error) {
 void EditorUI::renderModernFrontend(){if(frontend_)frontend_->render();}
 
 void EditorUI::endGizmoSession(bool restoreTransform, const char* reason) {
+    if(modelTransform_.active()){modelTransform_.end(restoreTransform,reason);return;}
     Part* part = scene_.findPart(transform_.partId());
     if (restoreTransform) transform_.cancel(part, true, reason);
     else transform_.commit(part, reason);
@@ -800,6 +802,10 @@ void EditorUI::undoTransform() {
         setStatus("Nada para desfazer.", true);
         return;
     }
+    if(!edit.parts.empty()||!edit.pivots.empty()){
+        std::string error;if(!modelTransform_.applyEdit(edit,false,error)){history_.clear();setStatus(error,true);return;}
+        scene_.select(scene_.find(edit.id));checkInvariants("undo_model");setStatus("Transformação do Modelo desfeita.");return;
+    }
     Part* part = scene_.findPart(edit.id);
     if (part == nullptr) {
         setStatus("A peca desta operacao nao existe mais.", true);
@@ -821,6 +827,10 @@ void EditorUI::redoTransform() {
     if (!history_.redo(edit)) {
         setStatus("Nada para refazer.", true);
         return;
+    }
+    if(!edit.parts.empty()||!edit.pivots.empty()){
+        std::string error;if(!modelTransform_.applyEdit(edit,true,error)){history_.clear();setStatus(error,true);return;}
+        scene_.select(scene_.find(edit.id));checkInvariants("redo_model");setStatus("Transformação do Modelo refeita.");return;
     }
     Part* part = scene_.findPart(edit.id);
     if (part == nullptr) {
@@ -1816,10 +1826,11 @@ void EditorUI::drawViewport() {
     const bool viewportOwns = route.owner == InputOwner::Viewport;
     const bool sessionOwns = route.owner == InputOwner::Transform;
     const auto previousHover = gizmo_.hoveredHandle();
-    const GizmoUpdateResult gizmoResult = transform_.update(
-        tool_, selectedPart, camera_, viewportRect, hovered,
-        (viewportOwns || sessionOwns) && !rigConsumed && !readout_.editing && !readoutHovered,
-        gizmoInput);
+    const bool selectedModel=selection&&selection->instanceClass()==InstanceClass::Model;
+    const bool gizmoAllowed=(viewportOwns||sessionOwns)&&!rigConsumed&&!readout_.editing&&!readoutHovered;
+    const GizmoUpdateResult gizmoResult=selectedModel||modelTransform_.active()
+        ?modelTransform_.update(tool_,selection,camera_,viewportRect,hovered,gizmoAllowed,gizmoInput)
+        :transform_.update(tool_,selectedPart,camera_,viewportRect,hovered,gizmoAllowed,gizmoInput);
     if (gizmoResult.started && selectedPart != nullptr) {
         // A transformacao real do inicio (nao o snapshot de desenho) e o que
         // o Undo precisa restaurar.
@@ -1929,6 +1940,8 @@ void EditorUI::drawViewport() {
     if (selectedPart != nullptr && tool_ != ToolMode::Select) {
         gizmo_.drawOverlay(*selectedPart, tool_, camera_, viewportRect);
     }
+    if(selection&&selection->instanceClass()==InstanceClass::Model&&modelTransform_.proxy()&&tool_!=ToolMode::Select)
+        gizmo_.drawOverlay(*modelTransform_.proxy(),tool_,camera_,viewportRect);
     EndTextureMode();
     resolveViewport();
 

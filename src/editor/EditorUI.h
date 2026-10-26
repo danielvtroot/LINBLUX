@@ -15,6 +15,7 @@
 #include "editor/Tool.h"
 #include "editor/TransformMetrics.h"
 #include "editor/TransformSession.h"
+#include "editor/ModelTransformSession.h"
 #include "game/Runtime.h"
 #include "raylib.h"
 
@@ -163,6 +164,7 @@ private:
     TransformSession transform_;
     ToolMode tool_ = ToolMode::Select;
     EditHistory history_;
+    ModelTransformSession modelTransform_;
     // Um unico readout por arraste. `context` guarda a transformacao inicial;
     // nada e recalculado a partir do frame anterior.
     struct TransformReadout {
