@@ -56,7 +56,9 @@ colisão entre as duas peças conectadas e respeita a edição pelo Studio. Para
 animar fisicamente, o destino precisa ser dinâmico; duas peças ancoradas não
 são movidas pelo solver. Ajustar posição/rotação local anima a conexão usando
 os mesmos quaternions/transformações da engine; não cria outro sistema de rigs.
-Não há dobradiça de eixo livre ou motor com limites nesta primeira integração.
+Cada junta fixa usa 64 iterações locais do solver; o orçamento global das
+peças sem junta permanece inalterado. Benchmark de grandes montagens segue
+pendente. Não há dobradiça de eixo livre ou motor com limites nesta integração.
 Exemplo executável: assets/examples/lua/juntas.lua.
 
 A junta vive no Attachment de origem: JSONv6, `jointTarget` com o ID do destino.
