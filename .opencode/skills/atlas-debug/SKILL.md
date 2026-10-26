@@ -44,8 +44,8 @@ ctest --test-dir build-linblux -R '^linblux_atlas$' --output-on-failure
 ctest --test-dir build-linblux -R '^linblux_(game|tests|defaults|engine_default_lifecycle)$' --output-on-failure
 ```
 
-Para UI/render, use o teste focado sob Xvfb; não rode a suíte completa
-casualmente.
+Para UI/render, use o TURBO com `--budget` e `--per-test-timeout`; não invoque
+`ctest` gráfico diretamente nem rode a suíte completa casualmente.
 
 ## Regras
 

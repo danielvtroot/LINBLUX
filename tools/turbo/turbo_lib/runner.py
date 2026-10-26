@@ -323,6 +323,241 @@ def _parse_ctest_text(text: str) -> dict[str, dict]:
     return result
 
 
+def _safe_log_component(name: str) -> str:
+    value = re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("._")
+    return value[:120] or "test"
+
+
+def run_supervised_tests(
+    root: Path,
+    build_dir: Path,
+    tests: list[dict],
+    *,
+    log_dir: Path,
+    budget_seconds: float,
+    graphics_timeout: float = config.GRAPHICS_TEST_TIMEOUT,
+    headless_timeout: float = config.HEADLESS_TEST_TIMEOUT,
+) -> dict:
+    """Run each selected test in its own supervised CTest process.
+
+    Individual invocations make the per-test cap real even when a test has a
+    larger CTest TIMEOUT property.  The global budget is checked before every
+    launch; tests that do not fit are reported as pending, never as passed.
+    """
+    selected = [str(test["name"]) for test in tests]
+    if not selected:
+        return {
+            "status": "NOT_RUN",
+            "reason": "nenhum teste selecionado",
+            "tests": {},
+            "selected": [],
+            "counts": {
+                "selected": 0,
+                "executed": 0,
+                "passed": 0,
+                "failed": 0,
+                "timeout": 0,
+                "not_run": 0,
+                "budget_skipped": 0,
+            },
+            "pending": [],
+            "interrupted": [],
+            "duration_seconds": 0,
+            "budget_seconds": budget_seconds,
+            "budget_used_seconds": 0,
+            "budget_exhausted": False,
+            "timed_out": False,
+            "exit_code": 2,
+        }
+
+    log_dir.mkdir(parents=True, exist_ok=True)
+    started = time.monotonic()
+    deadline = started + max(0.0, float(budget_seconds))
+    # Required regressions first; within that group, headless tests are cheaper
+    # and finish before the software-rendered display tests.  Duration is only
+    # a tie-breaker, never a reason to hide a required test.
+    ordered = sorted(
+        tests,
+        key=lambda test: (
+            0 if test.get("priority") == "required" else 1,
+            0 if not test.get("graphics") else 1,
+            float(test.get("duration_seconds") or 0),
+            str(test.get("name")),
+        ),
+    )
+    results: dict[str, dict] = {}
+    pending: list[dict] = []
+    interrupted: list[dict] = []
+    budget_interruptions: list[dict] = []
+    for test in ordered:
+        name = str(test["name"])
+        graphics = bool(test.get("graphics"))
+        cap = float(graphics_timeout if graphics else headless_timeout)
+        declared = float(test.get("timeout_seconds") or cap)
+        cap = min(cap, declared)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.5:
+            pending.append(
+                {
+                    "name": name,
+                    "priority": test.get("priority", "recommended"),
+                    "graphics": graphics,
+                    "reason": "orçamento de testes esgotado antes do início",
+                }
+            )
+            continue
+        timeout = min(cap, remaining)
+        budget_limited = remaining <= cap + 0.05
+        run_dir = log_dir / "tests" / _safe_log_component(name)
+        chunk = run_ctest(
+            root,
+            build_dir,
+            [name],
+            jobs=1,
+            log_dir=run_dir,
+            timeout=timeout,
+        )
+        item = (chunk.get("tests") or {}).get(name)
+        if item is None:
+            item = {
+                "name": name,
+                "status": "NOT_RUN",
+                "duration_seconds": 0,
+                "detail": "teste ausente no JUnit/CTest",
+            }
+        item = dict(item)
+        item["graphics"] = graphics
+        item["priority"] = test.get("priority", "recommended")
+        item["per_test_timeout_seconds"] = round(timeout, 3)
+        item["log"] = chunk.get("log")
+        item["junit"] = chunk.get("junit")
+        item["duration_seconds"] = round(float(chunk.get("duration_seconds") or 0), 3)
+        if chunk.get("timed_out"):
+            reason = (
+                "orçamento global de testes esgotado durante a execução"
+                if budget_limited
+                else f"timeout individual de {timeout:.1f}s"
+            )
+            item["status"] = "TIMEOUT"
+            item["detail"] = reason
+            interrupted.append(
+                {
+                    "name": name,
+                    "priority": item["priority"],
+                    "graphics": graphics,
+                    "reason": reason,
+                }
+            )
+            if budget_limited:
+                item["budget_interrupted"] = True
+                budget_interruptions.append(interrupted[-1])
+        elif chunk.get("status") == "FAILED" and item.get("status") == "NOT_RUN":
+            item["status"] = "ERROR"
+            item["detail"] = "CTest não executou o teste selecionado"
+        if item.get("status") == "NOT_RUN" and not item.get("detail"):
+            item["detail"] = "não executado pelo CTest"
+        results[name] = item
+        if budget_limited and chunk.get("timed_out"):
+            # The failing test consumed the remaining global budget; report the
+            # rest as pending instead of launching them with a zero timeout.
+            current = ordered.index(test)
+            for rest in ordered[current + 1 :]:
+                rest_name = str(rest["name"])
+                if rest_name not in results:
+                    pending.append(
+                        {
+                            "name": rest_name,
+                            "priority": rest.get("priority", "recommended"),
+                            "graphics": bool(rest.get("graphics")),
+                            "reason": "orçamento de testes esgotado",
+                        }
+                    )
+            break
+
+    counts = {
+        "selected": len(selected),
+        "executed": sum(1 for item in results.values() if item.get("status") != "NOT_RUN"),
+        "passed": sum(1 for item in results.values() if item.get("status") == "PASSED"),
+        "failed": sum(1 for item in results.values() if item.get("status") in {"FAILED", "ERROR"}),
+        "timeout": sum(1 for item in results.values() if item.get("status") == "TIMEOUT"),
+        "not_run": sum(1 for item in results.values() if item.get("status") == "NOT_RUN")
+        + sum(1 for _ in pending),
+        "budget_skipped": len(pending),
+        "budget_interrupted": len(budget_interruptions),
+    }
+    if counts["failed"]:
+        status = "FAILED"
+    elif budget_interruptions:
+        # The cap that stopped the test was the global validation budget, not
+        # an individual test timeout.  Keep that distinction visible.
+        status = "BUDGET_EXHAUSTED"
+    elif counts["timeout"]:
+        status = "TIMEOUT"
+    elif pending:
+        status = "BUDGET_EXHAUSTED"
+    elif counts["not_run"]:
+        status = "NOT_RUN"
+    else:
+        status = "PASSED"
+    pending_required = [item["name"] for item in pending if item.get("priority") == "required"]
+    timeout_required = [
+        name
+        for name, item in results.items()
+        if item.get("status") == "TIMEOUT" and item.get("priority") == "required"
+    ]
+    index_path = log_dir / "tests.log"
+    with index_path.open("w", encoding="utf-8") as handle:
+        handle.write("# TURBO supervised tests\n")
+        handle.write(f"# budget: {budget_seconds:.1f}s\n")
+        handle.write(f"# per-test graphics: {graphics_timeout:.1f}s; headless: {headless_timeout:.1f}s\n")
+        handle.write("# " + "-" * 72 + "\n")
+        for name in selected:
+            item = results.get(name)
+            if item:
+                handle.write(
+                    f"[{item.get('status')}] {name} {float(item.get('duration_seconds') or 0):.3f}s "
+                    f"log={item.get('log')}\n"
+                )
+            else:
+                handle.write(f"[PENDING] {name}\n")
+        if pending:
+            handle.write("\n# Pendentes por orçamento:\n")
+            for item in pending:
+                handle.write(f"# {item['name']}: {item['reason']}\n")
+        if interrupted:
+            handle.write("\n# Interrompidos:\n")
+            for item in interrupted:
+                handle.write(f"# {item['name']}: {item['reason']}\n")
+        handle.write(f"\n# used: {time.monotonic() - started:.3f}s; status: {status}\n")
+    duration = time.monotonic() - started
+    exit_code = 124 if status == "TIMEOUT" else 1 if status == "FAILED" else 2 if status in {"BUDGET_EXHAUSTED", "NOT_RUN"} else 0
+    return {
+        "status": status,
+        "reason": None
+        if status == "PASSED"
+        else "orçamento de testes esgotado"
+        if status == "BUDGET_EXHAUSTED"
+        else "há testes interrompidos ou não executados",
+        "tests": results,
+        "selected": selected,
+        "counts": counts,
+        "pending": pending,
+        "interrupted": interrupted,
+        "budget_interruptions": budget_interruptions,
+        "pending_required": pending_required,
+        "timeout_required": timeout_required,
+        "duration_seconds": round(duration, 3),
+        "budget_seconds": round(float(budget_seconds), 3),
+        "budget_used_seconds": round(min(duration, float(budget_seconds)), 3),
+        "budget_exhausted": bool(pending or budget_interruptions),
+        "timed_out": counts["timeout"] > 0,
+        "log": str(index_path),
+        "junit": None,
+        "exit_code": exit_code,
+        "excerpt": "",
+    }
+
+
 def run_ctest(
     root: Path,
     build_dir: Path,

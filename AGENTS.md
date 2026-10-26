@@ -37,42 +37,64 @@ referência).
 ```bash
 cmake -S . -B build-linblux
 cmake --build build-linblux -j2
-ctest --test-dir build-linblux --output-on-failure
 ```
 
-A suíte completa é lenta sob renderização por software e alguns testes usam
-Xvfb. Para mudanças localizadas, rode primeiro o teste ATLAS e o teste C++
-mais próximo:
+Testes **headless** podem ser executados diretamente quando são o alvo focado:
 
 ```bash
 ctest --test-dir build-linblux -R '^linblux_atlas$' --output-on-failure
 ctest --test-dir build-linblux -R '^linblux_(game|tests|defaults|engine_default_lifecycle)$' --output-on-failure
 ```
 
-Não conclua que uma alteração está correta só porque a busca textual não
-encontrou erros. Compile e execute os testes afetados.
+### Testes gráficos: supervisão obrigatória
 
-## ATLAS TURBO
-
-Para seleção explicável de build/testes, FAST é o padrão de iteração e IMPACT é
-o padrão antes da entrega. FULL não roda após toda mudança pequena.
+Nunca execute `ctest` diretamente para testes com label `graphics`, que usam
+Xvfb/`LIBGL_ALWAYS_SOFTWARE`, ou para `linblux_experience_ui`,
+`linblux_rml_ui`, `linblux_studio_ui`, `linblux_editor_input` e demais
+integrações visuais. Use o TURBO, que executa cada teste em processo
+supervisionado, com timeout individual, orçamento global, encerramento do grupo
+de processos e log completo.
 
 ```bash
 python3 tools/turbo/turbo.py test --mode fast --changed
 python3 tools/turbo/turbo.py test --mode impact --changed
+python3 tools/turbo/turbo.py test --mode impact --changed --budget 300 --per-test-timeout 180
 python3 tools/turbo/turbo.py test --mode full --no-cache   # decisão explícita
 python3 tools/turbo/turbo.py status
 python3 tools/turbo/turbo.py report
 python3 tools/turbo/turbo.py organize --dry-run
 ```
 
-`test --plan` mostra a seleção sem executar. Logs completos ficam em
-`.turbo/logs/` (ignorado pelo Git); leia somente o primeiro erro e o caminho
-indicado. `PASSED_PARTIAL`, `UNKNOWN`, `NO_TESTS`, `REUSED` e `TIMEOUT` não são
-aprovação plena. IMPACT limita gráficos por padrão; registre o que ficou fora.
-Teste o próprio Turbo com `ctest -R '^linblux_turbo$'` e
-`python3 -m unittest discover -s tests/turbo -p 'test_*.py'`. Detalhes em
-`docs/turbo/README.md`.
+`--budget` limita o tempo total dos testes; `--per-test-timeout` limita cada
+teste. Os padrões são FAST=180s, IMPACT=300s, FULL=1800s e 180s/90s por teste
+gráfico/headless. O orçamento não pode transformar teste não executado em
+aprovação. `test --plan` mostra prioridade, orçamento e o que ficou fora sem
+executar.
+
+`PASSED_PARTIAL`, `BUDGET_EXHAUSTED`, `UNKNOWN`, `NO_TESTS`, `REUSED` e
+`TIMEOUT` não são aprovação plena. Logs completos ficam em `.turbo/logs/`
+(ignorado pelo Git); o relatório aponta o primeiro erro e o caminho do log.
+Teste o próprio Turbo com `python3 -m unittest discover -s tests/turbo -p 'test_*.py'`
+e `python3 tools/turbo/turbo.py test --mode fast --changed`.
+
+## Encerramento inteligente
+
+Antes de iniciar outra bateria pesada, verifique se a tarefa já tem evidência
+suficiente:
+
+1. correção implementada e revisada;
+2. compilação incremental aprovada;
+3. teste de regressão específico aprovado;
+4. integração relevante aprovada;
+5. teste manual confirmado pelo usuário, quando aplicável.
+
+Se esses critérios estiverem satisfeitos, informe o que foi executado, o que
+ficou pendente e encerre. Não busque aprovação total decorativa. Se um teste
+adicional for necessário por risco real, justifique a seleção e execute-o com
+orçamento. Nunca apresente cobertura parcial como aprovação completa.
+
+Não conclua que uma alteração está correta só porque a busca textual não
+encontrou erros. Compile e execute os testes afetados.
 
 ## Contexto progressivo
 

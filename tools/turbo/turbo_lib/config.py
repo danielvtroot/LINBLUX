@@ -8,12 +8,26 @@ import subprocess
 import sys
 from pathlib import Path
 
-TURBO_VERSION = "0.1.0"
+TURBO_VERSION = "0.2.0"
 TURBO_SCHEMA_VERSION = 1
 TURBO_DIR_NAME = ".turbo"
 DEFAULT_BUILD_DIR = "build-linblux"
 DEFAULT_JOBS = 2
 DEFAULT_TEST_TIMEOUT = 300
+# A validation task must have a wall-clock ceiling.  These defaults are test
+# execution budgets, not estimates: when the budget ends, remaining tests are
+# reported as pending rather than silently treated as passed.  FULL is the only
+# mode allowed a large default, and it still remains an explicit decision.
+MODE_TEST_BUDGETS = {
+    "fast": 180,
+    "impact": 300,
+    "full": 1800,
+}
+# Per-test caps are enforced by running each graphical test in its own
+# supervised CTest invocation.  The CTest TIMEOUT properties remain a second
+# line of defence, but are intentionally larger than the TURBO cap.
+GRAPHICS_TEST_TIMEOUT = 180
+HEADLESS_TEST_TIMEOUT = 90
 # IMPACT is risk-based, not a disguised FULL.  Four graphical integrations keep
 # a normal editor change near a couple of minutes on software rendering; pass
 # --max-graphics with a larger value when the change requires more coverage.

@@ -10,6 +10,27 @@ from . import config
 
 CRITICAL_MODULES = {"core", "serialization", "scene", "physics", "rendering", "ui", "app"}
 RISK_WORDS = ("serialization", "public", "header", "render", "ui", "physics")
+# Direct regression evidence runs before broad module/structural guesses when a
+# test budget is tight.  The labels are a planning contract, not a semantic
+# proof; reasons remain visible for audit.
+REQUIRED_REASON_MARKERS = (
+    "arquivo do teste ou fonte direta:",
+    "target de teste direto:",
+    "harness de teste alterado:",
+    "consumidor do target:",
+    "recurso associado:",
+    "ferramenta ATLAS alterada:",
+    "ferramenta TURBO alterada:",
+    "teste do ATLAS alterado:",
+    "teste do TURBO alterado:",
+    "modo FULL:",
+)
+
+
+def _priority(reasons: list[str]) -> str:
+    if any(any(reason.startswith(marker) for marker in REQUIRED_REASON_MARKERS) for reason in reasons):
+        return "required"
+    return "recommended"
 
 
 def _normalize(path: str) -> str:
@@ -319,7 +340,10 @@ def build_plan(
     for name in selected_names:
         test = dict(tests[name])
         test["reasons"] = sorted(reasons.get(name, []))
+        test["priority"] = _priority(test["reasons"])
         selected_tests.append(test)
+    required_tests = [test for test in selected_tests if test["priority"] == "required"]
+    recommended_tests = [test for test in selected_tests if test["priority"] == "recommended"]
     coverage = "known" if any(
         any("linha de base" not in reason for reason in test["reasons"]) for test in selected_tests
     ) else "baseline" if selected_tests else "none"
@@ -343,6 +367,12 @@ def build_plan(
         "build_targets": sorted(build_targets),
         "selected_tests": selected_tests,
         "selected_names": [test["name"] for test in selected_tests],
+        "required_names": [test["name"] for test in required_tests],
+        "recommended_names": [test["name"] for test in recommended_tests],
+        "required_count": len(required_tests),
+        "recommended_count": len(recommended_tests),
+        "required_estimated_seconds": round(sum(test["duration_seconds"] for test in required_tests), 3),
+        "recommended_estimated_seconds": round(sum(test["duration_seconds"] for test in recommended_tests), 3),
         "filtered": filtered,
         "coverage": coverage,
         "coverage_unknown": coverage != "known",
@@ -367,14 +397,24 @@ def explain(plan: dict) -> str:
         f"Targets: {', '.join(plan['build_targets']) or 'nenhum'}",
         f"Testes selecionados: {plan['test_count']} "
         f"(gráficos={plan['graphics_count']}, lentos={plan['slow_count']})",
+        f"Prioridade: obrigatórios={plan.get('required_count', 0)}, "
+        f"adicionais={plan.get('recommended_count', 0)}",
         f"Cobertura: {plan['coverage']}",
     ]
+    if plan.get("budget_seconds"):
+        cap = plan.get("per_test_timeout_seconds") or {}
+        lines.append(
+            f"Orçamento de testes: {plan['budget_seconds']:.0f}s; "
+            f"timeout individual: gráficos={cap.get('graphics', '?')}s, "
+            f"headless={cap.get('headless', '?')}s"
+        )
     if plan.get("estimated_seconds"):
         lines.append(f"Duração estimada (histórico CTest): {plan['estimated_seconds']:.1f}s")
     if plan.get("unknown_paths"):
         lines.append(f"Sem mapeamento seguro: {', '.join(plan['unknown_paths'][:8])}")
     for test in plan.get("selected_tests", []):
-        lines.append(f"- {test['name']}: {'; '.join(test['reasons'][:3])}")
+        marker = "obrigatório" if test.get("priority") == "required" else "adicional"
+        lines.append(f"- [{marker}] {test['name']}: {'; '.join(test['reasons'][:3])}")
     for warning in plan.get("warnings", []):
         lines.append(f"AVISO: {warning}")
     return "\n".join(lines)

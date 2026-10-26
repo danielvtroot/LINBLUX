@@ -93,7 +93,18 @@ def _parser() -> argparse.ArgumentParser:
     p_test.add_argument("--plan", action="store_true", help="mostrar o plano sem compilar nem testar")
     p_test.add_argument("--no-build", action="store_true", help="não compilar; executar apenas os testes selecionados")
     p_test.add_argument("--no-cache", action="store_true", help="ignorar histórico reutilizável")
-    p_test.add_argument("--timeout", type=float, help="timeout total da execução CTest em segundos")
+    p_test.add_argument(
+        "--budget",
+        "--timeout",
+        dest="budget",
+        type=_positive_seconds,
+        help="orçamento global dos testes em segundos (padrão por modo; --timeout é alias)",
+    )
+    p_test.add_argument(
+        "--per-test-timeout",
+        type=_positive_seconds,
+        help="limite individual de cada teste em segundos (padrão: gráficos 180s, headless 90s)",
+    )
     p_test.add_argument("--max-graphics", type=int, default=None, help="limite de testes gráficos no IMPACT")
 
     p_report = sub.add_parser("report", help="mostrar o último relatório compacto")
@@ -143,6 +154,46 @@ def _jobs(args) -> int:
     return config.safe_jobs(args.jobs)
 
 
+def _positive_seconds(value: str) -> float:
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError("use um número de segundos") from exc
+    if seconds <= 0:
+        raise argparse.ArgumentTypeError("o tempo deve ser maior que zero")
+    return seconds
+
+
+def _test_budget(args, mode: str) -> float:
+    if args.budget is not None:
+        return float(args.budget)
+    return float(config.MODE_TEST_BUDGETS.get(mode, 300))
+
+
+def _per_test_caps(args) -> dict[str, float]:
+    if args.per_test_timeout is not None:
+        cap = float(args.per_test_timeout)
+        return {"graphics": cap, "headless": cap}
+    return {
+        "graphics": float(config.GRAPHICS_TEST_TIMEOUT),
+        "headless": float(config.HEADLESS_TEST_TIMEOUT),
+    }
+
+
+def _apply_test_budget(plan: dict, args, mode: str) -> tuple[float, dict[str, float]]:
+    budget = _test_budget(args, mode)
+    caps = _per_test_caps(args)
+    plan["budget_seconds"] = budget
+    plan["per_test_timeout_seconds"] = caps
+    estimated = float(plan.get("estimated_seconds") or 0)
+    if estimated > budget:
+        plan.setdefault("warnings", []).append(
+            f"orçamento de {budget:.0f}s é menor que a estimativa histórica de {estimated:.0f}s; "
+            "testes adicionais podem ficar pendentes"
+        )
+    return budget, caps
+
+
 def _inventory(args, root: Path, build: Path) -> dict:
     return inventory_mod.load_inventory(
         root,
@@ -169,7 +220,7 @@ def _exit_for_status(status: str) -> int:
         return 0
     if status == "TIMEOUT":
         return 124
-    if status in {"PASSED_PARTIAL", "UNKNOWN", "NO_TESTS", "NOT_RUN"}:
+    if status in {"PASSED_PARTIAL", "BUDGET_EXHAUSTED", "UNKNOWN", "NO_TESTS", "NOT_RUN"}:
         return 2
     if status == "BUSY":
         return 3
@@ -202,13 +253,15 @@ def _base_result(mode: str, root: Path, build: Path, run_id: str, changes: dict,
 def _test_outcome(test: dict) -> str:
     if not test:
         return "NOT_RUN"
-    if test.get("status") == "TIMEOUT":
-        return "TIMEOUT"
     counts = test.get("counts") or {}
     if counts.get("failed"):
         return "FAILED"
-    if counts.get("timeout"):
+    if test.get("status") == "BUDGET_EXHAUSTED":
+        return "BUDGET_EXHAUSTED"
+    if test.get("status") == "TIMEOUT" or counts.get("timeout"):
         return "TIMEOUT"
+    if test.get("budget_exhausted"):
+        return "BUDGET_EXHAUSTED"
     if counts.get("not_run") or test.get("missing"):
         return "UNKNOWN"
     if counts.get("executed", 0) < counts.get("selected", 0):
@@ -225,7 +278,8 @@ def _execute_plan(
     mode: str,
     *,
     jobs: int,
-    timeout_override: float | None,
+    budget_seconds: float,
+    per_test_caps: dict[str, float],
     no_build: bool,
     run_id: str,
 ) -> tuple[dict, dict, Path]:
@@ -263,30 +317,14 @@ def _execute_plan(
     selected = plan.get("selected_names", [])
     if not selected:
         return build_result, {}, log_dir
-    estimated = float(plan.get("estimated_seconds") or 0)
-    minimum = 120 if mode == "fast" else 300 if mode == "impact" else 600
-    timeout = timeout_override or max(minimum, min(7200, estimated * 2 + 120))
-    effective_jobs = max(1, jobs)
-    graphics = [name for name in selected if name in {
-        item["name"] for item in plan.get("selected_tests", []) if item.get("graphics")
-    }]
-    missing_locks = [
-        test["name"]
-        for test in plan.get("selected_tests", [])
-        if test.get("graphics") and "graphics" not in test.get("ctest_labels", [])
-    ]
-    if graphics and missing_locks:
-        effective_jobs = 1
-        plan.setdefault("warnings", []).append(
-            "CTest sem labels/RESOURCE_LOCK para gráficos; usando -j1 para evitar disputa de tela"
-        )
-    test_result = runner.run_ctest(
+    test_result = runner.run_supervised_tests(
         root,
         build,
-        selected,
-        jobs=effective_jobs,
+        plan.get("selected_tests", []),
         log_dir=log_dir,
-        timeout=timeout,
+        budget_seconds=budget_seconds,
+        graphics_timeout=per_test_caps["graphics"],
+        headless_timeout=per_test_caps["headless"],
     )
     return build_result, test_result, log_dir
 
@@ -302,10 +340,15 @@ def _next_action(status: str, mode: str, coverage: str) -> str:
         return "Validação completa aprovada nesta execução."
     if status == "PASSED_PARTIAL":
         return "Execução parcial: amplie a validação (IMPACT/FULL) antes de concluir."
+    if status == "BUDGET_EXHAUSTED":
+        return (
+            "Orçamento esgotado: os testes pendentes NÃO foram aprovados. Se forem necessários, "
+            "repita apenas os pendentes com --budget/--per-test-timeout; caso contrário, registre a cobertura parcial."
+        )
     if status == "REUSED":
         return "Resultado reutilizado; use --no-cache para exigir uma execução real."
     if status == "TIMEOUT":
-        return "Há teste travado; consulte o log, corrija a causa e repita apenas o teste afetado."
+        return "Há teste travado ou acima do limite; consulte o log, corrija a causa e repita apenas o teste afetado."
     if status in {"UNKNOWN", "NO_TESTS", "NOT_RUN"}:
         return "Nenhuma aprovação completa foi emitida; amplie a validação ou execute FULL."
     return "Corrija a primeira falha indicada e repita; o log completo está no caminho acima."
@@ -453,6 +496,7 @@ def _run_test(args) -> int:
         root=root,
         max_graphics=max_graphics,
     )
+    budget_seconds, per_test_caps = _apply_test_budget(plan, args, mode)
     if args.plan:
         text = report.format_plan(plan)
         return _emit(args, "test", {"plan": plan, "changes": changes}, True, text, 0)
@@ -533,7 +577,9 @@ def _run_test(args) -> int:
 
     result = _base_result(mode, root, build, run_id, changes, plan)
     result["fingerprint"] = fingerprint
-    result["timeout_seconds"] = args.timeout
+    result["timeout_seconds"] = budget_seconds
+    result["budget_seconds"] = budget_seconds
+    result["per_test_timeout_seconds"] = per_test_caps
     try:
         with cache.RunLock(root):
             cache.write_state(
@@ -554,7 +600,8 @@ def _run_test(args) -> int:
                 plan,
                 mode,
                 jobs=_jobs(args),
-                timeout_override=args.timeout,
+                budget_seconds=budget_seconds,
+                per_test_caps=per_test_caps,
                 no_build=args.no_build,
                 run_id=run_id,
             )
@@ -596,15 +643,28 @@ def _run_test(args) -> int:
         status = _test_outcome(test_result) if plan.get("selected_names") else "NO_TESTS"
         if status == "PASSED" and plan.get("coverage") != "known":
             status = "PASSED_PARTIAL"
+        if status in {"BUDGET_EXHAUSTED", "TIMEOUT"}:
+            plan["coverage"] = "partial"
     result["status"] = status
+    result["coverage"] = plan.get("coverage")
     result["finished_at"] = _utc_now()
     result["duration_seconds"] = round(time.monotonic() - started, 3)
     result["timed_out"] = bool(test_result.get("timed_out")) or status == "TIMEOUT"
+    result["budget_exhausted"] = bool(test_result.get("budget_exhausted")) or status == "BUDGET_EXHAUSTED"
+    result["pending"] = test_result.get("pending", [])
     result["next_action"] = _next_action(status, mode, plan.get("coverage", "none"))
     if status == "PASSED":
         result["message"] = "testes selecionados passaram agora; escopo do modo FAST/IMPACT/FULL"
     elif status == "PASSED_PARTIAL":
-        result["message"] = "testes selecionados passaram, mas a cobertura é desconhecida"
+        result["message"] = "testes selecionados passaram, mas a cobertura é limitada/desconhecida"
+    elif status == "BUDGET_EXHAUSTED":
+        pending = test_result.get("pending", [])
+        required = test_result.get("pending_required", [])
+        result["message"] = (
+            f"orçamento de testes esgotado: {len(pending)} teste(s) pendente(s)"
+            + (f", {len(required)} obrigatório(s)" if required else "")
+            + "; cobertura incompleta, sem aprovação plena"
+        )
     elif status == "REUSED":
         result["message"] = "resultado reutilizado"
     elif status == "NO_TESTS":
@@ -612,7 +672,7 @@ def _run_test(args) -> int:
     elif status == "UNKNOWN":
         result["message"] = "execução incompleta ou cobertura desconhecida; sem aprovação plena"
     elif status == "TIMEOUT":
-        result["message"] = "timeout: processo e grupo encerrados"
+        result["message"] = "timeout individual/global: processo e grupo encerrados; sem aprovação plena"
     else:
         result["message"] = "há falhas; consulte o primeiro erro e o log completo"
     cache.save_result(root, result, plan)
@@ -832,7 +892,11 @@ def _run_benchmark(args) -> int:
                     plan,
                     "fast",
                     jobs=_jobs(args),
-                    timeout_override=None,
+                    budget_seconds=float(config.MODE_TEST_BUDGETS["fast"]),
+                    per_test_caps={
+                        "graphics": float(config.GRAPHICS_TEST_TIMEOUT),
+                        "headless": float(config.HEADLESS_TEST_TIMEOUT),
+                    },
                     no_build=False,
                     run_id=run_id,
                 )

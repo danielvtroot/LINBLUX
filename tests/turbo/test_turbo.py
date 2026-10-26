@@ -16,6 +16,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 TURBO_PATH = ROOT / "tools" / "turbo"
@@ -261,6 +262,41 @@ class SelectionTests(unittest.TestCase):
         json.dumps(plan)
         self.assertIn("Cobertura", selection.explain(plan))
 
+    def test_direct_regression_is_required_and_module_guess_is_additional(self):
+        direct = fake_test("direct", "direct_tests", ("core",))
+        broad = fake_test("broad", "broad_tests", ("core",))
+        inventory_data = fake_inventory(
+            [broad, direct],
+            source_by_target={
+                "direct_tests": ["tests/direct.cpp"],
+                "broad_tests": ["tests/broad.cpp"],
+                "linblux_engine": ["src/core/value.cpp"],
+            },
+            deps_by_target={
+                "direct_tests": ["linblux_engine"],
+                "broad_tests": ["linblux_engine"],
+            },
+            atlas_files=[
+                {"path": "tests/direct.cpp", "module": "core"},
+                {"path": "src/core/value.cpp", "module": "core"},
+            ],
+        )
+        plan = selection.build_plan(inventory_data, fake_changes("tests/direct.cpp", "core"), "fast")
+        self.assertEqual(plan["required_names"], ["direct"])
+        self.assertEqual(plan["recommended_names"], ["broad"])
+        self.assertEqual(plan["required_count"], 1)
+        self.assertEqual(plan["recommended_count"], 1)
+        self.assertIn("[obrigatório]", selection.explain(plan))
+        self.assertIn("[adicional]", selection.explain(plan))
+
+    def test_full_selection_is_all_required(self):
+        unit = fake_test("unit", "unit_tests", ("core",))
+        graphics = fake_test("graphics", "graphics_tests", ("editor",), graphics=True)
+        inventory_data = fake_inventory([unit, graphics])
+        full = selection.build_plan(inventory_data, fake_changes("src/core/value.cpp", "core"), "full")
+        self.assertEqual(full["required_count"], 2)
+        self.assertEqual(full["recommended_count"], 0)
+
 
 class CacheTests(unittest.TestCase):
     def _last(self, **updates):
@@ -414,6 +450,212 @@ class RunnerTests(unittest.TestCase):
             self.assertLessEqual(len(text), 400)
             self.assertIn("sentinel", text)
 
+    def test_supervised_tests_required_first_with_individual_logs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            calls: list[str] = []
+
+            def fake_ctest(_root, _build, selected, *, jobs, log_dir, timeout):
+                name = selected[0]
+                calls.append(name)
+                log_dir.mkdir(parents=True, exist_ok=True)
+                log = log_dir / "tests.log"
+                log.write_text(f"{name} complete\n", encoding="utf-8")
+                return {
+                    "status": "PASSED",
+                    "timed_out": False,
+                    "duration_seconds": 0.01,
+                    "log": str(log),
+                    "junit": None,
+                    "tests": {
+                        name: {
+                            "name": name,
+                            "status": "PASSED",
+                            "duration_seconds": 0.01,
+                            "detail": None,
+                        }
+                    },
+                }
+
+            tests = [
+                {
+                    "name": "recommended",
+                    "graphics": False,
+                    "priority": "recommended",
+                    "duration_seconds": 1,
+                    "timeout_seconds": 5,
+                },
+                {
+                    "name": "required",
+                    "graphics": True,
+                    "priority": "required",
+                    "duration_seconds": 2,
+                    "timeout_seconds": 5,
+                },
+            ]
+            with mock.patch.object(runner, "run_ctest", side_effect=fake_ctest):
+                result = runner.run_supervised_tests(
+                    root,
+                    root / "build",
+                    tests,
+                    log_dir=root / "logs",
+                    budget_seconds=10,
+                    graphics_timeout=5,
+                    headless_timeout=5,
+                )
+            self.assertEqual(calls, ["required", "recommended"])
+            self.assertEqual(result["status"], "PASSED")
+            self.assertEqual(result["counts"]["passed"], 2)
+            self.assertEqual(result["counts"]["budget_skipped"], 0)
+            self.assertTrue((root / "logs" / "tests.log").is_file())
+            self.assertTrue((root / "logs" / "tests" / "required" / "tests.log").is_file())
+            self.assertIn("budget: 10.0s", (root / "logs" / "tests.log").read_text(encoding="utf-8"))
+
+    def test_budget_exhaustion_is_pending_not_passed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            tests = [
+                {
+                    "name": "required",
+                    "graphics": True,
+                    "priority": "required",
+                    "duration_seconds": 2,
+                    "timeout_seconds": 5,
+                },
+                {
+                    "name": "recommended",
+                    "graphics": False,
+                    "priority": "recommended",
+                    "duration_seconds": 1,
+                    "timeout_seconds": 5,
+                },
+            ]
+            with mock.patch.object(runner, "run_ctest", side_effect=AssertionError("must not run")):
+                result = runner.run_supervised_tests(
+                    root,
+                    root / "build",
+                    tests,
+                    log_dir=root / "logs",
+                    budget_seconds=0.1,
+                    graphics_timeout=5,
+                    headless_timeout=5,
+                )
+            self.assertEqual(result["status"], "BUDGET_EXHAUSTED")
+            self.assertEqual(result["counts"]["budget_skipped"], 2)
+            self.assertEqual(result["pending_required"], ["required"])
+            self.assertFalse(result["tests"])
+            self.assertEqual(result["exit_code"], 2)
+            text = report.format_result(
+                {
+                    "status": "BUDGET_EXHAUSTED",
+                    "plan": {"coverage": "partial", "budget_seconds": 0.1},
+                    "test": result,
+                }
+            )
+            self.assertIn("ORÇAMENTO ESGOTADO", text)
+            self.assertIn("NÃO aprovados", text)
+
+    def test_global_budget_interruption_is_distinct_from_test_timeout(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+
+            def fake_ctest(_root, _build, selected, *, jobs, log_dir, timeout):
+                name = selected[0]
+                time.sleep(0.15)
+                log_dir.mkdir(parents=True, exist_ok=True)
+                log = log_dir / "tests.log"
+                log.write_text("killed by budget\n", encoding="utf-8")
+                return {
+                    "status": "TIMEOUT",
+                    "timed_out": True,
+                    "duration_seconds": 0.15,
+                    "log": str(log),
+                    "junit": None,
+                    "tests": {
+                        name: {
+                            "name": name,
+                            "status": "TIMEOUT",
+                            "duration_seconds": 0.15,
+                            "detail": "timeout",
+                        }
+                    },
+                }
+
+            tests = [
+                {
+                    "name": "graphics",
+                    "graphics": True,
+                    "priority": "required",
+                    "duration_seconds": 2,
+                    "timeout_seconds": 5,
+                }
+            ]
+            with mock.patch.object(runner, "run_ctest", side_effect=fake_ctest):
+                result = runner.run_supervised_tests(
+                    root,
+                    root / "build",
+                    tests,
+                    log_dir=root / "logs",
+                    budget_seconds=1.5,
+                    graphics_timeout=5,
+                    headless_timeout=5,
+                )
+            self.assertEqual(result["status"], "BUDGET_EXHAUSTED")
+            self.assertEqual(result["counts"]["budget_interrupted"], 1)
+            self.assertEqual(result["budget_interruptions"][0]["name"], "graphics")
+            self.assertEqual(result["exit_code"], 2)
+
+    def test_per_test_timeout_is_not_reported_as_budget(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+
+            def fake_ctest(_root, _build, selected, *, jobs, log_dir, timeout):
+                name = selected[0]
+                time.sleep(0.15)
+                log_dir.mkdir(parents=True, exist_ok=True)
+                log = log_dir / "tests.log"
+                log.write_text("killed by individual cap\n", encoding="utf-8")
+                return {
+                    "status": "TIMEOUT",
+                    "timed_out": True,
+                    "duration_seconds": 0.15,
+                    "log": str(log),
+                    "junit": None,
+                    "tests": {
+                        name: {
+                            "name": name,
+                            "status": "TIMEOUT",
+                            "duration_seconds": 0.15,
+                            "detail": "timeout individual",
+                        }
+                    },
+                }
+
+            tests = [
+                {
+                    "name": "headless",
+                    "graphics": False,
+                    "priority": "required",
+                    "duration_seconds": 0.1,
+                    "timeout_seconds": 5,
+                }
+            ]
+            with mock.patch.object(runner, "run_ctest", side_effect=fake_ctest):
+                result = runner.run_supervised_tests(
+                    root,
+                    root / "build",
+                    tests,
+                    log_dir=root / "logs",
+                    budget_seconds=20,
+                    graphics_timeout=5,
+                    headless_timeout=0.05,
+                )
+            self.assertEqual(result["status"], "TIMEOUT")
+            self.assertEqual(result["counts"]["timeout"], 1)
+            self.assertEqual(result["counts"]["budget_interrupted"], 0)
+            self.assertFalse(result["budget_exhausted"])
+            self.assertEqual(result["exit_code"], 124)
+
     def test_cmake_configure_failure_is_reported_with_log(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -518,6 +760,9 @@ class CliContractTests(unittest.TestCase):
         self.assertIn("fast", result.stdout)
         self.assertIn("impact", result.stdout)
         self.assertIn("full", result.stdout)
+        self.assertIn("--budget", result.stdout)
+        self.assertIn("--per-test-timeout", result.stdout)
+        self.assertIn("--timeout", result.stdout)
 
 
 if __name__ == "__main__":

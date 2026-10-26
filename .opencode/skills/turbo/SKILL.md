@@ -22,20 +22,26 @@ python3 tools/turbo/turbo.py test --mode fast --changed
 python3 tools/turbo/turbo.py test --mode impact --changed
 ```
 
-3. Para release, CMake, serialização, header amplamente incluído ou cobertura
+3. Para limitar explicitamente uma validação maior:
+
+```bash
+python3 tools/turbo/turbo.py test --mode impact --changed --budget 300 --per-test-timeout 180
+```
+
+4. Para release, CMake, serialização, header amplamente incluído ou cobertura
    desconhecida, com decisão explícita:
 
 ```bash
 python3 tools/turbo/turbo.py test --mode full --no-cache
 ```
 
-4. Se precisar entender a seleção sem executar:
+5. Se precisar entender a seleção sem executar:
 
 ```bash
 python3 tools/turbo/turbo.py test --mode impact --changed --plan
 ```
 
-5. Para ambiente, inventário ou medição:
+6. Para ambiente, inventário ou medição:
 
 ```bash
 python3 tools/turbo/turbo.py doctor
@@ -43,30 +49,57 @@ python3 tools/turbo/turbo.py inventory
 python3 tools/turbo/turbo.py benchmark --run-fast
 ```
 
+## Supervisão obrigatória
+
+Nunca execute `ctest` diretamente para testes gráficos (`graphics`, Xvfb,
+`LIBGL_ALWAYS_SOFTWARE`, UI). O TURBO executa cada teste em uma invocação
+supervisionada, com timeout individual, orçamento global e encerramento do grupo
+de processos. Testes headless focados ainda podem usar `ctest -R`.
+
+- O orçamento padrão é FAST=180s, IMPACT=300s, FULL=1800s; o timeout individual
+  padrão é 180s para gráficos e 90s para headless.
+- `--budget`/`--timeout` e `--per-test-timeout` permitem ajustar a tarefa.
+- Testes obrigatórios (regressão direta) rodam antes dos adicionais; o que não
+  couber no orçamento fica pendente e **não** é aprovado.
+- Se um teste travar, o processo e seus filhos são encerrados. Não reinicie a
+  bateria inteira; consulte o log do teste interrompido.
+
+## Encerramento inteligente
+
+Quando correção, build incremental, regressão específica, integração relevante e
+teste manual já estiverem satisfeitos, avalie a cobertura e encerre. Não inicie
+uma nova bateria pesada apenas para obter `PASSED` total. Se um teste adicional
+for necessário por risco real, justifique e execute com orçamento.
+
 ## Como interpretar
 
 - `PASSED`: o escopo do modo passou agora; FAST/IMPACT não são FULL.
 - `PASSED_PARTIAL`: passou no escopo, mas a cobertura é desconhecida/limitada.
   Não declare entrega validada; amplie com IMPACT/FULL.
+- `BUDGET_EXHAUSTED`: o limite global encerrou a execução; há testes pendentes.
+  Não declare aprovação; execute apenas os pendentes se forem necessários ou
+  registre a limitação.
 - `REUSED`: resultado anterior aceito; nada foi executado agora. Use
   `--no-cache` se precisar de execução real.
 - `FAILED`, `BUILD_FAILED`, `CONFIG_FAILED`: corrija a primeira causa; preserve o
   log e o código de saída.
-- `TIMEOUT`: o grupo de processos foi encerrado; não trate como sucesso.
+- `TIMEOUT`: o limite individual encerrou o teste/grupo; não trate como sucesso.
 - `DOCS_OK`/`ASSET_OK`: apenas documentação/JSON validado; não alegue teste da
   engine.
-- Saída 2 = cobertura desconhecida/parcial ou nenhum teste; 124 = timeout; 1 =
-  falha.
+- Saída 2 = cobertura desconhecida/parcial, orçamento esgotado ou nenhum teste;
+  124 = timeout individual; 1 = falha.
 
 ## Evidências e limites
 
-- O plano tem `reasons` por teste e `filtered` para o que não foi executado.
+- O plano tem `reasons`, prioridade `required`/`recommended` e `filtered` para o
+  que não foi executado.
 - CTest fornece labels, timeouts, `RESOURCE_LOCK` e `PROCESSORS`; ATLAS fornece
   targets/includes com confiança textual `medium` (sem clangd/ctags).
 - FAST exclui gráficos/lentos. IMPACT limita gráficos por padrão a 4; use
   `--max-graphics N` para ampliar e registre a cobertura parcial.
-- Logs completos ficam em `.turbo/logs/<run-id>/`; não despeje o log inteiro no
-  diálogo. Leia somente o excerpt/trecho relevante.
+- Logs completos ficam em `.turbo/logs/<run-id>/tests/<teste>/tests.log`; o
+  índice `tests.log` lista concluídos, interrompidos e pendentes. Não despeje o
+  log inteiro no diálogo. Leia somente o excerpt/trecho relevante.
 - `status` consulta o estado sem polling; se outro TURBO estiver ativo, espere ou
   use o resultado existente.
 - `.turbo/` é reconstruível e ignorado pelo Git. Nunca adicione builds, caches,

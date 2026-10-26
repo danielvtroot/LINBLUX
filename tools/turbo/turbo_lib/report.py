@@ -8,6 +8,7 @@ STATUS_PT = {
     "PASSED": "PASSOU AGORA",
     "PASSED_NOW": "PASSOU AGORA",
     "PASSED_PARTIAL": "PASSOU PARCIALMENTE — COBERTURA DESCONHECIDA",
+    "BUDGET_EXHAUSTED": "ORÇAMENTO ESGOTADO — COBERTURA INCOMPLETA",
     "REUSED": "RESULTADO REUTILIZADO",
     "FAILED": "FALHOU",
     "ERROR": "ERRO DO EXECUTOR",
@@ -64,6 +65,18 @@ def format_result(result: dict, *, detail: bool = False) -> str:
     plan = result.get("plan") or {}
     if plan:
         lines.append(f"Cobertura: {plan.get('coverage', '?')}")
+        if plan.get("required_count") is not None:
+            lines.append(
+                f"Prioridade: obrigatórios={plan.get('required_count', 0)}, "
+                f"adicionais={plan.get('recommended_count', 0)}"
+            )
+        if plan.get("budget_seconds"):
+            caps = plan.get("per_test_timeout_seconds") or {}
+            lines.append(
+                f"Orçamento de testes: {float(plan['budget_seconds']):.0f}s; "
+                f"timeout individual: gráficos={caps.get('graphics', '?')}s, "
+                f"headless={caps.get('headless', '?')}s"
+            )
     build = result.get("build") or {}
     if build:
         build_label = (
@@ -79,11 +92,19 @@ def format_result(result: dict, *, detail: bool = False) -> str:
     counts = test.get("counts") or {}
     if counts:
         lines.append("Testes (histórico reutilizado):" if result.get("reused") else "Testes:")
+        lines.append(f"  selecionados: {counts.get('selected', 0)}")
         lines.append(f"  executados: {counts.get('executed', 0)}")
         lines.append(f"  aprovados: {counts.get('passed', 0)}")
         lines.append(f"  falhas: {counts.get('failed', 0)}")
         lines.append(f"  timeout: {counts.get('timeout', 0)}")
         lines.append(f"  não executados: {counts.get('not_run', 0)}")
+        if counts.get("budget_skipped"):
+            lines.append(f"  pendentes por orçamento: {counts['budget_skipped']} (NÃO aprovados)")
+        if test.get("budget_seconds"):
+            lines.append(
+                f"  orçamento usado: {float(test.get('budget_used_seconds') or 0):.1f}s "
+                f"de {float(test.get('budget_seconds')):.0f}s"
+            )
     elif result.get("status") == "REUSED":
         lines.append("Testes: resultado reutilizado, nenhum teste iniciado agora")
     docs = result.get("docs") or result.get("assets") or {}
@@ -92,6 +113,8 @@ def format_result(result: dict, *, detail: bool = False) -> str:
                      f"({len(docs.get('checked', []))} arquivo(s))")
     failure_candidates = []
     for name, item in sorted((test.get("tests") or {}).items()):
+        if item.get("budget_interrupted"):
+            continue
         if item.get("status") in {"FAILED", "ERROR", "TIMEOUT"}:
             failure_candidates.append((name, item))
     if failure_candidates:
@@ -99,6 +122,18 @@ def format_result(result: dict, *, detail: bool = False) -> str:
         lines.append("")
         lines.append(f"Falha: {name}")
         lines.append(f"Detalhe: {_short(item.get('detail') or test.get('excerpt') or result.get('message', ''))}")
+    elif result.get("status") == "BUDGET_EXHAUSTED":
+        pending = test.get("pending") or result.get("pending") or []
+        lines.append("")
+        lines.append(f"Orçamento esgotado: {len(pending)} teste(s) pendente(s), nenhum aprovado por omissão.")
+        for item in (test.get("budget_interruptions") or [])[:4]:
+            marker = "obrigatório" if item.get("priority") == "required" else "adicional"
+            lines.append(f"  [{marker}] {item.get('name')}: interrompido — {item.get('reason')}")
+        for item in pending[:8]:
+            marker = "obrigatório" if item.get("priority") == "required" else "adicional"
+            lines.append(f"  [{marker}] {item.get('name')}: {item.get('reason', 'orçamento esgotado')}")
+        if len(pending) > 8:
+            lines.append(f"  ... mais {len(pending) - 8}; consulte o JSON/log.")
     elif result.get("status") in {"BUILD_FAILED", "CONFIG_FAILED", "ERROR"}:
         lines.append("")
         lines.append("Falha:")
@@ -116,6 +151,10 @@ def format_result(result: dict, *, detail: bool = False) -> str:
         for log in (block.get("log"), (block.get("command") or {}).get("log")):
             if log and log not in logs:
                 logs.append(log)
+    if failure_candidates:
+        failure_log = failure_candidates[0][1].get("log")
+        if failure_log and failure_log not in logs:
+            logs.append(failure_log)
     if logs:
         lines.append("")
         lines.append("Log completo:")

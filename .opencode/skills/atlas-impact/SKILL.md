@@ -34,7 +34,8 @@ python3 tools/atlas/atlas.py tests-for "$ARGUMENTS"
 
 - compilar os targets afetados;
 - rodar testes diretos e um teste de integração por módulo;
-- UI/render: teste sob Xvfb ou inspeção visual;
+- UI/render: TURBO com `--budget`/`--per-test-timeout` (nunca `ctest` gráfico
+  direto) ou inspeção visual;
 - dados persistidos: ciclo de vida/round-trip;
 - atualizar índice e rodar `doctor`/`verify`.
 
