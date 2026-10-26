@@ -44,6 +44,7 @@ struct ParsedObject {
     bool canCollide = true;
     BodyProperties bodyProperties;
     SurfaceProperties surface;
+    ModelFrame modelFrame;bool hasModelFrame=false;
     bool hasNpc = false;
     NpcProperties npcProperties;
     std::string source;
@@ -215,6 +216,14 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
     if (out.instanceClass == InstanceClass::Workspace ||
         (IsRootServiceClass(out.instanceClass) && out.instanceClass!=InstanceClass::Lighting) || out.instanceClass == InstanceClass::Folder ||
         out.instanceClass == InstanceClass::Model) {
+        if(out.instanceClass==InstanceClass::Model&&value.contains("modelPivot")) {
+            const auto& pivot=value["modelPivot"];Vector3 angles{};
+            if(!pivot.is_object()||!pivot.contains("position")||!pivot.contains("rotation")||!pivot.contains("scale")||
+               !ReadVector3(pivot["position"],"modelPivot.position",out.modelFrame.position,error)||
+               !ReadVector3(pivot["rotation"],"modelPivot.rotation",angles,error)||!ReadFloat(pivot["scale"],"modelPivot.scale",out.modelFrame.scale,error))return false;
+            out.modelFrame.rotation=QuatFromEulerDegrees(angles);out.hasModelFrame=true;
+            if(!out.modelFrame.valid()){error="Pivô do Modelo inválido.";return false;}
+        }
         return true;
     }
 
@@ -531,6 +540,11 @@ std::string toJson(const Scene& scene) {
             objects.push_back({{"id",node->id()},{"class",node->className()},
                 {"name",node->name()},{"parent",node->parent()?node->parent()->id():0}});
             if(IsSurfaceClass(node->instanceClass()))objects.back()["surface"]=game::EncodeSurface(static_cast<const Surface&>(*node).properties());
+            if(node->instanceClass()==InstanceClass::Model){const auto& model=static_cast<const Container&>(*node);if(model.hasModelFrame()){
+                const auto& frame=model.modelFrame();const auto angles=EulerDegreesFromQuat(frame.rotation);
+                objects.back()["modelPivot"]={{"position",{frame.position.x,frame.position.y,frame.position.z}},
+                    {"rotation",{angles.x,angles.y,angles.z}},{"scale",frame.scale}};}}
+
             if (IsScriptClass(node->instanceClass())) {
                 const auto& script=static_cast<const Script&>(*node);
                 objects.back()["source"]=script.source; objects.back()["enabled"]=script.enabled;
@@ -799,6 +813,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
             if (!staged.createContainer(object.instanceClass,nullptr,object.name,object.id)) {
                 error = "falha ao criar container " + object.name; return false;
             }
+            if(object.hasModelFrame&&!staged.setModelPivot(object.id,object.modelFrame,error))return false;
             continue;
         }
         Part* part = nullptr;

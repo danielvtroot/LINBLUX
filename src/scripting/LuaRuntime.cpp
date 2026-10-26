@@ -329,6 +329,52 @@ struct LuaRuntime::Impl {
         Require(t>=0&&t<=1,"Interpolação requer fator entre 0 e 1");
         PushPose(L,{Vector3Lerp(a.position,b.position,float(t)),QuaternionSlerp(a.rotation,b.rotation,float(t)),Vector3Lerp(a.size,b.size,float(t))});return 1;
     }
+    static ModelFrame ModelPose(lua_State* L,int index) {
+        auto& self=Host(L);auto& object=self.instance(L,index);ModelFrame frame;std::string error;
+        if(!self.runtime->mutableScene().modelFrame(object.id(),frame,error))throw std::runtime_error(error);return frame;
+    }
+    static ModelFrame ReferencePose(lua_State* L,int index) {
+        if(lua_gettop(L)<index||lua_isnil(L,index))return {};
+        auto& object=Host(L).instance(L,index);if(object.instanceClass()==InstanceClass::Model)return ModelPose(L,index);
+        const auto& part=PartObject(L,index);return {part.position(),part.rotation(),1};
+    }
+    static ModelFrame RelativeModel(ModelFrame frame,const ModelFrame& reference) {
+        frame.position=Vector3Scale(Vector3RotateByQuaternion(Vector3Subtract(frame.position,reference.position),QuaternionInvert(reference.rotation)),1/reference.scale);
+        frame.rotation=QuaternionNormalize(QuaternionMultiply(QuaternionInvert(reference.rotation),frame.rotation));frame.scale/=reference.scale;return frame;
+    }
+    static void PushModel(lua_State* L,const ModelFrame& frame) {
+        lua_createtable(L,0,3);ModernVector(L,frame.position);lua_setfield(L,-2,"position");
+        ModernVector(L,EulerDegreesFromQuat(frame.rotation));lua_setfield(L,-2,"rotation");lua_pushnumber(L,frame.scale);lua_setfield(L,-2,"scale");
+    }
+    static int GetModelPose(lua_State* L){const auto frame=RelativeModel(ModelPose(L,1),ReferencePose(L,2));PushModel(L,frame);return 1;}
+    template<bool PivotOnly> static int SetModelPose(lua_State* L) {
+        auto& self=Host(L);const auto id=self.instance(L,1).id();const auto current=ModelPose(L,1),reference=ReferencePose(L,3);
+        auto frame=RelativeModel(current,reference);Require(lua_istable(L,2),"Transformação do Modelo requer tabela");lua_pushnil(L);
+        while(lua_next(L,2)){const auto* key=Text(L,-2);
+            if(Eq(key,"position"))frame.position=ReadVector(L,lua_gettop(L));
+            else if(Eq(key,"rotation"))frame.rotation=QuatFromEulerDegrees(ReadVector(L,lua_gettop(L)));
+            else if(Eq(key,"scale"))frame.scale=float(Number(L,-1));else throw std::runtime_error("Campo de Modelo desconhecido");lua_pop(L,1);}
+        frame.position=Vector3Add(reference.position,Vector3RotateByQuaternion(Vector3Scale(frame.position,reference.scale),reference.rotation));
+        frame.rotation=QuaternionNormalize(QuaternionMultiply(reference.rotation,frame.rotation));frame.scale*=reference.scale;
+        if constexpr(PivotOnly)Require(std::fabs(frame.scale-current.scale)<.00001f,"Editar pivô não altera escala; use scale");
+        std::string error;const bool ok=PivotOnly?self.runtime->mutableScene().setModelPivot(id,frame,error):self.runtime->mutableScene().transformModel(id,frame,error);
+        if(!ok)throw std::runtime_error(error);return 0;
+    }
+    template<bool Inverse,bool Direction> static int ModelVector(lua_State* L) {
+        const auto frame=ModelPose(L,1);auto value=ReadVector(L,2);
+        if constexpr(Inverse){if(!Direction)value=Vector3Subtract(value,frame.position);value=Vector3Scale(Vector3RotateByQuaternion(value,QuaternionInvert(frame.rotation)),1/frame.scale);}
+        else {value=Vector3RotateByQuaternion(Vector3Scale(value,frame.scale),frame.rotation);if(!Direction)value=Vector3Add(value,frame.position);}
+        ModernVector(L,value);return 1;
+    }
+    static int ScaleModel(lua_State* L){auto& self=Host(L);const auto id=self.instance(L,1).id();auto frame=ModelPose(L,1);frame.scale*=float(Number(L,2));std::string error;if(!self.runtime->mutableScene().transformModel(id,frame,error))throw std::runtime_error(error);return 0;}
+    static int UngroupModel(lua_State* L){auto& self=Host(L);const auto id=self.instance(L,1).id();std::string error;if(!self.runtime->mutableScene().ungroup(id,error))throw std::runtime_error(error);return 0;}
+    static int GroupModel(lua_State* L) {
+        auto& self=Host(L);Require(lua_istable(L,1),"group requer lista de peças/modelos");const auto count=lua_rawlen(L,1);
+        Require(count>=1&&count<=256,"Selecione de 1 a 256 objetos");std::vector<InstanceId> ids;ids.reserve(count);
+        for(std::size_t i=1;i<=count;++i){lua_rawgeti(L,1,i);ids.push_back(self.instance(L,-1).id());lua_pop(L,1);}
+        const std::string name=lua_gettop(L)>1?Text(L,2):"Modelo";self.nativeBudget(1,name.size()+128);std::string error;
+        auto* model=self.runtime->mutableScene().group(ids,name,error);if(!model)throw std::runtime_error(error);self.pushInstance(L,model,true);return 1;
+    }
     static int AddScript(lua_State* L) {
         auto& self=Host(L);auto& owner=self.instance(L,1);const auto type=owner.instanceClass();
         Require(owner.isPart()||type==InstanceClass::Folder||type==InstanceClass::Model||type==InstanceClass::Workspace||type==InstanceClass::ServerScriptService,"Este objeto não aceita scripts");
@@ -980,6 +1026,21 @@ struct LuaRuntime::Impl {
     }
     static int Index(lua_State* L) {
         auto& self=Host(L);const auto h=self.handle(L,1);const char* key=Text(L,2);
+        if(h.modern&&h.kind==Kind::Instance)if(const auto* object=self.runtime->scene().find(h.id);object&&object->instanceClass()==InstanceClass::Model) {
+            if(Eq(key,"transform")||Eq(key,"pivot")){PushModel(L,ModelPose(L,1));return 1;}
+            if(Eq(key,"position")){ModernVector(L,ModelPose(L,1).position);return 1;}
+            if(Eq(key,"rotation")){ModernVector(L,EulerDegreesFromQuat(ModelPose(L,1).rotation));return 1;}
+            if(Eq(key,"scale")){lua_pushnumber(L,ModelPose(L,1).scale);return 1;}
+            if(Eq(key,"get_transform")||Eq(key,"get_pivot")){lua_pushcfunction(L,Safe<GetModelPose>);return 1;}
+            if(Eq(key,"set_transform")){lua_pushcfunction(L,Safe<SetModelPose<false>>);return 1;}
+            if(Eq(key,"set_pivot")){lua_pushcfunction(L,Safe<SetModelPose<true>>);return 1;}
+            if(Eq(key,"scale_by")){lua_pushcfunction(L,Safe<ScaleModel>);return 1;}
+            if(Eq(key,"ungroup")){lua_pushcfunction(L,Safe<UngroupModel>);return 1;}
+            if(Eq(key,"point_to_world")){lua_pushcfunction(L,(Safe<ModelVector<false,false>>));return 1;}
+            if(Eq(key,"point_to_local")){lua_pushcfunction(L,(Safe<ModelVector<true,false>>));return 1;}
+            if(Eq(key,"vector_to_world")){lua_pushcfunction(L,(Safe<ModelVector<false,true>>));return 1;}
+            if(Eq(key,"vector_to_local")){lua_pushcfunction(L,(Safe<ModelVector<true,true>>));return 1;}
+        }
         if(h.modern&&h.kind==Kind::Instance) {
             if(Eq(key,"transform")){const auto& part=PartObject(L,1);PushPose(L,RelativePose(part,{}));return 1;}
             if(Eq(key,"get_transform")){lua_pushcfunction(L,Safe<GetPose>);return 1;}
@@ -1093,6 +1154,15 @@ struct LuaRuntime::Impl {
         if(h.modern&&h.kind==Kind::Player&&Eq(key,"velocity")){
             const auto value=ReadVector(L,3);std::string error;if(!self.runtime->playerMotion(value,game::PartMotion::Velocity,error))throw std::runtime_error(error);return 0;
         }
+        if(h.modern&&h.kind==Kind::Instance)if(const auto* object=self.runtime->scene().find(h.id);object&&object->instanceClass()==InstanceClass::Model) {
+            if(Eq(key,"transform")){lua_remove(L,2);return SetModelPose<false>(L);}
+            if(Eq(key,"pivot")){lua_remove(L,2);return SetModelPose<true>(L);}
+            if(Eq(key,"position")||Eq(key,"rotation")||Eq(key,"scale")) {
+                auto frame=ModelPose(L,1);if(Eq(key,"position"))frame.position=ReadVector(L,3);
+                else if(Eq(key,"rotation"))frame.rotation=QuatFromEulerDegrees(ReadVector(L,3));else frame.scale=float(Number(L,3));
+                std::string error;if(!self.runtime->mutableScene().transformModel(object->id(),frame,error))throw std::runtime_error(error);return 0;
+            }
+        }
         if(h.modern&&h.kind==Kind::Instance&&Eq(key,"transform")){lua_remove(L,2);return SetPose(L);}
         if(h.modern&&h.kind==Kind::Instance&&Eq(key,"body")) {
             auto& object=PartObject(L,1);const auto value=ReadBody(L,3,object.bodyProperties());std::string error;if(!object.setBodyProperties(value,error))throw std::runtime_error(error);return 0;
@@ -1169,7 +1239,7 @@ struct LuaRuntime::Impl {
         self.push(L,Kind::Player,0,true);lua_setfield(L,-2,"player");
         lua_newtable(L);lua_pushcfunction(L,Safe<CameraState>);lua_setfield(L,-2,"state");lua_pushcfunction(L,Safe<CameraConfigure>);lua_setfield(L,-2,"configure");lua_pushcfunction(L,Safe<CameraPose>);lua_setfield(L,-2,"set_pose");lua_pushcfunction(L,Safe<CameraRelease>);lua_setfield(L,-2,"release");lua_setfield(L,-2,"camera");
         lua_newtable(L);lua_pushcfunction(L,Safe<Animations>);lua_setfield(L,-2,"list");lua_setfield(L,-2,"animations");
-        lua_newtable(L);lua_pushcfunction(L,Safe<ModernNew>);lua_setfield(L,-2,"create");lua_pushcfunction(L,Safe<ModernFind>);lua_setfield(L,-2,"find");self.pushInstance(L,self.runtime->scene().workspace(),true);lua_setfield(L,-2,"root");lua_setfield(L,-2,"scene");
+        lua_newtable(L);lua_pushcfunction(L,Safe<ModernNew>);lua_setfield(L,-2,"create");lua_pushcfunction(L,Safe<ModernFind>);lua_setfield(L,-2,"find");lua_pushcfunction(L,Safe<GroupModel>);lua_setfield(L,-2,"group");self.pushInstance(L,self.runtime->scene().workspace(),true);lua_setfield(L,-2,"root");lua_setfield(L,-2,"scene");
         lua_newtable(L);lua_pushcfunction(L,Safe<On>);lua_setfield(L,-2,"on");lua_pushcfunction(L,Safe<Publish>);lua_setfield(L,-2,"emit");lua_setfield(L,-2,"events");
         lua_newtable(L);lua_pushcfunction(L,Safe<Raycast>);lua_setfield(L,-2,"raycast");lua_pushcfunction(L,Safe<Nearby>);lua_setfield(L,-2,"nearby");lua_pushcfunction(L,Safe<Gravity>);lua_setfield(L,-2,"gravity");lua_pushcfunction(L,Safe<SetGravity>);lua_setfield(L,-2,"set_gravity");lua_setfield(L,-2,"physics");
         lua_getfield(L,-1,"physics");lua_pushcfunction(L,Safe<QueryVolume<false>>);lua_setfield(L,-2,"overlap_box");lua_pushcfunction(L,Safe<QueryVolume<true>>);lua_setfield(L,-2,"overlap_sphere");lua_pop(L,1);

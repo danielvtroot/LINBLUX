@@ -233,6 +233,8 @@ bool Scene::validate(std::string& error) const {
             return false;
         }
     }
+    for(auto id:selectionIds_)if(!find(id)){error="Seleção contém objeto inexistente.";return false;}
+    if(selection_&&!selected(selection_->id())){error="Seleção principal ausente da seleção múltipla.";return false;}
     if (selection_ != nullptr) {
         const auto selected = byId_.find(selection_->id());
         if (selected == byId_.end() || selected->second != selection_) {
@@ -478,7 +480,7 @@ Container* Scene::group(const std::vector<InstanceId>& ids,const std::string& na
     ModelFrame frame;modelFrame(model->id(),frame,error);setModelPivot(model->id(),frame,error);select(model);return model;
 }
 bool Scene::ungroup(InstanceId id,std::string& error) {
-    auto* model=find(id);if(!model||model->instanceClass()!=InstanceClass::Model||!model->parent()){error="Selecione um Modelo para desagrupar.";return false;}
+    auto* model=find(id);if(!model||model->instanceClass()!=InstanceClass::Model||!model->parent()||!model->deletable()){error="Selecione um Modelo para desagrupar.";return false;}
     const auto children=model->children();auto* parent=model->parent();
     for(auto* child:children)if(!canParent(child,parent)){error="Hierarquia impede desagrupar este Modelo.";return false;}
     for(auto* child:children)reparent(child,parent,error);
