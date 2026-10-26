@@ -160,7 +160,7 @@ int main() {
             CHECK(std::get<std::string>(model->attributes().at("item_type"))=="visual_item");
             CHECK(projectio::save(scene,config.defaultProjectPath,error));
             capture("model-properties");
-            scene.createScript(InstanceClass::Script,nullptr,"ModeloPlay.lua")->source="local m=linblux.scene.find("+std::to_string(id)+");assert(m.scale==2);linblux.scene.root:set_attribute('model_play',true)";
+            scene.createScript(InstanceClass::Script,nullptr,"ModeloPlay.lua")->source="local m=linblux.scene.find("+std::to_string(id)+");assert(m.scale==2);local item=linblux.items.spawn('visual_item');linblux.items.collect(item);linblux.items.equip(item);assert(linblux.items.equipped().id==item.id);linblux.scene.root:set_attribute('model_play',true)";
             click("play");frames(8);CHECK(ui.playing());CHECK(EditorUITestAccess::runtime(ui).scripts().errorCount()==0);
             CHECK(EditorUITestAccess::runtime(ui).scene().workspace()->attributes().count("model_play"));
             CHECK(EditorUITestAccess::runtime(ui).inventory().prototype("visual_item")==id);
