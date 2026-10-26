@@ -223,3 +223,7 @@ Código pronto para publicação deste incremento. A missão integral segue aber
 Próxima fase: Modelos reais com pivô/transformações e seleção múltipla, antes de
 Attachments/inventário/E/Delete/hotbar. Não reiniciar investigação de imagens
 sem um defeito concreto novo.
+
+Backend de recuperação PUBLICADO: 4bb803c16365d79ad62f752fd25991c15772f398,
+push normal confirmado. Frontend e rosto VALIDADO NO PLAYER/renderizador compartilhado,
+com publicação junto ao relatório 21. Conferir o último commit do relatório para hash.

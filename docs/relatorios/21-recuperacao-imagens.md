@@ -62,3 +62,6 @@ Limitações: inferência de dependências dinâmicas em scripts não é complet
 Backups de dados privados externos seguem sem destino. Modelos transformáveis,
 multisseleção, Attachments, inventário/E/Delete/hotbar, RifleDemo, UI Lua, HUD e
 menu lateral ainda pendentes. Áudio/NPCs existentes não foram reimplementados.
+
+Backend PUBLICADO: 4bb803c16365d79ad62f752fd25991c15772f398, push main confirmado.
+Frontend/renderizador/testes/documentação compõem o commit que inclui este relatório.
