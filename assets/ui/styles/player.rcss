@@ -110,3 +110,29 @@
 .player-compact #pause-content h2 { font-size: 18px; }
 .player-compact .session-indicator { font-size: 11px; }
 .player-compact .session-actions button { font-size: 11px; }
+
+/* LINBLUX side menu. Final rules override the earlier historical sizing. */
+#pause { padding: 0; display: block; background-color: #00000065; }
+#pause-panel.pause-panel { position: absolute; left: 0; top: 0; bottom: 0; width: 90%; max-width: 880px; height: 100%; max-height: none; padding: 0; border: 0px; border-right: 1px #ffffff20; border-radius: 0; display: flex; flex-direction: row; background-color: #151519f5; }
+.pause-sidebar { display: flex; flex-direction: column; width: 170px; flex: 0 0 170px; height: 100%; padding: 14px 10px; background-color: #101013b8; }
+.pause-brand { display: flex; align-items: center; height: 48px; margin-bottom: 12px; font-size: 17px; font-weight: bold; }
+.pause-brand img { width: 34px; height: auto; margin-right: 8px; }
+#pause .pause-tabs { display: flex; flex-direction: column; flex: 1; min-height: 0; height: auto; margin: 9px 0; border: 0px; overflow: auto; }
+#pause .pause-tabs button { flex: 0 0 37px; min-height: 37px; height: 37px; width: 100%; justify-content: flex-start; padding: 6px 12px; font-size: 16px; border: 0px; border-left: 3px transparent; border-radius: 4px; }
+#pause .pause-tabs button.active { color: white; background-color: #592631; border-left-color: #e34255; }
+#pause #resume, #pause #leave { flex: 0 0 38px; height: 38px; font-size: 14px; }
+#pause #leave { color: #f3a5ad; background-color: #331e24; }
+.pause-main { display: flex; flex-direction: column; flex: 1; width: 1px; min-width: 0; height: 100%; padding: 0 18px 14px; }
+.pause-heading { display: flex; flex: 0 0 64px; height: 64px; align-items: center; border-bottom: 1px #ffffff15; margin-bottom: 8px; }
+#pause-experience { flex: 1; overflow: hidden; font-size: 17px; }
+#pause-close { width: 36px; height: 36px; font-size: 24px; padding: 0; }
+#pause #pause-content { width: 100%; flex: 1; min-height: 0; overflow: auto; font-size: 15px; }
+#pause .setting-row { flex-direction: column; align-items: flex-start; padding: 10px 0; }
+#pause .setting-control { margin-top: 8px; width: 100%; }
+#pause .setting-copy { width: 100%; }
+#pause .player-card { padding: 10px; }
+#pause .session-logo, #pause .player-emblem { display: none; }
+#pause .control-row { padding: 10px 0; }
+#pause .control-row kbd { width: 115px; min-width: 115px; }
+#pause .primary { background-color: #ba2838; }
+#master-volume { width: 95%; height: 26px; }

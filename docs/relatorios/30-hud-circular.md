@@ -22,3 +22,5 @@ expectativa visual antiga ainda fosse requisito do produto. Release ainda
 bloqueada por menu/Demo/pacote e validação final. Trabalho desenvolvimento de combate
 preservado fora do commit deste HUD, snapshot em .turbo/recovery-final e
 AutoBackup remoto eed462f8f1d3 confirmado no início.
+
+IMPACT 20261026T223928Z-8644: 22/22, 56,0 s, cobertura global parcial.

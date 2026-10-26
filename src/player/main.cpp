@@ -1,4 +1,5 @@
 #include "rendering/ExperienceOverlay.h"
+#include "rendering/PlayerMenu.h"
 #include "rendering/LuaUiRenderer.h"
 #include "experiences/ExperienceManager.h"
 #include "serialization/ProjectIO.h"
@@ -52,10 +53,10 @@ int main(int argc,char** argv) {
     Font font=GetFontDefault();bool customFont=false;
     for(const char* path:{"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"})if(FileExists(path)){font=LoadFontEx(path,24,nullptr,256);customFont=font.texture.id!=0;break;}
     {
-        SceneRenderer renderer;const auto logo=game::AssetTexture(game::BuiltinAssetPath("logo.png"));int rendered=0;
-        const auto label=[&](const char* text,float x,float y,float size,Color color){DrawTextEx(font,text,{x,y},size,1,color);};
+        SceneRenderer renderer;PlayerMenu menu;const auto logo=game::AssetTexture(game::BuiltinAssetPath("logo.png"));int rendered=0;
         while(!WindowShouldClose()&&(!frames||rendered++<frames)) {
-            if(IsKeyPressed(KEY_ESCAPE)){if(runtime.state()==game::RuntimeState::Paused)runtime.resume();else runtime.pause();EnableCursor();}
+            const Rectangle menuButton{16,16,104,52};
+            if(IsKeyPressed(KEY_ESCAPE)||(CheckCollisionPointRec(GetMousePosition(),menuButton)&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT))){if(runtime.state()==game::RuntimeState::Paused)runtime.resume();else runtime.pause();EnableCursor();}
             const bool paused=runtime.state()==game::RuntimeState::Paused;
             game::PlayerInput input;
             if(!paused)input.script=game::CaptureScriptInput();
@@ -73,12 +74,12 @@ int main(int argc,char** argv) {
             renderer.drawScene(runtime.scene(),runtime.playerCamera().camera(),GetScreenWidth(),GetScreenHeight(),0,runtime.playerCamera().avatarHidden()?nullptr:&avatar,false);
             DrawExperienceOverlay(runtime,GetScreenWidth(),GetScreenHeight(),font);
             DrawLuaUi(runtime,GetScreenWidth(),GetScreenHeight(),font);
-            DrawRectangleRounded({16,16,245,58},.2f,8,ui::theme::panel);
-            if(logo.id){BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{24,21,48,48},{0,0},0,WHITE);EndBlendMode();}
-            label("LINBLUX Player",84,35,18,ui::theme::text);
-            label("Esc · Pausar",float(GetScreenWidth()-156),32,16,ui::theme::text);
-            if(paused){DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),ui::theme::overlay);const float x=GetScreenWidth()*.5f-220,y=GetScreenHeight()*.5f-90;DrawRectangleRounded({x,y,440,190},.08f,8,ui::theme::panel);label("Experiência pausada",x+28,y+26,24,ui::theme::text);label("Esc para continuar · WASD para mover",x+28,y+76,17,ui::theme::secondary);const Rectangle quit{x+28,y+118,384,42};DrawRectangleRounded(quit,.12f,6,ui::theme::accent);label("Sair da experiência",x+124,y+130,18,ui::theme::text);if(CheckCollisionPointRec(GetMousePosition(),quit)&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT)){EndDrawing();break;}}
+            DrawRectangleRounded(menuButton,.16f,6,ui::theme::panel);
+            if(logo.id)DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{24,24,36,36},{0,0},0,WHITE);
+            for(int i=0;i<3;++i)DrawRectangle(78,31+8*i,22,2,ui::theme::text);
+            const bool quit=menu.draw(runtime,GetScreenWidth(),GetScreenHeight(),font,logo,std::filesystem::path(project).stem().string());
             EndDrawing();
+            if(quit)break;
         }
         runtime.stop();game::ClearImageTextures();
     }

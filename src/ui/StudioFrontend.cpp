@@ -52,7 +52,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     Rml::Context* context=nullptr;Rml::ElementDocument* document=nullptr;
     Rectangle view{},advancedRect{};float left=204,right=292,bottom=330,propertySplit=.52f,dpi=1;
     std::string tab="Home",advanced,search,page="game",dialog,focusValue,split,propertySearch;
-    bool pauseWasOpen=false;
+    bool pauseWasOpen=false;float menuProgress=0;
     std::string selectedRigDecal,selectedDecalRig;
     std::string tooltip;double tooltipSince=0;bool contextOpen=false;
     std::string treeMarkup,propertyMarkup,ribbonMarkup,advancedMarkup,documentMarkup;size_t treeHash=0;
@@ -313,6 +313,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         }
         const auto action=attr(e,"data-action"),property=attr(e,"data-property"),setting=attr(e,"data-setting");
         std::string v=value(e);if(attr(e,"type")=="checkbox")v=e->HasAttribute("checked")?"true":"false";
+        if(action=="player-volume"){try{SetMasterVolume(std::clamp(std::stof(v),0.f,1.f));}catch(...){}return;}
         if(action=="choose-material"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
         if(!property.empty())commands.push_back({"property:"+property,v,e->GetAttribute<InstanceId>("data-node",0)});
         else if(!action.empty())commands.push_back({action,v});
@@ -927,12 +928,12 @@ if(c.action=="r6")showAdvanced("rig");
             page="game";
             el("pause-content")->SetScrollTop(0);
         }
-        if(paused&&!pauseWasOpen) {
-            const Rml::Property from(.8f,Rml::Unit::NUMBER);
-            el("pause-panel")->Animate("opacity",Rml::Property(1.f,Rml::Unit::NUMBER),.12f,Rml::Tween{},1,false,0,&from);
-        }
+        menuProgress=std::clamp(menuProgress+(paused?1.f:-1.f)*std::min(GetFrameTime(),.05f)/.18f,0.f,1.f);
+        const float eased=menuProgress*menuProgress*(3-2*menuProgress);
+        style("pause-panel","left",Num(-view.width*(1-eased))+"px");
+        style("pause","pointer-events",paused?"auto":"none");
         pauseWasOpen=paused;
-        display("pause",paused,"flex");display("health",false);display("game-topbar",active,"flex");
+        display("pause",active&&(paused||menuProgress>0),"block");display("health",false);display("game-topbar",active,"flex");
         const auto cursor=ui.gameplayCursor();
         display("mouse-lock-cursor",active&&cursor.visual==GameCursorVisual::MouseLock);
         style("mouse-lock-cursor","left",Num(cursor.position.x-view.x)+"px");
@@ -940,20 +941,22 @@ if(c.action=="r6")showAdvanced("rig");
         const std::string menuIcon=paused?"icon-player-close":"icon-player-menu";
         if(attr(el("game-menu-icon"),"src")!=menuIcon)el("game-menu-icon")->SetAttribute("src",menuIcon);
         el("game-settings")->SetClass("selected",paused&&page=="settings");
-        for(const auto* name:{"game","settings","controls","about"}) {display(std::string(name)+"-page",page==name);el(std::string("page-")+name)->SetClass("active",page==name);}
+        for(const auto* name:{"game","settings","controls","audio","video","about"}) {display(std::string(name)+"-page",page==name);el(std::string("page-")+name)->SetClass("active",page==name);}
         if(!active)return;
         const float health=ui.runtime_.health(),maximum=std::max(1.f,ui.runtime_.settings().maxHealth);
         char s[64];std::snprintf(s,sizeof(s),"%.0f / %.0f",health,maximum);text("pause-health",s);
+        text("pause-experience",std::filesystem::path(ui.projectPath_).stem().string());
+        text("master-volume-label",std::to_string(int(GetMasterVolume()*100))+"%");
         text("player-name",ui.runtime_.rig().name);text("map-name",std::filesystem::path(ui.projectPath_).filename().string());
         if(paused) {
             auto set=[&](const char* id,const std::string& v){if(auto* f=dynamic_cast<Rml::ElementFormControl*>(el(id));f&&context->GetFocusElement()!=f&&f->GetValue()!=v)f->SetValue(v);};
-            const auto& p=ui.runtime_.settings();text("camera-mode",p.cameraMode==game::CameraMode::Classic?"Classic":p.cameraMode==game::CameraMode::Follow?"Follow":"First person");
+            const auto& p=ui.runtime_.settings();text("camera-mode",p.cameraMode==game::CameraMode::Classic?"Livre":p.cameraMode==game::CameraMode::Follow?"Acompanhar":"Primeira pessoa");
             set("sensitivity",Num(p.sensitivity));set("camera-distance",Num(p.cameraDistance));
             set("sensitivity-slider",Num(1+(p.sensitivity-.0001f)/.0299f*99));
             el("distance-slider")->SetAttribute("min",Num(p.minZoom));el("distance-slider")->SetAttribute("max",Num(p.maxZoom));
             set("distance-slider",Num(p.cameraDistance));
-            text("shift-lock",p.enableShiftLock?"On":"Off");text("first-person",p.allowFirstPerson?"On":"Off");
-            text("fullscreen-value",ui.gameFullscreen_?"On":"Off");
+            text("shift-lock",p.enableShiftLock?"Ativado":"Desativado");text("first-person",p.allowFirstPerson?"Ativado":"Desativado");
+            text("fullscreen-value",ui.gameFullscreen_?"Ativado":"Desativado");
         }
     }
 };
