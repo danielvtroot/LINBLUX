@@ -525,14 +525,31 @@ Container* Scene::group(const std::vector<InstanceId>& ids,const std::string& na
     for(auto a:ids)for(auto b:ids)if(a!=b&&find(a)->isAncestorOf(find(b))){error="Selecione o Modelo ou seus filhos, sem sobreposição.";return nullptr;}
     auto* model=createContainer(InstanceClass::Model,workspace_,name);if(!model){error="Não foi possível criar o Modelo.";return nullptr;}
     for(auto id:ids)if(!canParent(find(id),model)){remove(model);error="Hierarquia não permite agrupar essa seleção.";return nullptr;}
-    for(auto id:ids)reparent(find(id),model,error);
+    std::map<Instance*,std::vector<Instance*>> parents;
+    std::vector<std::pair<Attachment*,ModelFrame>> anchors;
+    for(auto id:ids)parents.emplace(find(id)->parent(),find(id)->parent()->children());
+    for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment)anchors.push_back({static_cast<Attachment*>(node.get()),static_cast<Attachment*>(node.get())->localFrame()});
+    for(auto id:ids)if(!reparent(find(id),model,error)){
+        for(const auto& previous:parents){previous.first->children_=previous.second;for(auto* child:previous.second)child->parent_=previous.first;}
+        model->children_.clear();
+        for(const auto& anchor:anchors)anchor.first->setLocalFrame(anchor.second);
+        remove(model);return nullptr;
+    }
     ModelFrame frame;modelFrame(model->id(),frame,error);setModelPivot(model->id(),frame,error);select(model);return model;
 }
 bool Scene::ungroup(InstanceId id,std::string& error) {
     auto* model=find(id);if(!model||model->instanceClass()!=InstanceClass::Model||!model->parent()||!model->deletable()){error="Selecione um Modelo para desagrupar.";return false;}
     const auto children=model->children();auto* parent=model->parent();
     for(auto* child:children)if(!canParent(child,parent)){error="Hierarquia impede desagrupar este Modelo.";return false;}
-    for(auto* child:children)reparent(child,parent,error);
+    std::vector<std::pair<Attachment*,ModelFrame>> anchors;
+    for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment&&model->isAncestorOf(node.get()))anchors.push_back({static_cast<Attachment*>(node.get()),static_cast<Attachment*>(node.get())->localFrame()});
+    const auto parentChildren=parent->children();
+    for(auto* child:children)if(!reparent(child,parent,error)){
+        parent->children_=parentChildren;for(auto* node:parentChildren)node->parent_=parent;
+        model->children_=children;for(auto* node:children)node->parent_=model;
+        for(const auto& anchor:anchors)anchor.first->setLocalFrame(anchor.second);
+        return false;
+    }
     if(!remove(model)){error="Modelo protegido não pode ser removido.";return false;}
     if(!children.empty())select(children.front());error.clear();return true;
 }

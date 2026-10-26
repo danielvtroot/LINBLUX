@@ -143,6 +143,14 @@ void Attachments() {
     auto bad=nlohmann::json::parse(original);for(auto& o:bad["objects"])if(o["id"]==muzzle->id())o["attachment"]["rotation"]={0,0,0,0};
     CHECK(!projectio::fromJson(scene,bad.dump(),error));CHECK(projectio::toJson(scene)==original);
     bad=nlohmann::json::parse(original);bad["version"]=4;CHECK(!projectio::fromJson(scene,bad.dump(),error));CHECK(projectio::toJson(scene)==original);
+    CHECK(scene.remove(direct));
+    ModelFrame huge=local;huge.position={1000000,0,0};CHECK(muzzle->setLocalFrame(huge));
+    const auto beforeFailure=projectio::toJson(scene);CHECK(!scene.ungroup(model->id(),error));CHECK(projectio::toJson(scene)==beforeFailure);
+    CHECK(!scene.group({body->id(),barrel->id()},"Não deve perder peças",error));
+    // A failed creation can consume an ID, but keeps every authored node and pose.
+    CHECK(body->parent()==model&&barrel->parent()==model);CHECK(NearlyEqual(muzzle->localFrame().position,huge.position));
+    CHECK(muzzle->setLocalFrame(local));CHECK(scene.attachmentFrame(muzzle->id(),world,error));
+    CHECK(scene.ungroup(model->id(),error));CHECK(scene.attachmentFrame(muzzle->id(),recovered,error));CHECK(NearlyEqual(world.position,recovered.position));
     const auto muzzleId=muzzle->id();CHECK(scene.remove(barrel));CHECK(!scene.find(muzzleId));
 }
 void ModelTransforms() {
