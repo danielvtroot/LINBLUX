@@ -993,6 +993,10 @@ void StudioFrontend::filter(EditorInput& in,InputContext& c) {
         // During Play only real modals/text/drags capture gameplay keys, so
         // hovering the HUD still leaves WASD and jump with the character.
         if(!p.ui.runtime_.active()||p.dialogOpen||p.contextOpen||p.dragging||!p.split.empty())c.widget=true;
+        // Passive panels own the pointer, not the editor's history shortcuts.
+        // Text, popups and active drags keep their normal input protection.
+        if((in.undo||in.redo)&&!p.ui.runtime_.active()&&!p.keyboardOwned&&!p.editing()&&
+            !p.dialogOpen&&!p.contextOpen&&!p.dragging&&p.split.empty())c.widget=false;
     }
     if(p.ui.runtime_.active()&&!p.editing()&&!p.dialogOpen)c.focused=true;
     if(p.escapeConsumed)in.escape=false;
