@@ -156,7 +156,13 @@ pub("ammo_final", estado.ammo)
 pub("reserva_final", estado.reserve)
 
 -- Origem real: o Attachment do item equipado, nunca uma coordenada fixa.
-local boca = linblux.scene.find("BocaDoCano")
+-- O Attachment da instância, nunca o do protótipo escondido.
+local boca = item:find_child("BocaDoCano")
+local nomes = ""
+for _, filho in ipairs(item:children()) do nomes = nomes..filho.name.."," end
+print("FILHOS:", nomes)
+pub("debug_filhos", nomes)
+pub("boca_id", boca and boca.id or 0)
 local acerto = linblux.physics.raycast(boca.world_position, boca.direction, 120, item)
 pub("acerto", acerto and acerto.object.name or "nenhum")
 pub("acerto_distancia", acerto and acerto.distance or -1)
@@ -330,6 +336,8 @@ int main() {
         require(std::fabs(cloneModel.scale - 2.f) < .01f, "clone scale was not applied");
 
         // Impacto: o raio parte do Attachment e ignora o próprio item.
+        require(attributeString(*workspace, "debug_filhos").find("BocaDoCano") != std::string::npos,
+                "item children: '" + attributeString(*workspace, "debug_filhos") + "'");
         require(attributeString(*workspace, "acerto") == "Alvo",
                 "raycast from the muzzle hit '" + attributeString(*workspace, "acerto") + "'");
         require(attributeNumber(*workspace, "alvo_vida") == 75, "damage was not applied by the health API");
