@@ -49,7 +49,7 @@ try:
  def shoot():cmd('mousemove','--window',window,640,360);cmd('mousedown',1);time.sleep(.2);cmd('mouseup',1);time.sleep(.25)
  def capture(name):
   path=root/(name+'.png');subprocess.run(['scrot','-u','-o',str(path)],check=True,timeout=5);return Image.open(path).convert('RGB')
- def hotbar_red(im):return sum(1 for y in range(690,710) for x in range(550,740) if (lambda c:c[0]>150 and c[1]<90 and c[2]<110)(im.getpixel((x,y))))
+ def hotbar_red(im):return sum(1 for y in range(690,710) for x in range(550,740) if (lambda c:abs(c[0]-215)<4 and abs(c[1]-38)<4 and abs(c[2]-63)<4)(im.getpixel((x,y))))
  assert hotbar_red(capture('empty'))==0,'hotbar appears before collection'
  key('e',.85);key('1');assert hotbar_red(capture('equipped'))>100,'actual hotbar did not equip'
  shoot();key('r');time.sleep(1.8);key('Delete');assert hotbar_red(capture('dropped'))==0,'hotbar survived Delete'
