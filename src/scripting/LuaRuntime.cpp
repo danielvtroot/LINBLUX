@@ -1336,6 +1336,10 @@ struct LuaRuntime::Impl {
         if(!lua_isnil(L,-1)){const auto value=Number(L,-1);Require(value>=0&&value<=255,"alfa deve ficar entre 0 e 255");alpha=static_cast<unsigned char>(value);}lua_pop(L,1);
         return {component("r"),component("g"),component("b"),alpha};
     }
+    // The bool must be computed before the message is read: passing
+    // error.c_str() directly as another argument leaves the pointer dangling
+    // once the model reallocates the string with the real message.
+    static void requireUi(bool ok,const std::string& error){Require(ok,error.c_str());}
     void applyUiProperty(lua_State* L,std::uint64_t id,const char* key,int index) {
         const std::uint64_t owner=executing;
         std::string error;
@@ -1343,18 +1347,18 @@ struct LuaRuntime::Impl {
             Require(lua_type(L,index)==LUA_TSTRING||lua_type(L,index)==LUA_TNUMBER,"texto deve ser string ou número");
             char formatted[40]{};if(lua_type(L,index)==LUA_TNUMBER)std::snprintf(formatted,sizeof(formatted),"%.14g",lua_tonumber(L,index));
             const std::string value=lua_type(L,index)==LUA_TSTRING?std::string(lua_tostring(L,index)):std::string(formatted);
-            Require(runtime->ui().setText(id,owner,value,error),error.c_str());return;
+            requireUi(runtime->ui().setText(id,owner,value,error),error);return;
         }
-        if(Eq(key,"visible")){Require(lua_isboolean(L,index),"visible requer booleano");Require(runtime->ui().setBool(id,owner,"visible",lua_toboolean(L,index),error),error.c_str());return;}
-        if(Eq(key,"anchor")){Require(lua_type(L,index)==LUA_TSTRING,"anchor requer string");Require(runtime->ui().setAnchor(id,owner,Text(L,index),error),error.c_str());return;}
+        if(Eq(key,"visible")){Require(lua_isboolean(L,index),"visible requer booleano");requireUi(runtime->ui().setBool(id,owner,"visible",lua_toboolean(L,index),error),error);return;}
+        if(Eq(key,"anchor")){Require(lua_type(L,index)==LUA_TSTRING,"anchor requer string");requireUi(runtime->ui().setAnchor(id,owner,Text(L,index),error),error);return;}
         if(Eq(key,"image")) {
             Require(lua_type(L,index)==LUA_TSTRING,"image requer caminho string");
             const std::string reference=Text(L,index);
             if(!reference.empty())Require(!game::ResolveImagePath(game::AssetsDir(),reference).empty(),"imagem de UI não existe nos recursos da experiência");
-            Require(runtime->ui().setImage(id,owner,reference,error),error.c_str());return;
+            requireUi(runtime->ui().setImage(id,owner,reference,error),error);return;
         }
-        if(Eq(key,"color")||Eq(key,"background")){Require(runtime->ui().setColor(id,owner,key,UiColorValue(L,index),error),error.c_str());return;}
-        Require(runtime->ui().setNumber(id,owner,key,Number(L,index),error),error.c_str());
+        if(Eq(key,"color")||Eq(key,"background")){requireUi(runtime->ui().setColor(id,owner,key,UiColorValue(L,index),error),error);return;}
+        requireUi(runtime->ui().setNumber(id,owner,key,Number(L,index),error),error);
     }
     static int UiCreate(lua_State* L) {
         auto& self=Host(L);Require(self.executing,"UI só pode ser criada por um Script em execução");
@@ -1364,7 +1368,7 @@ struct LuaRuntime::Impl {
         std::uint64_t parent=0;
         if(lua_gettop(L)>1&&lua_istable(L,2)){lua_getfield(L,2,"parent");if(!lua_isnil(L,-1))parent=UiHandle(L,-1);lua_pop(L,1);}
         std::uint64_t id=0;std::string error;
-        Require(self.runtime->ui().create(kind,self.executing,parent,id,error),error.c_str());
+        requireUi(self.runtime->ui().create(kind,self.executing,parent,id,error),error);
         if(lua_gettop(L)>1&&lua_istable(L,2)) {
             lua_pushnil(L);
             while(lua_next(L,2)) {
@@ -1403,7 +1407,7 @@ struct LuaRuntime::Impl {
     }
     static int UiDestroy(lua_State* L) {
         auto& self=Host(L);const auto id=UiHandle(L,1);std::string error;
-        Require(self.runtime->ui().destroy(id,self.executing,error),error.c_str());self.pruneUi();return 0;
+        requireUi(self.runtime->ui().destroy(id,self.executing,error),error);self.pruneUi();return 0;
     }
     static int UiOn(lua_State* L) {
         auto& self=Host(L);const auto id=UiHandle(L,1);const std::string event=Text(L,2);

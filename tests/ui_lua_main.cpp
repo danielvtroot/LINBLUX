@@ -163,6 +163,15 @@ end)
         require(ui.count() == 0, "UI survived RuntimeSession::stop");
 
         // ---- Validation, budgets and ownership --------------------------
+        {
+            Fixture probe("print(type(linblux.ui), type(linblux.ui.set), type(linblux.ui.create), linblux.ui.count())");
+            game::RuntimeSession session;
+            require(session.start(probe.scene, error), "probe: " + error);
+            session.update(1.f / 60, {});
+            for (const auto& message : session.scripts().messages())
+                std::fprintf(stderr, "PROBE %d %s\n", int(message.error), message.text.c_str());
+            session.stop(false);
+        }
         expectError("linblux.ui.set(9999, \"text\", \"x\")", "não existe");
         expectError("linblux.ui.create(\"spaceship\", {})", "tipo de UI desconhecido");
         expectError(R"(local e = linblux.ui.create("label", {})
