@@ -1,4 +1,5 @@
 #include "rendering/ExperienceOverlay.h"
+#include "rendering/LuaUiRenderer.h"
 #include "experiences/ExperienceManager.h"
 #include "serialization/ProjectIO.h"
 #include "rendering/SceneRenderer.h"
@@ -59,11 +60,19 @@ int main(int argc,char** argv) {
             game::PlayerInput input;
             if(!paused)input.script=game::CaptureScriptInput();
             if(!paused){input.movement={float(IsKeyDown(KEY_D)-IsKeyDown(KEY_A)),float(IsKeyDown(KEY_W)-IsKeyDown(KEY_S))};input.jump=IsKeyDown(KEY_SPACE);input.shiftKey=IsKeyDown(KEY_LEFT_SHIFT);input.zoom=GetMouseWheelMove();if(!runtime.playerCamera().scripted()&&(IsMouseButtonDown(MOUSE_BUTTON_RIGHT)||runtime.shiftLockActive())){if(!IsCursorHidden())DisableCursor();input.look=GetMouseDelta();}else if(IsCursorHidden())EnableCursor();}
+            // Script UI click boxes are viewport pixels. A hidden cursor means
+            // the camera owns the pointer, so HUD buttons must not fire.
+            if(!paused&&!IsCursorHidden()) {
+                const Vector2 pointer=GetMousePosition();
+                if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT))runtime.uiClickAt(pointer,float(GetScreenWidth()),float(GetScreenHeight()));
+                else runtime.uiPointer(pointer,float(GetScreenWidth()),float(GetScreenHeight()));
+            }
             runtime.update(GetFrameTime(),input);
             BeginDrawing();ClearBackground(ui::theme::background);
             RigRenderState avatar{&runtime.rig(),runtime.pose(),runtime.renderCharacterRoot()};
             renderer.drawScene(runtime.scene(),runtime.playerCamera().camera(),GetScreenWidth(),GetScreenHeight(),0,runtime.playerCamera().avatarHidden()?nullptr:&avatar,false);
             DrawExperienceOverlay(runtime,GetScreenWidth(),GetScreenHeight(),font);
+            DrawLuaUi(runtime,GetScreenWidth(),GetScreenHeight(),font);
             DrawRectangleRounded({16,16,245,58},.2f,8,ui::theme::panel);
             if(logo.id){BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{24,21,48,48},{0,0},0,WHITE);EndBlendMode();}
             label("LINBLUX Player",84,35,18,ui::theme::text);
