@@ -163,6 +163,10 @@ int main() {
         }
         require(sounds >= 4, "the demo must publish its activation/reload/impact/equip sounds");
 
+        runtime.inventory().remove(itemId);step(90,{});
+        require(!runtime.itemActions().known(itemId),"destroyed item retained action state");
+        for(const auto& object:runtime.scene().objects())require(!attributeFlag(*object,"efeito_rifle"),"effect survived item cleanup");
+        require(runtime.scripts().errorCount()==0,"errors while cleaning effects: "+scriptErrors(runtime));
         runtime.stop(false);
         require(projectio::toJson(world)==authored,"Play modified authored world");
         const auto temporary=fs::temp_directory_path()/("linblux-rifle-roundtrip-"+experiences::newId());

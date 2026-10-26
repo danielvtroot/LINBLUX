@@ -8,6 +8,21 @@ jogador: E coleta, 1 equipa, clique atira, R recarrega e Delete solta.
 local v = linblux.vec3
 local raiz = linblux.scene.root
 
+-- O sistema do mundo possui os efeitos e sua limpeza. Destruir/desabilitar
+-- o Script do item não cancela o descarte das Parts que já foram emitidas.
+linblux.events.on("rifle.efeito",function(dados)
+    local tracer=dados.kind=="tracer"
+    local efeito=linblux.scene.create("part",{name=tracer and "Tracante" or "Faisca",
+        position=v(dados.x,dados.y,dados.z),size=tracer and v(.22,.22,.22) or v(.32,.32,.32),
+        color=v(255,210,110),anchored=not tracer,collidable=false,material="emissive"})
+    efeito:set_attribute("efeito_rifle",true)
+    if tracer then efeito.velocity=v(dados.dx*220,dados.dy*220,dados.dz*220) end
+    task.spawn(function()
+        task.wait(tracer and .9 or .08)
+        if linblux.scene.find(tonumber(efeito.id)) then efeito:destroy() end
+    end)
+end)
+
 local dica, dicaRotulo
 
 local function mostrarDica(texto)
