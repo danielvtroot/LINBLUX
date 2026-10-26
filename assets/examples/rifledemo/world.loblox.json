@@ -376,7 +376,8 @@
    "canCollide": true,
    "attributes": {
     "decal_image": "assets/logo.png",
-    "decal_face": "Back"
+    "decal_face": "Back",
+    "decal_flip_u": true
    }
   }
  ],

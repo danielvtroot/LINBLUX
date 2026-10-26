@@ -688,7 +688,7 @@ Color Tint(const std::string* hex) {
 void DrawFaceQuad(Vector3 position, Quaternion rotationQuat, Vector3 size, int face,
                   const Texture2D& tex, float alpha, Color tint, Vector2 repeatUv,
                   Vector2 offsetUv, float uvRotation, Vector3 lightDirection, float sunIntensity,
-                  float brightness, float outward = 0.02f) {
+                  float brightness, float outward = 0.02f, bool flipU = false) {
     const Vector3 half = Vector3Scale(size, 0.5f);
     const FaceDef& def = kFaces[face];
     // Extensões reais no plano da face.
@@ -708,7 +708,7 @@ void DrawFaceQuad(Vector3 position, Quaternion rotationQuat, Vector3 size, int f
         v = (v - 0.5f) * repeatUv.y + offsetUv.y;
         const float angle=uvRotation*DEG2RAD,c=std::cos(angle),s=std::sin(angle);
         const float previousU=u;u=previousU*c+v*s;v=-previousU*s+v*c;
-        return std::pair<float, float>{u + 0.5f, v + 0.5f};
+        return std::pair<float, float>{flipU ? .5f-u : u+.5f, v+.5f};
     };
     // Cantos locais: bl, br, tr, tl ao longo de u/v.
     const Vector3 local[4] = {
@@ -755,10 +755,10 @@ void DrawFaceQuad(Vector3 position, Quaternion rotationQuat, Vector3 size, int f
 void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
               Color tint, Vector2 repeatUv, Vector2 offsetUv, int rotation,
               Vector3 lightDirection, float sunIntensity, float brightness,
-              float outward = 0.02f) {
+              float outward = 0.02f, bool flipU = false) {
     DrawFaceQuad(part.position(), part.rotation(), part.size(), face, tex, alpha, tint,
                  repeatUv, offsetUv, rotation, lightDirection, sunIntensity, brightness,
-                 outward);
+                 outward, flipU);
 }
 // Legacy R6 images use Front only; the previous six-face loop was the bug.
 // offset just enough to avoid z-fighting while staying glued to the animated
@@ -806,7 +806,9 @@ void DrawLayer(const Part& part, const char* imageKey, const char* faceKey,
     if (tex.id == 0) return;
     DrawQuad(part, face, tex, static_cast<float>(1.0f - std::clamp(alpha, 0.0, 1.0)),
              Tint(FindText(part, tintKey)), repeat, offset, (int)std::lround(rotation),
-             lightDirection, sunIntensity, brightness);
+             lightDirection, sunIntensity, brightness,.02f,
+             [&](){const auto it=part.attributes().find(std::string(imageKey)=="decal_image"?"decal_flip_u":"texture_flip_u");
+                 return it!=part.attributes().end()&&std::holds_alternative<bool>(it->second)&&std::get<bool>(it->second);}());
 }
 }  // namespace skins
 
@@ -832,7 +834,9 @@ void DrawPartSkins(const Part& part, const std::string& assetsDir,
             repeat={extent(face.uAxis)/value.studsPerTileU,extent(face.vAxis)/value.studsPerTileV};
         }
         skins::DrawFaceQuad(part.position(),part.rotation(),part.size(),value.face,texture,1-value.transparency,value.tint,
-            repeat,{value.offsetU,value.offsetV},value.rotation,lightDirection,sunIntensity,brightness,.021f);
+            repeat,{value.offsetU,value.offsetV},value.rotation,lightDirection,sunIntensity,brightness,.021f,
+            [&](){const auto it=surface.attributes().find("flip_u");
+                return it!=surface.attributes().end()&&std::holds_alternative<bool>(it->second)&&std::get<bool>(it->second);}());
     }
     rlDrawRenderBatchActive();rlEnableDepthMask();
 }
