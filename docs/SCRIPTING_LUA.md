@@ -630,3 +630,13 @@ Exemplos reais:
   interativa com aceitar/dispensar.
 - [ui_hud_vida.lua](../assets/examples/lua/ui_hud_vida.lua): HUD de vida ligado
   ao personagem.
+
+### Orientação UV compatível
+
+A projeção legada preserva seus UVs para não modificar projetos existentes.
+Uma peça pode optar pela inversão U com
+`parte:set_attribute("decal_flip_u", true)` ou `texture_flip_u` para a camada
+repetida. Componentes Surface/Decal/Texture usam seu próprio atributo
+`superficie:set_attribute("flip_u", true)`. A imagem original não é alterada;
+a configuração é salva nos atributos e incluída no `.lo`.
+A placa do RifleDemo demonstra face Back e `decal_flip_u`, com logo legível.

@@ -59,6 +59,7 @@ int main() {
         std::string error;
         require(projectio::load(world, (demo / "world.loblox.json").string(), error), "load: " + error);
 
+        require(world.findPart(18)&&attributeFlag(*world.findPart(18),"decal_flip_u"),"demo lost explicit UV orientation");
         const auto authored=projectio::toJson(world);
         game::RuntimeSession runtime;
         require(runtime.start(world, error), "start: " + error);
@@ -177,6 +178,7 @@ int main() {
         library.exportPackage(installed,temporary/"RifleDemo.lo");
         experiences::ExperienceManager restored(temporary/"restored",{},temporary/"defaults2");
         const auto imported=restored.importPackage(temporary/"RifleDemo.lo");Scene reopened;restored.open(imported,reopened);
+        require(reopened.findPart(18)&&attributeFlag(*reopened.findPart(18),"decal_flip_u"),"package lost UV orientation");
         require(runtime.start(reopened,error),"package start: "+error);step(120,{});
         require(runtime.scripts().errorCount()==0,"package lost scripts/resources: "+scriptErrors(runtime));
         require(runtime.inventory().worldItems().size()==1,"package lost item prototype");
