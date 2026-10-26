@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -22,7 +23,7 @@ custom_defaults=root/'data/linblux/engine-defaults'
 shutil.copytree(root/'defaults',custom_defaults)
 environment=dict(os.environ,HOME=str(root/'home'),XDG_DATA_HOME=str(root/'data'),
  XDG_CONFIG_HOME=str(root/'config'),XDG_STATE_HOME=str(root/'state'),
- LIBGL_ALWAYS_SOFTWARE='1',LP_NUM_THREADS='2')
+ LIBGL_ALWAYS_SOFTWARE='1',LP_NUM_THREADS='2',LOBLOX_TRACE_UI='1')
 trace=root/'state/linblux/linblux.jsonl'
 def events():
  return [json.loads(line) for line in trace.read_text().splitlines()] if trace.exists() else []
@@ -82,6 +83,14 @@ def dialog_primary(path):
  bottom=max(y for y,_,_ in rows);group=[r for r in rows if bottom-24<=r[0]<=bottom]
  left=min(r[1] for r in group);right=max(r[2] for r in group)
  return ((left+right)//2,sum(y for y,_,_ in group)//len(group))
+def traced_control(log,element_id):
+ # The Studio reports its real element geometry after every resize when
+ # LOBLOX_TRACE_UI is set; target the control by id, never by a guess.
+ pattern=re.compile(r'#'+re.escape(element_id)+r' \S*: ([\d.]+)x([\d.]+) at ([\d.]+),([\d.]+)')
+ found=pattern.findall(log.read_text())
+ if not found:return None
+ width,height,x,y=(float(value) for value in found[-1])
+ return (x+width/2,y+height/2)
 def footer_primary(path):
  image=Image.open(path).convert('RGB')
  rows=[]
@@ -172,22 +181,19 @@ def run(phase):
     project=Path(opened['file']);manifest=json.loads((project/'experience.json').read_text());place=project/manifest['mainPlace'];original=place.read_bytes();world=json.loads(original)
     assert world['game']['defaultRig']==expected['rig']
     assert any(o.get('name')=='MarcadorPadrao' for o in world['objects'])
-    # Start Play with the editor shortcut: stable regardless of the header
-    # layout, and the editor ignores it while a text field is being edited.
-    # Retry because the Home transition can swallow the first press.
-    time.sleep(1.2)
-    start=None
-    # xdotool --window injects a synthetic event GLFW ignores; focus the real
-    # window and let XTEST deliver the shortcut to the editor.
-    xdo('windowfocus','--sync',window)
-    for _ in range(4):
-     xdo('key','F5')
-     deadline=time.monotonic()+5
-     while time.monotonic()<deadline and not start:
-      start=next((e for e in events()[before:] if e.get('subsystem')=='runtime' and e.get('event')=='start'),None)
-      if not start:time.sleep(.1)
-     if start:break
-    assert start,'Play shortcut did not start the inherited character';assert start.get('context',{}).get('rig')==expected['rig'],start
+    # Start Play through the editor's own play control, located by element id
+    # in the Studio's geometry trace.  The F5 shortcut only reaches the editor
+    # when the pointer owns the viewport, and this flow ends on the form footer.
+    play=None
+    deadline=time.monotonic()+20
+    while time.monotonic()<deadline:
+     play=traced_control(root/(phase+'.log'),'play')
+     if play:break
+     time.sleep(.2)
+    assert play,f'Editor play control was not traced: {root}'
+    click(window,*play)
+    start=wait(lambda:next((e for e in events()[before:] if e.get('subsystem')=='runtime' and e.get('event')=='start'),None))
+    assert start.get('context',{}).get('rig')==expected['rig'],start
     time.sleep(1);shot('actual-new-character-playing')
     xdo('keydown','Shift_L');xdo('keydown','F5');time.sleep(.2);xdo('keyup','F5');xdo('keyup','Shift_L')
     wait(lambda:any(e.get('subsystem')=='runtime' and e.get('event')=='stop' for e in events()[before:]))
