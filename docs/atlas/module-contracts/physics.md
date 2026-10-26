@@ -47,3 +47,10 @@ enumeração. Cota compartilhada por quadro e máximo 256 resultados.
 `body` atualiza massa/inércia e parâmetros no corpo existente, preservando
 velocidades e suspensão por gizmo. `bodyMass` consulta o Bullet. JSON opcional
 `body`/cenas antigas e duplicação mantidos por ProjectIO/Scene.
+
+**Juntas fixas:** pares de Attachments são a fonte da verdade em Scene.
+PhysicsWorld mantém btFixedConstraint por ID de origem, atualiza quadros antes
+do passo e remove constraints antes dos corpos. Não aloca por quadro quando
+o vínculo permanece estável. Sem juntas duplicadas por âncora; edição de
+corpos suspende a constraint. Remoção/desconexão/clone/JSONv6 são validados em
+AttachmentJoints (linblux_studio); exemplo juntas.lua roda no Player real.

@@ -100,13 +100,16 @@ public:
     const char* className() const override { return "Attachment"; }
     InstanceClass instanceClass() const override { return InstanceClass::Attachment; }
     const ModelFrame& localFrame() const { return local_; }
+    InstanceId jointTarget() const { return jointTarget_; }
     bool setLocalFrame(const ModelFrame& frame) {
         if(!frame.valid()||frame.scale!=1)return false;
         local_=frame;
         return true;
     }
 private:
+    friend class Scene;
     ModelFrame local_;
+    InstanceId jointTarget_=0;
 };
 // Groups have no physics body. Scene owns propagation of a Model's frame.
 class Container final : public Instance {

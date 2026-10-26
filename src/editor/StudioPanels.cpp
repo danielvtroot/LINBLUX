@@ -253,6 +253,13 @@ void EditorUI::drawInstanceProperties(Instance& object) {
     }
     if(object.instanceClass()==InstanceClass::Attachment){
         auto& attachment=static_cast<Attachment&>(object);auto frame=attachment.localFrame();auto angles=EulerDegreesZYXFromQuat(frame.rotation);
+        if(ImGui::BeginCombo("Junta fixa",attachment.jointTarget()?"Conectado":"Sem junta")){
+            std::string error;if(ImGui::Selectable("Desconectar"))if(!scene_.connectAttachments(object.id(),0,error))setStatus(error,true);
+            for(const auto& candidate:scene_.objects())if(candidate->instanceClass()==InstanceClass::Attachment&&candidate.get()!=&object&&candidate->parent()->isPart()&&candidate->parent()!=object.parent()){
+                const auto label=candidate->parent()->name()+" / "+candidate->name()+"##"+std::to_string(candidate->id());
+                if(ImGui::Selectable(label.c_str(),attachment.jointTarget()==candidate->id()))if(!scene_.connectAttachments(object.id(),candidate->id(),error))setStatus(error,true);
+            }ImGui::EndCombo();
+        }
         bool changed=ImGui::InputFloat3("Posição local",&frame.position.x,"%.3f",ImGuiInputTextFlags_EnterReturnsTrue);
         if(ImGui::InputFloat3("Rotação local",&angles.x,"%.2f",ImGuiInputTextFlags_EnterReturnsTrue)){frame.rotation=QuatFromEulerDegreesZYX(angles);changed=true;}
         if(changed&&!attachment.setLocalFrame(frame))setStatus("Transformação do Attachment inválida.",true);

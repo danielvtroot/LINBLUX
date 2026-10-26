@@ -624,6 +624,12 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             }
         } else if(node->instanceClass()==InstanceClass::Attachment) {
             const auto& local=static_cast<const Attachment&>(*node).localFrame();const auto angles=EulerDegreesZYXFromQuat(local.rotation);
+            group("Junta fixa · duas peças");
+            const auto target=static_cast<const Attachment&>(*node).jointTarget();
+            s+="<div class=\"property\"><label>Conectar a</label><select id=\"prop-Attachment.Link\" data-node=\""+id+"\" data-property=\"Attachment.Link\"><option value=\"0\""+(target?std::string():" selected=\"selected\"")+">Sem junta</option>";
+            for(const auto& candidate:ui.scene_.objects())if(candidate->instanceClass()==InstanceClass::Attachment&&candidate.get()!=node&&candidate->parent()->isPart()&&candidate->parent()!=node->parent()){
+                const auto cid=std::to_string(candidate->id());s+="<option value=\""+cid+"\""+(target==candidate->id()?" selected=\"selected\"":"")+">"+Escape(candidate->parent()->name()+" / "+candidate->name())+"</option>";
+            }s+="</select></div>";
             group("Attachment · transformação local");
             for(int axis=0;axis<3;++axis){input("Attachment.Position."+std::to_string(axis),Num((&local.position.x)[axis]),"Posição local "+std::string(1,char('X'+axis)));
                 input("Attachment.Rotation."+std::to_string(axis),Num((&angles.x)[axis]),"Rotação local "+std::string(1,char('X'+axis)));}

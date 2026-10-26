@@ -21,6 +21,8 @@ def main():
     example = (root / "assets/examples/lua/temporizadores.lua").read_text()
     example += '\nlinblux.events.on("stop", function() assert(linblux.scene.root:get_attribute("timer_concluido")) end)\n'
     cases = [
+        ("Juntas.lua",(root / "assets/examples/lua/juntas.lua").read_text(),0,"erros Lua: 0"),
+        ("JuntaInvalida.lua","local p=linblux.scene.create('part');local a=linblux.scene.create('attachment',{parent=p});a:connect_to(a)",1,"duas peças distintas"),
         ("AttachmentPaiInvalido.lua", "linblux.scene.create('attachment')",1,"Não foi possível criar o objeto"),
         ("AttachmentLeitura.lua", "local p=linblux.scene.create('part');local a=linblux.scene.create('attachment',{parent=p});a.world_position=linblux.vec3(0,0,0)",1,"somente leitura"),
         ("Attachments.lua",(root / "assets/examples/lua/attachments.lua").read_text(),0,"erros Lua: 0"),

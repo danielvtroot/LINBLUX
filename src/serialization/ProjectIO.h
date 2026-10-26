@@ -9,7 +9,7 @@ class Scene;
 namespace projectio {
 
 // Versao atual do formato. Arquivos com versao maior sao rejeitados.
-constexpr int kFormatVersion = 5;
+constexpr int kFormatVersion = 6;
 constexpr const char* kFormatName = "loblox-project";
 
 // Serializa a cena inteira (servicos, hierarquia, propriedades).

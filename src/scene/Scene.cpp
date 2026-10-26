@@ -176,6 +176,16 @@ bool Scene::validate(std::string& error) const {
         error = "servicos ausentes do indice de ids";
         return false;
     }
+    for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment){
+        const auto& anchor=static_cast<const Attachment&>(*node);
+        if(!anchor.localFrame().valid()){error="Attachment inválido.";return false;}
+        if(!anchor.jointTarget())continue;const auto* target=find(anchor.jointTarget());
+        if(!target||target==node.get()||target->instanceClass()!=InstanceClass::Attachment||!node->parent()->isPart()||!target->parent()||!target->parent()->isPart()||target->parent()==node->parent()){
+            error="Referência de junta inválida.";return false;}
+        if(static_cast<const Attachment*>(target)->jointTarget()){error="Âncora de destino já vinculada.";return false;}
+        for(const auto& other:objects_)if(other.get()!=node.get()&&other->instanceClass()==InstanceClass::Attachment&&static_cast<const Attachment&>(*other).jointTarget()==anchor.jointTarget()){
+            error="Âncora de destino compartilhada por duas juntas.";return false;}
+    }
     std::size_t actualParts = 0;
     for (const auto& object : objects_) {
         if (object->isPart()) ++actualParts;
@@ -374,6 +384,30 @@ Attachment* Scene::createAttachment(Instance* parent,const std::string& name,Ins
     auto node=std::make_unique<Attachment>(forcedId?forcedId:allocateId(),forcedId?name:makeUniqueName(name));
     auto* raw=node.get();return adopt(std::move(node),parent)?raw:nullptr;
 }
+bool Scene::connectAttachments(InstanceId source,InstanceId target,std::string& error,bool preserve) {
+    auto* a=find(source);auto* b=find(target);
+    if(!a||a->instanceClass()!=InstanceClass::Attachment){error="Selecione um Attachment de origem.";return false;}
+    auto& anchor=static_cast<Attachment&>(*a);
+    if(!target){
+        anchor.jointTarget_=0;
+        for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment&&static_cast<const Attachment&>(*node).jointTarget()==source)static_cast<Attachment*>(node.get())->jointTarget_=0;
+        error.clear();return true;
+    }
+    if(!b||b->instanceClass()!=InstanceClass::Attachment||a==b||!a->parent()->isPart()||!b->parent()->isPart()||a->parent()==b->parent()){
+        error="A junta requer Attachments de duas peças distintas.";return false;}
+    for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment&&node.get()!=a){
+        const auto& other=static_cast<const Attachment&>(*node);
+        if(other.jointTarget()==source||other.jointTarget()==target||(node.get()==b&&other.jointTarget())){
+            error="Attachment já participa de outra junta; crie outra âncora na peça.";return false;}
+    }
+    if(preserve){
+        ModelFrame world,owner;if(!attachmentFrame(source,world,error)||!attachmentParentFrame(b->parent(),owner,error))return false;
+        ModelFrame local;local.position=Vector3Scale(Vector3RotateByQuaternion(Vector3Subtract(world.position,owner.position),QuaternionInvert(owner.rotation)),1/owner.scale);
+        local.rotation=QuaternionNormalize(QuaternionMultiply(QuaternionInvert(owner.rotation),world.rotation));
+        if(!static_cast<Attachment*>(b)->setLocalFrame(local)){error="Quadro de ligação excede os limites.";return false;}
+    }
+    anchor.jointTarget_=target;error.clear();return true;
+}
 bool Scene::attachmentParentFrame(const Instance* owner,ModelFrame& frame,std::string& error) const {
     if(!owner||find(owner->id())!=owner){error="Pai do Attachment inexistente.";return false;}
     frame={};
@@ -382,7 +416,7 @@ bool Scene::attachmentParentFrame(const Instance* owner,ModelFrame& frame,std::s
         const auto* part=static_cast<const Part*>(owner);frame.position=part->position();frame.rotation=part->rotation();
         // Parts store world geometry. The nearest Model carries hierarchy scale.
         for(auto* ancestor=owner->parent();ancestor;ancestor=ancestor->parent())if(ancestor->instanceClass()==InstanceClass::Model){
-            ModelFrame model;if(!modelFrame(ancestor->id(),model,error))return false;frame.scale=model.scale;break;}
+            const auto& model=static_cast<const Container&>(*ancestor);frame.scale=model.hasModelFrame()?model.modelFrame().scale:1;break;}
     }else if(!modelFrame(owner->id(),frame,error))return false;
     error.clear();return true;
 }
@@ -421,6 +455,11 @@ bool Scene::canParent(const Instance* object, const Instance* parent) const {
     if (!object || !parent || find(object->id()) != object || find(parent->id()) != parent ||
         isService(object) || object == parent || object->isAncestorOf(parent)) return false;
     if (!accepts(object->instanceClass(),parent)) return false;
+    if(object->instanceClass()==InstanceClass::Attachment){
+        const auto linked=static_cast<const Attachment*>(object)->jointTarget();const auto* target=find(linked);
+        if(linked&&(!parent->isPart()||(target&&target->parent()==parent)))return false;
+        for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment&&static_cast<const Attachment&>(*node).jointTarget()==object->id()&&(!parent->isPart()||node->parent()==parent))return false;
+    }
     unsigned depth = 0;
     for (auto* p = parent; p; p = p->parent()) if (++depth > 128) return false;
     // Account for descendants too, so reparent cannot bypass the depth budget.
@@ -579,6 +618,14 @@ Instance* Scene::duplicateTree(const Instance& source, Instance* parent) {
     for (auto* child : children) {
         if (!duplicateTree(*child,copy)) { removeSubtree(copy); return nullptr; }
     }
+    // References inside a clone point to cloned anchors, never the source assembly.
+    std::map<InstanceId,Instance*> remap;
+    std::function<void(const Instance*,Instance*)> map=[&](const Instance* a,Instance* b){remap[a->id()]=b;for(size_t i=0;i<a->children().size();++i)map(a->children()[i],b->children()[i]);};
+    map(&source,copy);
+    for(const auto& pair:remap)if(pair.second->instanceClass()==InstanceClass::Attachment){
+        const auto target=static_cast<const Attachment*>(find(pair.first))->jointTarget();
+        static_cast<Attachment*>(pair.second)->jointTarget_=remap.count(target)?remap.at(target)->id():0;
+    }
     return copy;
 }
 
@@ -601,6 +648,7 @@ void Scene::removeSubtree(Instance* object) {
         removeSubtree(child);
     }
 
+    for(const auto& node:objects_)if(node->instanceClass()==InstanceClass::Attachment&&static_cast<const Attachment&>(*node).jointTarget()==object->id())static_cast<Attachment*>(node.get())->jointTarget_=0;
     notifyRemoval(object);
     selectionIds_.erase(std::remove(selectionIds_.begin(),selectionIds_.end(),object->id()),selectionIds_.end());
     if(selection_==object)selection_=selectionIds_.empty()?nullptr:find(selectionIds_.back());

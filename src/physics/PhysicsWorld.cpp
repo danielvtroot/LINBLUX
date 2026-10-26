@@ -5,6 +5,7 @@
 #include <cmath>
 
 #include <btBulletDynamicsCommon.h>
+#include <BulletDynamics/ConstraintSolver/btFixedConstraint.h>
 
 #include "scene/Scene.h"
 
@@ -66,6 +67,7 @@ PhysicsWorld::~PhysicsWorld() {
 
 void PhysicsWorld::attach(Scene& scene) {
     scene.addRemovalListener([this](Instance* object) {
+        if(object)removeJointsFor(object->id());
         if (object != nullptr && object->isPart()) {
             removePart(object->id());
         }
@@ -81,9 +83,11 @@ void PhysicsWorld::rebuildAll(Scene& scene) {
             part->clearDirty();
         }
     }
+    syncJoints(scene);
 }
 
 void PhysicsWorld::clearBodies() {
+    for(auto& pair:joints_){world_->removeConstraint(pair.second.constraint);delete pair.second.constraint;}joints_.clear();
     for (auto& pair : bodies_) {
         BodyEntry& entry = pair.second;
         world_->removeRigidBody(entry.body);
@@ -176,6 +180,7 @@ void PhysicsWorld::addPart(Part* part) {
 }
 
 void PhysicsWorld::destroyEntry(InstanceId id) {
+    removeJointsFor(id);
     editingParts_.erase(id);
     const auto it = bodies_.find(id);
     if (it == bodies_.end()) {
@@ -201,6 +206,7 @@ bool PhysicsWorld::hasBody(InstanceId id) const {
 
 bool PhysicsWorld::validate(const Scene& scene, std::string& error) const {
     error.clear();
+    if(world_->getNumConstraints()!=static_cast<int>(joints_.size())){error="Índice de juntas Bullet inconsistente.";return false;}
     std::size_t partCount = 0;
     for (Part* part : scene.parts()) {
         if (part == nullptr) {
@@ -377,6 +383,39 @@ bool PhysicsWorld::isPartEditing(InstanceId id) const {
     return editingParts_.find(id) != editingParts_.end();
 }
 
+void PhysicsWorld::removeJointsFor(InstanceId id) {
+    for(auto it=joints_.begin();it!=joints_.end();)if(it->first==id||it->second.target==id||it->second.a==id||it->second.b==id){
+        world_->removeConstraint(it->second.constraint);delete it->second.constraint;it=joints_.erase(it);
+    }else ++it;
+}
+void PhysicsWorld::syncJoints(Scene& scene) {
+    std::unordered_set<InstanceId> live;
+    for(const auto& node:scene.objects())if(node->instanceClass()==InstanceClass::Attachment){
+        const auto& a=static_cast<const Attachment&>(*node);const auto* other=scene.find(a.jointTarget());
+        if(!other||other->instanceClass()!=InstanceClass::Attachment||!a.parent()->isPart()||!other->parent()->isPart()||a.parent()==other->parent())continue;
+        const auto aid=a.parent()->id(),bid=other->parent()->id();if(!hasBody(aid)||!hasBody(bid))continue;
+        ModelFrame ownerA,ownerB;std::string error;
+        if(!scene.attachmentParentFrame(a.parent(),ownerA,error)||!scene.attachmentParentFrame(other->parent(),ownerB,error))continue;
+        auto local=[](const Attachment& anchor,float scale){btTransform frame;frame.setIdentity();frame.setOrigin(ToBullet(Vector3Scale(anchor.localFrame().position,scale)));frame.setRotation(ToBullet(anchor.localFrame().rotation));return frame;};
+        const auto frameA=local(a,ownerA.scale),frameB=local(static_cast<const Attachment&>(*other),ownerB.scale);
+        auto it=joints_.find(a.id());
+        if(it!=joints_.end()&&(it->second.target!=other->id()||it->second.a!=aid||it->second.b!=bid)){removeJointsFor(a.id());it=joints_.end();}
+        if(it==joints_.end()){
+            auto* constraint=new btFixedConstraint(*bodies_.at(aid).body,*bodies_.at(bid).body,frameA,frameB);
+            // Long lever arms under LINBLUX gravity need a tighter local solve.
+            // Keep the global solver budget unchanged for unconnected bodies.
+            constraint->setOverrideNumSolverIterations(64);
+            world_->addConstraint(constraint,true);joints_[a.id()]={constraint,other->id(),aid,bid};it=joints_.find(a.id());
+            bodies_.at(aid).body->activate(true);bodies_.at(bid).body->activate(true);
+        }else if(!(it->second.constraint->getFrameOffsetA()==frameA)||!(it->second.constraint->getFrameOffsetB()==frameB)){
+            it->second.constraint->setFrames(frameA,frameB);bodies_.at(aid).body->activate(true);bodies_.at(bid).body->activate(true);
+        }
+        it->second.constraint->setEnabled(!isPartEditing(aid)&&!isPartEditing(bid));live.insert(a.id());
+    }
+    for(auto it=joints_.begin();it!=joints_.end();)if(!live.count(it->first)){
+        world_->removeConstraint(it->second.constraint);delete it->second.constraint;it=joints_.erase(it);
+    }else ++it;
+}
 void PhysicsWorld::syncScene(Scene& scene) {
     for (Part* part : scene.parts()) {
         if (part == nullptr) {
@@ -392,6 +431,7 @@ void PhysicsWorld::syncScene(Scene& scene) {
             applyChanges(part);
         }
     }
+    syncJoints(scene);
 }
 
 void PhysicsWorld::simulate(Scene& scene, float deltaSeconds) {

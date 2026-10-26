@@ -76,6 +76,9 @@ int main(int argc,char** argv) {
         auto* muzzle=scene.createAttachment(part,"BocaDoCano");CHECK(muzzle);const auto muzzleId=muzzle->id();
         ModelFrame muzzleLocal;muzzleLocal.position={0,0,-2};CHECK(muzzle->setLocalFrame(muzzleLocal));
         ModelFrame muzzleWorld;CHECK(scene.attachmentFrame(muzzleId,muzzleWorld,bodyError));
+        auto* matePart=scene.createPart(PartShape::Block,{10,4,3},{1,1,1},"Encaixe portátil");CHECK(scene.reparent(matePart,portableModel,bodyError));
+        auto* mate=scene.createAttachment(matePart,"Encaixe");CHECK(mate);const auto mateId=mate->id();
+        CHECK(scene.connectAttachments(muzzleId,mateId,bodyError));
         const auto previous=author.activePlace();author.save(scene);CHECK(author.activePlace()!=previous);CHECK(fs::exists(previous));
         auto m=author.active()->manifest;m.name="Renamed";m.description="Updated description";author.updateMetadata(m);
         const auto goodManifest=Read(project.root/"experience.json");auto badMedia=m;badMedia.icon="assets/missing.png";
@@ -133,6 +136,7 @@ int main(int argc,char** argv) {
         CHECK(receivedScene.findPart(partId));CHECK(receivedScene.gameAssets().findRig(rigId));
         CHECK(receivedScene.find(muzzleId)&&receivedScene.find(muzzleId)->parent()->id()==partId);
         ModelFrame receivedMuzzle;CHECK(receivedScene.attachmentFrame(muzzleId,receivedMuzzle,bodyError));
+        CHECK(static_cast<const Attachment*>(receivedScene.find(muzzleId))->jointTarget()==mateId);
         CHECK(NearlyEqual(receivedMuzzle.position,muzzleWorld.position));CHECK(NearlyEqual(receivedMuzzle.rotation,muzzleWorld.rotation));
         ModelFrame receivedFrame;CHECK(receivedScene.modelFrame(modelId,receivedFrame,bodyError));CHECK(NearlyEqual(receivedFrame.scale,1.5f));
         CHECK(NearlyEqual(receivedFrame.rotation,portableFrame.rotation));CHECK(receivedScene.findPart(partId)->parent()->id()==modelId);

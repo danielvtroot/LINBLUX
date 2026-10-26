@@ -116,6 +116,36 @@ void ModelGizmoSession() {
     CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==after);
     CHECK(scene.remove(b));const auto missing=projectio::toJson(scene);CHECK(!session.applyEdit(edit,true,error));CHECK(projectio::toJson(scene)==missing);
 }
+void AttachmentJoints() {
+    Scene scene;std::string error;auto* model=scene.createContainer(InstanceClass::Model,nullptr,"Articulação");
+    auto* base=scene.createPart(PartShape::Block,{0,8,0},{2,2,2},"Base da junta");base->setAnchored(true);base->setCanCollide(false);
+    auto* arm=scene.createPart(PartShape::Block,{4,8,0},{2,2,2},"Peça móvel");arm->setCanCollide(false);
+    CHECK(scene.reparent(base,model,error));CHECK(scene.reparent(arm,model,error));
+    auto* a=scene.createAttachment(base,"Origem");auto* b=scene.createAttachment(arm,"Destino");CHECK(a&&b);if(!a||!b)return;
+    const auto position=arm->position();CHECK(scene.connectAttachments(a->id(),b->id(),error));CHECK(NearlyEqual(position,arm->position()));CHECK(a->jointTarget()==b->id());
+    CHECK(!scene.connectAttachments(a->id(),a->id(),error));CHECK(!scene.reparent(a,model,error));
+    CHECK(scene.validate(error));PhysicsWorld physics;physics.attach(scene);CHECK(physics.jointCount()==1&&physics.bodyCount()==2);
+    for(int i=0;i<120;++i)physics.simulate(scene,1.f/60);
+    if(!NearlyEqual(arm->position(),position,.03f))std::fprintf(stderr,"Joint rest actual %.5f %.5f %.5f expected %.5f %.5f %.5f\n",arm->position().x,arm->position().y,arm->position().z,position.x,position.y,position.z);
+    CHECK(NearlyEqual(arm->position(),position,.03f));
+    auto pose=a->localFrame();pose.rotation=QuatFromEulerDegreesZYX({0,60,0});CHECK(a->setLocalFrame(pose));
+    for(int i=0;i<120;++i)physics.simulate(scene,1.f/60);
+    const auto expected=Vector3Add(base->position(),Vector3RotateByQuaternion({4,0,0},pose.rotation));if(!NearlyEqual(arm->position(),expected,.05f))std::fprintf(stderr,"Joint animated actual %.5f %.5f %.5f expected %.5f %.5f %.5f\n",arm->position().x,arm->position().y,arm->position().z,expected.x,expected.y,expected.z);CHECK(NearlyEqual(arm->position(),expected,.05f));
+    auto* clone=scene.duplicateTree(*model);CHECK(clone);physics.syncScene(scene);CHECK(physics.jointCount()==2);
+    int remapped=0;for(const auto& node:scene.objects())if(clone->isAncestorOf(node.get())&&node->instanceClass()==InstanceClass::Attachment){
+        const auto target=static_cast<const Attachment&>(*node).jointTarget();if(target){++remapped;CHECK(clone->isAncestorOf(scene.find(target)));CHECK(target!=b->id());}}
+    CHECK(remapped==1);const auto json=projectio::toJson(scene);CHECK(nlohmann::json::parse(json)["version"]==6);
+    Scene loaded;CHECK(projectio::fromJson(loaded,json,error));CHECK(projectio::toJson(loaded)==json);
+    PhysicsWorld restored;restored.attach(loaded);CHECK(restored.jointCount()==2);
+    auto bad=nlohmann::json::parse(json);for(auto& node:bad["objects"])if(node["id"]==a->id())node["jointTarget"]=99999999u;
+    CHECK(!projectio::fromJson(scene,bad.dump(),error));CHECK(projectio::toJson(scene)==json);
+    CHECK(scene.remove(clone));CHECK(physics.jointCount()==1&&physics.bodyCount()==2);
+    CHECK(scene.connectAttachments(b->id(),0,error));physics.syncScene(scene);CHECK(physics.jointCount()==0&&a->jointTarget()==0);
+    CHECK(scene.connectAttachments(a->id(),b->id(),error));physics.syncScene(scene);CHECK(physics.jointCount()==1);
+    CHECK(scene.remove(b));CHECK(a->jointTarget()==0&&physics.jointCount()==0);
+    const auto height=arm->position().y;for(int i=0;i<60;++i)physics.simulate(scene,1.f/60);CHECK(arm->position().y<height-1);
+    CHECK(scene.validate(error));CHECK(physics.validate(scene,error));
+}
 void Attachments() {
     Scene scene;std::string error;
     auto* model=scene.createContainer(InstanceClass::Model,nullptr,"Rifle fictício");
@@ -1555,6 +1585,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    Hierarchy();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

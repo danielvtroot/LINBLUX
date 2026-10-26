@@ -369,6 +369,11 @@ struct LuaRuntime::Impl {
         else {value=Vector3RotateByQuaternion(Vector3Scale(value,frame.scale),frame.rotation);if(!Direction)value=Vector3Add(value,frame.position);}
         ModernVector(L,value);return 1;
     }
+    template<bool Disconnect> static int LinkAttachment(lua_State* L){
+        auto& self=Host(L);const auto source=self.instance(L,1).id();
+        const auto target=Disconnect?0:self.instance(L,2).id();self.modelBudget();std::string error;
+        if(!self.runtime->mutableScene().connectAttachments(source,target,error))throw std::runtime_error(error);return 0;
+    }
     static int ScaleModel(lua_State* L){auto& self=Host(L);const auto id=self.instance(L,1).id();auto frame=ModelPose(L,1);frame.scale*=float(Number(L,2));self.modelBudget();std::string error;if(!self.runtime->mutableScene().transformModel(id,frame,error))throw std::runtime_error(error);return 0;}
     static int UngroupModel(lua_State* L){auto& self=Host(L);const auto id=self.instance(L,1).id();self.modelBudget();std::string error;if(!self.runtime->mutableScene().ungroup(id,error))throw std::runtime_error(error);return 0;}
     static int GroupModel(lua_State* L) {
@@ -1040,6 +1045,9 @@ struct LuaRuntime::Impl {
         auto& self=Host(L);const auto h=self.handle(L,1);const char* key=Text(L,2);
         if(h.modern&&h.kind==Kind::Instance)if(const auto* object=self.runtime->scene().find(h.id);object&&object->instanceClass()==InstanceClass::Attachment) {
             const auto& local=static_cast<const Attachment&>(*object).localFrame();
+            if(Eq(key,"connect_to")){lua_pushcfunction(L,Safe<LinkAttachment<false>>);return 1;}
+            if(Eq(key,"disconnect")){lua_pushcfunction(L,Safe<LinkAttachment<true>>);return 1;}
+            if(Eq(key,"joint")){self.pushInstance(L,self.runtime->scene().find(static_cast<const Attachment&>(*object).jointTarget()),true);return 1;}
             if(Eq(key,"position")){ModernVector(L,local.position);return 1;}
             if(Eq(key,"rotation")){ModernVector(L,EulerDegreesZYXFromQuat(local.rotation));return 1;}
             if(Eq(key,"transform")){PushModel(L,local);return 1;}
@@ -1176,6 +1184,10 @@ struct LuaRuntime::Impl {
         auto& self=Host(L);const auto h=self.handle(L,1);const char* key=Text(L,2);
         if(h.modern&&h.kind==Kind::Player&&Eq(key,"velocity")){
             const auto value=ReadVector(L,3);std::string error;if(!self.runtime->playerMotion(value,game::PartMotion::Velocity,error))throw std::runtime_error(error);return 0;
+        }
+        if(h.modern&&h.kind==Kind::Instance&&Eq(key,"joint"))if(const auto* object=self.runtime->scene().find(h.id);object&&object->instanceClass()==InstanceClass::Attachment){
+            const auto target=lua_isnil(L,3)?0:self.instance(L,3).id();self.modelBudget();std::string error;
+            if(!self.runtime->mutableScene().connectAttachments(object->id(),target,error))throw std::runtime_error(error);return 0;
         }
         if(h.modern&&h.kind==Kind::Instance)if(auto* object=self.runtime->mutableScene().find(h.id);object&&object->instanceClass()==InstanceClass::Attachment&&
             (Eq(key,"position")||Eq(key,"rotation")||Eq(key,"transform")||Eq(key,"world_position")||Eq(key,"world_rotation")||Eq(key,"direction")||Eq(key,"world_transform"))) {

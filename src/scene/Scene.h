@@ -63,6 +63,7 @@ public:
     // Copy properties in place, with a fresh ID and unique name. Selection is unchanged.
     Part* duplicatePart(const Part& source);
     Attachment* createAttachment(Instance* parent,const std::string& name="Attachment",InstanceId forcedId=0);
+    bool connectAttachments(InstanceId source,InstanceId target,std::string& error,bool preserve=true);
     bool attachmentParentFrame(const Instance* owner,ModelFrame& frame,std::string& error) const;
     bool attachmentFrame(InstanceId attachment,ModelFrame& world,std::string& error) const;
     Surface* createSurface(InstanceClass type,Instance* parent,const std::string& name="",InstanceId forcedId=0);

@@ -216,6 +216,11 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             }
             else if(node->instanceClass()==InstanceClass::Attachment&&name.rfind("Attachment.",0)==0) {
                 auto& attachment=static_cast<Attachment&>(*node);auto frame=attachment.localFrame();
+                if(name=="Attachment.Link"){
+                    std::size_t used=0;const auto target=std::stoull(c.value,&used);std::string error;
+                    if(used!=c.value.size()||!e.scene_.connectAttachments(node->id(),target,error))throw std::runtime_error(error.empty()?"Referência de junta inválida.":error);
+                    return true;
+                }
                 const auto split=name.find_last_of('.');const int axis=std::stoi(name.substr(split+1));
                 if(axis<0||axis>2)throw std::runtime_error("Eixo do Attachment inválido.");
                 const auto value=Number(c.value);
