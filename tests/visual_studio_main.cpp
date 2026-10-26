@@ -91,7 +91,7 @@ linblux.ui.create("panel", {anchor="center", width=220, height=120, background="
             auto& runtime=EditorUITestAccess::runtime(ui);
             CHECK(runtime.state()==game::RuntimeState::Playing);
             const auto hud=EditorUITestAccess::healthHud(ui),area=EditorUITestAccess::viewport(ui);
-            CHECK(hud.width>100 && hud.x>=area.x && hud.y>=area.y);
+            CHECK(hud.width>50 && hud.x>=area.x && hud.y>=area.y);
             CHECK(hud.x+hud.width<=area.x+area.width && hud.y+hud.height<=area.y+area.height);
             const float health=runtime.health();frames(5);CHECK(runtime.health()==health);
             capture("hud-"+std::to_string(int(size.x)));

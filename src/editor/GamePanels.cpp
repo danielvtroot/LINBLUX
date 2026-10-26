@@ -315,6 +315,10 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     DrawLuaUi(runtime_,viewportWidth_,viewportHeight_);
     EndTextureMode();
     resolveViewport();
+    if(runtime_.state()==game::RuntimeState::Playing&&runtime_.healthHud().visible) {
+        const float scale=std::clamp(viewportHeight_/720.f,.75f,1.5f);
+        healthHud_={image.x+viewportWidth_-93*scale,image.y+17*scale,82*scale,82*scale};
+    }
     if(frontend_)return; // RML owns gameplay presentation; no duplicate HUD/menu.
     auto* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled({menuButton.x,menuButton.y},{menuButton.x+menuButton.width,menuButton.y+menuButton.height},
@@ -343,7 +347,6 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     }
     const float health=runtime_.health(),maximum=runtime_.settings().maxHealth;
     const ImU32 color=IM_COL32(215,38,63,255);
-    healthHud_={image.x+viewportWidth_-93,image.y+17,82,82};
     const auto& settings=runtime_.settings();
     if (!runtime_.playerCamera().avatarHidden() && (settings.healthDisplayType!=2 || settings.nameDisplayDistance>0)) {
         const auto head=runtime_.rig().evaluate(runtime_.pose(),runtime_.renderCharacterRoot())[game::Head];
