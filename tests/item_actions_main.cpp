@@ -121,9 +121,6 @@ linblux.items.collect(item)
 linblux.items.equip(item)
 linblux.items.configure(item, {magazine=6, reserve=6, consume=1, interval=0.25, reload_time=0.3})
 pub("ammo_inicial", linblux.items.combat(item).ammo)
-assert(not pcall(linblux.items.configure,item,{magazine=4294967302}),"inteiro truncado na configuração")
-assert(not pcall(linblux.items.set_ammo,item,4294967302,6),"inteiro truncado na munição")
-assert(linblux.items.combat(item).ammo==6,"configuração inválida modificou estado")
 
 local primeiro_evento = false
 linblux.events.on("item_action", function(evento)
@@ -444,6 +441,24 @@ linblux.ui.create("label", {text=true})
                     "invalid UI property did not fail:\n" + text);
             require(refused.ui().count() == 0, "failed ui.create left an orphan element:\n" + text);
             refused.stop(false);
+        }
+        // A sandbox não oferece pcall: valide erros de cada script isolado,
+        // sem liberar acesso adicional só para o teste.
+        for(const std::string call:{"linblux.items.configure(item,{magazine=4294967302})","linblux.items.set_ammo(item,4294967302,6)"}){
+            Scene numeric;numeric.buildDefaultScene();auto* script=numeric.createScript(InstanceClass::Script,numeric.ensureService(InstanceClass::ServerScriptService),"Numero.lua");
+            script->source=R"lua(
+local m=linblux.scene.create('model',{name='Teste'})
+linblux.scene.create('part',{parent=m,size=linblux.vec3(1,1,1)})
+linblux.items.register('teste',m)
+local item=linblux.items.spawn('teste')
+linblux.items.configure(item,{magazine=6,reserve=6})
+linblux.scene.root:set_attribute('checked_id',tonumber(item.id))
+)lua"+call;
+            game::RuntimeSession checked;require(checked.start(numeric,error),"numeric start");for(int i=0;i<3;++i)checked.update(1.f/60,{});
+            std::string messages;for(const auto& m:checked.scripts().messages())messages+=m.text;
+            require(messages.find("Munição fora dos limites")!=std::string::npos,"narrowed integer accepted: "+messages);
+            const auto id=InstanceId(attributeNumber(*checked.scene().workspace(),"checked_id"));
+            require(checked.itemActions().ammo(id)==6,"invalid integer changed ammo");checked.stop(false);
         }
         std::printf("Item actions: activation, ammo, reload, attachment, raycast, damage, HUD and cleanup OK\n");
     } catch (const std::exception& e) {
