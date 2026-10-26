@@ -370,10 +370,10 @@ struct LuaRuntime::Impl {
         ModernVector(L,value);return 1;
     }
     static int ItemsRegister(lua_State* L){
-        auto& h=Host(L);const std::string type=Text(L,1);auto& model=h.instance(L,2);game::ItemOptions options;
+        auto& h=Host(L);const std::string type=Text(L,1);Require(type.size()==lua_rawlen(L,1),"Tipo de item não aceita NUL");auto& model=h.instance(L,2);game::ItemOptions options;
         if(lua_gettop(L)>2){Require(lua_istable(L,3),"Configuração do item requer tabela");lua_pushnil(L);while(lua_next(L,3)){
             const char* key=Text(L,-2);
-            if(Eq(key,"name"))options.name=Text(L,-1);else if(Eq(key,"icon"))options.icon=Text(L,-1);
+            if(Eq(key,"name")){options.name=Text(L,-1);Require(options.name.size()==lua_rawlen(L,-1),"Nome não aceita NUL");}else if(Eq(key,"icon")){options.icon=Text(L,-1);Require(options.icon.size()==lua_rawlen(L,-1),"Ícone não aceita NUL");}
             else if(Eq(key,"equipable")){Require(lua_isboolean(L,-1),"equipable requer booleano");options.equipable=lua_toboolean(L,-1);}
             else if(Eq(key,"grip_position"))options.grip.position=ReadVector(L,-1);
             else if(Eq(key,"grip_rotation"))options.grip.rotation=QuatFromEulerDegreesZYX(ReadVector(L,-1));

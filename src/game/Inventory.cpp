@@ -43,12 +43,15 @@ void Inventory::registerType(const std::string& type,InstanceId prototype,ItemOp
     auto& h=*impl_;Need(!type.empty()&&type.size()<=64&&type.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")==std::string::npos,"Identificador do tipo de item inválido.");
     Need(h.types.size()<64&&!h.types.count(type),"Tipo de item já registrado ou limite de 64 tipos atingido.");
     auto* root=h.model(prototype);Need(!h.items.count(prototype),"Item ativo não pode virar um protótipo.");
+    for(const auto& active:h.items){auto* other=h.scene.find(active.first);Need(!other||(!root->isAncestorOf(other)&&!other->isAncestorOf(root)),"Protótipo não pode conter itens ativos nem pertencer a eles.");}
     for(const auto& t:h.types){auto* other=h.scene.find(t.second.prototype);Need(!other||(!root->isAncestorOf(other)&&!other->isAncestorOf(root)),"Protótipos de itens não podem se sobrepor.");}
     if(options.name.empty())options.name=root->name();Need(options.name.size()<=128&&options.name.find('\0')==std::string::npos&&options.icon.size()<=512&&options.grip.valid()&&options.grip.scale==1,"Configuração do item inválida.");
     if(!options.icon.empty()){options.icon=NormalizeImageReference(options.icon);Need(!ResolveImagePath(AssetsDir(),options.icon).empty(),"Ícone do item não encontrado nos recursos da experiência.");}
     const auto nodes=Nodes(root);Need(nodes.size()<=256,"Protótipo excede 256 componentes.");size_t parts=0;Impl::Type definition{prototype,options,{}};
     for(auto* n:nodes){parts+=n->isPart();definition.nodes.push_back(Capture(n));}
     Need(parts>0&&parts<=128,"Item requer de 1 a 128 peças.");
+    for(const auto& n:h.scene.objects())if(n->instanceClass()==InstanceClass::Attachment){const auto target=static_cast<const Attachment&>(*n).jointTarget();if(target){auto* other=h.scene.find(target);Need(other&&root->isAncestorOf(n.get())==root->isAncestorOf(other),"Protótipo possui junta ligada a um objeto externo.");}}
+
     h.types.emplace(type,definition);root->setAttribute("item_icon",options.icon);
     Present(h.scene,definition.nodes,false,false);
     for(auto* n:nodes)if(IsScriptClass(n->instanceClass()))static_cast<Script*>(n)->enabled=false;
