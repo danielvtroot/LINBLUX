@@ -317,3 +317,16 @@ PENDENTE imediato: E por proximidade, Delete e hotbar. Ainda não implementados
 por este commit. Continuam pendentes áudio completo/UI Lua/combate/RifleDemo,
 HUD/menu, Demo, distribuição, validação final e licenças/segurança. Nenhuma
 tag/Release criada. Não confundir catálogo e bolsa runtime com lançamento.
+
+## Alpha — E/Delete/hotbar
+
+Inventário PUBLICADO em e4863f3, relatório75168ad, push confirmado.
+Interação e controles IMPLEMENTADOS/TESTADOS/VALIDADOS NO PLAYER em 1258b0a5943d6e39e94faf98718d984f2a6f11e3.
+E cancela por release/alcance/pausa; linha de visão bloqueia paredes; Delete
+solta sem perder ID/dados; slots/páginas dinâmicos funcionam no Studio/Player.
+FAST15/15; IMPACT20/20 (global parcial); GUI final31,350 s,720p/1080p,
+fonte vetorial e captura inspecionada. Relatório27 e INTERACOES.md.
+
+PENDENTE imediato: áudio (ProbeAudio ainda decodifica tudo para duração; Player
+inicializa dispositivo após scripts). Depois UI Lua, RifleDemo, HUD/menu, Demo,
+pacote/instalação limpa e revisão final. Alpha ainda sem tag/Release.
