@@ -402,6 +402,9 @@ void PhysicsWorld::syncJoints(Scene& scene) {
         if(it!=joints_.end()&&(it->second.target!=other->id()||it->second.a!=aid||it->second.b!=bid)){removeJointsFor(a.id());it=joints_.end();}
         if(it==joints_.end()){
             auto* constraint=new btFixedConstraint(*bodies_.at(aid).body,*bodies_.at(bid).body,frameA,frameB);
+            // Long lever arms under LINBLUX gravity need a tighter local solve.
+            // Keep the global solver budget unchanged for unconnected bodies.
+            constraint->setOverrideNumSolverIterations(64);
             world_->addConstraint(constraint,true);joints_[a.id()]={constraint,other->id(),aid,bid};it=joints_.find(a.id());
             bodies_.at(aid).body->activate(true);bodies_.at(bid).body->activate(true);
         }else if(!(it->second.constraint->getFrameOffsetA()==frameA)||!(it->second.constraint->getFrameOffsetB()==frameB)){
