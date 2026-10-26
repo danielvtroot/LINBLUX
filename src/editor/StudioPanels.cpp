@@ -266,6 +266,12 @@ void EditorUI::drawInstanceProperties(Instance& object) {
         ModelFrame world;std::string error;if(scene_.attachmentFrame(object.id(),world,error))ImGui::Text("Posição global: %.3f %.3f %.3f",world.position.x,world.position.y,world.position.z);
     }
     if(object.instanceClass()==InstanceClass::Model) {
+        const auto mark=object.attributes().find("_linblux_item_prototype");bool prototype=mark!=object.attributes().end()&&std::holds_alternative<bool>(mark->second)&&std::get<bool>(mark->second);
+        if(ImGui::Checkbox("Protótipo de item",&prototype)){
+            object.setAttribute("_linblux_item_prototype",prototype);if(prototype&&!object.attributes().count("item_type"))object.setAttribute("item_type",std::string("item-")+std::to_string(object.id()));
+        }
+        if(prototype){const auto type=object.attributes().find("item_type");std::string value=type!=object.attributes().end()&&std::holds_alternative<std::string>(type->second)?std::get<std::string>(type->second):"";if(ImGui::InputText("Tipo de item",&value,ImGuiInputTextFlags_EnterReturnsTrue))object.setAttribute("item_type",value);}
+
         ModelFrame frame;std::string error;
         if(scene_.modelFrame(object.id(),frame,error)) {
             auto candidate=frame;auto angles=EulerDegreesZYXFromQuat(frame.rotation);bool changed=false;

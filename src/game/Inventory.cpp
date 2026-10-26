@@ -42,6 +42,15 @@ struct Inventory::Impl {
 };
 Inventory::Inventory(Scene& s,PhysicsWorld& p):impl_(std::make_unique<Impl>(s,p)){}
 Inventory::~Inventory()=default;
+void Inventory::loadAuthored(){
+    for(const auto& node:impl_->scene.objects())if(node->instanceClass()==InstanceClass::Model){
+        const auto marker=node->attributes().find("_linblux_item_prototype");
+        if(marker==node->attributes().end()||!std::holds_alternative<bool>(marker->second)||!std::get<bool>(marker->second))continue;
+        const auto type=node->attributes().find("item_type");Need(type!=node->attributes().end()&&std::holds_alternative<std::string>(type->second),"Protótipo autoral sem tipo de item.");
+        ItemOptions options;const auto icon=node->attributes().find("item_icon");if(icon!=node->attributes().end()){Need(std::holds_alternative<std::string>(icon->second),"Ícone do item deve ser referência textual.");options.icon=std::get<std::string>(icon->second);}
+        registerType(std::get<std::string>(type->second),node->id(),options);
+    }
+}
 void Inventory::registerType(const std::string& type,InstanceId prototype,ItemOptions options){
     auto& h=*impl_;Need(!type.empty()&&type.size()<=64&&type.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")==std::string::npos,"Identificador do tipo de item inválido.");
     Need(h.types.size()<64&&!h.types.count(type),"Tipo de item já registrado ou limite de 64 tipos atingido.");

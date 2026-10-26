@@ -18,6 +18,7 @@ class Inventory {
 public:
     Inventory(Scene& scene,PhysicsWorld& physics);
     ~Inventory();
+    void loadAuthored();
     void registerType(const std::string& type,InstanceId prototype,ItemOptions options={});
     InstanceId prototype(const std::string& type) const;
     InstanceId spawn(const std::string& type,const ModelFrame* pose=nullptr);

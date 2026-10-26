@@ -65,6 +65,10 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="sphere")e.insertPart(PartShape::Sphere);
         else if(c.action=="spawn")e.insertSpawnLocation();
         else if(c.action=="folder")e.insertContainer(InstanceClass::Folder,e.scene_.find(c.instance));
+        else if(c.action=="apply-item-icon"||c.action=="clear-item-icon"){
+            auto* model=e.scene_.selection();if(!model||model->instanceClass()!=InstanceClass::Model)throw std::runtime_error("Selecione um Modelo.");
+            if(!model->setAttribute("item_icon",c.action=="clear-item-icon"?std::string():game::NormalizeImageReference(c.value)))throw std::runtime_error("Limite de atributos atingido.");
+        }
         else if(c.action=="attachment") {
             auto* parent=e.scene_.find(c.instance);if(!parent)parent=e.scene_.selection();
             auto* created=e.scene_.createAttachment(parent,"Attachment");
@@ -213,6 +217,16 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                 e.endGizmoSession(true,"model_property");
                 const bool ok=e.modelTransform_.applyProperty(node->id(),frame,name.rfind("Pivot.",0)==0,error);
                 if(!ok)throw std::runtime_error(error);e.physics_.syncScene(e.scene_);
+            }
+            else if(node->instanceClass()==InstanceClass::Model&&name.rfind("Item.",0)==0){
+                if(name=="Item.Prototype"){
+                    if(c.value!="true"&&c.value!="false")throw std::runtime_error("Use verdadeiro ou falso.");
+                    if(!node->setAttribute("_linblux_item_prototype",c.value=="true"))throw std::runtime_error("Limite de atributos do Modelo atingido.");
+                    if(c.value=="true"&&!node->attributes().count("item_type"))if(!node->setAttribute("item_type",std::string("item-")+std::to_string(node->id())))throw std::runtime_error("Limite de atributos do Modelo atingido.");
+                }else if(name=="Item.Type"){
+                    if(c.value.empty()||c.value.size()>64||c.value.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")!=std::string::npos)throw std::runtime_error("Tipo de item: use letras, números, - ou _ (máximo64).");
+                    if(!node->setAttribute("item_type",c.value))throw std::runtime_error("Limite de atributos atingido.");
+                }else throw std::runtime_error("Propriedade de item desconhecida.");
             }
             else if(node->instanceClass()==InstanceClass::Attachment&&name.rfind("Attachment.",0)==0) {
                 auto& attachment=static_cast<Attachment&>(*node);auto frame=attachment.localFrame();

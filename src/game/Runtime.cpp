@@ -271,7 +271,7 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error,const Prog
         state_ = RuntimeState::Playing;
         const bool spawnedDead=health_<=0;
         npcs_.reset(); // controladores de NPC sao sempre recriados por Play
-        inventory_=std::make_unique<Inventory>(*scene_,*physics_);inventory_->update(position(),camera_.yaw());
+        inventory_=std::make_unique<Inventory>(*scene_,*physics_);inventory_->update(position(),camera_.yaw());inventory_->loadAuthored();
         scripts_.start(*this); // errors are reported; safe native gameplay remains available
         npcs_.attachAuthored(*this,error); // NPCs autorados ganham controlador
         if(spawnedDead && health_<=0)scripts_.healthChanged(health_,true);
