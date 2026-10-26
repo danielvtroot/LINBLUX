@@ -20,7 +20,7 @@ bool ModelTransformSession::capture(InstanceId id,TransformEdit& edit,std::strin
 }
 void ModelTransformSession::complete(TransformEdit& edit) {
     for(auto& part:edit.parts)if(const auto* object=scene_.findPart(part.id))part.after=object->transform();
-    for(auto& pivot:edit.pivots)if(const auto* object=scene_.find(pivot.id)){
+    for(auto& pivot:edit.pivots)if(const auto* object=scene_.find(pivot.id);object&&object->instanceClass()==InstanceClass::Model){
         std::string ignored;scene_.modelFrame(pivot.id,pivot.after,ignored);pivot.afterExplicit=static_cast<const Container&>(*object).hasModelFrame();}
 }
 bool ModelTransformSession::applyEdit(const TransformEdit& edit,bool after,std::string& error) {
@@ -70,7 +70,9 @@ GizmoUpdateResult ModelTransformSession::update(ToolMode mode,Instance* model,co
     }
     if(active()&&(transform_.active()||result.ended)) {
         if(result.cancelled){applyEdit(edit_,false,error);release();return result;}
-        const auto pose=proxy_->transform();ModelFrame target=startFrame_;target.position=pose.position;target.rotation=pose.rotation;
+        const auto pose=proxy_->transform();
+        if(SameTransform(pose,startProxy_)){applyEdit(edit_,false,error);if(result.ended)release();return result;}
+        ModelFrame target=startFrame_;target.position=pose.position;if(mode==ToolMode::Rotate)target.rotation=pose.rotation;
         if(mode==ToolMode::Scale){float ratio=1,change=0;for(int i=0;i<3;++i){const float value=(&pose.size.x)[i]/(&startProxy_.size.x)[i];if(std::fabs(value-1)>change){change=std::fabs(value-1);ratio=value;}}target.scale*=ratio;}
         if(!applyEdit(edit_,false,error)||!scene_.transformModel(edit_.id,target,error)){
             end(true,"model_transform_rejected");result.ended=true;result.cancelled=true;result.consumed=true;return result;}
