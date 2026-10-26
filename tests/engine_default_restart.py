@@ -49,6 +49,36 @@ def primary_block(path,min_y=0,max_y=None,min_x=8,max_x=None):
  bottom=max(y for y,_,_ in rows);group=[r for r in rows if bottom-30<=r[0]<=bottom]
  left=min(r[1] for r in group);right=max(r[2] for r in group);top=min(r[0] for r in group)
  return ((left+right)//2,(top+bottom)//2)
+def brand_tile(path,min_x,min_y,max_x,max_y,min_pixels=60):
+ # Locate the LINBLUX red brand tile; every card/logo uses the same mark.
+ image=Image.open(path).convert('RGB');points=[]
+ for y in range(min_y,max_y):
+  for x in range(min_x,max_x):
+   r,g,b=image.getpixel((x,y))
+   if r>110 and r>g*1.7 and r>b*1.3:points.append((x,y))
+ if len(points)<min_pixels:return None
+ return (sum(x for x,_ in points)//len(points),sum(y for _,y in points)//len(points),image.width)
+def edit_default_target(path):
+ tile=brand_tile(path,60,280,130,380)
+ if not tile:return None
+ # The card action is right-aligned; keep it relative to the window width so
+ # resizing or a shifted card cannot send the click into the copy area.
+ return (tile[2]-128,tile[1])
+def footer_primary(path):
+ image=Image.open(path).convert('RGB')
+ rows=[]
+ for y in range(image.height-130,image.height-8):
+  start=None
+  for x in range(image.width//2,image.width-8):
+   r,g,b=image.getpixel((x,y));red=abs(r-186)<18 and abs(g-40)<15 and abs(b-56)<18
+   if red and start is None:start=x
+   if (not red or x==image.width-9) and start is not None:
+    if x-start>80:rows.append((y,start,x))
+    start=None
+ if not rows:return None
+ bottom=max(y for y,_,_ in rows);group=[r for r in rows if bottom-24<=r[0]<=bottom]
+ left=min(r[1] for r in group);right=max(r[2] for r in group)
+ return ((left+right)//2,sum(y for y,_,_ in group)//len(group))
 
 def run(phase):
  before=len(events())
@@ -71,7 +101,8 @@ def run(phase):
    xdo('windowmove',window,0,0);xdo('windowsize',window,1280,900);xdo('windowfocus','--sync',window);time.sleep(3)
    shot(phase+'-home')
    if phase=='first':
-    click(window,1130,425)
+    target=wait(lambda:edit_default_target(shot('actual-home-card')),15)
+    click(window,*target)
     opened=wait(lambda:next((e for e in events()[before:] if e.get('event')=='open' and 'engine-workspaces' in e.get('file','')),None))
     draft=Path(opened['file']);manifest=json.loads((draft/'experience.json').read_text());world=json.loads((draft/manifest['mainPlace']).read_text())
     assert world['game']['defaultRig']==expected['rig']
@@ -105,40 +136,37 @@ def run(phase):
     assert (root/'defaults/index.json').read_bytes()==factory_index,'Save wrote into the read-only factory fixture'
     time.sleep(.5);shot('actual-default-saved')
    else:
-    click(window,150,320);time.sleep(2)
-    xdo('mousemove','--window',window,730,650);xdo('click','--repeat',25,'--delay',25,5);time.sleep(1)
-    image=Image.open(shot('actual-create-form')).convert('RGB')
-    # Locate the solid LINBLUX primary action in the lower right of the form.
-    rows=[]
-    for y in range(image.height//2,image.height-8):
-     start=None
-     for x in range(image.width*3//5,image.width-8):
-      r,g,b=image.getpixel((x,y));red=abs(r-186)<18 and abs(g-40)<15 and abs(b-56)<18
-      if red and start is None:start=x
-      if not red and start is not None:
-       if x-start>70:rows.append((y,start,x))
-       start=None
-    assert rows,f'Create action not visible: {root}'
-    bottom=max(y for y,_,_ in rows);group=[r for r in rows if bottom-24<=r[0]<=bottom]
-    _,left,right=group[len(group)//2];click(window,(left+right)//2,sum(y for y,_,_ in group)//len(group))
+    # Home primary action: the solid LINBLUX red button in the hero area.
+    create=wait(lambda:primary_block(shot('actual-home-create'),min_y=150,max_y=300,min_x=20,max_x=400),15)
+    click(window,*create)
+    # The create page keeps its default template (engine-default) and the
+    # primary action pinned in the footer; locate it by colour, never by a
+    # hard-coded pair of coordinates.
+    submit=None
+    deadline=time.monotonic()+20
+    while time.monotonic()<deadline:
+     submit=footer_primary(shot('actual-create-form'))
+     if submit:break
+     time.sleep(.2)
+    assert submit,f'Create action not visible: {root}'
+    click(window,*submit)
     opened=wait(lambda:next((e for e in events()[before:] if e.get('event')=='open' and '/experiences/' in e.get('file','')),None))
     project=Path(opened['file']);manifest=json.loads((project/'experience.json').read_text());place=project/manifest['mainPlace'];original=place.read_bytes();world=json.loads(original)
     assert world['game']['defaultRig']==expected['rig']
     assert any(o.get('name')=='MarcadorPadrao' for o in world['objects'])
-    # The editor is usable as soon as the open event is logged, but under a
-    # loaded software renderer its first frame can still be a moment away.
-    # Retry the real header button instead of treating one lost click as a
-    # runtime failure; a delayed click can otherwise hit the overlaying Home.
+    # Start Play with the editor shortcut: stable regardless of the header
+    # layout, and the editor ignores it while a text field is being edited.
+    # Retry because the Home transition can swallow the first press.
     time.sleep(1.2)
     start=None
-    for _ in range(3):
-     click(window,1167,16)
+    for _ in range(4):
+     xdo('key','--window',window,'F5')
      deadline=time.monotonic()+5
      while time.monotonic()<deadline and not start:
       start=next((e for e in events()[before:] if e.get('subsystem')=='runtime' and e.get('event')=='start'),None)
       if not start:time.sleep(.1)
      if start:break
-    assert start,'Play button did not start the inherited character';assert start.get('context',{}).get('rig')==expected['rig'],start
+    assert start,'Play shortcut did not start the inherited character';assert start.get('context',{}).get('rig')==expected['rig'],start
     time.sleep(1);shot('actual-new-character-playing')
     xdo('keydown','Shift_L');xdo('keydown','F5');time.sleep(.2);xdo('keyup','F5');xdo('keyup','Shift_L')
     wait(lambda:any(e.get('subsystem')=='runtime' and e.get('event')=='stop' for e in events()[before:]))
