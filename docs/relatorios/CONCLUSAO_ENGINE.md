@@ -475,3 +475,21 @@ não foi incluída como teste aprovado. Somente as alterações nossas daquele
 arquivo foram restauradas; todo WIP desenvolvimento funcional está publicado.
 Não executar FULL antes de resolver o cenário e a revisão GPL/raylib. Também
 faltam áudio físico e teste em outro sistema Linux. Não existe tag/Release.
+
+## Artefato final deste checkpoint
+
+Código PUBLICADO:d7b0dcb5153ad594b3d4fd958f4faba18090215e, remoto confirmado.
+Candidato:.turbo/dist/linblux-alpha-0.1.0-candidate-d7b0dcb5153a-linux-x86_64.tar.gz
+SHA-256:6ab24a09172d8f5b956757c4caa6721758031f68ddf3bb3427b79b642e4eec07.
+Manifesto:55 arquivos, source_dirty=false, sem MP4. Verificação final do mesmo
+artefato aprovada em7,827s: hashes, Player headless/renderizado e Studio/Home
+fora do checkout, HOME/XDG/CWD novos. Log:.turbo/logs/linux-package-final.log;
+extração:/tmp/linblux-clean-install-wze_ulde. Studio foi encerrado pelo supervisor.
+AutoBackup ativo, checkpoint remoto81952126cd2a confirmado,427 arquivos e zero
+alterações descobertas naquele instante. Nenhum build/teste ficou executando.
+
+Este commit final apenas registra evidências; o binário continua correspondendo
+ao código d7b0dcb. Não há tag/Release. Retomada exata: relatório34/patch RmlUi,
+reprodução curta de maximizar/retomar/F10/F11 em1366×768. Depois regressão
+abrangente, licenças GPL/raylib, áudio físico e outro Linux. Cópia privada externa
+segue sem destino; os arquivos ignorados e o pacote local não são backup GitHub.
