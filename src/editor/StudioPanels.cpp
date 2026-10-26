@@ -248,6 +248,22 @@ void EditorUI::drawInstanceProperties(Instance& object) {
         }
         ImGui::EndTable();
     }
+    if(object.instanceClass()==InstanceClass::Model) {
+        ModelFrame frame;std::string error;
+        if(scene_.modelFrame(object.id(),frame,error)) {
+            auto candidate=frame;auto angles=EulerDegreesFromQuat(frame.rotation);bool changed=false;
+            if(category("Transformação do Modelo")&&table("Model transform")) {
+                if(row("Posição"))changed|=ImGui::InputFloat3("##ModelPosition",&candidate.position.x,"%.3f",ImGuiInputTextFlags_EnterReturnsTrue);
+                if(row("Rotação"))if(ImGui::InputFloat3("##ModelRotation",&angles.x,"%.2f",ImGuiInputTextFlags_EnterReturnsTrue)){candidate.rotation=QuatFromEulerDegrees(angles);changed=true;}
+                if(row("Escala uniforme"))changed|=ImGui::InputFloat("##ModelScale",&candidate.scale,0,0,"%.3f",ImGuiInputTextFlags_EnterReturnsTrue);
+                ImGui::EndTable();
+            }
+            if(changed){endGizmoSession(true,"model_property");if(!scene_.transformModel(object.id(),candidate,error))setStatus(error,true);else physics_.syncScene(scene_);}
+            auto pivot=frame.position;
+            if(ImGui::InputFloat3("Pivô sem mover peças",&pivot.x,"%.3f",ImGuiInputTextFlags_EnterReturnsTrue)){frame.position=pivot;if(!scene_.setModelPivot(object.id(),frame,error))setStatus(error,true);}
+            if(ImGui::Button("Desagrupar modelo")){if(!scene_.ungroup(object.id(),error))setStatus(error,true);ImGui::PopID();return;}
+        }
+    }
     if (object.isPart()) {
         auto& part=static_cast<Part&>(object);
         if (category("Transform") && table("Transform values")) {
