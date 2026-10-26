@@ -206,6 +206,7 @@ bool PhysicsWorld::hasBody(InstanceId id) const {
 
 bool PhysicsWorld::validate(const Scene& scene, std::string& error) const {
     error.clear();
+    if(world_->getNumConstraints()!=static_cast<int>(joints_.size())){error="Índice de juntas Bullet inconsistente.";return false;}
     std::size_t partCount = 0;
     for (Part* part : scene.parts()) {
         if (part == nullptr) {

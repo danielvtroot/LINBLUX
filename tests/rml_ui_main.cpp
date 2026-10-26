@@ -145,7 +145,12 @@ int main() {
             clickVisible("prop-Attachment.Position.2");key("ctrl+a");event("type --clearmodifiers -- -2");key("Return");
             CHECK(NearlyEqual(static_cast<Attachment*>(anchor)->localFrame().position.z,-2));
             ModelFrame anchorWorld;CHECK(scene.attachmentFrame(anchorId,anchorWorld,error));
-            const auto anchorPosition=anchorWorld.position;capture("attachment-properties");
+            const auto anchorPosition=anchorWorld.position;
+            auto* partner=scene.createAttachment(second,"Encaixe");CHECK(partner);frames(2);
+            clickVisible("prop-Attachment.Link");key("Down");key("Return");frames(2);
+            CHECK(static_cast<Attachment*>(anchor)->jointTarget()==partner->id());
+            ModelFrame partnerWorld;CHECK(scene.attachmentFrame(partner->id(),partnerWorld,error));CHECK(NearlyEqual(partnerWorld.position,anchorPosition));
+            capture("attachment-properties");
             CHECK(projectio::save(scene,config.defaultProjectPath,error));Scene loaded;CHECK(projectio::load(loaded,config.defaultProjectPath,error));
             CHECK(loaded.attachmentFrame(anchorId,anchorWorld,error));CHECK(NearlyEqual(anchorWorld.position,anchorPosition));
             clickVisible("node-"+std::to_string(id));

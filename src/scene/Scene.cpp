@@ -420,7 +420,7 @@ bool Scene::attachmentParentFrame(const Instance* owner,ModelFrame& frame,std::s
         const auto* part=static_cast<const Part*>(owner);frame.position=part->position();frame.rotation=part->rotation();
         // Parts store world geometry. The nearest Model carries hierarchy scale.
         for(auto* ancestor=owner->parent();ancestor;ancestor=ancestor->parent())if(ancestor->instanceClass()==InstanceClass::Model){
-            ModelFrame model;if(!modelFrame(ancestor->id(),model,error))return false;frame.scale=model.scale;break;}
+            const auto& model=static_cast<const Container&>(*ancestor);frame.scale=model.hasModelFrame()?model.modelFrame().scale:1;break;}
     }else if(!modelFrame(owner->id(),frame,error))return false;
     error.clear();return true;
 }
