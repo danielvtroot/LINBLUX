@@ -35,6 +35,10 @@ public:
     void healthChanged(float health,bool died);
     void inventoryChanged(InstanceId item,const std::string& action);
     void interactionCompleted(InstanceId object);
+    // Pointer events for script-built UI, produced by the host renderer and
+    // delivered as tasks so a callback never runs inside a render pass.
+    void uiClick(std::uint64_t element);
+    void uiHover(std::uint64_t element,bool entering);
     const std::vector<Message>& messages() const;
     std::size_t errorCount() const; // retained across stop, reset on the next Play
     void hostError(const std::string& text);

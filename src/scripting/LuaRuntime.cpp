@@ -1,6 +1,7 @@
 #include "scripting/LuaRuntime.h"
 #include <nlohmann/json.hpp>
 #include "game/Runtime.h"
+#include "game/ImageAssets.h"
 #include "scene/Scene.h"
 #include "core/Diagnostics.h"
 #include <lua.hpp>
@@ -1307,6 +1308,151 @@ struct LuaRuntime::Impl {
         else throw std::runtime_error("unknown or readonly Part property");
         return 0;
     }
+    // ---- Script UI (linblux.ui) --------------------------------------------
+    // Elements are owned by the script that created them, ids are monotonic so
+    // a stale handle can never address a different node, and every write goes
+    // through the host model's validation and per-frame mutation budget.
+    struct UiHandler { std::uint64_t element=0; std::string event; InstanceId script=0; int ref=0; };
+    std::map<std::pair<std::uint64_t,std::string>,UiHandler> uiHandlers;
+
+    static std::uint64_t UiHandle(lua_State* L,int index) {
+        Require(lua_type(L,index)==LUA_TNUMBER,"referência de UI inválida");
+        const auto id=lua_tointeger(L,index);
+        Require(id>0,"referência de UI inválida");
+        return std::uint64_t(id);
+    }
+    static Color UiColor(const std::string& value) {
+        Require(value.size()==7||value.size()==9,"cor deve ser #RRGGBB ou #RRGGBBAA");
+        Require(value[0]=='#',"cor deve começar com #");
+        auto channel=[&](std::size_t offset){char text[3]{value[offset],value[offset+1],0};Require(std::isxdigit(static_cast<unsigned char>(text[0]))&&std::isxdigit(static_cast<unsigned char>(text[1])),"cor hexadecimal inválida");return static_cast<unsigned char>(std::strtol(text,nullptr,16));};
+        return {channel(1),channel(3),channel(5),value.size()==9?channel(7):static_cast<unsigned char>(255)};
+    }
+    static Color UiColorValue(lua_State* L,int index) {
+        if(lua_type(L,index)==LUA_TSTRING)return UiColor(Text(L,index));
+        Require(lua_istable(L,index),"cor deve ser string #RRGGBB ou tabela {r,g,b,a}");
+        const auto component=[&](const char* key){lua_getfield(L,index,key);const auto value=Number(L,-1);lua_pop(L,1);Require(value>=0&&value<=255,"canais de cor devem ficar entre 0 e 255");return static_cast<unsigned char>(value);};
+        unsigned char alpha=255;
+        lua_getfield(L,index,"a");if(lua_isnil(L,-1)){lua_pop(L,1);lua_getfield(L,index,"alpha");}
+        if(!lua_isnil(L,-1)){const auto value=Number(L,-1);Require(value>=0&&value<=255,"alfa deve ficar entre 0 e 255");alpha=static_cast<unsigned char>(value);}lua_pop(L,1);
+        return {component("r"),component("g"),component("b"),alpha};
+    }
+    void applyUiProperty(lua_State* L,std::uint64_t id,const char* key,int index) {
+        const std::uint64_t owner=executing;
+        std::string error;
+        if(Eq(key,"text")) {
+            Require(lua_type(L,index)==LUA_TSTRING||lua_type(L,index)==LUA_TNUMBER,"texto deve ser string ou número");
+            char formatted[40]{};if(lua_type(L,index)==LUA_TNUMBER)std::snprintf(formatted,sizeof(formatted),"%.14g",lua_tonumber(L,index));
+            const std::string value=lua_type(L,index)==LUA_TSTRING?std::string(lua_tostring(L,index)):std::string(formatted);
+            Require(runtime->ui().setText(id,owner,value,error),error.c_str());return;
+        }
+        if(Eq(key,"visible")){Require(lua_isboolean(L,index),"visible requer booleano");Require(runtime->ui().setBool(id,owner,"visible",lua_toboolean(L,index),error),error.c_str());return;}
+        if(Eq(key,"anchor")){Require(lua_type(L,index)==LUA_TSTRING,"anchor requer string");Require(runtime->ui().setAnchor(id,owner,Text(L,index),error),error.c_str());return;}
+        if(Eq(key,"image")) {
+            Require(lua_type(L,index)==LUA_TSTRING,"image requer caminho string");
+            const std::string reference=Text(L,index);
+            if(!reference.empty())Require(!game::ResolveImagePath(game::AssetsDir(),reference).empty(),"imagem de UI não existe nos recursos da experiência");
+            Require(runtime->ui().setImage(id,owner,reference,error),error.c_str());return;
+        }
+        if(Eq(key,"color")||Eq(key,"background")){Require(runtime->ui().setColor(id,owner,key,UiColorValue(L,index),error),error.c_str());return;}
+        Require(runtime->ui().setNumber(id,owner,key,Number(L,index),error),error.c_str());
+    }
+    static int UiCreate(lua_State* L) {
+        auto& self=Host(L);Require(self.executing,"UI só pode ser criada por um Script em execução");
+        Require(lua_type(L,1)==LUA_TSTRING,"ui.create requer o tipo do elemento");game::UiKind kind;
+        Require(game::UiKindFromName(Text(L,1),kind),"tipo de UI desconhecido; use panel, label, button, image ou bar");
+        if(lua_gettop(L)>1)Require(lua_isnil(L,2)||lua_istable(L,2),"propriedades de UI devem ser tabela");
+        std::uint64_t parent=0;
+        if(lua_gettop(L)>1&&lua_istable(L,2)){lua_getfield(L,2,"parent");if(!lua_isnil(L,-1))parent=UiHandle(L,-1);lua_pop(L,1);}
+        std::uint64_t id=0;std::string error;
+        Require(self.runtime->ui().create(kind,self.executing,parent,id,error),error.c_str());
+        if(lua_gettop(L)>1&&lua_istable(L,2)) {
+            lua_pushnil(L);
+            while(lua_next(L,2)) {
+                const char* key=Text(L,-2);
+                if(!Eq(key,"parent"))self.applyUiProperty(L,id,key,-1);
+                lua_pop(L,1);
+            }
+        }
+        lua_pushinteger(L,lua_Integer(id));return 1;
+    }
+    static int UiSet(lua_State* L) {
+        auto& self=Host(L);const auto id=UiHandle(L,1);Require(lua_type(L,2)==LUA_TSTRING,"ui.set requer o nome da propriedade");
+        self.applyUiProperty(L,id,Text(L,2),3);return 0;
+    }
+    static int UiGet(lua_State* L) {
+        auto& self=Host(L);const auto id=UiHandle(L,1);const char* key=Text(L,2);
+        const auto* element=self.runtime->ui().find(id);Require(element,"Elemento de UI não existe (ou já foi destruído).");
+        Require(!element->owner||element->owner==self.executing,"Elemento de UI pertence a outro script.");
+        if(Eq(key,"text")){lua_pushlstring(L,element->text.data(),element->text.size());return 1;}
+        if(Eq(key,"image")){lua_pushlstring(L,element->image.data(),element->image.size());return 1;}
+        if(Eq(key,"anchor")){lua_pushstring(L,element->anchor.c_str());return 1;}
+        if(Eq(key,"visible")){lua_pushboolean(L,element->visible);return 1;}
+        if(Eq(key,"kind")){lua_pushstring(L,game::UiKindName(element->kind));return 1;}
+        if(Eq(key,"x")||Eq(key,"y")){lua_pushnumber(L,key[0]=='x'?element->x:element->y);return 1;}
+        if(Eq(key,"width")||Eq(key,"height")){lua_pushnumber(L,key[0]=='w'?element->width:element->height);return 1;}
+        if(Eq(key,"opacity")){lua_pushnumber(L,element->opacity);return 1;}
+        if(Eq(key,"value")){lua_pushnumber(L,element->value);return 1;}
+        if(Eq(key,"max")){lua_pushnumber(L,element->maxValue);return 1;}
+        if(Eq(key,"font_size")){lua_pushnumber(L,element->fontSize);return 1;}
+        if(Eq(key,"z")){lua_pushinteger(L,element->z);return 1;}
+        if(Eq(key,"color")||Eq(key,"background")){
+            const auto& color=key[0]=='c'?element->color:element->background;
+            char buffer[10];std::snprintf(buffer,sizeof(buffer),"#%02X%02X%02X%02X",color.r,color.g,color.b,color.a);lua_pushstring(L,buffer);return 1;
+        }
+        throw std::runtime_error("propriedade de UI desconhecida");
+    }
+    static int UiDestroy(lua_State* L) {
+        auto& self=Host(L);const auto id=UiHandle(L,1);std::string error;
+        Require(self.runtime->ui().destroy(id,self.executing,error),error.c_str());self.pruneUi();return 0;
+    }
+    static int UiOn(lua_State* L) {
+        auto& self=Host(L);const auto id=UiHandle(L,1);const std::string event=Text(L,2);
+        Require(lua_isfunction(L,3),"ui.on requer uma função");
+        Require(event=="click"||event=="hover","evento de UI desconhecido; use click ou hover");
+        const auto* element=self.runtime->ui().find(id);Require(element,"Elemento de UI não existe (ou já foi destruído).");
+        Require(element->owner==self.executing,"Elemento de UI pertence a outro script.");
+        Require(self.uiHandlers.size()<64,"Limite de 64 eventos de UI atingido.");
+        auto& entry=self.uiHandlers[{id,event}];
+        if(entry.ref)luaL_unref(L,LUA_REGISTRYINDEX,entry.ref);
+        lua_pushvalue(L,3);entry={id,event,self.executing,luaL_ref(L,LUA_REGISTRYINDEX)};return 0;
+    }
+    static int UiOff(lua_State* L) {
+        auto& self=Host(L);const auto id=UiHandle(L,1);const std::string event=Text(L,2);
+        const auto it=self.uiHandlers.find({id,event});
+        if(it==self.uiHandlers.end()){lua_pushboolean(L,false);return 1;}
+        Require(it->second.script==self.executing,"Evento de UI pertence a outro script.");
+        luaL_unref(L,LUA_REGISTRYINDEX,it->second.ref);self.uiHandlers.erase(it);lua_pushboolean(L,true);return 1;
+    }
+    static int UiCount(lua_State* L) {auto& self=Host(L);lua_pushinteger(L,lua_Integer(self.runtime->ui().ownedBy(self.executing)));return 1;}
+    static int EmitUi(lua_State* L) {
+        auto& self=Host(L);const int ref=int(lua_tointeger(L,1));const auto id=std::uint64_t(lua_tointeger(L,2));const int event=int(lua_tointeger(L,3));
+        const auto* element=self.runtime->ui().find(id);
+        const std::string kind=element?game::UiKindName(element->kind):"panel";const std::string text=element?element->text:std::string();
+        lua_settop(L,0);lua_rawgeti(L,LUA_REGISTRYINDEX,ref);lua_newtable(L);
+        lua_pushinteger(L,lua_Integer(id));lua_setfield(L,-2,"id");
+        lua_pushstring(L,event==0?"click":event==1?"hover_enter":"hover_leave");lua_setfield(L,-2,"event");
+        lua_pushlstring(L,kind.data(),kind.size());lua_setfield(L,-2,"kind");
+        lua_pushlstring(L,text.data(),text.size());lua_setfield(L,-2,"text");
+        if(event){lua_pushboolean(L,event==1);lua_setfield(L,-2,"hovered");}
+        SpawnTask(L);return 0;
+    }
+    void dispatchUi(std::uint64_t element,const std::string& event,int code) {
+        if(!state)return;
+        const auto it=uiHandlers.find({element,event});
+        if(it==uiHandlers.end()||!scriptAlive(it->second.script))return;
+        const InstanceId previous=executing;executing=it->second.script;
+        lua_pushcfunction(state,Safe<EmitUi>);lua_pushinteger(state,it->second.ref);lua_pushinteger(state,lua_Integer(element));lua_pushinteger(state,code);
+        if(lua_pcall(state,3,0,0)!=LUA_OK){message(true,executing,lua_tostring(state,-1));lua_pop(state,1);}
+        executing=previous;
+    }
+    void pruneUi() {
+        if(!state)return;
+        for(auto it=uiHandlers.begin();it!=uiHandlers.end();) {
+            const bool alive=scriptAlive(it->second.script)&&runtime->ui().find(it->second.element);
+            if(!alive){if(!scriptAlive(it->second.script))runtime->ui().clearOwner(it->second.script);luaL_unref(state,LUA_REGISTRYINDEX,it->second.ref);it=uiHandlers.erase(it);}
+            else ++it;
+        }
+    }
     static int Setup(lua_State* L) {
         auto& self=Host(L);
         luaL_requiref(L,"_G",luaopen_base,1);lua_pop(L,1);
@@ -1384,7 +1530,16 @@ struct LuaRuntime::Impl {
         lua_newtable(L);
         const std::pair<const char*,lua_CFunction> items[]={{"register",Safe<ItemsRegister>},{"spawn",Safe<ItemsSpawn>},{"collect",Safe<ItemsAction<0>>},{"add",Safe<ItemsAction<0>>},{"equip",Safe<ItemsAction<1>>},{"unequip",Safe<ItemsAction<2>>},{"drop",Safe<ItemsAction<3>>},{"remove",Safe<ItemsAction<4>>},{"list",Safe<ItemsList>},{"equipped",Safe<ItemsEquipped>},{"info",Safe<ItemsInfo>},{"state",Safe<ItemsState>}};
         for(const auto& entry:items){lua_pushcfunction(L,entry.second);lua_setfield(L,-2,entry.first);}lua_setfield(L,-2,"items");
-        lua_newtable(L);lua_pushcfunction(L,Safe<InteractionRegister>);lua_setfield(L,-2,"register");lua_pushcfunction(L,Safe<InteractionRemove>);lua_setfield(L,-2,"unregister");lua_pushcfunction(L,Safe<InteractionPrompt>);lua_setfield(L,-2,"prompt");lua_setfield(L,-2,"interactions");
+        lua_newtable(L);        lua_pushcfunction(L,Safe<InteractionRegister>);lua_setfield(L,-2,"register");lua_pushcfunction(L,Safe<InteractionRemove>);lua_setfield(L,-2,"unregister");lua_pushcfunction(L,Safe<InteractionPrompt>);lua_setfield(L,-2,"prompt");lua_setfield(L,-2,"interactions");
+        lua_newtable(L);
+        lua_pushcfunction(L,Safe<UiCreate>);lua_setfield(L,-2,"create");
+        lua_pushcfunction(L,Safe<UiSet>);lua_setfield(L,-2,"set");
+        lua_pushcfunction(L,Safe<UiGet>);lua_setfield(L,-2,"get");
+        lua_pushcfunction(L,Safe<UiDestroy>);lua_setfield(L,-2,"destroy");
+        lua_pushcfunction(L,Safe<UiOn>);lua_setfield(L,-2,"on");
+        lua_pushcfunction(L,Safe<UiOff>);lua_setfield(L,-2,"off");
+        lua_pushcfunction(L,Safe<UiCount>);lua_setfield(L,-2,"count");
+        lua_setfield(L,-2,"ui");
         lua_setglobal(L,"linblux");return 0;
     }
     static int EmitInventory(lua_State* L){auto& h=Host(L);const int ref=int(lua_tointeger(L,1));const auto id=InstanceId(lua_tointeger(L,2));const std::string action=Text(L,3);const auto connection=InstanceId(lua_tointeger(L,4));
@@ -1506,7 +1661,7 @@ struct LuaRuntime::Impl {
     }
     void tick(float dt,bool resetBudget=true) {
         if(!state)return;
-        pruneListeners();
+        pruneListeners();pruneUi();
         time+=dt;if(resetBudget)frameBudget=limits.instructionsPerFrame;
         const auto count=jobs.size();
         for(std::size_t i=0;i<count;++i) {
@@ -1539,6 +1694,8 @@ struct LuaRuntime::Impl {
         executing=0;
     }
     void close() {
+        if(state)for(auto& entry:uiHandlers)luaL_unref(state,LUA_REGISTRYINDEX,entry.second.ref);
+        uiHandlers.clear();
         jobs.clear();listeners.clear();modules.clear();loading.clear();startedScripts.clear();
         if(state){closing=true;instructions=limits.instructionsPerTask;frameBudget=limits.instructionsPerFrame;lua_sethook(state,Hook,LUA_MASKCOUNT,1000);lua_close(state);}
         jobs.clear();listeners.clear();modules.clear();loading.clear();startedScripts.clear();
@@ -1562,6 +1719,10 @@ struct LuaRuntime::Impl {
         event(Spawn);
     }
     void cancelScript(InstanceId id) {
+        // A stopped script loses its UI with its listeners: no orphan node may
+        // outlive the closure that could still update it.
+        if(state)for(auto it=uiHandlers.begin();it!=uiHandlers.end();){if(it->second.script==id){luaL_unref(state,LUA_REGISTRYINDEX,it->second.ref);it=uiHandlers.erase(it);}else ++it;}
+        if(runtime)runtime->ui().clearOwner(id);
         for(auto& job:jobs)if(job.script==id)job.done=true;
         for(auto it=listeners.begin();it!=listeners.end();) {
             if(it->second.script==id){luaL_unref(state,LUA_REGISTRYINDEX,it->second.ref);it=listeners.erase(it);}else ++it;
@@ -1623,6 +1784,8 @@ bool LuaRuntime::wantsContacts()const{return impl_->state&&(impl_->hasSignal(Col
 void LuaRuntime::contact(InstanceId first,InstanceId second,bool entering){impl_->contact(first,second,entering);}
 void LuaRuntime::characterAdded(){impl_->characterAdded();}
 void LuaRuntime::interactionCompleted(InstanceId id){impl_->entityChanged(InteractionCompleted,id,"complete");}
+void LuaRuntime::uiClick(std::uint64_t element){impl_->dispatchUi(element,"click",0);}
+void LuaRuntime::uiHover(std::uint64_t element,bool entering){impl_->dispatchUi(element,"hover",entering?1:2);}
 void LuaRuntime::inventoryChanged(InstanceId id,const std::string& action){impl_->entityChanged(InventoryChanged,id,action);}
 void LuaRuntime::healthChanged(float health,bool died){impl_->event(HealthChanged,health);if(died)impl_->event(Died);}
 const std::vector<Message>& LuaRuntime::messages()const{return impl_->output;}
