@@ -4,8 +4,8 @@
 #include <algorithm>
 namespace loblox {
 namespace {Font overlayFont{};bool fontAttempted=false;
-Font OverlayFont(){if(!fontAttempted){fontAttempted=true;for(const char* file:{"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"})if(FileExists(file)){overlayFont=LoadFontEx(file,32,nullptr,256);if(overlayFont.texture.id)SetTextureFilter(overlayFont.texture,TEXTURE_FILTER_BILINEAR);break;}}return overlayFont.texture.id?overlayFont:GetFontDefault();}}
-void ClearExperienceOverlayResources(){if(overlayFont.texture.id)UnloadFont(overlayFont);overlayFont={};fontAttempted=false;}
+Font OverlayFont(){if(!fontAttempted){fontAttempted=true;for(const char* file:{"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"})if(FileExists(file)){const auto loaded=LoadFontEx(file,32,nullptr,256);if(loaded.texture.id!=GetFontDefault().texture.id)overlayFont=loaded;if(overlayFont.texture.id)SetTextureFilter(overlayFont.texture,TEXTURE_FILTER_BILINEAR);break;}}return overlayFont.texture.id?overlayFont:GetFontDefault();}}
+void ClearExperienceOverlayResources(){if(overlayFont.texture.id){if(IsWindowReady())UnloadFont(overlayFont);else{UnloadFontData(overlayFont.glyphs,overlayFont.glyphCount);MemFree(overlayFont.recs);}}overlayFont={};fontAttempted=false;}
 
 void DrawExperienceOverlay(const game::RuntimeSession& runtime,int width,int height,Font font){
     if(runtime.state()!=game::RuntimeState::Playing)return;
