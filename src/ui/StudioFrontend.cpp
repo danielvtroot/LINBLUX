@@ -830,7 +830,11 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         // Dispatch may blur a field and enqueue its commit. Drain by index so
         // a blur cannot invalidate an iterator while an action changes focus.
         bool refreshImages=false;
-        for(size_t i=0;i<commands.size();++i){const auto c=commands[i];actions.dispatch(c);if(c.action=="r6")showAdvanced("rig");
+        for(size_t i=0;i<commands.size();++i){const auto c=commands[i];actions.dispatch(c);
+            if(previewVoice&&(c.action.rfind("sound-volume:",0)==0||c.action.rfind("sound-loop:",0)==0)){
+                const bool volume=c.action.rfind("sound-volume:",0)==0;const auto* sound=ui.scene_.gameAssets().findSound(c.action.substr(volume?13:11));
+                if(sound&&sound->reference==previewAudio.reference(previewVoice)){std::string error;if(volume)previewAudio.setVolume(previewVoice,sound->volume,error);else previewAudio.setLoop(previewVoice,sound->loop);}}
+if(c.action=="r6")showAdvanced("rig");
             refreshImages|=c.action=="apply-item-icon"||c.action=="clear-item-icon"||c.action=="apply-surface-image"||c.action.rfind("apply-image",0)==0||c.action.rfind("apply-texture",0)==0||c.action=="remove-image"||c.action.rfind("delete-image:",0)==0||c.action.rfind("replace-image:",0)==0||c.action.rfind("rename-image:",0)==0;}
         commands.clear();if(refreshImages)invalidateImages();
     }
@@ -883,6 +887,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             s+="</div>";
             s+="<h2>Sons locais</h2><p class=\"muted\">MP3 / WAV / OGG · use <code>linblux.audio.play(id)</code> em um Script.</p>"+Button("import-sound","Importar som","folder");
             if(sounds.empty())s+="<p>Nenhum som importado ainda.</p>";
+            if(!previewAudio.deviceReady())s+="<p class=\"muted\">Sem dispositivo de áudio: importação e metadados disponíveis; prévia indisponível.</p>";
             s+="<div class=\"asset-grid\">";
             for(const auto& file:sounds){const auto* saved=ui.scene_.gameAssets().findSound(file.reference);const auto& sound=saved?*saved:file;
                 s+="<div class=\"asset-card\"><span class=\"asset-name\">"+Escape(saved?sound.name:"Som não catalogado")+"</span><span class=\"asset-meta\">"+Escape(file.reference)+(sound.durationSeconds>0?" · "+Num(sound.durationSeconds)+" s":"")+"</span>";

@@ -461,7 +461,7 @@ bool GameAssets::validate(std::string& error) const {
     if (sounds.size() > 256) { error = "game: sound limit exceeded"; return false; }
     std::set<std::string> soundIds;
     for (const auto& sound : sounds) {
-        if (sound.id.empty() || sound.id.size() > 128 || sound.reference.size() > 512 || !soundIds.insert(sound.id).second) {
+        if (sound.id.empty() || sound.id.size() > 128 || sound.name.empty() || sound.name.size()>128 || sound.reference.size() > 512 || !soundIds.insert(sound.id).second) {
             error = "game: invalid or duplicate sound id"; return false;
         }
         if(!std::isfinite(sound.durationSeconds)||sound.durationSeconds<0){error="Duração de áudio inválida.";return false;}

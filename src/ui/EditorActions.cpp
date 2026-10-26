@@ -115,6 +115,7 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         }
         else if(c.action=="remove-sound") {
             if(e.runtime_.active())throw std::runtime_error("Pare a execução antes de excluir áudio.");std::string error;
+            if(!e.saveCurrentProject())throw std::runtime_error("Áudio preservado: salve a experiência antes de excluir.");
             if(!game::RemoveSoundAsset(e.scene_,game::AssetsDir(),c.value,[&](std::string& message){const bool ok=e.saveCurrentProject();if(!ok)message=e.status_;return ok;},error))throw std::runtime_error(error);
             e.setStatus("Áudio excluído da experiência; arquivo original preservado.");
         }
