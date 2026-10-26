@@ -109,6 +109,7 @@ void Inventory::drop(InstanceId id){
 void Inventory::remove(InstanceId id){auto& h=*impl_;h.item(id);Need(h.scene.remove(h.scene.find(id)),"Não foi possível remover o item.");h.forget(id);h.change(id,"remove");}
 ItemInfo Inventory::info(InstanceId id)const{auto& h=*impl_;const auto& item=h.item(id);return {id,item.type,item.options.name,item.options.icon,item.state,item.options.equipable};}
 std::vector<InstanceId> Inventory::list()const{std::vector<InstanceId> result;for(auto id:impl_->bag)if(impl_->scene.find(id))result.push_back(id);return result;}
+std::vector<InstanceId> Inventory::worldItems()const{std::vector<InstanceId> out;for(const auto& item:impl_->items)if(item.second.state=="world"&&impl_->scene.find(item.first))out.push_back(item.first);return out;}
 InstanceId Inventory::equipped()const{return impl_->scene.find(impl_->equipped)?impl_->equipped:0;}
 void Inventory::update(Vector3 player,float yaw){
     auto& h=*impl_;h.player=player;h.yaw=yaw;

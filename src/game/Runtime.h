@@ -5,6 +5,7 @@
 #include <set>
 #include "game/Audio.h"
 #include "game/Inventory.h"
+#include "game/Interaction.h"
 #include "game/Npc.h"
 #include "game/Rig.h"
 #include "game/ScriptInput.h"
@@ -105,6 +106,10 @@ public:
     NpcSystem& npcs() { return npcs_; }
     const NpcSystem& npcs() const { return npcs_; }
     ProgressStore& storage(){return progress_;}
+    InteractionSystem& interactions(){return *interactions_;}
+    const InteractionSystem& interactions()const{return *interactions_;}
+    unsigned hotbarPage()const{return hotbarPage_;}
+    const std::string& itemNotice()const{return itemNotice_;}
     Inventory& inventory(){return *inventory_;}
     const Inventory& inventory()const{return *inventory_;}
     AudioSystem& audio(){return audio_;}
@@ -169,6 +174,9 @@ private:
     std::unique_ptr<Scene> scene_;
     std::unique_ptr<PhysicsWorld> physics_;
     std::unique_ptr<Inventory> inventory_;
+    std::unique_ptr<InteractionSystem> interactions_;
+    unsigned hotbarPage_=0;std::string itemNotice_;float itemNoticeTime_=0;
+    void updateItemControls(float dt);
     std::unique_ptr<btCapsuleShape> capsule_;
     std::unique_ptr<btDefaultMotionState> motion_;
     std::unique_ptr<btRigidBody> body_;
