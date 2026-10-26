@@ -60,7 +60,10 @@ with (root / "application.log").open("w") as output:
         manifest = json.loads(manifests[0].read_text())
         place = manifests[0].parent / manifest["mainPlace"]
         original = place.read_bytes()
-        assert (manifests[0].parent / manifest["faceImage"]).is_file()
+        # The factory no longer forces a character face; only a project that
+        # declares one must ship the file.
+        if manifest["faceImage"]:
+            assert (manifests[0].parent / manifest["faceImage"]).is_file()
         assert str(fixture).encode() not in original
         subprocess.run(["scrot", "-o", "-u", str(root / "received-studio.png")], check=True)
         xdo("mousemove", "--window", window, 1170, 16)
