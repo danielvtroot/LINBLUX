@@ -507,7 +507,8 @@ Instance* Scene::duplicateTree(const Instance& source, Instance* parent) {
     }
     std::string error;
     if (!reparent(copy,parent,error)) { removeSubtree(copy); return nullptr; }
-    for (auto* child : source.children()) {
+    const auto children=source.children();
+    for (auto* child : children) {
         if (!duplicateTree(*child,copy)) { removeSubtree(copy); return nullptr; }
     }
     return copy;

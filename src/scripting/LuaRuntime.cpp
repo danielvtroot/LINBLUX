@@ -65,7 +65,7 @@ struct LuaRuntime::Impl {
     std::size_t memory=0;
     std::size_t errors=0;
     double time=0;
-    unsigned generation=0;
+    unsigned generation=0,modelOperations=0;
     int instructions=0, frameBudget=0, moduleDepth=0;
     InstanceId executing=0;
     Limits limits;
@@ -329,8 +329,10 @@ struct LuaRuntime::Impl {
         Require(t>=0&&t<=1,"Interpolação requer fator entre 0 e 1");
         PushPose(L,{Vector3Lerp(a.position,b.position,float(t)),QuaternionSlerp(a.rotation,b.rotation,float(t)),Vector3Lerp(a.size,b.size,float(t))});return 1;
     }
+    void modelBudget(){Require(++modelOperations<=32,"Limite de 32 operações de Modelos por quadro atingido.");}
     static ModelFrame ModelPose(lua_State* L,int index) {
         auto& self=Host(L);auto& object=self.instance(L,index);ModelFrame frame;std::string error;
+        if(object.instanceClass()==InstanceClass::Model&&!static_cast<Container&>(object).hasModelFrame())self.modelBudget();
         if(!self.runtime->mutableScene().modelFrame(object.id(),frame,error))throw std::runtime_error(error);return frame;
     }
     static ModelFrame ReferencePose(lua_State* L,int index) {
@@ -357,6 +359,7 @@ struct LuaRuntime::Impl {
         frame.position=Vector3Add(reference.position,Vector3RotateByQuaternion(Vector3Scale(frame.position,reference.scale),reference.rotation));
         frame.rotation=QuaternionNormalize(QuaternionMultiply(reference.rotation,frame.rotation));frame.scale*=reference.scale;
         if constexpr(PivotOnly)Require(std::fabs(frame.scale-current.scale)<.00001f,"Editar pivô não altera escala; use scale");
+        if constexpr(!PivotOnly)self.modelBudget();
         std::string error;const bool ok=PivotOnly?self.runtime->mutableScene().setModelPivot(id,frame,error):self.runtime->mutableScene().transformModel(id,frame,error);
         if(!ok)throw std::runtime_error(error);return 0;
     }
@@ -366,8 +369,8 @@ struct LuaRuntime::Impl {
         else {value=Vector3RotateByQuaternion(Vector3Scale(value,frame.scale),frame.rotation);if(!Direction)value=Vector3Add(value,frame.position);}
         ModernVector(L,value);return 1;
     }
-    static int ScaleModel(lua_State* L){auto& self=Host(L);const auto id=self.instance(L,1).id();auto frame=ModelPose(L,1);frame.scale*=float(Number(L,2));std::string error;if(!self.runtime->mutableScene().transformModel(id,frame,error))throw std::runtime_error(error);return 0;}
-    static int UngroupModel(lua_State* L){auto& self=Host(L);const auto id=self.instance(L,1).id();std::string error;if(!self.runtime->mutableScene().ungroup(id,error))throw std::runtime_error(error);return 0;}
+    static int ScaleModel(lua_State* L){auto& self=Host(L);const auto id=self.instance(L,1).id();auto frame=ModelPose(L,1);frame.scale*=float(Number(L,2));self.modelBudget();std::string error;if(!self.runtime->mutableScene().transformModel(id,frame,error))throw std::runtime_error(error);return 0;}
+    static int UngroupModel(lua_State* L){auto& self=Host(L);const auto id=self.instance(L,1).id();self.modelBudget();std::string error;if(!self.runtime->mutableScene().ungroup(id,error))throw std::runtime_error(error);return 0;}
     static int GroupModel(lua_State* L) {
         auto& self=Host(L);const auto id=[&]{
             Require(lua_istable(L,1),"group requer lista de peças/modelos");const auto count=lua_rawlen(L,1);
@@ -375,7 +378,7 @@ struct LuaRuntime::Impl {
             for(std::size_t i=1;i<=count;++i){lua_rawgeti(L,1,i);ids.push_back(self.instance(L,-1).id());lua_pop(L,1);}
             const std::string name=lua_gettop(L)>1?Text(L,2):"Modelo";
             if(lua_gettop(L)>1)Require(lua_rawlen(L,2)==name.size(),"Nome do Modelo não aceita NUL");
-            self.nativeBudget(1,name.size()+128);std::string error;
+            self.nativeBudget(1,name.size()+128);self.modelBudget();std::string error;
             auto* model=self.runtime->mutableScene().group(ids,name,error);if(!model)throw std::runtime_error(error);return model->id();
         }();
         self.pushInstance(L,self.runtime->scene().find(id),true);return 1;
@@ -1168,7 +1171,7 @@ struct LuaRuntime::Impl {
             if(Eq(key,"position")||Eq(key,"rotation")||Eq(key,"scale")) {
                 auto frame=ModelPose(L,1);if(Eq(key,"position"))frame.position=ReadVector(L,3);
                 else if(Eq(key,"rotation"))frame.rotation=QuatFromEulerDegrees(ReadVector(L,3));else frame.scale=float(Number(L,3));
-                std::string error;if(!self.runtime->mutableScene().transformModel(object->id(),frame,error))throw std::runtime_error(error);return 0;
+                self.modelBudget();std::string error;if(!self.runtime->mutableScene().transformModel(object->id(),frame,error))throw std::runtime_error(error);return 0;
             }
         }
         if(h.modern&&h.kind==Kind::Instance&&Eq(key,"transform")){lua_remove(L,2);return SetPose(L);}
@@ -1509,12 +1512,13 @@ bool LuaRuntime::start(game::RuntimeSession& runtime) {
     *static_cast<Impl**>(lua_getextraspace(self.state))=&self;
     lua_pushcfunction(self.state,Impl::Safe<Impl::Setup>);
     if(lua_pcall(self.state,0,0,0)!=LUA_OK){self.message(true,0,lua_tostring(self.state,-1));self.close();return false;}
-    self.discoverScripts();
+    self.modelOperations=0;self.discoverScripts();
     self.tick(0);self.event(EngineStart);self.event(Spawn);self.tick(0);return true;
 }
-void LuaRuntime::stop(){impl_->stop();}
+void LuaRuntime::stop(){impl_->modelOperations=0;impl_->stop();}
 void LuaRuntime::update(float dt){
     if(!impl_->state||!std::isfinite(dt)||dt<0)return;
+    impl_->modelOperations=0;
     const auto added=impl_->discoverScripts();impl_->inputEvents();impl_->event(Heartbeat,dt);impl_->tick(dt);
     for(const auto id:added)impl_->event(EngineStart,0,id);
 }
