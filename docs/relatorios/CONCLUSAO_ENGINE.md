@@ -348,6 +348,10 @@ agora imprime deslocamentos absolutos e é reemitido a cada redimensionamento.
 mais rosto) e `linblux_rml_ui` voltou a apontar para o botão de importação da
 página de recursos (`assets-import-dialog-`), que usa escopo próprio.
 
+Publicação: `7176e36` (áudio), `08a9f72` (harness de reinício), `f78d396`
+(TURBO 0.2.0) e `4de8517` (seletores de UI); `origin/main` confirmado em
+`4de8517e771a2e50848d1d668554718391e71994`.
+
 Validação gráfica desta etapa: `linblux_rml_ui` integral, 1051 verificações e 0
 falhas em tela 1920x1080 supervisionada (a execução anterior exigia o mesmo
 ambiente; uma tentativa em 1600x1000 falhava só porque o Play de 1920 ficava
