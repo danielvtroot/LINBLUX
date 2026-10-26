@@ -407,6 +407,11 @@ if(Python3_Interpreter_FOUND AND XVFB_RUN_EXECUTABLE AND XDOTOOL_EXECUTABLE)
       ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/engine_default_restart.py
       $<TARGET_FILE:linblux> $<TARGET_FILE:linblux_engine_default_tests>)
     set_tests_properties(linblux_engine_default_restart PROPERTIES TIMEOUT 150 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
+    add_test(NAME linblux_lua_ui_player
+      COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24"
+              ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/lua_ui_player.py
+              $<TARGET_FILE:linblux_player>)
+    set_tests_properties(linblux_lua_ui_player PROPERTIES TIMEOUT 120 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
   else()
     message(WARNING "Teste de reinicializacao do Mundo Padrao requer python3-pil")
   endif()
@@ -491,6 +496,7 @@ linblux_turbo_graphics(linblux_rml_ui "graphics;integration;ui;editor;slow")
 linblux_turbo_graphics(linblux_rig_decals_ui "graphics;integration;editor;rendering;rig;slow")
 linblux_turbo_graphics(linblux_mouse_lock "graphics;integration;editor;ui;game;slow")
 linblux_turbo_graphics(linblux_lua_ui_render "graphics;integration;ui;scripting;rendering")
+linblux_turbo_graphics(linblux_lua_ui_player "graphics;integration;ui;scripting;player")
 linblux_turbo_graphics(linblux_script_input_ui "graphics;integration;editor;ui;game;scripting")
 linblux_turbo_graphics(linblux_models_ui "graphics;integration;editor;ui;scene;scripting")
 linblux_turbo_graphics(linblux_body_properties_ui "graphics;integration;editor;ui;physics;scripting")
