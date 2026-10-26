@@ -227,3 +227,23 @@ sem um defeito concreto novo.
 Backend de recuperação PUBLICADO: 4bb803c16365d79ad62f752fd25991c15772f398,
 push normal confirmado. Frontend e rosto VALIDADO NO PLAYER/renderizador compartilhado,
 com publicação junto ao relatório 21. Conferir o último commit do relatório para hash.
+
+## Modelos — incremento em validação
+
+Recuperação de imagens PUBLICADA em 4bb803c e bf90835, ambos com push confirmado.
+Modelos IMPLEMENTADOS: ModelFrame, pivô, transformações uniformes em lote,
+seleção múltipla/Ctrl+G, desagrupamento, hierarquia, clonagem, scripts por Modelo,
+API Lua e persistência/exportação. Modelo novo usa JSON v4 e orientação em
+quaternion, preservando leitura v1/v2/v3. Escala não uniforme não é suportada.
+
+Regressões encontradas e corrigidas: iterador invalidado em duplicateTree e
+perda de precisão na conversão de rotações de 90° ao salvar. Não enfraquecemos
+o teste: quaternion passou a ser persistido e a orientação dos filhos é conferida.
+FAST 20261026T004226Z-7953: build286,1 s; 17/17 em12,4 s, total299 s; cobertura
+global desconhecida devido ao novo teste/CMake. Build final focado2,37 s.
+IMPACT e linblux_models_ui em execução; não marcar publicado antes de confirmar.
+
+PENDENTE dentro da integração de Modelos: gizmos de conjunto e undo composto.
+Depois: Attachments e vínculos físicos; inventário, coleta E, Delete, hotbar;
+áudio completo/UI Lua, combate/RifleDemo; HUD/menu e integração final. Não há
+implementação desses itens escondida neste incremento.
