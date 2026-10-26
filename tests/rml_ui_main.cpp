@@ -81,7 +81,7 @@ int main() {
         if(!ui.frontend())return 1;
         std::function<void()> observeFrame;
         auto frames=[&](int count=2){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(BLACK);rlImGuiBegin();ui.draw();rlImGuiEnd();ui.renderModernFrontend();EndDrawing();if(observeFrame)observeFrame();}};
-        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames(std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")?1:2);};
+        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames((std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")||std::getenv("LINBLUX_PLAYER_MENU_ONLY"))?1:2);};
         auto key=[&](const std::string& name){event("keydown "+name);event("keyup "+name);};
         auto clickAt=[&](Vector2 p){event("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));event("mousedown 1");event("mouseup 1");};
         auto click=[&](const std::string& id){
@@ -92,6 +92,7 @@ int main() {
             if(b.width<=0||b.height<=0)std::fprintf(stderr,"MISSING element: %s\n",id.c_str());
             CHECK(b.width>0&&b.height>0);if(b.width<=0||b.height<=0)return;
             clickAt({b.x+b.width/2,b.y+b.height/2});
+            if(std::getenv("LINBLUX_PLAYER_MENU_ONLY"))frames(2);
         };
         auto capture=[&](const std::string& name){frames();TakeScreenshot((std::string(directory)+"/"+name+".png").c_str());};
         // Painéis longos rolam; a automação rola até o controle antes de clicar.
@@ -111,6 +112,31 @@ int main() {
         // Optional fast iteration path; the registered CTest always exercises
         // the full editor + player sequence without this environment variable.
         capture("studio-1366");
+        if(std::getenv("LINBLUX_PLAYER_MENU_ONLY")) {
+            for(auto size:{Vector2{1280,720},Vector2{1920,1080}}){
+                resizeWindow(int(size.x),int(size.y));click("play");frames(6);auto& rt=EditorUITestAccess::runtime(ui);
+                CHECK(rt.takeDamage(40,error));key("Escape");frames(16);CHECK(rt.state()==game::RuntimeState::Paused);CHECK(!EditorUITestAccess::captured(ui));
+                const auto vp=ui.frontend()->viewport(),panel=ui.frontend()->elementBounds("pause-panel");
+                CHECK(std::fabs(panel.x-vp.x)<2);CHECK(panel.width<=vp.width*.94f);CHECK(panel.height>=vp.height-2);
+                for(const char* id:{"resume","page-game","page-settings","page-controls","page-audio","page-video","page-about","leave","pause-close"}){
+                    const auto r=ui.frontend()->elementBounds(id);CHECK(r.width>20&&r.height>20);CHECK(r.x>=vp.x&&r.y>=vp.y&&r.x+r.width<=vp.x+vp.width+2&&r.y+r.height<=vp.y+vp.height+2);
+                }
+                capture("side-menu-"+std::to_string(int(size.x)));
+                if(size.x==1920){key("Escape");frames(14);CHECK(rt.state()==game::RuntimeState::Playing);key("shift+F5");CHECK(!ui.playing());continue;}
+                const auto position=rt.position();event("keydown w");frames(5);event("keyup w");CHECK(Vector3Distance(position,rt.position())<.001f);
+                click("page-settings");const auto mode=rt.settings().cameraMode;click("camera-next");CHECK(rt.settings().cameraMode!=mode);
+                const float sensitivity=rt.settings().sensitivity;const auto slider=ui.frontend()->elementBounds("sensitivity-slider");clickAt({slider.x+slider.width*.7f,slider.y+slider.height/2});CHECK(rt.settings().sensitivity!=sensitivity);
+                const bool shift=rt.settings().enableShiftLock;click("shift-lock");CHECK(rt.settings().enableShiftLock!=shift);
+                click("page-audio");CHECK(ui.frontend()->elementBounds("master-volume").width>80);
+                click("page-video");CHECK(ui.frontend()->elementBounds("fullscreen-value").width>40);
+                click("page-controls");CHECK(ui.frontend()->elementText("controls-page").find("W A S D")!=std::string::npos);
+                click("page-about");capture("side-help-"+std::to_string(int(size.x)));
+                click("page-game");click("respawn");frames(4);CHECK(rt.health()==rt.settings().maxHealth);
+                if(rt.state()!=game::RuntimeState::Paused)key("Escape");frames(14);click("pause-close");frames(14);CHECK(rt.state()==game::RuntimeState::Playing);
+                key("Escape");frames(14);click("leave");CHECK(!ui.playing());
+            }
+            std::printf("Player side menu: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
         if(std::getenv("LINBLUX_ITEM_CONTROLS_ONLY")) {
             resizeWindow(1280,720);
             scene.createScript(InstanceClass::Script,nullptr,"Coleta.lua")->source=R"(
