@@ -363,7 +363,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(auto* fold=ancestor(target,"data-fold")) {auto id=fold->GetAttribute<InstanceId>("data-fold",0);if(collapsed.erase(id)==0)collapsed.insert(id);treeHash=0;return;}
         if(auto* rig=ancestor(target,"data-rig")) {selectedRigDecal.clear();commands.push_back({"rig-select",attr(rig,"data-rig")});return;}
         auto* button=ancestor(target,"data-action");
-        if(!button) {if(auto* row=ancestor(target,"data-node-row"))commands.push_back({"select","",row->GetAttribute<InstanceId>("data-node-row",0)});return;}
+        if(!button) {if(auto* row=ancestor(target,"data-node-row"))commands.push_back({"select",ImGui::GetIO().KeyCtrl?"toggle":"",row->GetAttribute<InstanceId>("data-node-row",0)});return;}
         if(button->GetTagName()=="input"||button->GetTagName()=="select")return;
         const auto action=attr(button,"data-action"),v=attr(button,"data-value");
         if(action=="rig-decal-add"||action=="rig-decal-delete"||
@@ -493,6 +493,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     }
     void tree() {
         size_t hash=ui.scene_.objects().size()+size_t(ui.scene_.selection()?ui.scene_.selection()->id():0)*399;
+        for(auto id:ui.scene_.selectedIds())hash=hash*399+id;
         for(const auto& n:ui.scene_.objects())hash^=std::hash<std::string>{}(n->name())+(n->id()*911)+(n->parent()?n->parent()->id()*235:0);
         for(const auto& rig:ui.scene_.gameAssets().rigs) {
             hash^=std::hash<std::string>{}(rig.id+rig.name+ui.selectedRig_+selectedRigDecal+std::to_string(ui.selectedRigBody_));
@@ -505,7 +506,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         std::function<void(const Instance*,int)> row=[&](const Instance* node,int depth){if(!search.empty()&&!relevant(node))return;
             const auto id=std::to_string(node->id());const auto type=node->instanceClass();
             const std::string icon=type==InstanceClass::Workspace?"workspace":type==InstanceClass::Lighting?"lighting":type==InstanceClass::Folder?"folder":type==InstanceClass::Model?"model":type==InstanceClass::ModuleScript?"module":type==InstanceClass::LocalScript?"local-script":type==InstanceClass::SpawnLocation?"spawn":IsSurfaceClass(type)?"image":IsScriptClass(type)?"script":IsRootServiceClass(type)?"storage":"part";
-            s+="<div id=\"node-"+id+"\" class=\"tree-row"+(ui.scene_.selection()==node?" selected":"")+"\" data-node-row=\""+id+"\" title=\""+Escape(node->name()+" · "+node->className())+"\" style=\"padding-left:"+std::to_string(3+depth*14)+"px\">";
+            s+="<div id=\"node-"+id+"\" class=\"tree-row"+(ui.scene_.selected(node->id())?" selected":"")+"\" data-node-row=\""+id+"\" title=\""+Escape(node->name()+" · "+node->className())+"\" style=\"padding-left:"+std::to_string(3+depth*14)+"px\">";
             if(!node->children().empty())s+="<button class=\"fold\" data-fold=\""+id+"\"><img src=\"icon-chevron-"+(collapsed.count(node->id())?"right":"down")+"\"/></button>";
             else s+="<span class=\"leaf\"/>";
             s+="<img src=\"icon-"+icon+"\"/><span class=\"node-name\">"+Escape(node->name())+"</span></div>";
@@ -610,6 +611,16 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                 auto it=p.attributes().find(entry.first);if(it!=p.attributes().end()){if(auto* text=std::get_if<std::string>(&it->second))v=*text;else if(auto* number=std::get_if<double>(&it->second))v=Num(*number);}
                 input(entry.first,v,entry.second);
             }
+        } else if(node->instanceClass()==InstanceClass::Model) {
+            ModelFrame frame;std::string error;
+            if(ui.scene_.modelFrame(node->id(),frame,error)){
+                group("Transformação do Modelo");const auto angles=EulerDegreesFromQuat(frame.rotation);
+                for(int axis=0;axis<3;++axis){input("Model.Position."+std::to_string(axis),Num((&frame.position.x)[axis]),"Posição "+std::string(1,char('X'+axis)));
+                    input("Model.Rotation."+std::to_string(axis),Num((&angles.x)[axis]),"Rotação "+std::string(1,char('X'+axis)));}
+                input("Model.Scale",Num(frame.scale),"Escala uniforme");group("Pivô sem mover as peças");
+                for(int axis=0;axis<3;++axis){input("Pivot.Position."+std::to_string(axis),Num((&frame.position.x)[axis]),"Pivô "+std::string(1,char('X'+axis)));}
+                s+=Button("ungroup","Desagrupar modelo","model");
+            }
         } else if(IsSurfaceClass(node->instanceClass())) {
             const auto& surface=static_cast<const Surface&>(*node);const auto& value=surface.properties();group("Superfície");
             s+=ImagePicker(value.image,"apply-surface-image","surface","image-query-surface");
@@ -647,6 +658,8 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         mouseOwned=false;
         if(ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopup)){context->ProcessMouseLeave();mouseOwned=true;return;}
         if(!IsWindowFocused()){context->ProcessMouseLeave();context->ProcessMouseButtonUp(0,0);context->ProcessMouseButtonUp(1,0);split.clear();dragNode=0;dragging=false;return;}
+        if(!editing()&&!dialogOpen&&!ui.runtime_.active()&&io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_G,false)){
+            commands.push_back({io.KeyShift?"ungroup":"group",""});keyboardOwned=true;}
         const bool capture=ui.gameplayCapture_||ui.camera_.cursorCaptured();
         if(!capture)context->ProcessMouseMove(int(mouse.x*dpi),int(mouse.y*dpi),0);
         auto* hover=context->GetHoverElement();bool controls=ancestor(hover,"data-action")||ancestor(hover,"data-experience")||ancestor(hover,"data-page")||ancestor(hover,"data-player-page")||ancestor(hover,"data-player-step")||ancestor(hover,"data-split");
@@ -674,9 +687,9 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                     display("context-menu",true);contextOpen=true;treeKeyboard=true;rig=nullptr;
                 }
                 if(row||rig) {
-                    if(row)actions.dispatch({"select","",row->GetAttribute<InstanceId>("data-node-row",0)});else actions.dispatch({"rig-select",attr(rig,"data-rig")});
-                    std::string menu;for(const auto* cmd:{"rename","duplicate","copy","paste","folder","model","script","delete","focus"})if(row||std::string(cmd)=="rename"||std::string(cmd)=="duplicate"||std::string(cmd)=="delete"||std::string(cmd)=="focus")menu+=Button(cmd,cmd,"","","context");
-                    el("context-menu")->SetInnerRML(i18n::Markup(menu));rect("context-menu",{std::min(mouse.x,float(w)-190),std::min(mouse.y,float(h)-235),184,row?231.f:106.f});display("context-menu",true);contextOpen=true;treeKeyboard=true;
+                    if(row){const auto id=row->GetAttribute<InstanceId>("data-node-row",0);if(!ui.scene_.selected(id))actions.dispatch({"select","",id});}else actions.dispatch({"rig-select",attr(rig,"data-rig")});
+                    std::string menu;for(const auto* cmd:{"rename","duplicate","copy","paste","group","ungroup","folder","model","script","delete","focus"})if(row||std::string(cmd)=="rename"||std::string(cmd)=="duplicate"||std::string(cmd)=="delete"||std::string(cmd)=="focus")menu+=Button(cmd,cmd,"","","context");
+                    el("context-menu")->SetInnerRML(i18n::Markup(menu));rect("context-menu",{std::min(mouse.x,float(w)-190),std::max(4.f,std::min(mouse.y,float(h)-285)),184,row?281.f:106.f});display("context-menu",true);contextOpen=true;treeKeyboard=true;
                 }
             }
             if(io.MouseWheel!=0 && mouseOwned)context->ProcessMouseWheel(-io.MouseWheel,mods);

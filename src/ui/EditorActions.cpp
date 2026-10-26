@@ -48,7 +48,17 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             if(c.value!="fps"&&c.value!="focus")throw std::runtime_error("Unknown Studio camera mode");
             e.camera_.setNavigationMode(c.value=="fps"?EditorCamera::NavigationMode::FPS:EditorCamera::NavigationMode::Focus);
         }
-        else if(c.action=="select") {e.endGizmoSession(true,"tree_selection");e.cancelRigGizmo();e.selectedRig_.clear();e.scene_.select(e.scene_.find(c.instance));}
+        else if(c.action=="select") {e.endGizmoSession(true,"tree_selection");e.cancelRigGizmo();e.selectedRig_.clear();if(c.value=="toggle")e.scene_.toggleSelection(e.scene_.find(c.instance));else e.scene_.select(e.scene_.find(c.instance));}
+        else if(c.action=="group") {
+            e.endGizmoSession(true,"group");e.cancelRigGizmo();std::string error;
+            if(!e.scene_.group(e.scene_.selectedIds(),"Modelo",error))throw std::runtime_error(error);
+            e.selectedRig_.clear();e.setStatus("Seleção agrupada como Modelo.");
+        }
+        else if(c.action=="ungroup") {
+            e.endGizmoSession(true,"ungroup");std::string error;
+            if(!e.scene_.selection()||!e.scene_.ungroup(e.scene_.selection()->id(),error))throw std::runtime_error(error.empty()?"Selecione um Modelo.":error);
+            e.setStatus("Modelo desagrupado; transformações preservadas.");
+        }
         else if(c.action=="rig-select")e.selectRig(c.value);
         else if(c.action=="tool") {const int tool=std::stoi(c.value);if(tool<0||tool>3)throw std::runtime_error("Invalid tool");e.setTool(static_cast<ToolMode>(tool),"rml_ribbon");}
         else if(c.action=="part")e.insertPart(PartShape::Block);
@@ -184,6 +194,20 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                 if(std::holds_alternative<double>(it->second))node->setAttribute(key,double(Number(c.value)));
                 else if(std::holds_alternative<bool>(it->second)){if(c.value!="true"&&c.value!="false")throw std::runtime_error("Use true or false");node->setAttribute(key,c.value=="true");}
                 else node->setAttribute(key,c.value);
+            }
+            else if(node->instanceClass()==InstanceClass::Model&&(name.rfind("Model.",0)==0||name.rfind("Pivot.",0)==0)) {
+                ModelFrame frame;std::string error;if(!e.scene_.modelFrame(node->id(),frame,error))throw std::runtime_error(error);
+                if(name=="Model.Scale")frame.scale=Number(c.value);
+                else {
+                    const auto split=name.find_last_of('.');const int axis=std::stoi(name.substr(split+1));if(axis<0||axis>2)throw std::runtime_error("Eixo do Modelo inválido.");
+                    const float value=Number(c.value);
+                    if(name.find(".Position.")!=std::string::npos)(&frame.position.x)[axis]=value;
+                    else if(name.find(".Rotation.")!=std::string::npos){auto angles=EulerDegreesFromQuat(frame.rotation);(&angles.x)[axis]=value;frame.rotation=QuatFromEulerDegrees(angles);}
+                    else throw std::runtime_error("Propriedade do Modelo inválida.");
+                }
+                e.endGizmoSession(true,"model_property");
+                const bool ok=name.rfind("Pivot.",0)==0?e.scene_.setModelPivot(node->id(),frame,error):e.scene_.transformModel(node->id(),frame,error);
+                if(!ok)throw std::runtime_error(error);e.physics_.syncScene(e.scene_);
             }
             else if(IsSurfaceClass(node->instanceClass())&&name.rfind("Surface.",0)==0) {
                 auto& surface=static_cast<Surface&>(*node);auto value=surface.properties();const float number=Number(c.value);

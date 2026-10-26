@@ -5,7 +5,7 @@
  <div class="ribbon-group"><div class="group-tools"><button data-action="show:settings"><img src="icon-settings"/>Configurações</button><button data-action="show:assets"><img src="icon-image"/>Imagens</button></div><div class="group-name">Projeto</div></div>
 </div>
 <div id="ribbon-Model" class="ribbon-page">
- <div class="ribbon-group"><div class="group-tools"><button data-action="folder"><img src="icon-folder"/>Pasta</button><button data-action="model"><img src="icon-model"/>Modelo</button></div><div class="group-name">Organizar</div></div>
+ <div class="ribbon-group"><div class="group-tools"><button data-action="folder"><img src="icon-folder"/>Pasta</button><button data-action="model"><img src="icon-model"/>Modelo</button><button data-action="group" title="Ctrl+G"><img src="icon-model"/>Agrupar</button><button data-action="ungroup" title="Ctrl+Shift+G"><img src="icon-model"/>Desagrupar</button></div><div class="group-name">Organizar</div></div>
  <div class="ribbon-group"><div class="group-tools"><button data-action="duplicate" title="Duplicar · Ctrl+D"><img src="icon-duplicate"/>Duplicar</button><button data-action="copy" title="Copiar · Ctrl+C"><img src="icon-copy"/>Copiar</button><button data-action="paste" title="Colar · Ctrl+V"><img src="icon-paste"/>Colar</button><button data-action="delete"><img src="icon-delete"/>Excluir</button></div><div class="group-name">Editar</div></div>
  <div class="ribbon-group"><div class="group-tools"><button data-action="focus" title="Enquadrar seleção · F"><img src="icon-focus"/>Foco</button><button data-action="show:assets"><img src="icon-image"/>Imagens</button></div><div class="group-name">Superfície</div></div>
 </div>

@@ -369,11 +369,16 @@ struct LuaRuntime::Impl {
     static int ScaleModel(lua_State* L){auto& self=Host(L);const auto id=self.instance(L,1).id();auto frame=ModelPose(L,1);frame.scale*=float(Number(L,2));std::string error;if(!self.runtime->mutableScene().transformModel(id,frame,error))throw std::runtime_error(error);return 0;}
     static int UngroupModel(lua_State* L){auto& self=Host(L);const auto id=self.instance(L,1).id();std::string error;if(!self.runtime->mutableScene().ungroup(id,error))throw std::runtime_error(error);return 0;}
     static int GroupModel(lua_State* L) {
-        auto& self=Host(L);Require(lua_istable(L,1),"group requer lista de peças/modelos");const auto count=lua_rawlen(L,1);
-        Require(count>=1&&count<=256,"Selecione de 1 a 256 objetos");std::vector<InstanceId> ids;ids.reserve(count);
-        for(std::size_t i=1;i<=count;++i){lua_rawgeti(L,1,i);ids.push_back(self.instance(L,-1).id());lua_pop(L,1);}
-        const std::string name=lua_gettop(L)>1?Text(L,2):"Modelo";self.nativeBudget(1,name.size()+128);std::string error;
-        auto* model=self.runtime->mutableScene().group(ids,name,error);if(!model)throw std::runtime_error(error);self.pushInstance(L,model,true);return 1;
+        auto& self=Host(L);const auto id=[&]{
+            Require(lua_istable(L,1),"group requer lista de peças/modelos");const auto count=lua_rawlen(L,1);
+            Require(count>=1&&count<=256,"Selecione de 1 a 256 objetos");std::vector<InstanceId> ids;ids.reserve(count);
+            for(std::size_t i=1;i<=count;++i){lua_rawgeti(L,1,i);ids.push_back(self.instance(L,-1).id());lua_pop(L,1);}
+            const std::string name=lua_gettop(L)>1?Text(L,2):"Modelo";
+            if(lua_gettop(L)>1)Require(lua_rawlen(L,2)==name.size(),"Nome do Modelo não aceita NUL");
+            self.nativeBudget(1,name.size()+128);std::string error;
+            auto* model=self.runtime->mutableScene().group(ids,name,error);if(!model)throw std::runtime_error(error);return model->id();
+        }();
+        self.pushInstance(L,self.runtime->scene().find(id),true);return 1;
     }
     static int AddScript(lua_State* L) {
         auto& self=Host(L);auto& owner=self.instance(L,1);const auto type=owner.instanceClass();
@@ -485,16 +490,16 @@ struct LuaRuntime::Impl {
         Vector3 position{},rotation{},size{4,4,4},color{163,162,165};
         bool anchored=true,collidable=true;double transparency=0;
         PartMaterial material=PartMaterial::SmoothPlastic;PartShape shape=PartShape::Block;
-        BodyProperties body;
+        BodyProperties body;float modelScale=1;
         std::string name=part?"Objeto":group?"Grupo":"Modelo";
         Instance* parent=self.runtime->mutableScene().workspace();
         if(lua_istable(L,2)) {
             // Reject typos before creating anything. Read raw fields, without invoking user metamethods.
             lua_pushnil(L);while(lua_next(L,2)) {
                 const char* key=Text(L,-2);bool known=false;
-                for(const char* allowed:{"name","parent","position","rotation","size","color","anchored","collidable","transparency","material","shape","body"})known|=Eq(key,allowed);
+                for(const char* allowed:{"name","parent","position","rotation","size","color","anchored","collidable","transparency","material","shape","body","scale"})known|=Eq(key,allowed);
                 Require(known,"Opção de criação desconhecida");
-                Require(part||Eq(key,"name")||Eq(key,"parent"),"Grupos não possuem transformação ou aparência de peça");lua_pop(L,1);
+                Require(part||Eq(key,"name")||Eq(key,"parent")||(model&&(Eq(key,"position")||Eq(key,"rotation")||Eq(key,"scale"))),"Grupo/Modelo não aceita esta propriedade de peça");Require(!part||!Eq(key,"scale"),"Peças usam size ou scale_by");lua_pop(L,1);
             }
             Field(L,2,"name");if(!lua_isnil(L,-1)){name=Text(L,-1);Require(!name.empty()&&name.size()<=128&&name.size()==lua_rawlen(L,-1),"Nome deve ter de 1 a 128 bytes, sem NUL");}lua_pop(L,1);
             Field(L,2,"parent");if(!lua_isnil(L,-1))parent=&self.instance(L,-1);lua_pop(L,1);
@@ -504,18 +509,21 @@ struct LuaRuntime::Impl {
             Field(L,2,"collidable");if(!lua_isnil(L,-1)){Require(lua_isboolean(L,-1),"collidable requer booleano");collidable=lua_toboolean(L,-1);}lua_pop(L,1);
             Field(L,2,"transparency");if(!lua_isnil(L,-1))transparency=Number(L,-1);lua_pop(L,1);
             Field(L,2,"material");if(!lua_isnil(L,-1))material=Material(L,-1);lua_pop(L,1);
+            Field(L,2,"scale");if(!lua_isnil(L,-1))modelScale=float(Number(L,-1));lua_pop(L,1);
             Field(L,2,"body");if(!lua_isnil(L,-1))body=ReadBody(L,-1);lua_pop(L,1);
             Field(L,2,"shape");if(!lua_isnil(L,-1)){const char* value=Text(L,-1);Require(Eq(value,"box")||Eq(value,"sphere"),"shape aceita box ou sphere");shape=Eq(value,"sphere")?PartShape::Sphere:PartShape::Block;}lua_pop(L,1);
         }
         Require(size.x>=kMinPartSize&&size.y>=kMinPartSize&&size.z>=kMinPartSize,"Tamanho mínimo é 0,2");
         Require(color.x>=0&&color.y>=0&&color.z>=0&&color.x<=255&&color.y<=255&&color.z<=255,"Cor requer canais de 0 a 255");
         Require(transparency>=0&&transparency<=1,"Transparência deve estar entre 0 e 1");
+        const ModelFrame modelFrame{position,QuatFromEulerDegrees(rotation),modelScale};if(model)Require(modelFrame.valid(),"Pivô/escala do Modelo inválidos");
         self.nativeBudget(1,name.size()+128);auto& scene=self.runtime->mutableScene();
         Instance* created=part?static_cast<Instance*>(scene.createPart(shape,position,size,name)):scene.createContainer(group?InstanceClass::Folder:InstanceClass::Model,parent,name);
         Require(created,"Não foi possível criar o objeto");std::string error;
         if(!scene.reparent(created,parent,error)){scene.remove(created);throw std::runtime_error(error);}
         if(part){auto& object=static_cast<Part&>(*created);object.setRotationEulerDegrees(rotation);object.setColor({static_cast<unsigned char>(color.x),static_cast<unsigned char>(color.y),static_cast<unsigned char>(color.z),static_cast<unsigned char>((1-transparency)*255)});object.setAnchored(anchored);object.setCanCollide(collidable);object.setMaterial(material);}
         if(part)static_cast<Part&>(*created).setBodyProperties(body,error);
+        if(model)scene.setModelPivot(created->id(),modelFrame,error);
         self.pushInstance(L,created,true);return 1;
     }
     // ---- NPCs -------------------------------------------------------------

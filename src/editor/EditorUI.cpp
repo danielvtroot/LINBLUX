@@ -1888,7 +1888,7 @@ void EditorUI::drawViewport() {
             if (!rigHit.empty()) selectRig(rigHit, bodyHit);
             else if (partHit) {
                 cancelRigGizmo(); selectedRig_.clear();
-                scene_.select(hit);
+                if(ImGui::GetIO().KeyCtrl&&hit)scene_.toggleSelection(hit);else scene_.select(hit);
             } else {
                 cancelRigGizmo(); selectedRig_.clear();
                 scene_.select(nullptr);
@@ -1988,7 +1988,7 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
     if (instance->children().empty()) {
         flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
     }
-    if (scene_.selection() == instance) {
+    if (scene_.selected(instance->id())) {
         flags |= ImGuiTreeNodeFlags_Selected;
     }
 
@@ -2010,7 +2010,7 @@ void EditorUI::drawExplorerNode(Instance* instance, const char* filter) {
     }
     if (ImGui::IsItemClicked()) {
         endGizmoSession(true);
-        scene_.select(instance);
+        if(ImGui::GetIO().KeyCtrl)scene_.toggleSelection(instance);else scene_.select(instance);
         if (ImGui::IsMouseDoubleClicked(0)) {
             if (IsScriptClass(instance->instanceClass())) openScript(instance->id());
             else if (!ImGui::IsItemToggledOpen()) renameSelection();
