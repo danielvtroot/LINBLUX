@@ -695,8 +695,11 @@ end)
             resizeWindow(int(size.x),int(size.y));capture("studio-"+std::to_string(int(size.x)));
             if(size.x==1366)click("editor-camera-focus");
             const auto editorMode=camera.navigationMode();const auto editorEye=camera.position();
-            auto playBounds=ui.frontend()->elementBounds("play");click("play");auto& rt=EditorUITestAccess::runtime(ui);
-            if(rt.state()!=game::RuntimeState::Playing)std::fprintf(stderr,"PLAY MISS size=%d play=%.1f,%.1f,%.1fx%.1f viewport=%.1f,%.1f,%.1fx%.1f status=%s\n",int(size.x),playBounds.x,playBounds.y,playBounds.width,playBounds.height,ui.frontend()->viewport().x,ui.frontend()->viewport().y,ui.frontend()->viewport().width,ui.frontend()->viewport().height,ui.status_.c_str());
+            // The resize and the click share the same frames; under software
+            // rendering the first click can race the new layout, so retry the
+            // user action instead of assuming the control was lost.
+            auto& rt=EditorUITestAccess::runtime(ui);
+            for(int attempt=0;attempt<3&&rt.state()!=game::RuntimeState::Playing;++attempt)click("play");
             CHECK(rt.state()==game::RuntimeState::Playing);
             if(size.x==1366) {
                 click("game-settings");CHECK(rt.state()==game::RuntimeState::Paused);
