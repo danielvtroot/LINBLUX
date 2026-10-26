@@ -409,6 +409,11 @@ target_link_libraries(linblux_item_actions_tests PRIVATE linblux_engine)
 add_test(NAME linblux_item_actions COMMAND linblux_item_actions_tests)
 set_tests_properties(linblux_item_actions PROPERTIES TIMEOUT 90)
 
+add_executable(linblux_rifledemo_tests tests/rifledemo_main.cpp)
+target_link_libraries(linblux_rifledemo_tests PRIVATE linblux_engine)
+add_test(NAME linblux_rifledemo COMMAND linblux_rifledemo_tests)
+set_tests_properties(linblux_rifledemo PROPERTIES TIMEOUT 40 LABELS "headless;integration;inventory;scripting;game;combat")
+
 # Preserve notices for every static third-party component shipped in the application.
 install(FILES LICENSE DESTINATION share/linblux/licenses COMPONENT Linblux RENAME LINBLUX-MIT.txt)
 install(FILES third_party/imgui/LICENSE.txt DESTINATION share/linblux/licenses COMPONENT Linblux RENAME Dear-ImGui-MIT.txt)

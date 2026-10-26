@@ -92,6 +92,7 @@ int main() {
             if(b.width<=0||b.height<=0)std::fprintf(stderr,"MISSING element: %s\n",id.c_str());
             CHECK(b.width>0&&b.height>0);if(b.width<=0||b.height<=0)return;
             clickAt({b.x+b.width/2,b.y+b.height/2});
+            if(std::getenv("LINBLUX_PLAYER_MENU_ONLY"))frames(2);
         };
         auto capture=[&](const std::string& name){frames();TakeScreenshot((std::string(directory)+"/"+name+".png").c_str());};
         // Painéis longos rolam; a automação rola até o controle antes de clicar.
