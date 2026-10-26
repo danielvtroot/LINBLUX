@@ -251,10 +251,10 @@ void EditorUI::drawInstanceProperties(Instance& object) {
     if(object.instanceClass()==InstanceClass::Model) {
         ModelFrame frame;std::string error;
         if(scene_.modelFrame(object.id(),frame,error)) {
-            auto candidate=frame;auto angles=EulerDegreesFromQuat(frame.rotation);bool changed=false;
+            auto candidate=frame;auto angles=EulerDegreesZYXFromQuat(frame.rotation);bool changed=false;
             if(category("Transformação do Modelo")&&table("Model transform")) {
                 if(row("Posição"))changed|=ImGui::InputFloat3("##ModelPosition",&candidate.position.x,"%.3f",ImGuiInputTextFlags_EnterReturnsTrue);
-                if(row("Rotação"))if(ImGui::InputFloat3("##ModelRotation",&angles.x,"%.2f",ImGuiInputTextFlags_EnterReturnsTrue)){candidate.rotation=QuatFromEulerDegrees(angles);changed=true;}
+                if(row("Rotação"))if(ImGui::InputFloat3("##ModelRotation",&angles.x,"%.2f",ImGuiInputTextFlags_EnterReturnsTrue)){candidate.rotation=QuatFromEulerDegreesZYX(angles);changed=true;}
                 if(row("Escala uniforme"))changed|=ImGui::InputFloat("##ModelScale",&candidate.scale,0,0,"%.3f",ImGuiInputTextFlags_EnterReturnsTrue);
                 ImGui::EndTable();
             }

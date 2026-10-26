@@ -614,7 +614,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         } else if(node->instanceClass()==InstanceClass::Model) {
             ModelFrame frame;std::string error;
             if(ui.scene_.modelFrame(node->id(),frame,error)){
-                group("Transformação do Modelo");const auto angles=EulerDegreesFromQuat(frame.rotation);
+                group("Transformação do Modelo");const auto angles=EulerDegreesZYXFromQuat(frame.rotation);
                 for(int axis=0;axis<3;++axis){input("Model.Position."+std::to_string(axis),Num((&frame.position.x)[axis]),"Posição "+std::string(1,char('X'+axis)));
                     input("Model.Rotation."+std::to_string(axis),Num((&angles.x)[axis]),"Rotação "+std::string(1,char('X'+axis)));}
                 input("Model.Scale",Num(frame.scale),"Escala uniforme");group("Pivô sem mover as peças");

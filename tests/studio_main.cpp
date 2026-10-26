@@ -82,6 +82,7 @@ void ModelTransforms() {
     Scene scene;std::string error;scene.buildDefaultScene();
     auto* a=scene.createPart(PartShape::Block,{10,4,0},{2,2,2},"A");a->setAnchored(true);
     auto* b=scene.createPart(PartShape::Block,{14,4,0},{2,2,2},"B");b->setAnchored(true);
+    a->setRotationEulerDegrees({15,0,17});
     scene.select(a);scene.toggleSelection(b);CHECK(scene.selectedIds().size()==2);CHECK(scene.selected(a->id()));
     auto* model=scene.group(scene.selectedIds(),"Conjunto",error);CHECK(model);CHECK(model&&model->children().size()==2);
     if(!model)return;const auto id=model->id();ModelFrame frame;CHECK(scene.modelFrame(id,frame,error));CHECK(NearlyEqual(frame.position,{12,4,0}));
@@ -94,8 +95,9 @@ void ModelTransforms() {
     frame.position.x+=1;CHECK(scene.transformModel(id,frame,error));CHECK(NearlyEqual(a->position(),Vector3Add(position,{1,0,0})));
     auto* clone=scene.duplicateTree(*model);CHECK(clone&&clone->id()!=id);ModelFrame cloned;CHECK(scene.modelFrame(clone->id(),cloned,error));CHECK(NearlyEqual(cloned.position,frame.position));
     CHECK(cloned.scale==2);CHECK(scene.remove(clone));
+    const auto originalRotation=a->rotation();
     const auto before=projectio::toJson(scene);Scene loaded;CHECK(projectio::fromJson(loaded,before,error));ModelFrame recovered;CHECK(loaded.modelFrame(id,recovered,error));
-    CHECK(NearlyEqual(recovered.position,frame.position));CHECK(NearlyEqual(recovered.rotation,frame.rotation));CHECK(recovered.scale==2);
+    CHECK(NearlyEqual(recovered.position,frame.position));CHECK(NearlyEqual(recovered.rotation,frame.rotation));CHECK(recovered.scale==2);CHECK(NearlyEqual(loaded.findPart(aid)->rotation(),originalRotation));
     auto invalid=frame;invalid.scale=.0001f;CHECK(!scene.transformModel(id,invalid,error));CHECK(projectio::toJson(scene)==before);
     auto bad=nlohmann::json::parse(before);for(auto& object:bad["objects"])if(object["id"]==id)object["modelPivot"]["scale"]=-1;
     CHECK(!projectio::fromJson(scene,bad.dump(),error));CHECK(projectio::toJson(scene)==before);

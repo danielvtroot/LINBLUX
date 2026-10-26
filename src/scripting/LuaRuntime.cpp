@@ -346,7 +346,7 @@ struct LuaRuntime::Impl {
     }
     static void PushModel(lua_State* L,const ModelFrame& frame) {
         lua_createtable(L,0,3);ModernVector(L,frame.position);lua_setfield(L,-2,"position");
-        ModernVector(L,EulerDegreesFromQuat(frame.rotation));lua_setfield(L,-2,"rotation");lua_pushnumber(L,frame.scale);lua_setfield(L,-2,"scale");
+        ModernVector(L,EulerDegreesZYXFromQuat(frame.rotation));lua_setfield(L,-2,"rotation");lua_pushnumber(L,frame.scale);lua_setfield(L,-2,"scale");
     }
     static int GetModelPose(lua_State* L){const auto frame=RelativeModel(ModelPose(L,1),ReferencePose(L,2));PushModel(L,frame);return 1;}
     template<bool PivotOnly> static int SetModelPose(lua_State* L) {
@@ -354,7 +354,7 @@ struct LuaRuntime::Impl {
         auto frame=RelativeModel(current,reference);Require(lua_istable(L,2),"Transformação do Modelo requer tabela");lua_pushnil(L);
         while(lua_next(L,2)){const auto* key=Text(L,-2);
             if(Eq(key,"position"))frame.position=ReadVector(L,lua_gettop(L));
-            else if(Eq(key,"rotation"))frame.rotation=QuatFromEulerDegrees(ReadVector(L,lua_gettop(L)));
+            else if(Eq(key,"rotation"))frame.rotation=QuatFromEulerDegreesZYX(ReadVector(L,lua_gettop(L)));
             else if(Eq(key,"scale"))frame.scale=float(Number(L,-1));else throw std::runtime_error("Campo de Modelo desconhecido");lua_pop(L,1);}
         frame.position=Vector3Add(reference.position,Vector3RotateByQuaternion(Vector3Scale(frame.position,reference.scale),reference.rotation));
         frame.rotation=QuaternionNormalize(QuaternionMultiply(reference.rotation,frame.rotation));frame.scale*=reference.scale;
@@ -519,7 +519,7 @@ struct LuaRuntime::Impl {
         Require(size.x>=kMinPartSize&&size.y>=kMinPartSize&&size.z>=kMinPartSize,"Tamanho mínimo é 0,2");
         Require(color.x>=0&&color.y>=0&&color.z>=0&&color.x<=255&&color.y<=255&&color.z<=255,"Cor requer canais de 0 a 255");
         Require(transparency>=0&&transparency<=1,"Transparência deve estar entre 0 e 1");
-        const ModelFrame modelFrame{position,QuatFromEulerDegrees(rotation),modelScale};if(model)Require(modelFrame.valid(),"Pivô/escala do Modelo inválidos");
+        const ModelFrame modelFrame{position,QuatFromEulerDegreesZYX(rotation),modelScale};if(model)Require(modelFrame.valid(),"Pivô/escala do Modelo inválidos");
         self.nativeBudget(1,name.size()+128);auto& scene=self.runtime->mutableScene();
         Instance* created=part?static_cast<Instance*>(scene.createPart(shape,position,size,name)):scene.createContainer(group?InstanceClass::Folder:InstanceClass::Model,parent,name);
         Require(created,"Não foi possível criar o objeto");std::string error;
@@ -1040,7 +1040,7 @@ struct LuaRuntime::Impl {
         if(h.modern&&h.kind==Kind::Instance)if(const auto* object=self.runtime->scene().find(h.id);object&&object->instanceClass()==InstanceClass::Model) {
             if(Eq(key,"transform")||Eq(key,"pivot")){PushModel(L,ModelPose(L,1));return 1;}
             if(Eq(key,"position")){ModernVector(L,ModelPose(L,1).position);return 1;}
-            if(Eq(key,"rotation")){ModernVector(L,EulerDegreesFromQuat(ModelPose(L,1).rotation));return 1;}
+            if(Eq(key,"rotation")){ModernVector(L,EulerDegreesZYXFromQuat(ModelPose(L,1).rotation));return 1;}
             if(Eq(key,"scale")){lua_pushnumber(L,ModelPose(L,1).scale);return 1;}
             if(Eq(key,"get_transform")||Eq(key,"get_pivot")){lua_pushcfunction(L,Safe<GetModelPose>);return 1;}
             if(Eq(key,"set_transform")){lua_pushcfunction(L,Safe<SetModelPose<false>>);return 1;}
@@ -1170,7 +1170,7 @@ struct LuaRuntime::Impl {
             if(Eq(key,"pivot")){lua_remove(L,2);return SetModelPose<true>(L);}
             if(Eq(key,"position")||Eq(key,"rotation")||Eq(key,"scale")) {
                 auto frame=ModelPose(L,1);if(Eq(key,"position"))frame.position=ReadVector(L,3);
-                else if(Eq(key,"rotation"))frame.rotation=QuatFromEulerDegrees(ReadVector(L,3));else frame.scale=float(Number(L,3));
+                else if(Eq(key,"rotation"))frame.rotation=QuatFromEulerDegreesZYX(ReadVector(L,3));else frame.scale=float(Number(L,3));
                 self.modelBudget();std::string error;if(!self.runtime->mutableScene().transformModel(object->id(),frame,error))throw std::runtime_error(error);return 0;
             }
         }

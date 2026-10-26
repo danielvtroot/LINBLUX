@@ -202,7 +202,7 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                     const auto split=name.find_last_of('.');const int axis=std::stoi(name.substr(split+1));if(axis<0||axis>2)throw std::runtime_error("Eixo do Modelo inválido.");
                     const float value=Number(c.value);
                     if(name.find(".Position.")!=std::string::npos)(&frame.position.x)[axis]=value;
-                    else if(name.find(".Rotation.")!=std::string::npos){auto angles=EulerDegreesFromQuat(frame.rotation);(&angles.x)[axis]=value;frame.rotation=QuatFromEulerDegrees(angles);}
+                    else if(name.find(".Rotation.")!=std::string::npos){auto angles=EulerDegreesZYXFromQuat(frame.rotation);(&angles.x)[axis]=value;frame.rotation=QuatFromEulerDegreesZYX(angles);}
                     else throw std::runtime_error("Propriedade do Modelo inválida.");
                 }
                 e.endGizmoSession(true,"model_property");

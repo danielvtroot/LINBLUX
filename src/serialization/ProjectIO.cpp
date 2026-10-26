@@ -219,9 +219,11 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
         if(out.instanceClass==InstanceClass::Model&&value.contains("modelPivot")) {
             const auto& pivot=value["modelPivot"];Vector3 angles{};
             if(!pivot.is_object()||!pivot.contains("position")||!pivot.contains("rotation")||!pivot.contains("scale")){error="Pivô do Modelo requer posição, rotação e escala.";return false;}
-            if(!ReadVector3(pivot["position"],"modelPivot.position",out.modelFrame.position,error)||
-               !ReadVector3(pivot["rotation"],"modelPivot.rotation",angles,error)||!ReadFloat(pivot["scale"],"modelPivot.scale",out.modelFrame.scale,error))return false;
-            out.modelFrame.rotation=QuatFromEulerDegrees(angles);out.hasModelFrame=true;
+            if(!ReadVector3(pivot["position"],"modelPivot.position",out.modelFrame.position,error)||!ReadFloat(pivot["scale"],"modelPivot.scale",out.modelFrame.scale,error))return false;
+            const auto& rotation=pivot["rotation"];
+            if(rotation.is_array()&&rotation.size()==4){float q[4];for(int i=0;i<4;++i)if(!ReadFloat(rotation[i],"modelPivot.rotation",q[i],error))return false;out.modelFrame.rotation={q[0],q[1],q[2],q[3]};}
+            else {if(!ReadVector3(rotation,"modelPivot.rotation",angles,error))return false;out.modelFrame.rotation=QuatFromEulerDegrees(angles);}
+            out.hasModelFrame=true;
             if(!out.modelFrame.valid()){error="Pivô do Modelo inválido.";return false;}
         }
         return true;
@@ -401,6 +403,13 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
         return false;
     }
     out.transform.rotation = QuatFromEulerDegrees(eulerDegrees);
+    if(value.contains("orientation")) {
+        const auto& rotation=value["orientation"];if(!rotation.is_array()||rotation.size()!=4){error="Orientação requer quaternion com quatro números.";return false;}
+        float q[4];for(int i=0;i<4;++i)if(!ReadFloat(rotation[i],"orientation",q[i],error))return false;
+        ModelFrame check;check.rotation={q[0],q[1],q[2],q[3]};if(!check.valid()){error="Quaternion de orientação inválido.";return false;}
+        out.transform.rotation=check.rotation;
+    }
+
 
     if (out.transform.size.x < kMinPartSize || out.transform.size.y < kMinPartSize ||
         out.transform.size.z < kMinPartSize) {
@@ -487,7 +496,8 @@ std::string toJson(const Scene& scene) {
             IsSurfaceClass(o->instanceClass()) || IsScriptClass(o->instanceClass()) || (IsRootServiceClass(o->instanceClass()) &&
                 o->instanceClass()!=InstanceClass::Workspace && o->instanceClass()!=InstanceClass::Lighting);
     });
-    root["version"] = hierarchy ? 3 : hasGame ? 2 : 1;
+    const bool preciseModels=std::any_of(scene.objects().begin(),scene.objects().end(),[](const auto& object){return object->instanceClass()==InstanceClass::Model&&static_cast<const Container&>(*object).hasModelFrame();});
+    root["version"] = preciseModels ? 4 : hierarchy ? 3 : hasGame ? 2 : 1;
     if (hasGame) root["game"] = gameData;
     root["nextId"] = scene.nextId();
 
@@ -541,9 +551,9 @@ std::string toJson(const Scene& scene) {
                 {"name",node->name()},{"parent",node->parent()?node->parent()->id():0}});
             if(IsSurfaceClass(node->instanceClass()))objects.back()["surface"]=game::EncodeSurface(static_cast<const Surface&>(*node).properties());
             if(node->instanceClass()==InstanceClass::Model){const auto& model=static_cast<const Container&>(*node);if(model.hasModelFrame()){
-                const auto& frame=model.modelFrame();const auto angles=EulerDegreesFromQuat(frame.rotation);
+                const auto& frame=model.modelFrame();
                 objects.back()["modelPivot"]={{"position",{frame.position.x,frame.position.y,frame.position.z}},
-                    {"rotation",{angles.x,angles.y,angles.z}},{"scale",frame.scale}};}}
+                    {"rotation",{frame.rotation.x,frame.rotation.y,frame.rotation.z,frame.rotation.w}},{"scale",frame.scale}};}}
 
             if (IsScriptClass(node->instanceClass())) {
                 const auto& script=static_cast<const Script&>(*node);
@@ -569,6 +579,7 @@ std::string toJson(const Scene& scene) {
                            {"material", PartMaterialName(part->material())},
                            {"anchored", part->anchored()},
                            {"canCollide", part->canCollide()}});
+        if(preciseModels){const auto q=part->rotation();objects.back()["orientation"]={q.x,q.y,q.z,q.w};}
         const auto& body=part->bodyProperties();
         objects.back()["body"]={{"density",body.density},{"friction",body.friction},
             {"restitution",body.restitution},{"linearDamping",body.linearDamping},{"angularDamping",body.angularDamping}};
