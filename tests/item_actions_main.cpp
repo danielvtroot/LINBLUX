@@ -163,6 +163,8 @@ for _, filho in ipairs(item:children()) do
     if string.sub(filho.name, 1, 10) == "BocaDoCano" then boca = filho end
 end
 if boca then pub("boca_id", boca.id) else pub("boca_id", 0) end
+print("ITEM:", item.id, item.name, item.position.X, item.position.Y, item.position.Z)
+print("BOCA:", boca.id, boca.name, boca.position.Z, boca.world_position.Z)
 local acerto = linblux.physics.raycast(boca.world_position, boca.direction, 120, item)
 pub("acerto", acerto and acerto.object.name or "nenhum")
 pub("acerto_distancia", acerto and acerto.distance or -1)
@@ -311,6 +313,7 @@ int main() {
         require(attributeNumber(*workspace, "reserva_recarregada") == 4, "reload_end event reserve");
 
         // Attachment: origem do efeito e direção frontal acompanham o Modelo.
+        for (const auto& message : runtime.scripts().messages()) std::fprintf(stderr, "MSG %s\n", message.text.c_str());
         const auto* muzzleNode = static_cast<const Attachment*>(runtime.scene().find(muzzleId));
         require(muzzleNode, "muzzle attachment vanished");
         ModelFrame muzzleFrame;
