@@ -10,6 +10,7 @@
 #include "core/Math.h"
 #include "objects/Part.h"
 
+class btFixedConstraint;
 class btBroadphaseInterface;
 class btCollisionConfiguration;
 class btCollisionDispatcher;
@@ -50,6 +51,7 @@ public:
     void removePart(InstanceId id);
     bool hasBody(InstanceId id) const;
     std::size_t bodyCount() const { return bodies_.size(); }
+    std::size_t jointCount() const { return joints_.size(); }
     // Correspondencia exata Part <-> corpo e editingParts_ contido nos corpos.
     bool validate(const Scene& scene, std::string& error) const;
 
@@ -106,6 +108,10 @@ private:
     btCollisionShape* createShape(const Part& part) const;
     btRigidBody* createBody(Part& part, btCollisionShape* shape);
     void destroyEntry(InstanceId id);
+    void removeJointsFor(InstanceId id);
+    void syncJoints(Scene& scene);
+    struct JointEntry {btFixedConstraint* constraint=nullptr;InstanceId target=0,a=0,b=0;};
+    std::unordered_map<InstanceId,JointEntry> joints_;
     void updateShape(const Part& part, BodyEntry& entry);
     void setBodyTransform(const Part& part, BodyEntry& entry, bool resetVelocity);
     void applyCollisionFlag(const Part& part, btRigidBody* body);

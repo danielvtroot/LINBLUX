@@ -44,7 +44,7 @@ struct ParsedObject {
     bool canCollide = true;
     BodyProperties bodyProperties;
     SurfaceProperties surface;
-    ModelFrame modelFrame;bool hasModelFrame=false;
+    ModelFrame modelFrame;bool hasModelFrame=false;InstanceId jointTarget=0;
     bool hasNpc = false;
     NpcProperties npcProperties;
     std::string source;
@@ -220,7 +220,11 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
         if(!ReadVector3(frame["position"],"attachment.position",out.modelFrame.position,error))return false;
         float q[4];for(int i=0;i<4;++i)if(!ReadFloat(frame["rotation"][i],"attachment.rotation",q[i],error))return false;
         out.modelFrame.rotation={q[0],q[1],q[2],q[3]};
-        if(!out.modelFrame.valid()){error="Quaternion ou posição do Attachment inválidos.";return false;}return true;
+        if(!out.modelFrame.valid()){error="Quaternion ou posição do Attachment inválidos.";return false;}
+        if(value.contains("jointTarget")){
+            if(!value["jointTarget"].is_number_unsigned()){error="ID de junta inválido.";return false;}
+            out.jointTarget=value["jointTarget"].get<InstanceId>();
+        }return true;
     }
     if (out.instanceClass == InstanceClass::Workspace ||
         (IsRootServiceClass(out.instanceClass) && out.instanceClass!=InstanceClass::Lighting) || out.instanceClass == InstanceClass::Folder ||
@@ -507,7 +511,8 @@ std::string toJson(const Scene& scene) {
     });
     const bool preciseModels=std::any_of(scene.objects().begin(),scene.objects().end(),[](const auto& object){return object->instanceClass()==InstanceClass::Model&&static_cast<const Container&>(*object).hasModelFrame();});
     const bool attachments=std::any_of(scene.objects().begin(),scene.objects().end(),[](const auto& o){return o->instanceClass()==InstanceClass::Attachment;});
-    root["version"] = attachments ? 5 : preciseModels ? 4 : hierarchy ? 3 : hasGame ? 2 : 1;
+    const bool joints=std::any_of(scene.objects().begin(),scene.objects().end(),[](const auto& o){return o->instanceClass()==InstanceClass::Attachment&&static_cast<const Attachment&>(*o).jointTarget();});
+    root["version"] = joints ? 6 : attachments ? 5 : preciseModels ? 4 : hierarchy ? 3 : hasGame ? 2 : 1;
     if (hasGame) root["game"] = gameData;
     root["nextId"] = scene.nextId();
 
@@ -561,7 +566,8 @@ std::string toJson(const Scene& scene) {
                 {"name",node->name()},{"parent",node->parent()?node->parent()->id():0}});
             if(node->instanceClass()==InstanceClass::Attachment){const auto& frame=static_cast<const Attachment&>(*node).localFrame();
                 objects.back()["attachment"]={{"position",{frame.position.x,frame.position.y,frame.position.z}},
-                    {"rotation",{frame.rotation.x,frame.rotation.y,frame.rotation.z,frame.rotation.w}}};}
+                    {"rotation",{frame.rotation.x,frame.rotation.y,frame.rotation.z,frame.rotation.w}}};
+                if(const auto target=static_cast<const Attachment&>(*node).jointTarget())objects.back()["jointTarget"]=target;}
             if(IsSurfaceClass(node->instanceClass()))objects.back()["surface"]=game::EncodeSurface(static_cast<const Surface&>(*node).properties());
             if(node->instanceClass()==InstanceClass::Model){const auto& model=static_cast<const Container&>(*node);if(model.hasModelFrame()){
                 const auto& frame=model.modelFrame();
@@ -881,6 +887,10 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
     for(const auto& object:parsed)if(object.instanceClass==InstanceClass::Attachment) {
         auto* attachment=staged.createAttachment(staged.find(object.parent),object.name,object.id);
         if(!attachment||!attachment->setLocalFrame(object.modelFrame)){error="Não foi possível restaurar Attachment "+object.name;return false;}
+    }
+    for(const auto& object:parsed)if(object.jointTarget){
+        if(version<6){error="Junta requer projeto versão6.";return false;}
+        if(!staged.connectAttachments(object.id,object.jointTarget,error,false))return false;
     }
     if (requestedNextId != 0) staged.setNextId(requestedNextId);
     for (const auto& value:root["objects"]) if (value.contains("attributes")) {
