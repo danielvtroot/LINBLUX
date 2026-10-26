@@ -12,7 +12,7 @@ namespace loblox {
 namespace {
 Font UiFont() { return ExperienceOverlayFont(); }
 
-Color Fade(Color color, float opacity) {
+Color WithOpacity(Color color, float opacity) {
     color.a = static_cast<unsigned char>(std::clamp(color.a * opacity, 0.f, 255.f));
     return color;
 }
@@ -42,8 +42,8 @@ void DrawLuaUi(const game::RuntimeSession& runtime, int width, int height, Font 
         if (element->opacity <= 0.004f) continue;
         const Rectangle rect = ui.resolve(*element, float(width), float(height));
         if (rect.width <= 0 || rect.height <= 0) continue;
-        const Color color = Fade(element->color, element->opacity);
-        const Color background = Fade(element->background, element->opacity);
+        const Color color = WithOpacity(element->color, element->opacity);
+        const Color background = WithOpacity(element->background, element->opacity);
         const float font_size = element->fontSize * scale;
         const float spacing = std::max(1.f, scale);
         switch (element->kind) {
@@ -72,7 +72,7 @@ void DrawLuaUi(const game::RuntimeSession& runtime, int width, int height, Font 
                 const auto texture = game::AssetTexture(path);
                 if (!texture.id) break;
                 DrawTexturePro(texture, {0, 0, float(texture.width), float(texture.height)}, rect,
-                               {0, 0}, 0, Fade(WHITE, element->opacity));
+                               {0, 0}, 0, WithOpacity(WHITE, element->opacity));
                 break;
             }
             case game::UiKind::Bar: {
@@ -89,7 +89,7 @@ void DrawLuaUi(const game::RuntimeSession& runtime, int width, int height, Font 
                     const Vector2 size = MeasureTextEx(font, text.c_str(), font_size, spacing);
                     DrawTextEx(font, text.c_str(),
                                {rect.x + (rect.width - size.x) * .5f, rect.y + (rect.height - size.y) * .5f},
-                               font_size, spacing, Fade(WHITE, element->opacity));
+                               font_size, spacing, WithOpacity(WHITE, element->opacity));
                 }
                 break;
             }
