@@ -688,7 +688,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                 }
                 if(row||rig) {
                     if(row){const auto id=row->GetAttribute<InstanceId>("data-node-row",0);if(!ui.scene_.selected(id))actions.dispatch({"select","",id});}else actions.dispatch({"rig-select",attr(rig,"data-rig")});
-                    std::string menu;for(const auto* cmd:{"rename","duplicate","copy","paste","group","ungroup","folder","model","script","delete","focus"})if(row||std::string(cmd)=="rename"||std::string(cmd)=="duplicate"||std::string(cmd)=="delete"||std::string(cmd)=="focus")menu+=Button(cmd,cmd,"","","context");
+                    std::string menu;for(const auto* cmd:{"rename","duplicate","copy","paste","group","ungroup","folder","model","script","delete","focus"})if(row||std::string(cmd)=="rename"||std::string(cmd)=="duplicate"||std::string(cmd)=="delete"||std::string(cmd)=="focus")menu+=Button(cmd,std::string(cmd)=="group"?"Agrupar seleção":std::string(cmd)=="ungroup"?"Desagrupar modelo":cmd,"","","context");
                     el("context-menu")->SetInnerRML(i18n::Markup(menu));rect("context-menu",{std::min(mouse.x,float(w)-190),std::max(4.f,std::min(mouse.y,float(h)-285)),184,row?281.f:106.f});display("context-menu",true);contextOpen=true;treeKeyboard=true;
                 }
             }
