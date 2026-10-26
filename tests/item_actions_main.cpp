@@ -157,12 +157,12 @@ pub("reserva_final", estado.reserve)
 
 -- Origem real: o Attachment do item equipado, nunca uma coordenada fixa.
 -- O Attachment da instância, nunca o do protótipo escondido.
-local boca = item:find_child("BocaDoCano")
-local nomes = ""
-for _, filho in ipairs(item:children()) do nomes = nomes..filho.name.."," end
-print("FILHOS:", nomes)
-pub("debug_filhos", nomes)
-pub("boca_id", boca and boca.id or 0)
+-- Clonar renomeia para manter nomes únicos: procure pelo prefixo.
+local boca
+for _, filho in ipairs(item:children()) do
+    if string.sub(filho.name, 1, 10) == "BocaDoCano" then boca = filho end
+end
+if boca then pub("boca_id", boca.id) else pub("boca_id", 0) end
 local acerto = linblux.physics.raycast(boca.world_position, boca.direction, 120, item)
 pub("acerto", acerto and acerto.object.name or "nenhum")
 pub("acerto_distancia", acerto and acerto.distance or -1)
@@ -182,6 +182,10 @@ task.wait(0.05)
 pub("boca_x", boca.world_position.X)
 pub("boca_y", boca.world_position.Y)
 pub("boca_z", boca.world_position.Z)
+pub("debug_item_x", item.position.X)
+pub("debug_item_z", item.position.Z)
+pub("debug_local_z", boca.position.Z)
+pub("debug_boca_nome", boca.name)
 pub("boca_dir_z", boca.direction.Z)
 pub("fim", true)
 )lua";
@@ -272,7 +276,12 @@ int main() {
                 std::to_string(attributeNumber(*workspace, "debug_criacoes")) + ", equip=" +
                 std::to_string(attributeNumber(*workspace, "debug_equip")) + ", painel=" +
                 std::to_string(attributeNumber(*workspace, "debug_painel")) + ", ui=" +
-                std::to_string(runtime.ui().count()) + "):\n" + scriptErrors(runtime));
+                std::to_string(runtime.ui().count()) + "):\n" + scriptErrors(runtime) + "ALL:\n" +
+                [&] {
+                    std::string all;
+                    for (const auto& message : runtime.scripts().messages()) all += message.text + "\n";
+                    return all;
+                }());
         require(runtime.scripts().errorCount() == 0, "script errors:\n" + scriptErrors(runtime));
         const auto itemId = InstanceId(attributeNumber(*workspace, "item_id"));
         const auto cloneId = InstanceId(attributeNumber(*workspace, "clone_id"));
@@ -308,7 +317,11 @@ int main() {
         require(runtime.scene().attachmentFrame(muzzleId, muzzleFrame, error), "attachment frame: " + error);
         require(std::fabs(muzzleFrame.position.x - attributeNumber(*workspace, "boca_x")) < .01f &&
                 std::fabs(muzzleFrame.position.z - attributeNumber(*workspace, "boca_z")) < .01f,
-                "Lua world_position disagrees with the engine frame: lua(" +
+                "Lua world_position disagrees with the engine frame: item(" +
+                std::to_string(attributeNumber(*workspace, "debug_item_x")) + "," +
+                std::to_string(attributeNumber(*workspace, "debug_item_z")) + ") local" +
+                std::to_string(attributeNumber(*workspace, "debug_local_z")) + " name " +
+                attributeString(*workspace, "debug_boca_nome") + " lua(" +
                 std::to_string(attributeNumber(*workspace, "boca_x")) + "," +
                 std::to_string(attributeNumber(*workspace, "boca_y")) + "," +
                 std::to_string(attributeNumber(*workspace, "boca_z")) + ") engine(" +
@@ -336,8 +349,7 @@ int main() {
         require(std::fabs(cloneModel.scale - 2.f) < .01f, "clone scale was not applied");
 
         // Impacto: o raio parte do Attachment e ignora o próprio item.
-        require(attributeString(*workspace, "debug_filhos").find("BocaDoCano") != std::string::npos,
-                "item children: '" + attributeString(*workspace, "debug_filhos") + "'");
+        require(attributeNumber(*workspace, "boca_id") != 0, "driver did not find the instance attachment");
         require(attributeString(*workspace, "acerto") == "Alvo",
                 "raycast from the muzzle hit '" + attributeString(*workspace, "acerto") + "'");
         require(attributeNumber(*workspace, "alvo_vida") == 75, "damage was not applied by the health API");
