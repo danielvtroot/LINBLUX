@@ -37,3 +37,10 @@ de física concreta.
 
 **Limites:** não há componentes ECS genéricos; o modelo é hierárquico e
 orientado a objetos. Rigs são dados de `game`, não `Instance` filhas.
+
+**Attachments:** componente folha de Part/Modelo, com transformação local
+validada, ID estável e pose global calculada por Scene. Lua usa referências
+existentes; clone/remoção são os da hierarquia. JSON v5 preserva quaternions e
+recusa documentos inválidos antes de substituir a cena. Testes: Attachments
+em linblux_studio, exemplo attachments.lua no Player, pacote/defaults em
+linblux_experiences e fluxo X11 em linblux_models_ui.
