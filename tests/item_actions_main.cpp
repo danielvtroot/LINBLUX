@@ -108,6 +108,15 @@ local item = linblux.items.spawn("fuzil", {position=v(7,3,0)})
 local clone = linblux.items.spawn("fuzil", {position=v(11,3,0), scale=2})
 pub("item_id", item.id)
 pub("clone_id", clone.id)
+
+-- Cópia recém-criada (com colisão): sem ignorar a subárvore do Modelo, o raio
+-- atinge as próprias peças; com o Modelo ignorado, nenhuma delas aparece.
+local p = clone.position
+local origem = v(p.x, p.y, p.z - 20)
+local sem = linblux.physics.raycast(origem, v(0,0,1), 40)
+local com = linblux.physics.raycast(origem, v(0,0,1), 40, clone)
+pub("auto_sem", sem and sem.object.name or "nenhum")
+pub("auto_com", com and com.object.name or "nenhum")
 linblux.items.collect(item)
 linblux.items.equip(item)
 linblux.items.configure(item, {magazine=6, reserve=6, consume=1, interval=0.25, reload_time=0.3})
@@ -160,17 +169,6 @@ pub("acerto_distancia", acerto and acerto.distance or -1)
 if acerto and acerto.object == alvo then linblux.npc.damage(alvo, 25) end
 pub("alvo_vida", linblux.npc.health(alvo))
 
--- Cópia no mundo (com colisão): sem ignorar a subárvore, o raio do próprio
--- pivô atinge o Modelo; com o Modelo ignorado, nenhuma peça dele aparece.
-local p = clone.position
-local origem = v(p.x, p.y, p.z - 20)
-local sem = linblux.physics.raycast(origem, v(0,0,1), 40)
-local com = linblux.physics.raycast(origem, v(0,0,1), 40, clone)
-pub("auto_sem", sem and sem.object.name or "nenhum")
-pub("auto_com", com and com.object.name or "nenhum")
-print("CLONE:", clone.id, clone.name, p.x, p.y, p.z, sem and sem.object.name or "nenhum")
-local chao = linblux.physics.raycast(v(p.x, p.y + 5, p.z), v(0,-1,0), 40)
-print("CHAO:", chao and chao.object.name or "nenhum")
 
 linblux.items.unequip()
 linblux.items.equip(item)
@@ -343,6 +341,7 @@ int main() {
 
         // Impacto: o raio parte do Attachment e ignora o próprio item.
         require(attributeNumber(*workspace, "boca_id") != 0, "driver did not find the instance attachment");
+        for (const auto& message : runtime.scripts().messages()) std::fprintf(stderr, "MSG %s\n", message.text.c_str());
         require(attributeString(*workspace, "acerto") == "Alvo",
                 "raycast from the muzzle hit '" + attributeString(*workspace, "acerto") + "'");
         require(attributeNumber(*workspace, "alvo_vida") == 75, "damage was not applied by the health API");

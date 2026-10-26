@@ -1810,7 +1810,9 @@ struct LuaRuntime::Impl {
     }
     std::vector<InstanceId> discoverScripts() {
         for(auto it=startedScripts.begin();it!=startedScripts.end();) {
-            if(!scriptAlive(*it))it=startedScripts.erase(it);else ++it;
+            // Um script destruído (ou pai destruído) não pode deixar UI, listeners
+            // ou tarefas pendentes para trás: o cancelamento é a limpeza completa.
+            if(!scriptAlive(*it)){cancelScript(*it);it=startedScripts.erase(it);}else ++it;
         }
         std::vector<InstanceId> candidates,added;
         const auto* service=runtime->scene().service(InstanceClass::ServerScriptService);
