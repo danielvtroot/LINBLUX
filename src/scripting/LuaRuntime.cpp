@@ -412,12 +412,16 @@ struct LuaRuntime::Impl {
     static int ItemsState(lua_State* L){auto& h=Host(L);const auto info=h.runtime->inventory().info(h.instance(L,1).id());lua_pushlstring(L,info.state.data(),info.state.size());return 1;}
     // Ações genéricas de uso: qualquer item equipável pode configurar pente,
     // intervalo e recarga. O efeito (raio, projétil, som, luz) fica no script.
+    static int ItemInteger(lua_State* L,int index){
+        Require(lua_isinteger(L,index),"Munição requer inteiro");const auto value=lua_tointeger(L,index);
+        Require(value>=0&&value<=1000000,"Munição fora dos limites");return int(value);
+    }
     static int ItemsConfigure(lua_State* L){
         auto& h=Host(L);const auto id=h.instance(L,1).id();Require(lua_istable(L,2),"configure requer tabela de configuração");
         game::ItemConfig config;
         lua_pushnil(L);while(lua_next(L,2)){
             const char* key=Text(L,-2);
-            const auto integer=[&](){Require(lua_isinteger(L,-1),"Campos de munição requerem inteiros");return int(lua_tointeger(L,-1));};
+            const auto integer=[&](){return ItemInteger(L,-1);};
             if(Eq(key,"magazine"))config.magazine=integer();
             else if(Eq(key,"reserve"))config.reserve=integer();
             else if(Eq(key,"consume"))config.consume=integer();
@@ -448,7 +452,7 @@ struct LuaRuntime::Impl {
     }
     static int ItemsSetAmmo(lua_State* L){
         auto& h=Host(L);Require(lua_isinteger(L,2)&&lua_isinteger(L,3),"set_ammo requer inteiros para pente e reserva");
-        std::string error;Require(h.runtime->itemActions().setAmmo(h.instance(L,1).id(),int(lua_tointeger(L,2)),int(lua_tointeger(L,3)),error),error.c_str());return 0;
+        std::string error;Require(h.runtime->itemActions().setAmmo(h.instance(L,1).id(),ItemInteger(L,2),ItemInteger(L,3),error),error.c_str());return 0;
     }
     static void PushCombat(lua_State* L,const game::ItemRuntimeState& state){
         lua_createtable(L,0,10);

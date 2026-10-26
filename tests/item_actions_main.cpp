@@ -121,6 +121,9 @@ linblux.items.collect(item)
 linblux.items.equip(item)
 linblux.items.configure(item, {magazine=6, reserve=6, consume=1, interval=0.25, reload_time=0.3})
 pub("ammo_inicial", linblux.items.combat(item).ammo)
+assert(not pcall(linblux.items.configure,item,{magazine=4294967302}),"inteiro truncado na configuração")
+assert(not pcall(linblux.items.set_ammo,item,4294967302,6),"inteiro truncado na munição")
+assert(linblux.items.combat(item).ammo==6,"configuração inválida modificou estado")
 
 local primeiro_evento = false
 linblux.events.on("item_action", function(evento)
