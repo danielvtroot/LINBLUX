@@ -80,7 +80,7 @@ int main() {
         if(!ui.frontend())return 1;
         std::function<void()> observeFrame;
         auto frames=[&](int count=2){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(BLACK);rlImGuiBegin();ui.draw();rlImGuiEnd();ui.renderModernFrontend();EndDrawing();if(observeFrame)observeFrame();}};
-        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames((std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")||std::getenv("LOBLOX_RIG_DECALS_ONLY"))?1:2);};
+        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames(std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")?1:2);};
         auto key=[&](const std::string& name){event("keydown "+name);event("keyup "+name);};
         auto clickAt=[&](Vector2 p){event("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));event("mousedown 1");event("mouseup 1");};
         auto click=[&](const std::string& id){
@@ -325,6 +325,7 @@ end)
             click("tree-search");event("type --clearmodifiers R6");key("Return");
             click("rig-"+rigId);click("rig-body-"+rigId+"-0");
             click("cmd-rig-decal-add-");CHECK(rig()->bodies[game::Torso].decals.size()==1);
+            if(rig()->bodies[game::Torso].decals.empty()){capture("rig-add-failure");rlImGuiShutdown();CloseWindow();return 1;}
             const auto first=rig()->bodies[game::Torso].decals.front().id;
             click("rig-prop-Name");key("ctrl+a");event("type --clearmodifiers DecalFront");key("Return");
             CHECK(rig()->findDecal(first)->name=="DecalFront");
