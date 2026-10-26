@@ -38,3 +38,11 @@ Personagens novos não recebem face ou olhos impostos pelo renderizador. Imagens
 configuradas explicitamente em experiências antigas continuam sendo renderizadas
 até o criador remover o vínculo. O recurso de fábrica já sem imagem permanece
 sem alteração de rig, juntas, animações, física ou controlador.
+
+Superfícies independentes são persistidas em objetos Decal/Texture do formato
+v3, com campo surface. Imagem, face, transparência, rotação, cor RGBA, repetição
+e deslocamentos UV usam o mesmo codec dos adesivos de rig. Arquivos v1/v2/v3
+anteriores continuam legíveis; campos novos opcionais usam os valores anteriores.
+Pais Part são restaurados antes das superfícies, sem depender da ordem do JSON.
+No renderizador, os componentes usam a mesma orientação de faces e rotação UV
+contínua, com composição na ordem dos filhos.
