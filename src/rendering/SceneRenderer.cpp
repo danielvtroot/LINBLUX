@@ -900,7 +900,7 @@ SceneRenderer::SceneRenderer() {
 
 SceneRenderer::~SceneRenderer() {
     if(--rendererCount==0) {
-        ClearExperienceOverlayResources(); 
+        ClearExperienceOverlayResources();
         game::ClearImageTextures();
         UnloadProceduralSky();
     }
