@@ -5,6 +5,7 @@
 #include "objects/Instance.h"
 namespace loblox {class Scene;class PhysicsWorld;}
 namespace loblox::game {
+bool InventoryHidden(const Instance& node);
 struct ItemOptions {
     std::string name,icon;
     bool equipable=true;

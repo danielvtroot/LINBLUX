@@ -8,6 +8,8 @@
 #include <stdexcept>
 
 namespace loblox::game {
+bool InventoryHidden(const Instance& node){const auto it=node.attributes().find("_linblux_item_hidden");if(it==node.attributes().end())return false;const auto* flag=std::get_if<bool>(&it->second);return flag&&*flag;}
+
 namespace {
 void Need(bool condition,const char* message){if(!condition)throw std::runtime_error(message);}
 struct Snapshot {InstanceId id;InstanceClass type;bool anchored=false,collide=false,enabled=false;unsigned char alpha=255;};

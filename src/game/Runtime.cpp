@@ -806,7 +806,7 @@ std::vector<InstanceId> RuntimeSession::overlap(const SpatialQuery& query,bool& 
         QueryContacts(const Scene& s,const SpatialQuery& q,const btCollisionObject* p,const btCollisionObject* test):scene(s),query(q),player(p),probe(test){}
         bool identify(const btCollisionObject* object,InstanceId& id)const{
             if(object==player){id=0;return query.includePlayer;}
-            const auto* part=static_cast<const Part*>(object->getUserPointer());if(!part||scene.findPart(part->id())!=part||part->id()==query.ignore)return false;id=part->id();return true;
+            const auto* part=static_cast<const Part*>(object->getUserPointer());if(!part||scene.findPart(part->id())!=part||InventoryHidden(*part)||part->id()==query.ignore)return false;id=part->id();return true;
         }
         bool needsCollision(btBroadphaseProxy* proxy)const override{
             const auto* object=static_cast<const btCollisionObject*>(proxy->m_clientObject);InstanceId id;
