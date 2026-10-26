@@ -89,6 +89,7 @@ add_library(linblux_engine STATIC
   src/game/JpegImage.cpp
   src/game/Runtime.cpp
   src/game/Inventory.cpp
+  src/game/Interaction.cpp
   src/game/Navigation.cpp
   src/game/Npc.cpp
   src/game/Audio.cpp
@@ -135,7 +136,7 @@ add_library(linblux_editing STATIC
 target_link_libraries(linblux_editing PUBLIC linblux_engine)
 add_library(linblux_core INTERFACE) # transitional test/embedding facade
  target_link_libraries(linblux_core INTERFACE linblux_engine linblux_editing)
-add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp)
+add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp src/rendering/ExperienceOverlay.cpp)
 target_link_libraries(linblux_renderer PUBLIC linblux_engine)
 add_library(linblux_presentation STATIC src/ui/Localization.cpp)
 target_link_libraries(linblux_presentation PUBLIC linblux_engine)

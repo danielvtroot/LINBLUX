@@ -1,3 +1,4 @@
+#include "rendering/ExperienceOverlay.h"
 #include "experiences/ExperienceManager.h"
 #include "serialization/ProjectIO.h"
 #include "rendering/SceneRenderer.h"
@@ -61,6 +62,7 @@ int main(int argc,char** argv) {
             BeginDrawing();ClearBackground(ui::theme::background);
             RigRenderState avatar{&runtime.rig(),runtime.pose(),runtime.renderCharacterRoot()};
             renderer.drawScene(runtime.scene(),runtime.playerCamera().camera(),GetScreenWidth(),GetScreenHeight(),0,runtime.playerCamera().avatarHidden()?nullptr:&avatar,false);
+            DrawExperienceOverlay(runtime,GetScreenWidth(),GetScreenHeight(),font);
             DrawRectangleRounded({16,16,245,58},.2f,8,ui::theme::panel);
             if(logo.id){BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{24,21,48,48},{0,0},0,WHITE);EndBlendMode();}
             label("LINBLUX Player",84,35,18,ui::theme::text);

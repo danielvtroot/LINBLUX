@@ -1,3 +1,4 @@
+#include "rendering/ExperienceOverlay.h"
 #include "ui/Localization.h"
 #include "ui/ExperienceUI.h"
 #include "editor/EditorUI.h"
@@ -300,6 +301,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     RigRenderState character{&runtime_.rig(), runtime_.pose(), runtime_.renderCharacterRoot()};
     renderer_.drawScene(runtime_.scene(), runtime_.playerCamera().camera(), viewportWidth_, viewportHeight_,
         kInvalidInstanceId, runtime_.playerCamera().avatarHidden() ? nullptr : &character, false);
+    DrawExperienceOverlay(runtime_,viewportWidth_,viewportHeight_);
     EndTextureMode();
     resolveViewport();
     if(frontend_)return; // RML owns gameplay presentation; no duplicate HUD/menu.

@@ -34,6 +34,7 @@ public:
     void characterAdded();
     void healthChanged(float health,bool died);
     void inventoryChanged(InstanceId item,const std::string& action);
+    void interactionCompleted(InstanceId object);
     const std::vector<Message>& messages() const;
     std::size_t errorCount() const; // retained across stop, reset on the next Play
     void hostError(const std::string& text);

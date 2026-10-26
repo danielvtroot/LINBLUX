@@ -19,7 +19,7 @@ namespace loblox::scripting {
 namespace {
 enum class Kind { Instance,Game,Players,Player,RunService,AnimationService,Character,Humanoid,Animator,Signal,Connection,Task };
 enum Signal { Spawn=1,Heartbeat,HealthChanged,Died,EngineStart,EngineStop,EngineDestroy,PhysicsUpdate,CollisionEnter,CollisionExit,
-    KeyPressed,KeyReleased,MousePressed,MouseReleased,GamepadPressed,GamepadReleased,InventoryChanged };
+    KeyPressed,KeyReleased,MousePressed,MouseReleased,GamepadPressed,GamepadReleased,InventoryChanged,InteractionCompleted };
 struct Handle { Kind kind; InstanceId id; unsigned generation; unsigned avatar=0; bool modern=false; };
 constexpr std::size_t kNativeContentLimit=8*1024*1024, kNativeNodes=10000;
 bool Eq(const char* a,const char* b) { return std::strcmp(a,b)==0; }
@@ -369,6 +369,18 @@ struct LuaRuntime::Impl {
         else {value=Vector3RotateByQuaternion(Vector3Scale(value,frame.scale),frame.rotation);if(!Direction)value=Vector3Add(value,frame.position);}
         ModernVector(L,value);return 1;
     }
+    static int InteractionRegister(lua_State* L){
+        auto& h=Host(L);auto& object=h.instance(L,1);game::InteractionOptions options;
+        if(lua_gettop(L)>1){Require(lua_istable(L,2),"Interação requer tabela de opções");lua_pushnil(L);while(lua_next(L,2)){
+            const char* key=Text(L,-2);
+            if(Eq(key,"label")){options.label=Text(L,-1);Require(options.label.size()==lua_rawlen(L,-1),"Nome de interação não aceita NUL");}
+            else if(Eq(key,"distance"))options.distance=float(Number(L,-1));else if(Eq(key,"hold_seconds"))options.holdSeconds=float(Number(L,-1));
+            else if(Eq(key,"key")){const char* name=Text(L,-1);bool found=false;for(const auto& entry:game::ScriptKeys)if(Eq(name,entry.name)){options.key=entry.code;found=true;break;}Require(found,"Tecla de interação desconhecida ou protegida");}
+            else throw std::runtime_error("Opção de interação desconhecida");lua_pop(L,1);
+        }}h.modelBudget();h.runtime->interactions().add(object.id(),options);h.pushInstance(L,&object,true);return 1;
+    }
+    static int InteractionRemove(lua_State* L){auto& h=Host(L);h.modelBudget();h.runtime->interactions().remove(h.instance(L,1).id());return 0;}
+    static int InteractionPrompt(lua_State* L){auto& h=Host(L);const auto& prompt=h.runtime->interactions().prompt();lua_newtable(L);h.pushInstance(L,h.runtime->scene().find(prompt.object),true);lua_setfield(L,-2,"object");lua_pushnumber(L,prompt.progress);lua_setfield(L,-2,"progress");lua_pushlstring(L,prompt.label.data(),prompt.label.size());lua_setfield(L,-2,"label");return 1;}
     static int ItemsRegister(lua_State* L){
         auto& h=Host(L);const std::string type=Text(L,1);Require(type.size()==lua_rawlen(L,1),"Tipo de item não aceita NUL");auto& model=h.instance(L,2);game::ItemOptions options;
         if(lua_gettop(L)>2){Require(lua_istable(L,3),"Configuração do item requer tabela");lua_pushnil(L);while(lua_next(L,3)){
@@ -902,7 +914,7 @@ struct LuaRuntime::Impl {
             Eq(topic,"physics_update")?PhysicsUpdate:Eq(topic,"collision_enter")?CollisionEnter:Eq(topic,"collision_exit")?CollisionExit:
             Eq(topic,"key_pressed")?KeyPressed:Eq(topic,"key_released")?KeyReleased:
             Eq(topic,"mouse_pressed")?MousePressed:Eq(topic,"mouse_released")?MouseReleased:
-            Eq(topic,"gamepad_pressed")?GamepadPressed:Eq(topic,"gamepad_released")?GamepadReleased:Eq(topic,"inventory_changed")?InventoryChanged:0;
+            Eq(topic,"gamepad_pressed")?GamepadPressed:Eq(topic,"gamepad_released")?GamepadReleased:Eq(topic,"inventory_changed")?InventoryChanged:Eq(topic,"interaction_completed")?InteractionCompleted:0;
     }
     static const char* Topic(lua_State* L) {
         const char* topic=Text(L,1);const auto length=lua_rawlen(L,1);
@@ -1366,12 +1378,13 @@ struct LuaRuntime::Impl {
         lua_newtable(L);
         const std::pair<const char*,lua_CFunction> items[]={{"register",Safe<ItemsRegister>},{"spawn",Safe<ItemsSpawn>},{"collect",Safe<ItemsAction<0>>},{"add",Safe<ItemsAction<0>>},{"equip",Safe<ItemsAction<1>>},{"unequip",Safe<ItemsAction<2>>},{"drop",Safe<ItemsAction<3>>},{"remove",Safe<ItemsAction<4>>},{"list",Safe<ItemsList>},{"equipped",Safe<ItemsEquipped>},{"info",Safe<ItemsInfo>},{"state",Safe<ItemsState>}};
         for(const auto& entry:items){lua_pushcfunction(L,entry.second);lua_setfield(L,-2,entry.first);}lua_setfield(L,-2,"items");
+        lua_newtable(L);lua_pushcfunction(L,Safe<InteractionRegister>);lua_setfield(L,-2,"register");lua_pushcfunction(L,Safe<InteractionRemove>);lua_setfield(L,-2,"unregister");lua_pushcfunction(L,Safe<InteractionPrompt>);lua_setfield(L,-2,"prompt");lua_setfield(L,-2,"interactions");
         lua_setglobal(L,"linblux");return 0;
     }
     static int EmitInventory(lua_State* L){auto& h=Host(L);const int ref=int(lua_tointeger(L,1));const auto id=InstanceId(lua_tointeger(L,2));const std::string action=Text(L,3);const auto connection=InstanceId(lua_tointeger(L,4));
-        lua_settop(L,0);lua_rawgeti(L,LUA_REGISTRYINDEX,ref);lua_newtable(L);h.pushInstance(L,h.runtime->scene().find(id),true);lua_setfield(L,-2,"item");
+        lua_settop(L,0);lua_rawgeti(L,LUA_REGISTRYINDEX,ref);lua_newtable(L);h.pushInstance(L,h.runtime->scene().find(id),true);lua_setfield(L,-2,"item");h.pushInstance(L,h.runtime->scene().find(id),true);lua_setfield(L,-2,"object");
         const auto key=std::to_string(id);lua_pushlstring(L,key.data(),key.size());lua_setfield(L,-2,"id");lua_pushlstring(L,action.data(),action.size());lua_setfield(L,-2,"action");SpawnTask(L);h.jobs.back().connection=connection;return 0;}
-    void inventoryChanged(InstanceId id,const std::string& action){if(!state)return;pruneListeners();for(const auto& pair:listeners)if(pair.second.signal==InventoryChanged){
+    void entityChanged(int signal,InstanceId id,const std::string& action){if(!state)return;pruneListeners();for(const auto& pair:listeners)if(pair.second.signal==signal){
         executing=pair.second.script;lua_pushcfunction(state,Safe<EmitInventory>);lua_pushinteger(state,pair.second.ref);lua_pushinteger(state,lua_Integer(id));lua_pushlstring(state,action.data(),action.size());lua_pushinteger(state,lua_Integer(pair.first));
         if(lua_pcall(state,4,0,0)!=LUA_OK){message(true,executing,lua_tostring(state,-1));lua_pop(state,1);}}}
     static int Emit(lua_State* L) {
@@ -1603,7 +1616,8 @@ void LuaRuntime::fixedUpdate(float dt){
 bool LuaRuntime::wantsContacts()const{return impl_->state&&(impl_->hasSignal(CollisionEnter)||impl_->hasSignal(CollisionExit));}
 void LuaRuntime::contact(InstanceId first,InstanceId second,bool entering){impl_->contact(first,second,entering);}
 void LuaRuntime::characterAdded(){impl_->characterAdded();}
-void LuaRuntime::inventoryChanged(InstanceId id,const std::string& action){impl_->inventoryChanged(id,action);}
+void LuaRuntime::interactionCompleted(InstanceId id){impl_->entityChanged(InteractionCompleted,id,"complete");}
+void LuaRuntime::inventoryChanged(InstanceId id,const std::string& action){impl_->entityChanged(InventoryChanged,id,action);}
 void LuaRuntime::healthChanged(float health,bool died){impl_->event(HealthChanged,health);if(died)impl_->event(Died);}
 const std::vector<Message>& LuaRuntime::messages()const{return impl_->output;}
 std::size_t LuaRuntime::errorCount()const{return impl_->errors;}
