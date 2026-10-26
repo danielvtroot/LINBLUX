@@ -101,7 +101,9 @@ public:
     InstanceClass instanceClass() const override { return InstanceClass::Attachment; }
     const ModelFrame& localFrame() const { return local_; }
     bool setLocalFrame(const ModelFrame& frame) {
-        if(!frame.valid()||frame.scale!=1)return false;local_=frame;return true;
+        if(!frame.valid()||frame.scale!=1)return false;
+        local_=frame;
+        return true;
     }
 private:
     ModelFrame local_;

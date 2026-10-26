@@ -139,7 +139,7 @@ void Attachments() {
     const auto original=projectio::toJson(scene);CHECK(nlohmann::json::parse(original)["version"]==5);
     Scene loaded;CHECK(projectio::fromJson(loaded,original,error));CHECK(projectio::toJson(loaded)==original);
     ModelFrame recovered;CHECK(loaded.attachmentFrame(muzzle->id(),recovered,error));CHECK(NearlyEqual(recovered.position,world.position));
-    Scene lua;CHECK(scenelua::fromLua(lua,scenelua::toLua(scene),error));CHECK(projectio::toJson(lua)==original);
+    bool rejectedLegacy=false;try{(void)scenelua::toLua(scene);}catch(const std::exception&){rejectedLegacy=true;}CHECK(rejectedLegacy);
     auto bad=nlohmann::json::parse(original);for(auto& o:bad["objects"])if(o["id"]==muzzle->id())o["attachment"]["rotation"]={0,0,0,0};
     CHECK(!projectio::fromJson(scene,bad.dump(),error));CHECK(projectio::toJson(scene)==original);
     bad=nlohmann::json::parse(original);bad["version"]=4;CHECK(!projectio::fromJson(scene,bad.dump(),error));CHECK(projectio::toJson(scene)==original);

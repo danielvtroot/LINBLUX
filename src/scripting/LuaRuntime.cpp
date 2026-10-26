@@ -1177,7 +1177,8 @@ struct LuaRuntime::Impl {
         if(h.modern&&h.kind==Kind::Player&&Eq(key,"velocity")){
             const auto value=ReadVector(L,3);std::string error;if(!self.runtime->playerMotion(value,game::PartMotion::Velocity,error))throw std::runtime_error(error);return 0;
         }
-        if(h.modern&&h.kind==Kind::Instance)if(auto* object=self.runtime->mutableScene().find(h.id);object&&object->instanceClass()==InstanceClass::Attachment) {
+        if(h.modern&&h.kind==Kind::Instance)if(auto* object=self.runtime->mutableScene().find(h.id);object&&object->instanceClass()==InstanceClass::Attachment&&
+            (Eq(key,"position")||Eq(key,"rotation")||Eq(key,"transform")||Eq(key,"world_position")||Eq(key,"world_rotation")||Eq(key,"direction")||Eq(key,"world_transform"))) {
             auto& attachment=static_cast<Attachment&>(*object);auto frame=attachment.localFrame();
             if(Eq(key,"position"))frame.position=ReadVector(L,3);
             else if(Eq(key,"rotation"))frame.rotation=QuatFromEulerDegreesZYX(ReadVector(L,3));
@@ -1186,10 +1187,8 @@ struct LuaRuntime::Impl {
                 while(lua_next(L,3)){const char* field=Text(L,-2);if(Eq(field,"position"))frame.position=ReadVector(L,-1);
                     else if(Eq(field,"rotation"))frame.rotation=QuatFromEulerDegreesZYX(ReadVector(L,-1));else throw std::runtime_error("Campo do Attachment inválido");lua_pop(L,1);}
             }else if(Eq(key,"world_position")||Eq(key,"world_rotation")||Eq(key,"direction")||Eq(key,"world_transform"))throw std::runtime_error("Transformação global do Attachment é somente leitura");
-            else goto ordinary_instance_assignment;
             Require(attachment.setLocalFrame(frame),"Transformação local do Attachment inválida");return 0;
         }
-        ordinary_instance_assignment:
         if(h.modern&&h.kind==Kind::Instance)if(const auto* object=self.runtime->scene().find(h.id);object&&object->instanceClass()==InstanceClass::Model) {
             if(Eq(key,"transform")){lua_remove(L,2);return SetModelPose<false>(L);}
             if(Eq(key,"pivot")){lua_remove(L,2);return SetModelPose<true>(L);}
