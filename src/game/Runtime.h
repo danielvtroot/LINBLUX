@@ -4,6 +4,7 @@
 #include <optional>
 #include <set>
 #include "game/Audio.h"
+#include "game/HealthHud.h"
 #include "game/Inventory.h"
 #include "game/ItemActions.h"
 #include "game/Interaction.h"
@@ -130,6 +131,8 @@ public:
     const ScriptInput& previousScriptInput() const { return previousScriptInput_; }
     unsigned characterGeneration() const { return respawns_; }
     bool setAnimation(const std::string& state,const std::string& assetId,std::string& error);
+    HealthHud& healthHud(){return healthHud_;}
+    const HealthHud& healthHud() const{return healthHud_;}
     float health() const { return health_; }
     bool setHealth(float value,std::string& error);
     bool takeDamage(float amount,std::string& error);
@@ -228,6 +231,7 @@ private:
     ProgressStore progress_;
     std::set<std::pair<InstanceId,InstanceId>> activeContacts_;
     ScriptInput scriptInput_,previousScriptInput_;
+    HealthHud healthHud_;
     float health_=100, deadTime_=0, damageCooldown_=0;
     std::optional<Vector3> scriptCheckpoint_;
     bool shiftLockRequested_ = false;

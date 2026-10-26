@@ -273,6 +273,7 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error,const Prog
         npcs_.reset(); // controladores de NPC sao sempre recriados por Play
         inventory_=std::make_unique<Inventory>(*scene_,*physics_);inventory_->update(position(),camera_.yaw());inventory_->loadAuthored();
         interactions_=std::make_unique<InteractionSystem>(*scene_,*physics_);hotbarPage_=0;itemNotice_.clear();
+        healthHud_={};
         ui_.clear(); // a new Play never inherits nodes from a previous script VM
         itemActions_.clear(); // munição/recarga são estado temporário de partida
         scripts_.start(*this); // errors are reported; safe native gameplay remains available

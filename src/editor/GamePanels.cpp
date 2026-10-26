@@ -342,27 +342,8 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
         }
     }
     const float health=runtime_.health(),maximum=runtime_.settings().maxHealth;
-    displayedHealth_=Lerp(displayedHealth_,health,1-std::exp(-10*std::min(GetFrameTime(),.1f)));
-    const float fraction=std::clamp(displayedHealth_/maximum,0.f,1.f);
-    // Colour follows actual health, not an asymptotic interpolant which can
-    // remain fractionally above a threshold forever (e.g. exactly 25/100).
-    const float condition=health/maximum;
-    const ImU32 color=condition>.6f?IM_COL32(65,213,126,255):
-        condition>.25f?IM_COL32(244,192,68,255):IM_COL32(235,78,86,255);
-    if(runtime_.state()==game::RuntimeState::Playing) {
-        const float width=std::min(std::clamp(viewportWidth_*.27f,180.f,240.f),std::max(80.f,viewportWidth_-110.f));
-        const ImVec2 top{image.x+viewportWidth_-width-12,image.y+12};
-        healthHud_={top.x,top.y,width,50};
-        dl->AddRectFilled({top.x+1,top.y+2},{top.x+width+1,top.y+52},IM_COL32(0,0,0,65),9);
-        dl->AddRectFilled(top,{top.x+width,top.y+50},IM_COL32(19,25,33,235),9);
-        dl->AddRect(top,{top.x+width,top.y+50},IM_COL32(72,88,105,160),9);
-        dl->AddText({top.x+12,top.y+8},health>0?IM_COL32(210,223,232,255):color,health>0?"HEALTH":"RESPAWNING");
-        char value[48];std::snprintf(value,sizeof(value),"%.0f / %.0f",health,maximum);
-        const auto text=ImGui::CalcTextSize(value);
-        dl->AddText({top.x+width-text.x-12,top.y+8},IM_COL32(246,249,252,255),value);
-        dl->AddRectFilled({top.x+12,top.y+32},{top.x+width-12,top.y+39},IM_COL32(52,65,76,255),4);
-        if(fraction>0)dl->AddRectFilled({top.x+12,top.y+32},{top.x+12+(width-24)*fraction,top.y+39},color,4);
-    }
+    const ImU32 color=IM_COL32(215,38,63,255);
+    healthHud_={image.x+viewportWidth_-93,image.y+17,82,82};
     const auto& settings=runtime_.settings();
     if (!runtime_.playerCamera().avatarHidden() && (settings.healthDisplayType!=2 || settings.nameDisplayDistance>0)) {
         const auto head=runtime_.rig().evaluate(runtime_.pose(),runtime_.renderCharacterRoot())[game::Head];

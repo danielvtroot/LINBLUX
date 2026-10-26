@@ -1412,6 +1412,10 @@ struct LuaRuntime::Impl {
         if(Eq(key,"color")||Eq(key,"background")){requireUi(runtime->ui().setColor(id,owner,key,UiColorValue(L,index),error),error);return;}
         requireUi(runtime->ui().setNumber(id,owner,key,Number(L,index),error),error);
     }
+    static int UiHealthHud(lua_State* L) {
+        Require(lua_isboolean(L,1),"ui.health_hud requer booleano");
+        Host(L).runtime->healthHud().visible=lua_toboolean(L,1)!=0;return 0;
+    }
     static int UiCreate(lua_State* L) {
         auto& self=Host(L);Require(self.executing,"UI só pode ser criada por um Script em execução");
         Require(lua_type(L,1)==LUA_TSTRING,"ui.create requer o tipo do elemento");game::UiKind kind;
@@ -1596,6 +1600,7 @@ struct LuaRuntime::Impl {
         for(const auto& entry:items){lua_pushcfunction(L,entry.second);lua_setfield(L,-2,entry.first);}lua_setfield(L,-2,"items");
         lua_newtable(L);        lua_pushcfunction(L,Safe<InteractionRegister>);lua_setfield(L,-2,"register");lua_pushcfunction(L,Safe<InteractionRemove>);lua_setfield(L,-2,"unregister");lua_pushcfunction(L,Safe<InteractionPrompt>);lua_setfield(L,-2,"prompt");lua_setfield(L,-2,"interactions");
         lua_newtable(L);
+        lua_pushcfunction(L,Safe<UiHealthHud>);lua_setfield(L,-2,"health_hud");
         lua_pushcfunction(L,Safe<UiCreate>);lua_setfield(L,-2,"create");
         lua_pushcfunction(L,Safe<UiSet>);lua_setfield(L,-2,"set");
         lua_pushcfunction(L,Safe<UiGet>);lua_setfield(L,-2,"get");
