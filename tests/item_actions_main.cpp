@@ -122,9 +122,13 @@ linblux.items.equip(item)
 linblux.items.configure(item, {magazine=6, reserve=6, consume=1, interval=0.25, reload_time=0.3})
 pub("ammo_inicial", linblux.items.combat(item).ammo)
 
+local primeiro_evento = false
 linblux.events.on("item_action", function(evento)
     pub("ultima_acao", evento.action)
-    if evento.action == "activate" then pub("ammo_evento", evento.ammo) end
+    if evento.action == "activate" and not primeiro_evento then
+        primeiro_evento = true
+        pub("ammo_evento", evento.ammo)
+    end
     if evento.action == "reload_end" then
         pub("ammo_recarregada", evento.ammo)
         pub("reserva_recarregada", evento.reserve)
@@ -153,10 +157,6 @@ pub("reserva_final", estado.reserve)
 
 -- Origem real: o Attachment do item equipado, nunca uma coordenada fixa.
 local boca = linblux.scene.find("BocaDoCano")
-pub("boca_x", boca.world_position.X)
-pub("boca_y", boca.world_position.Y)
-pub("boca_z", boca.world_position.Z)
-pub("boca_dir_z", boca.direction.Z)
 local acerto = linblux.physics.raycast(boca.world_position, boca.direction, 120, item)
 pub("acerto", acerto and acerto.object.name or "nenhum")
 pub("acerto_distancia", acerto and acerto.distance or -1)
@@ -172,6 +172,11 @@ pub("auto_com", com and com.object.name or "nenhum")
 linblux.items.unequip()
 linblux.items.equip(item)
 task.wait(0.05)
+-- Publicado no fim para comparar com a mesma pose que o C++ lê depois.
+pub("boca_x", boca.world_position.X)
+pub("boca_y", boca.world_position.Y)
+pub("boca_z", boca.world_position.Z)
+pub("boca_dir_z", boca.direction.Z)
 pub("fim", true)
 )lua";
 }
@@ -275,7 +280,11 @@ int main() {
         require(attributeNumber(*workspace, "cooldown") > 0, "cooldown was not exposed");
         require(attributeBool(*workspace, "tiro_apos_intervalo"), "activation after interval failed");
         require(attributeNumber(*workspace, "ammo_apos_tiros") == 4, "ammo did not reach 4");
-        require(attributeString(*workspace, "ultima_acao") == "activate", "item_action was not delivered");
+        // O último evento é o deactivate do unequip final: recarga e ativação
+        // já foram publicadas antes (ammo_evento e ammo_recarregada).
+        require(attributeString(*workspace, "ultima_acao") == "deactivate",
+                "item_action was not delivered in order (last: '" +
+                attributeString(*workspace, "ultima_acao") + "')");
         require(attributeBool(*workspace, "reload_ok"), "reload did not start");
         require(!attributeBool(*workspace, "tiro_durante"), "activation during reload was accepted");
         require(attributeString(*workspace, "motivo_recarga") == "Recarregando.", "wrong reload refusal");
@@ -293,7 +302,12 @@ int main() {
         require(runtime.scene().attachmentFrame(muzzleId, muzzleFrame, error), "attachment frame: " + error);
         require(std::fabs(muzzleFrame.position.x - attributeNumber(*workspace, "boca_x")) < .01f &&
                 std::fabs(muzzleFrame.position.z - attributeNumber(*workspace, "boca_z")) < .01f,
-                "Lua world_position disagrees with the engine frame");
+                "Lua world_position disagrees with the engine frame: lua(" +
+                std::to_string(attributeNumber(*workspace, "boca_x")) + "," +
+                std::to_string(attributeNumber(*workspace, "boca_y")) + "," +
+                std::to_string(attributeNumber(*workspace, "boca_z")) + ") engine(" +
+                std::to_string(muzzleFrame.position.x) + "," + std::to_string(muzzleFrame.position.y) +
+                "," + std::to_string(muzzleFrame.position.z) + ")");
         ModelFrame itemFrame;
         require(runtime.scene().modelFrame(itemId, itemFrame, error), "item frame: " + error);
         const Vector3 muzzleOffset = Vector3Subtract(muzzleFrame.position, itemFrame.position);
