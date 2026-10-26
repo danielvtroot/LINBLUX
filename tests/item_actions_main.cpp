@@ -401,7 +401,13 @@ int main() {
         require(runtime.ui().count() > 0, "HUD did not return after recollecting");
 
         // Destruição: estado, callbacks e HUD não sobrevivem ao item.
-        const auto scriptId = itemScript->id();
+        const auto* itemRoot = runtime.scene().find(itemId);
+        require(itemRoot, "item vanished before destroy");
+        InstanceId scriptId = 0;
+        for (const auto& object : runtime.scene().objects())
+            if (IsScriptClass(object->instanceClass()) && itemRoot->isAncestorOf(object.get()))
+                scriptId = object->id();
+        require(scriptId, "item instance has no script");
         runtime.inventory().remove(itemId);
         for (int i = 0; i < 6; ++i) runtime.update(1.f / 60, {});
         require(!runtime.itemActions().known(itemId), "destroyed item kept action state");
@@ -433,7 +439,7 @@ linblux.items.activate(item)
                 refuse.ensureService(InstanceClass::ServerScriptService), "UiInvalida.lua");
             uiScript->source = R"lua(
 -- Propriedade inválida: o elemento criado não pode sobreviver sem id.
-linblux.ui.create("label", {text="x", cor="#FFFFFF"})
+linblux.ui.create("label", {text=true})
 )lua";
             game::RuntimeSession refused;
             require(refused.start(refuse, error), "refuse start: " + error);
@@ -442,9 +448,9 @@ linblux.ui.create("label", {text="x", cor="#FFFFFF"})
             for (const auto& message : refused.scripts().messages()) text += message.text + "\n";
             require(text.find("Ative somente o item equipado") != std::string::npos,
                     "stored item activation was accepted:\n" + text);
-            require(text.find("Opção de UI desconhecida") != std::string::npos,
+            require(text.find("texto deve ser string ou número") != std::string::npos,
                     "invalid UI property did not fail:\n" + text);
-            require(refused.ui().count() == 0, "failed ui.create left an orphan element");
+            require(refused.ui().count() == 0, "failed ui.create left an orphan element:\n" + text);
             refused.stop(false);
         }
         std::printf("Item actions: activation, ammo, reload, attachment, raycast, damage, HUD and cleanup OK\n");
