@@ -10,6 +10,7 @@
 #include "game/Rig.h"
 #include "game/ScriptInput.h"
 #include "game/ProgressStore.h"
+#include "game/Ui.h"
 #include "scripting/LuaRuntime.h"
 #include "scene/Scene.h"
 #include "physics/PhysicsWorld.h"
@@ -114,6 +115,12 @@ public:
     const Inventory& inventory()const{return *inventory_;}
     AudioSystem& audio(){return audio_;}
     const AudioSystem& audio() const {return audio_;}
+    // Declarative UI built by scripts. Cleared with the Play session and when
+    // the owning script disappears; never part of the authored scene.
+    UiModel& ui(){return ui_;}
+    const UiModel& ui() const {return ui_;}
+    bool uiClickAt(Vector2 point,float width,float height){const bool hit=ui_.hitTest(point,width,height)!=0;if(hit)ui_.click(point,width,height);return hit;}
+    void uiPointer(Vector2 point,float width,float height){ui_.pointer(point,width,height);}
     const ScriptInput& scriptInput() const { return scriptInput_; }
     const ScriptInput& previousScriptInput() const { return previousScriptInput_; }
     unsigned characterGeneration() const { return respawns_; }
@@ -211,6 +218,7 @@ private:
     scripting::LuaRuntime scripts_;
     NpcSystem npcs_;
     AudioSystem audio_;
+    UiModel ui_;
     ProgressStore progress_;
     std::set<std::pair<InstanceId,InstanceId>> activeContacts_;
     ScriptInput scriptInput_,previousScriptInput_;
