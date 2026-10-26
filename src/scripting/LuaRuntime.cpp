@@ -391,7 +391,7 @@ struct LuaRuntime::Impl {
         h.nativeBudget(nodes,bytes+nodes*128);h.modelBudget();const auto id=h.runtime->inventory().spawn(type,custom?&pose:nullptr);h.pushInstance(L,scene.find(id),true);return 1;
     }
     template<int Action> static int ItemsAction(lua_State* L){auto& h=Host(L);h.modelBudget();auto& items=h.runtime->inventory();
-        if constexpr(Action==2)items.unequip();else {const auto id=h.instance(L,1).id();if constexpr(Action==0)items.collect(id);if constexpr(Action==1)items.equip(id);if constexpr(Action==3)items.drop(id);if constexpr(Action==4)items.remove(id);}return 0;}
+        if constexpr(Action==2)items.unequip();else {const auto id=h.instance(L,1).id();if constexpr(Action==1||Action==3)items.update(h.runtime->position(),h.runtime->playerCamera().yaw());if constexpr(Action==0)items.collect(id);if constexpr(Action==1)items.equip(id);if constexpr(Action==3)items.drop(id);if constexpr(Action==4)items.remove(id);}return 0;}
     static int ItemsList(lua_State* L){auto& h=Host(L);const auto list=h.runtime->inventory().list();lua_createtable(L,int(list.size()),0);int i=0;for(auto id:list){h.pushInstance(L,h.runtime->scene().find(id),true);lua_rawseti(L,-2,++i);}return 1;}
     static int ItemsEquipped(lua_State* L){auto& h=Host(L);h.pushInstance(L,h.runtime->scene().find(h.runtime->inventory().equipped()),true);return 1;}
     static int ItemsInfo(lua_State* L){auto& h=Host(L);const auto info=h.runtime->inventory().info(h.instance(L,1).id());lua_newtable(L);

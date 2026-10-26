@@ -50,7 +50,7 @@ void Inventory::registerType(const std::string& type,InstanceId prototype,ItemOp
     for(const auto& t:h.types){auto* other=h.scene.find(t.second.prototype);Need(!other||(!root->isAncestorOf(other)&&!other->isAncestorOf(root)),"Protótipos de itens não podem se sobrepor.");}
     Need(root->attributes().size()<=62,"Modelo precisa de espaço para metadados do item.");
     if(options.name.empty())options.name=root->name();Need(options.name.size()<=128&&options.name.find('\0')==std::string::npos&&options.icon.size()<=512&&options.grip.valid()&&options.grip.scale==1,"Configuração do item inválida.");
-    if(!options.icon.empty()){options.icon=NormalizeImageReference(options.icon);Need(!ResolveImagePath(AssetsDir(),options.icon).empty(),"Ícone do item não encontrado nos recursos da experiência.");}
+    if(!options.icon.empty()){options.icon=NormalizeImageReference(options.icon);Need(options.icon.rfind("assets/",0)==0&&options.icon.find("..") == std::string::npos,"Ícone deve ser um recurso gerenciado em assets/.");Need(!ResolveImagePath(AssetsDir(),options.icon).empty(),"Ícone do item não encontrado nos recursos da experiência.");}
     const auto nodes=Nodes(root);Need(nodes.size()<=256,"Protótipo excede 256 componentes.");size_t parts=0;Impl::Type definition{prototype,options,{}};
     for(auto* n:nodes){if(n->isPart()){const auto* p=static_cast<const Part*>(n);Need(!p->hasNpc(),"Protótipo de item não aceita controlador NPC.");Need(p->attributes().size()<64||p->attributes().count("_linblux_item_hidden"),"Peça precisa de espaço para metadados de visibilidade.");}parts+=n->isPart();definition.nodes.push_back(Capture(n));}
     Need(parts>0&&parts<=128,"Item requer de 1 a 128 peças.");
