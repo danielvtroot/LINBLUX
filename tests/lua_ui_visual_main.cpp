@@ -2,10 +2,13 @@
 // Studio Play texture and the Player, checked by reading the framebuffer and
 // by clicking the rendered button.
 #include "experiences/ExperienceManager.h"
+#include "game/ImageAssets.h"
 #include "game/Runtime.h"
+#include "rendering/ExperienceOverlay.h"
 #include "rendering/LuaUiRenderer.h"
 #include "scene/Scene.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>

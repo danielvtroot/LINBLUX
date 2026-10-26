@@ -304,6 +304,13 @@ if(XVFB_RUN_EXECUTABLE)
     add_test(NAME linblux_visual_studio COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_visual_studio_tests>)
     set_tests_properties(linblux_visual_studio PROPERTIES TIMEOUT 180 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
 
+    # Script-built UI: the same raylib renderer the Studio Play texture and the
+    # Player use, verified by framebuffer pixels at two window sizes.
+    add_executable(linblux_lua_ui_render_tests tests/lua_ui_visual_main.cpp)
+    target_link_libraries(linblux_lua_ui_render_tests PRIVATE linblux_renderer)
+    add_test(NAME linblux_lua_ui_render COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_lua_ui_render_tests>)
+    set_tests_properties(linblux_lua_ui_render PROPERTIES TIMEOUT 120 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
+
     add_executable(linblux_sky_capture_tests tests/sky_capture_main.cpp)
     target_link_libraries(linblux_sky_capture_tests PRIVATE linblux_editor)
     add_test(NAME linblux_sky_capture COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_sky_capture_tests>)
@@ -483,6 +490,7 @@ linblux_turbo_graphics(linblux_experience_ui "graphics;integration;experiences;u
 linblux_turbo_graphics(linblux_rml_ui "graphics;integration;ui;editor;slow")
 linblux_turbo_graphics(linblux_rig_decals_ui "graphics;integration;editor;rendering;rig;slow")
 linblux_turbo_graphics(linblux_mouse_lock "graphics;integration;editor;ui;game;slow")
+linblux_turbo_graphics(linblux_lua_ui_render "graphics;integration;ui;scripting;rendering")
 linblux_turbo_graphics(linblux_script_input_ui "graphics;integration;editor;ui;game;scripting")
 linblux_turbo_graphics(linblux_models_ui "graphics;integration;editor;ui;scene;scripting")
 linblux_turbo_graphics(linblux_body_properties_ui "graphics;integration;editor;ui;physics;scripting")
