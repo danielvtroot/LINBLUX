@@ -57,7 +57,7 @@ local proximo=2
 linblux.npc.move_to(guia,pontos[proximo])
 linblux.events.on("update",function()
     local estado=linblux.npc.state(guia)
-    if estado=="idle" then
+    if estado=="idle" or estado=="arrived" then
         proximo=proximo%2+1
         linblux.npc.move_to(guia,pontos[proximo])
     end

@@ -217,6 +217,9 @@ bool NpcSystem::attachAuthored(RuntimeSession& runtime, std::string& error) {
     }
     std::sort(ids.begin(), ids.end());
     for (const auto id : ids) {
+        // Scripts may already attach/configure this NPC during VM startup.
+        // Reattaching here would erase its route, health and animation state.
+        if(attached(id))continue;
         std::string detail;
         if (!attach(runtime, id, detail)) {
             // Uma Part ancorada ou inválida não impede as demais.
