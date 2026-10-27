@@ -121,6 +121,8 @@ public:
     const ItemActions& itemActions()const{return itemActions_;}
     AudioSystem& audio(){return audio_;}
     const AudioSystem& audio() const {return audio_;}
+    MusicPlaylist& music(){return music_;}
+    const MusicPlaylist& music() const {return music_;}
     // Declarative UI built by scripts. Cleared with the Play session and when
     // the owning script disappears; never part of the authored scene.
     UiModel& ui(){return ui_;}
@@ -227,6 +229,7 @@ private:
     scripting::LuaRuntime scripts_;
     NpcSystem npcs_;
     AudioSystem audio_;
+    MusicPlaylist music_;
     UiModel ui_;
     ProgressStore progress_;
     std::set<std::pair<InstanceId,InstanceId>> activeContacts_;

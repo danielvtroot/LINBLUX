@@ -454,6 +454,8 @@ SoundAsset& GameAssets::addSound(const std::string& reference, const std::string
 bool GameAssets::removeSound(const std::string& id) {
     const auto before = sounds.size();
     sounds.erase(std::remove_if(sounds.begin(), sounds.end(), [&](const SoundAsset& sound) { return sound.id == id; }), sounds.end());
+    if(music.background==id)music.background.clear();
+    music.playlist.erase(std::remove(music.playlist.begin(),music.playlist.end(),id),music.playlist.end());
     return sounds.size() != before;
 }
 bool GameAssets::validate(std::string& error) const {
@@ -467,6 +469,15 @@ bool GameAssets::validate(std::string& error) const {
         if(!std::isfinite(sound.durationSeconds)||sound.durationSeconds<0){error="Duração de áudio inválida.";return false;}
         if (!std::isfinite(sound.volume) || sound.volume < 0 || sound.volume > 1) { error = "game: sound volume out of range"; return false; }
         if (sound.reference.rfind("assets/", 0) != 0) { error = "game: sound reference must live in assets/"; return false; }
+    }
+    // A playlist guarda IDs, não ponteiros. IDs ausentes são permitidos para
+    // que um projeto continue abrindo; a UI os mostra como faixa inválida e o
+    // runtime os ignora sem interromper o Play.
+    if(music.background.size()>128||music.playlist.size()>128){error="game: music limit exceeded";return false;}
+    if(!std::isfinite(music.volume)||music.volume<0||music.volume>1){error="game: music volume out of range";return false;}
+    if(!music.background.empty()&&music.background.find('\0')!=std::string::npos){error="game: invalid music background";return false;}
+    for(const auto& id:music.playlist)if(id.empty()||id.size()>128||id.find('\0')!=std::string::npos){
+        error="game: invalid music playlist track";return false;
     }
     std::set<std::string> ids;
     for (const auto& r : rigs) if (!r.validate(error) || !ids.insert(r.id).second) { if (error.empty()) error = "duplicate rig id"; return false; }

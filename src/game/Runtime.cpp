@@ -278,6 +278,11 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error,const Prog
         itemActions_.clear(); // munição/recarga são estado temporário de partida
         scripts_.start(*this); // errors are reported; safe native gameplay remains available
         npcs_.attachAuthored(*this,error); // NPCs autorados ganham controlador
+        // Música declarativa começa somente no Play. Uma faixa inválida não
+        // impede o jogo: o runtime ignora e a UI mostra o motivo.
+        std::string musicError;
+        if(!music_.start(audio_,scene_->gameAssets(),musicError)&&!musicError.empty())
+            scripts_.hostError("Música: "+musicError);
         if(spawnedDead && health_<=0)scripts_.healthChanged(health_,true);
         Event("runtime", "start", correlation_, {{"bodies", bodyCount()}, {"rig", rig_.id}});
         return true;
@@ -295,7 +300,7 @@ void RuntimeSession::stop(bool saveProgress) {
     state_ = RuntimeState::StoppingPlay;
     if (!activeAnimation_.empty()) Event("animation", "stop", correlation_, {{"clip", activeAnimation_}});
     activeAnimation_.clear();
-    scripts_.stop();ui_.clear();npcs_.reset();audio_.stopAll();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
+    scripts_.stop();ui_.clear();npcs_.reset();music_.stop(audio_);audio_.stopAll();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
     itemActions_.clear();
     if(saveProgress)try{progress_.flush();}catch(const std::exception& e){scripts_.hostError(e.what());}
     progress_.close();
@@ -310,6 +315,7 @@ void RuntimeSession::stop(bool saveProgress) {
 void RuntimeSession::pause() {
     if (state_ != RuntimeState::Playing) return;
     state_ = RuntimeState::Paused; jumpPending_ = false;jumpBufferTime_=0;
+    music_.pause(audio_);
     if(interactions_)interactions_->cancel();
     try{progress_.flush();}catch(const std::exception& e){scripts_.hostError(e.what());}
     Event("runtime", "pause", correlation_);
@@ -317,6 +323,7 @@ void RuntimeSession::pause() {
 void RuntimeSession::resume() {
     if (state_ != RuntimeState::Paused) return;
     state_ = RuntimeState::Playing;
+    music_.resume(audio_);
     lastShiftKey_=1; // keys held in a menu/another app need a release first
     Event("runtime", "resume", correlation_);
 }
@@ -702,7 +709,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     for(std::uint64_t id=ui_.takeClick();id;id=ui_.takeClick())scripts_.uiClick(id);
     std::uint64_t hoverId=0;bool entering=false;
     while(ui_.takeHover(hoverId,entering))scripts_.uiHover(hoverId,entering);
-    scripts_.update(dt);audio_.update(dt,scene_.get());
+    scripts_.update(dt);audio_.update(dt,scene_.get());music_.update(audio_);
     if(inventory_)try{inventory_->update(position(),camera_.yaw());for(const auto& change:inventory_->takeChanges()){
             scripts_.inventoryChanged(change.id,change.action);
             // Um item que saiu das mãos/destruído não pode manter recarga ou

@@ -57,6 +57,15 @@ nlohmann::json EncodeAssets(const GameAssets& a) {
         for(const auto& sound:a.sounds)j["sounds"].push_back({{"id",sound.id},{"name",sound.name},
             {"reference",sound.reference},{"duration",sound.durationSeconds},{"volume",sound.volume},{"loop",sound.loop},{"kind",sound.kind}});
     }
+    // Música declarativa usa os mesmos IDs estáveis da biblioteca. Só entra no
+    // JSON quando configurada ou quando algum padrão foi alterado, preservando
+    // byte a byte projetos que ainda não usam áudio.
+    const auto& music=a.music;
+    if(!music.background.empty()||!music.playlist.empty()||std::fabs(music.volume-.8f)>1e-6f||
+        !music.loop||!music.repeat) {
+        j["music"]={{"background",music.background},{"playlist",music.playlist},
+            {"volume",music.volume},{"loop",music.loop},{"repeat",music.repeat}};
+    }
     for (const auto& r : a.rigs) {
         json rig{{"id", r.id}, {"name", r.name}, {"root", Transform(r.root)},
                  {"bodies", json::array()}, {"joints", json::array()}};
@@ -193,6 +202,22 @@ bool DecodeAssets(const nlohmann::json& j, GameAssets& assets, std::string& erro
                 sound.volume=value.value("volume",1.f);sound.loop=value.value("loop",false);
                 sound.kind=value.value("kind",std::string("sound"));
                 a.sounds.push_back(std::move(sound));
+            }
+        }
+        if(j.contains("music")) {
+            const auto& value=j.at("music");
+            Require(value.is_object(),"invalid music settings");
+            a.music.background=value.value("background",std::string());
+            a.music.volume=value.value("volume",.8f);
+            a.music.loop=value.value("loop",true);
+            a.music.repeat=value.value("repeat",true);
+            if(value.contains("playlist")) {
+                const auto& playlist=value.at("playlist");
+                Require(playlist.is_array()&&playlist.size()<=128,"invalid music playlist");
+                for(const auto& item:playlist) {
+                    Require(item.is_string(),"music playlist requires stable sound ids");
+                    a.music.playlist.push_back(item.get<std::string>());
+                }
             }
         }
         const auto& p = j.at("player"); auto& out = a.player;

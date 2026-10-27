@@ -16,6 +16,7 @@ extern "C" {
 #include <unordered_map>
 
 #include "game/ImageAssets.h"
+#include "game/Rig.h"
 #include "scene/Scene.h"
 
 namespace loblox::game {
@@ -45,7 +46,15 @@ bool IsAudioReference(const std::string& reference) {
 std::vector<SoundUse> DescribeSoundUsage(const Scene& scene,const std::string& reference){
     std::vector<SoundUse> uses;if(!IsAudioReference(reference))return uses;const auto canonical=NormalizeImageReference(reference);const auto file=std::filesystem::path(canonical).filename().string();if(file.empty())return uses;
     std::vector<std::string> tokens{file,std::filesystem::path(file).stem().string()};
-    for(const auto& sound:scene.gameAssets().sounds)if(NormalizeImageReference(sound.reference)==canonical){tokens.push_back(sound.id);tokens.push_back(sound.name);}
+    const auto& music=scene.gameAssets().music;
+    for(const auto& sound:scene.gameAssets().sounds)if(NormalizeImageReference(sound.reference)==canonical){
+        tokens.push_back(sound.id);tokens.push_back(sound.name);
+        // Música declarativa é uma referência de projeto, não um objeto. O
+        // uso sintético impede a exclusão segura de apagar a faixa por engano.
+        if(music.background==sound.id)uses.push_back({0,"Experiência","música de fundo"});
+        if(std::find(music.playlist.begin(),music.playlist.end(),sound.id)!=music.playlist.end())
+            uses.push_back({0,"Experiência","playlist de música"});
+    }
     for(const auto& node:scene.objects()){
         for(const auto& attr:node->attributes())if(const auto* value=std::get_if<std::string>(&attr.second)){
             if(NormalizeImageReference(*value)==canonical||std::find(tokens.begin(),tokens.end(),*value)!=tokens.end())uses.push_back({node->id(),node->name(),attr.first});}
@@ -292,6 +301,8 @@ bool AudioSystem::looping(int handle) const {
     return voice && voice->loop;
 }
 
+bool AudioSystem::hasVoice(int handle) const { return find(handle) != nullptr; }
+
 std::string AudioSystem::reference(int handle) const {
     const Voice* voice = find(handle);
     return voice ? voice->reference : std::string();
@@ -339,6 +350,92 @@ void AudioSystem::update(float dt,const Scene* scene) {
 void AudioSystem::stopAll() {
     for (auto& entry : voices_) release(entry.second);
     voices_.clear();
+}
+
+bool MusicPlaylist::playIndex(AudioSystem& audio,std::size_t index,std::string& error){
+    error.clear();
+    if(index>=tracks_.size())return false;
+    const auto& track=tracks_[index];
+    const int handle=audio.play(track.reference,track.volume,playlist_?false:loop_,error);
+    if(handle<=0)return false;
+    index_=index;handle_=handle;currentId_=track.id;active_=true;paused_=false;
+    return true;
+}
+
+bool MusicPlaylist::start(AudioSystem& audio,const GameAssets& assets,std::string& error){
+    stop(audio);error.clear();lastError_.clear();
+    const auto& settings=assets.music;
+    volume_=std::clamp(settings.volume,0.f,1.f);
+    loop_=settings.loop;repeat_=settings.repeat;playlist_=!settings.playlist.empty();
+    std::vector<std::string> configured;
+    if(playlist_)configured=settings.playlist;
+    else if(!settings.background.empty())configured.push_back(settings.background);
+    if(configured.empty())return false;
+    std::size_t skipped=0;
+    for(const auto& id:configured){
+        const auto* sound=assets.findSound(id);
+        if(!sound||!IsAudioReference(sound->reference)){++skipped;continue;}
+        tracks_.push_back({sound->id,sound->reference,
+            std::clamp(volume_*sound->volume,0.f,1.f)});
+    }
+    if(tracks_.empty()){
+        error=playlist_?"A playlist não tem faixas válidas.":"A música de fundo não aponta para um áudio válido.";
+        lastError_=error;return false;
+    }
+    if(skipped){
+        lastError_=std::to_string(skipped)+" faixa(s) inválida(s) ignorada(s).";
+    }
+    // Inicia a primeira faixa válida. Em caso de falha de arquivo, tenta as
+    // seguintes em vez de impedir o Play inteiro.
+    for(std::size_t i=0;i<tracks_.size();++i){
+        std::string playError;
+        if(playIndex(audio,i,playError))return true;
+        lastError_=playError;
+    }
+    tracks_.clear();active_=false;handle_=0;currentId_.clear();
+    error=lastError_.empty()?"Nenhuma faixa de música pôde ser reproduzida.":lastError_;
+    return false;
+}
+
+void MusicPlaylist::stop(AudioSystem& audio){
+    if(handle_>0)audio.stop(handle_);
+    handle_=0;index_=0;currentId_.clear();tracks_.clear();
+    playlist_=false;repeat_=false;loop_=true;active_=false;paused_=false;volume_=1;
+    lastError_.clear();
+}
+
+void MusicPlaylist::pause(AudioSystem& audio){
+    if(!active_||paused_)return;
+    if(handle_>0)audio.pause(handle_);
+    paused_=true;
+}
+
+void MusicPlaylist::resume(AudioSystem& audio){
+    if(!active_||!paused_)return;
+    if(handle_>0)audio.resume(handle_);
+    paused_=false;
+}
+
+void MusicPlaylist::update(AudioSystem& audio){
+    if(!active_||paused_)return;
+    if(handle_>0&&audio.hasVoice(handle_))return;
+    handle_=0;
+    if(!playlist_){
+        active_=false;currentId_.clear();return;
+    }
+    std::size_t attempts=0;
+    while(attempts++<tracks_.size()){
+        std::size_t next=index_+1;
+        if(next>=tracks_.size()){
+            if(!repeat_){active_=false;currentId_.clear();return;}
+            next=0;
+        }
+        std::string error;
+        if(playIndex(audio,next,error))return;
+        lastError_=error;
+        index_=next;
+    }
+    active_=false;currentId_.clear();
 }
 
 }  // namespace loblox::game
