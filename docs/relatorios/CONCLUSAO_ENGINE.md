@@ -567,3 +567,16 @@ Próximo incremento: percepção das arestas e seleção através de peças.
 Restante da missão27/10: física/NPC, estados de pulo, armazenamento/templates,
 itens iniciais/recompensas, rifle animado, ESC sem pausa, mixer, rig editor,
 integração/limpeza auditada e validações de lançamento ainda PENDENTES.
+
+
+## 27/10 — Contornos, seleção e nomes de construção
+
+PUBLICADO anterior:0142aa98daf5c9edf818c9b34298088be7a9311a, remoto confirmado.
+IMPLEMENTADO/TESTADO incremento36: arestas/AABB/normais opcionais só no Editor,
+hover, Alt+clique para sobrepostas, Shift+clique para Modelo, diagnóstico de
+caixas sobrepostas/coincidentes, Peça/Esfera e sufixos _002 sem renomear mapas.
+FAST19/19; gizmo/numérico2/2; Models UI atual aprovado; nova fixture X11 do
+encaixe e seleção63 verificações sem falha. Sem FULL ou benchmark de GPU.
+Relatório36 e guia EDITOR_PRECISAO.md. Áudio WIP continua separado/preservado.
+Próximo: reproduzir giro de NPC além de90°, depois física/pulo e demais
+pendências da missão27/10. Nenhuma Release anunciada.

@@ -413,18 +413,6 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
     rlDisableDepthTest();
     rlDisableDepthMask();
 
-    if(surfaceContact_.snapped) {
-        Vector2 p,q;
-        const Vector2 size{viewport.width,viewport.height};
-        const auto end=Vector3Add(surfaceContact_.point,Vector3Scale(surfaceContact_.normal,
-            camera.worldUnitsPerPixel(surfaceContact_.point,viewport.height)*24));
-        if(camera.projectChecked(surfaceContact_.point,size,p)&&camera.projectChecked(end,size,q)) {
-            DrawCircleV(p,7,{16,18,22,230});DrawCircleLinesV(p,7,{242,70,78,255});
-            DrawLineEx(p,q,2,{242,70,78,255});
-            DrawText("Encaixe",int(p.x+12),int(p.y-9),16,{255,225,225,255});
-        }
-    }
-
     const Vector2 center = layout.center;
     const auto highlighted = [this](gizmomath::HandleId id) {
         return dragging_ ? activeHandle_ == id : hoveredHandle_ == id;
@@ -532,6 +520,21 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
                 if(side<0){DrawCircleV(p,8.5f*pixelScale_,kOutline);DrawCircleV(p,3*pixelScale_,color);}
                 if(highlight)DrawCircleLinesV(p,16*pixelScale_,kHighlight);
             }
+        }
+    }
+
+    if(surfaceContact_.snapped) {
+        Vector2 p,q;
+        const Vector2 size{viewport.width,viewport.height};
+        const auto end=Vector3Add(surfaceContact_.point,Vector3Scale(surfaceContact_.normal,
+            camera.worldUnitsPerPixel(surfaceContact_.point,viewport.height)*24));
+        if(camera.projectChecked(surfaceContact_.point,size,p)&&camera.projectChecked(end,size,q)) {
+            DrawCircleV(p,7,{16,18,22,230});DrawCircleLinesV(p,7,{242,70,78,255});
+            DrawLineEx(p,q,2,{242,70,78,255});
+            const float x=std::clamp(p.x+14,4.f,std::max(4.f,viewport.width-82));
+            const float y=std::clamp(p.y-27,4.f,std::max(4.f,viewport.height-26));
+            DrawRectangleRounded({x,y,78,23},.18f,4,{23,24,29,235});
+            DrawText("Encaixe",int(x+8),int(y+4),16,{255,225,225,255});
         }
     }
 
