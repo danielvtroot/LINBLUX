@@ -742,14 +742,21 @@ void NpcHeadingRegression() {
         const Vector3 direction{-std::sin(angle*DEG2RAD),0,-std::cos(angle*DEG2RAD)};
         const auto start=runtime.scene().findPart(id)->position();
         CHECK(runtime.npcs().moveTo(runtime,id,Vector3Add(start,Vector3Scale(direction,25)),error));
-        for(int frame=0;frame<120;++frame)runtime.update(1.f/60,{});
+        for(int frame=0;frame<120;++frame) {
+            const auto previous=Vector3RotateByQuaternion({0,0,-1},runtime.scene().findPart(id)->rotation());
+            runtime.update(1.f/60,{});
+            const auto current=Vector3RotateByQuaternion({0,0,-1},runtime.scene().findPart(id)->rotation());
+            CHECK(std::acos(std::clamp(Vector3DotProduct(previous,current),-1.f,1.f))<=config.turnSpeed/60+.002f);
+        }
         const auto* part=runtime.scene().findPart(id);
         const auto forward=Vector3RotateByQuaternion({0,0,-1},part->rotation());
         const float alignment=Vector3DotProduct(forward,direction);
         if(alignment<.98f)std::printf("NPC heading %.0f: alignment %.4f, forward %.3f %.3f\n",angle,alignment,forward.x,forward.z);
         CHECK(alignment>.98f);CHECK(std::fabs(forward.y)<.001f);
         const float displacement=Vector3Distance(start,part->position());
-        CHECK(displacement>2&&displacement<4.3f); // corpo Bullet movido de verdade, com atrito
+        if(displacement<=2||displacement>=4.3f)std::printf("NPC heading %.0f: displacement %.4f in 2s (speed2)\n",angle,displacement);
+        CHECK(displacement>3.8f&&displacement<4.1f); // velocidade de controlador, não bloco arrastado
+        CHECK(NearlyEqual(part->bodyProperties().friction,.8f)); // material autoral não alterado
         CHECK(runtime.npcs().stopMoving(id));for(int frame=0;frame<30;++frame)runtime.update(1.f/60,{});
         const auto speed=runtime.partVelocity(id);CHECK(std::hypot(speed.x,speed.z)<.02f);
         CHECK(runtime.validate(error));runtime.stop();
