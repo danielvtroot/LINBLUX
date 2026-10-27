@@ -12,7 +12,7 @@ local marker=linblux.ui.create('panel',{anchor='bottom-right',x=-16,y=-16,width=
 linblux.events.on('update',function()
  assert(not linblux.input.key_down('w'),'menu deixou tecla de gameplay chegar ao Lua')
  local color=math.floor(linblux.time.now()*4)%2==0 and '#00FF00FF' or '#0000FFFF'
- linblux.ui.set(marker,{background=color})
+ linblux.ui.set(marker,'background',color)
 end)
 """
 world['objects'].append(dict(id=script_id,parent=1,name='MenuSemPausa.lua',**{'class':'Script'},source=watchdog,enabled=True))
