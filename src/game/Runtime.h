@@ -146,6 +146,7 @@ public:
     // sample between fixed ticks. Rotation controlled by mouse is not delayed.
     RigidTransform renderCharacterRoot() const;
     const Pose& pose() const { return pose_; }
+    bool significantFall() const { return significantFall_; } // apresentação, não estado físico/API legada
     Vector3 position() const;
     Vector3 velocity() const;
     HumanoidState humanoidState() const { return humanoidState_; }
@@ -213,6 +214,8 @@ private:
     std::string poseSource_;
     bool poseWalking_ = false;
     bool wasAirborne_ = false;
+    bool significantFall_ = false;
+    float flightPeak_ = 0, flightTime_ = 0;
     float blendTime_ = 0;
     float accumulator_ = 0, walkTime_ = 0, idleTime_ = 0, airTime_ = 0, walkWeight_ = 0, yaw_ = 0;
     float rootHeightOffset_ = .1f;
