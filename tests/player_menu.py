@@ -10,7 +10,7 @@ script_id=max(node['id'] for node in world['objects'])+1
 watchdog="""
 local marker=linblux.ui.create('panel',{anchor='bottom-right',x=-16,y=-16,width=40,height=40,background='#00FF00FF'})
 linblux.events.on('update',function()
- assert(not linblux.input.key_down('W'),'menu deixou tecla de gameplay chegar ao Lua')
+ assert(not linblux.input.key_down('w'),'menu deixou tecla de gameplay chegar ao Lua')
  local color=math.floor(linblux.time.now()*4)%2==0 and '#00FF00FF' or '#0000FFFF'
  linblux.ui.set(marker,{background=color})
 end)
