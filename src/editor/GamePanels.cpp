@@ -161,7 +161,7 @@ void EditorUI::startPlay() {
 }
 void EditorUI::finishPlayStart() {
     for (const auto& message:runtime_.scripts().messages()) if (message.error) showOutput_=true;
-    pausePage_ = 0; gameplaySkipDelta_ = true; gameMaximized_=false; gameFullscreen_=false;
+    pausePage_ = 0; gameMenuOpen_=false; gameplaySkipDelta_ = true; gameMaximized_=false; gameFullscreen_=false;
     ImGui::SetWindowFocus(i18n::Label("Viewport"));
     setStatus("Play iniciado. F10 maximiza, F11 tela cheia; Esc abre o menu.");
 }
@@ -169,7 +169,7 @@ void EditorUI::stopPlay() {
     exitGameDisplayModes();
     setGameplayCapture(false);
     if (!runtime_.active()) return;
-    runtime_.stop(); pausePage_ = 0; camera_.releaseCapture();
+    runtime_.stop(); pausePage_ = 0; gameMenuOpen_=false; camera_.releaseCapture();
     setStatus("Play finalizado. Alterações da sessão foram descartadas.");
     checkInvariants("runtime_stop");
 }
@@ -255,7 +255,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     EditorInput gameInput=raw;
     if(menuHovered && raw.leftPressed)gameInput.escape=true; // HUD action enters the same Pause/Resume router
     if(menuHovered)context.hovered=false;
-    context.mode = runtime_.state() == game::RuntimeState::Paused ? InputMode::Paused : InputMode::Playing;
+    context.mode = gameMenuOpen() ? InputMode::Paused : InputMode::Playing;
     context.menuDepth = pausePage_;
     const InputRoute route = RouteInput(gameInput, context);
     if (traceInput_ && (raw.escape || raw.stop || raw.jump || raw.rightPressed || raw.leftPressed || raw.wheel != 0)) {
@@ -265,11 +265,11 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     }
     if (route.owner == InputOwner::Stop) { stopPlay(); return; }
     if (route.owner == InputOwner::Pause) {
-        runtime_.pause(); pausePage_ = 0;
+        gameMenuOpen_=true; pausePage_ = 0;
         setGameplayCapture(false);
     } else if (route.owner == InputOwner::Back) pausePage_ = 0;
     else if (route.owner == InputOwner::Resume) {
-        runtime_.resume(); ImGui::SetWindowFocus(i18n::Label("Viewport"));
+        gameMenuOpen_=false; runtime_.resume(); ImGui::SetWindowFocus(i18n::Label("Viewport"));
     }
     game::PlayerInput input;
     const bool owns = route.owner == InputOwner::Gameplay || route.owner == InputOwner::Resume;
@@ -285,7 +285,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
         if (context.hovered || gameplayCapture_) input.zoom = raw.wheel;
     }
     gameplaySkipDelta_ = false;
-    if(runtime_.state()==game::RuntimeState::Playing) {
+    if(runtime_.state()==game::RuntimeState::Playing&&!gameMenuOpen()) {
         // Script UI uses viewport-local pixels. The right-button capture keeps
         // owning the pointer, so a camera drag never clicks a HUD button.
         const Vector2 local{raw.mouse.x-image.x,raw.mouse.y-image.y};
@@ -372,7 +372,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     }
 }
 void EditorUI::drawPauseMenu() {
-    if (runtime_.state() != game::RuntimeState::Paused || gameViewportW_ < 80 || gameViewportH_ < 80) return;
+    if (!gameMenuOpen() || gameViewportW_ < 80 || gameViewportH_ < 80) return;
     setGameplayCapture(false);
     const ImVec2 origin{gameViewportX_, gameViewportY_};
     const ImVec2 extent{gameViewportW_, gameViewportH_};
@@ -504,7 +504,7 @@ void EditorUI::drawPauseMenu() {
     ImGui::PopStyleVar(3);ImGui::PopStyleColor(11);
     if(stop) stopPlay();
     else if(reset) { std::string error; if(!runtime_.resetCharacter(error)) setStatus(error,true); }
-    else if(resume) { runtime_.resume();ImGui::SetWindowFocus(i18n::Label("Viewport")); }
+    else if(resume) { gameMenuOpen_=false; runtime_.resume();ImGui::SetWindowFocus(i18n::Label("Viewport")); }
 }
 
 void EditorUI::drawRigEditor() {
