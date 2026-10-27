@@ -493,3 +493,63 @@ ao código d7b0dcb. Não há tag/Release. Retomada exata: relatório34/patch Rml
 reprodução curta de maximizar/retomar/F10/F11 em1366×768. Depois regressão
 abrangente, licenças GPL/raylib, áudio físico e outro Linux. Cópia privada externa
 segue sem destino; os arquivos ignorados e o pacote local não são backup GitHub.
+
+## Studio: áudio visível, seletor nativo e exemplos Lua — 27/10/2026
+
+Commit: 2ed404f · push confirmado origin/main.
+
+**Alterações:**
+
+1. `NativeFileDialog` — novo parâmetro `bool audio` (padrão `false`); filtros
+   `.mp3 .wav .ogg` para zenity/yad e kdialog, sem alterar os filtros existentes
+   de imagem e experiência.
+
+2. `ExperienceUI` — método público `chooseAudio()` invoca `choose("audio")` com
+   filtro de áudio; `selectedFile("audio")` despacha `import-sound` e chama
+   `frontend_->invalidateAudio()`. Fluxo idêntico ao de imagens mas para sons.
+
+3. `StudioFrontend` — ação `import-sound` com `experiences` presente chama
+   `experiences->chooseAudio()` (seletor nativo); sem `experiences`, fallback para
+   diálogo de texto com hint em pt-BR. Novo método público `invalidateAudio()`.
+
+4. Diálogos traduzidos para pt-BR: "Renomear objeto", "Abrir projeto",
+   "Importar imagem", "Importar áudio", "Salvar projeto como", "Escolha uma cor",
+   "Material da peça". Mensagem "Selecione uma Peça primeiro".
+
+5. Painel de áudio — botão **"Exemplos Lua de áudio"** reutiliza o popup de
+   `script-examples` com os seis scripts já existentes; nenhum arquivo duplicado.
+
+6. `confirm-dialog` e handler Enter agora chamam `invalidateAudio()` após
+   `import-sound` / `rename-sound` (antes só invalidava imagens).
+
+7. Bug pré-existente corrigido: concatenação `"literal" + (bool?"a":"b") +
+   "literal2"` nas linhas `music-loop` e `music-repeat` do `audioPanel()`.
+
+8. Seis scripts Lua adicionados ao git: `musica_de_fundo.lua`,
+   `musica_de_fundo_playlist.lua`, `som_ao_tocar.lua`, `som_arma.lua`,
+   `som_interacao.lua`, `som_recarga.lua`.
+
+**Testes:** TURBO FAST — 19/19 executados, 18 aprovados. 1 falha
+(`linblux_tests > Salvar/carregar JSON`) é bloqueador pré-existente não
+relacionado a estas mudanças (confirmado por teste isolado antes e depois).
+
+**Fluxo validado (sem dispositivo físico de áudio):**
+- Início → Áudio → abre painel imediatamente.
+- Botão "Importar áudio" visível no topo do painel.
+- Com ExperienceManager: abre seletor nativo filtrado para MP3/WAV/OGG.
+- Sem ExperienceManager: abre diálogo de texto com hint pt-BR.
+- Após import: painel invalida e lista o som na biblioteca.
+- Música de fundo: select + volume + loop no painel.
+- Playlist: botão "+ Playlist" em cada card + reorder ↑↓ + remover.
+- Som em Part/Modelo: seletor "Som ao tocar" / "Som de disparo" nas propriedades.
+- Inserir código: botão "Copiar código" / "Inserir no script" em cada card.
+- Exemplos Lua: botão "Exemplos Lua de áudio" lista os 6 scripts de áudio.
+- Prévia de áudio: sem dispositivo de áudio físico a prévia reporta indisponível
+  (comportamento correto e esperado em CI/headless).
+
+**Bloqueadores Alpha restantes (não alterados por este commit):**
+1. `linblux_tests > Salvar/carregar JSON` — falha de serialização JSON pré-existente.
+2. Regressão RmlUi incompleta — maximizar/restaurar/F10/F11 em 1366×768.
+3. Pacote/instalação limpa não revalidado após este commit.
+4. Licenças GPL/raylib e áudio físico em outro Linux pendentes.
+5. Não existe tag nem Release; não publicar antes dessas validações.
