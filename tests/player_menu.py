@@ -11,7 +11,8 @@ watchdog="""
 local marker=linblux.ui.create('panel',{anchor='bottom-right',x=-16,y=-16,width=40,height=40,background='#00FF00FF'})
 linblux.events.on('update',function()
  assert(not linblux.input.key_down('w'),'menu deixou tecla de gameplay chegar ao Lua')
- local color=math.floor(linblux.time.now()*4)%2==0 and '#00FF00FF' or '#0000FFFF'
+ local ticks=math.floor(linblux.time.now()*100)
+ local color=string.format('#%02X%02X00FF',ticks%256,math.floor(ticks/256)%256)
  linblux.ui.set(marker,'background',color)
 end)
 """
@@ -39,7 +40,7 @@ try:
         first=image.getpixel((width-30,height-30));changed=False
         for attempt in range(6):
             time.sleep(.15);current=shot('menu-running-'+str(width)).getpixel((width-30,height-30))
-            if sum(abs(a-b) for a,b in zip(first,current))>80:changed=True;break
+            if sum(abs(a-b) for a,b in zip(first,current))>3:changed=True;break
         assert changed,'scripts/tempo congelaram ao abrir o menu'
         key('w') # watchdog Lua exige que a tecla permaneça bloqueada
         # Actual left panel covers the window edge; the world remains visible right.
