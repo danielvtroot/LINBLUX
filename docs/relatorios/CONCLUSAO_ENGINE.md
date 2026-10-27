@@ -553,3 +553,17 @@ relacionado a estas mudanças (confirmado por teste isolado antes e depois).
 3. Pacote/instalação limpa não revalidado após este commit.
 4. Licenças GPL/raylib e áudio físico em outro Linux pendentes.
 5. Não existe tag nem Release; não publicar antes dessas validações.
+
+
+## 27/10 — Precisão do editor: encaixe geométrico
+
+IMPLEMENTADO/TESTADO: Ctrl durante Mover encaixa caixas orientadas por superfícies;
+Shift libera grade. Usa filhos reais dos Modelos, respeita eixo/plano e rejeita
+correção com penetração. Undo/redo/cancelamento preservados. Relatório35 e guia
+EDITOR_PRECISAO.md registram limites. FAST17/17, IMPACT23/23 (cobertura parcial),
+gizmo gráfico aprovado e capturas720p/1080p inspecionadas. Sem FULL.
+Alterações preexistentes de áudio e frontend preservadas fora deste commit.
+Próximo incremento: percepção das arestas e seleção através de peças.
+Restante da missão27/10: física/NPC, estados de pulo, armazenamento/templates,
+itens iniciais/recompensas, rifle animado, ESC sem pausa, mixer, rig editor,
+integração/limpeza auditada e validações de lançamento ainda PENDENTES.
