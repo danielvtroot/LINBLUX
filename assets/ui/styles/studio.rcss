@@ -197,3 +197,52 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 .asset-card { box-sizing: border-box; }
 
 button.image-locked { opacity: 0.45; pointer-events: none; }
+/* Página Áudio: biblioteca, prévia e música declarativa no mesmo lugar.
+   Cards usam IDs estáveis; o nome amigável fica em destaque e o arquivo
+   técnico só aparece como metadado. */
+.audio-heading { display: flex; align-items: flex-start; justify-content: space-between; width: 100%; padding: 0 0 6px; }
+.audio-heading h2 { margin: 0 0 3px; }
+.audio-heading p { margin: 0; max-width: 620px; }
+.audio-heading button { flex: 0 0 auto; margin-left: 12px; }
+.audio-toolbar { display: flex; align-items: center; width: 100%; height: 34px; margin: 4px 0 8px; }
+.audio-search { flex: 1; max-width: 380px; height: 27px; margin-right: 9px; }
+.audio-count { color: #98a3b4; font-size: 10px; }
+.audio-grid { display: flex; flex-wrap: wrap; width: 100%; padding: 4px 0 10px; }
+.audio-card { display: flex; flex-direction: column; width: 236px; min-height: 168px; margin: 0 8px 8px 0; padding: 8px; border: 1px #515967; background-color: #30343c; }
+.audio-card-header { display: flex; align-items: center; width: 100%; margin-bottom: 3px; }
+.audio-card-header .audio-name { flex: 1; min-width: 0; font-size: 12px; color: #e2e8f2; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.audio-kind { flex: 0 0 auto; margin-left: 6px; padding: 1px 4px; background-color: #3b4654; border-radius: 2px; color: #b9cbe0; font-size: 9px; }
+.audio-kind.music { background-color: #4a3d63; color: #d8c7ff; }
+.audio-meta { display: block; margin-bottom: 5px; color: #98a3b4; font-size: 9px; line-height: 1.4; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.audio-missing { color: #ffb3b3; }
+.audio-inline { display: flex; align-items: center; width: 100%; height: 24px; margin-bottom: 2px; color: #b8c3d4; font-size: 10px; }
+.audio-inline input[type=range] { flex: 1; height: 18px; margin-left: 6px; padding: 0; }
+.audio-inline input[type=checkbox] { width: 14px; height: 14px; margin-left: 6px; }
+.audio-inline select { flex: 1; height: 21px; margin-left: 6px; padding: 1px 4px; font-size: 10px; }
+.audio-actions { display: flex; flex-wrap: wrap; width: 100%; margin-top: auto; padding-top: 4px; }
+.audio-actions button { height: 23px; margin: 0 3px 3px 0; padding: 2px 5px; font-size: 9px; }
+.audio-actions button img { width: 12px; height: 12px; margin-right: 3px; }
+.audio-empty { width: 100%; padding: 10px; border: 1px #3d434e; background-color: #25282e; color: #aeb4c1; font-size: 11px; }
+.music-panel { width: 100%; margin: 2px 0 12px; padding: 9px 10px; border: 1px #4d5767; background-color: #2c3038; }
+.music-panel h3 { margin: 0 0 3px; }
+.music-panel p { margin: 0 0 7px; font-size: 10px; }
+.music-grid { display: flex; flex-wrap: wrap; width: 100%; }
+.music-field { display: flex; align-items: center; justify-content: space-between; width: 48%; min-width: 250px; height: 29px; margin: 0 2% 4px 0; color: #c4c9d3; font-size: 11px; }
+.music-field span { flex: 0 0 auto; margin-right: 7px; }
+.music-field select { flex: 1; min-width: 0; height: 25px; font-size: 11px; }
+.music-field input[type=range] { flex: 1; min-width: 80px; height: 20px; padding: 0; }
+.music-field input[type=checkbox] { width: 14px; height: 14px; }
+.playlist { width: 100%; margin-top: 7px; border-top: 1px #454c58; padding-top: 6px; }
+.playlist-heading { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 23px; margin-bottom: 3px; font-size: 11px; color: #d5dbe6; }
+.playlist-heading span { color: #98a3b4; font-size: 10px; }
+.playlist-row { display: flex; align-items: center; width: 100%; height: 27px; border-bottom: 1px #3a3f48; font-size: 11px; }
+.playlist-index { flex: 0 0 24px; color: #98a3b4; font-size: 10px; }
+.playlist-track { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.playlist-track.invalid { color: #ffb3b3; }
+.playlist-actions { display: flex; flex: 0 0 auto; align-items: center; }
+.playlist-actions button { width: 24px; height: 22px; margin-left: 2px; padding: 0; font-size: 10px; }
+.playlist-actions button img { width: 12px; height: 12px; margin: 0; }
+.playlist-empty { padding: 6px 0; color: #98a3b4; font-size: 10px; }
+.playlist-clear { margin-top: 6px; }
+.compact .audio-card { width: 220px; }
+.compact .music-field { width: 100%; margin-right: 0; }
