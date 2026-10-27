@@ -580,3 +580,17 @@ encaixe e seleção63 verificações sem falha. Sem FULL ou benchmark de GPU.
 Relatório36 e guia EDITOR_PRECISAO.md. Áudio WIP continua separado/preservado.
 Próximo: reproduzir giro de NPC além de90°, depois física/pulo e demais
 pendências da missão27/10. Nenhuma Release anunciada.
+
+
+## 27/10 — NPC: giro completo e velocidade de controlador
+
+PUBLICADO anterior:b1157e195054128d7ecf1eb69882ba6f34a77944.
+IMPLEMENTADO/TESTADO: heading por atan2 (corrige oscilação após90°), atrito
+liberado no movimento comandado e restaurado ao parar; propriedades intactas.
+Antes:11 falhas; após só giro, deslocamento1,9059/2s com speed2. Depois todas
+as8 direções/giro limitado/deslocamento3,8–4,1/parada aprovados. Relatório37.
+Player RifleDemo real+studio2/2 em19,792s; FAST17/17; IMPACT23/23 em64,7s,
+cobertura parcial. Apenas hunk físico de Runtime incluído; música WIP preservada.
+Próximo: distinguir pulo normal de queda significativa na apresentação, depois
+ESC sem congelar simulação. Templates/serviços, itens iniciais e demais
+requisitos da missão27/10 continuam pendentes. Alpha não liberado.

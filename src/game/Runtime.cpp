@@ -788,7 +788,12 @@ bool RuntimeSession::partMotion(InstanceId id,Vector3 value,PartMotion operation
     if(found==physics_->bodies_.end()||found->second.body->isStaticOrKinematicObject()){error="Corpo dinâmico indisponível.";return false;}
     auto* body=found->second.body;
     switch(operation) {
-        case PartMotion::Velocity:body->setLinearVelocity(Bt(value));break;
+        case PartMotion::Velocity:
+            body->setLinearVelocity(Bt(value));
+            // Controlador de NPC, como o jogador: não arrasta um bloco com
+            // atrito contra a velocidade comandada. Parado recupera o material.
+            if(part->hasNpc())body->setFriction(std::hypot(value.x,value.z)>.001f?0.f:part->bodyProperties().friction);
+            break;
         case PartMotion::Force:body->applyCentralForce(Bt(value));break;
         case PartMotion::Impulse:body->applyCentralImpulse(Bt(value));break;
         case PartMotion::AngularVelocity:body->setAngularVelocity(Bt(value));break;

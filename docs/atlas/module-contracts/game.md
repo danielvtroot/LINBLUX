@@ -14,6 +14,12 @@ personagem, câmera, saúde/estado humanoide, mensagens e validação.
 **APIs principais:** `Rig`, `AnimationClip`, `Animator`, `GameAssets`,
 `PlayerSettings`, `RuntimeSession`, `PlayerCamera`, `SpawnPoint`.
 
+**NPC conduzido por Bullet:** heading por atan2 do vetor frontal (círculo completo),
+turnSpeed em rad/s limitado por passo. `partMotion(Velocity)` em Part com NPC
+libera atrito horizontal durante movimento comandado e restaura o material ao
+parar; não modifica a propriedade serializada nem a física de Parts soltas.
+Regressão em `NpcHeadingRegression`/studio e Player RifleDemo; relatório37.
+
 **Invariantes:** o runtime recebe uma cópia e não escreve no mundo autoral;
 física é autoritativa para o corpo e a câmera usa uma amostra de apresentação;
 poses são replayáveis e não incrementais; o rig padrão tem seis corpos e seis

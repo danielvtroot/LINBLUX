@@ -730,6 +730,38 @@ end, sensor)
         CHECK(runtime.validate(error));CHECK(projectio::toJson(author)==baseline);
     }
 }
+void NpcHeadingRegression() {
+    // atan2 em heading deve cobrir o círculo inteiro, não o intervalo asin de Euler Y.
+    for(float angle:{0.f,45.f,90.f,135.f,180.f,-135.f,-90.f,-45.f}) {
+        Scene author;author.buildDefaultScene();std::string error;
+        auto* source=author.createPart(PartShape::Block,{30,2.5f,20},{2,5,2},"Teste de giro");
+        source->setAnchored(false);NpcProperties config;config.speed=2;config.turnSpeed=8;
+        CHECK(source->setNpcProperties(config,error));const auto id=source->id();
+        game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+        for(int frame=0;frame<30;++frame)runtime.update(1.f/60,{});
+        const Vector3 direction{-std::sin(angle*DEG2RAD),0,-std::cos(angle*DEG2RAD)};
+        const auto start=runtime.scene().findPart(id)->position();
+        CHECK(runtime.npcs().moveTo(runtime,id,Vector3Add(start,Vector3Scale(direction,25)),error));
+        for(int frame=0;frame<120;++frame) {
+            const auto previous=Vector3RotateByQuaternion({0,0,-1},runtime.scene().findPart(id)->rotation());
+            runtime.update(1.f/60,{});
+            const auto current=Vector3RotateByQuaternion({0,0,-1},runtime.scene().findPart(id)->rotation());
+            CHECK(std::acos(std::clamp(Vector3DotProduct(previous,current),-1.f,1.f))<=config.turnSpeed/60+.002f);
+        }
+        const auto* part=runtime.scene().findPart(id);
+        const auto forward=Vector3RotateByQuaternion({0,0,-1},part->rotation());
+        const float alignment=Vector3DotProduct(forward,direction);
+        if(alignment<.98f)std::printf("NPC heading %.0f: alignment %.4f, forward %.3f %.3f\n",angle,alignment,forward.x,forward.z);
+        CHECK(alignment>.98f);CHECK(std::fabs(forward.y)<.001f);
+        const float displacement=Vector3Distance(start,part->position());
+        if(displacement<=2||displacement>=4.3f)std::printf("NPC heading %.0f: displacement %.4f in 2s (speed2)\n",angle,displacement);
+        CHECK(displacement>3.8f&&displacement<4.1f); // velocidade de controlador, não bloco arrastado
+        CHECK(NearlyEqual(part->bodyProperties().friction,.8f)); // material autoral não alterado
+        CHECK(runtime.npcs().stopMoving(id));for(int frame=0;frame<30;++frame)runtime.update(1.f/60,{});
+        const auto speed=runtime.partVelocity(id);CHECK(std::hypot(speed.x,speed.z)<.02f);
+        CHECK(runtime.validate(error));runtime.stop();
+    }
+}
 void LinbluxNpc() {
     Scene author;author.buildDefaultScene();std::string error;
     // Muro estatico entre o NPC e o destino; pilar alto isola o topo.
@@ -1748,6 +1780,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    EditorSelectionAndNames();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    NpcHeadingRegression();EditorSelectionAndNames();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

@@ -404,7 +404,6 @@ void NpcSystem::publishVisual(RuntimeSession& runtime, const Controller& control
 
 void NpcSystem::halt(RuntimeSession& runtime, Controller& controller) {
     const Vector3 velocity = runtime.partVelocity(controller.part);
-    if (Horizontal(velocity) <= .001f) return;
     std::string error;
     runtime.partMotion(controller.part, {0, velocity.y, 0}, PartMotion::Velocity, error);
 }
@@ -583,7 +582,10 @@ void NpcSystem::tick(RuntimeSession& runtime, float dt) {
         }
         // Giro suave: turnSpeed (rad/s) limita a mudanca de orientacao por passo.
         if (controller.turnSpeed > 0) {
-            const float current = EulerDegreesFromQuat(part->rotation()).y;
+            // Euler Y usa asin e perde o quadrante além de 90°. O vetor frontal
+            // preserva o heading completo, inclusive atravessando -180/180°.
+            const auto forward=Vector3RotateByQuaternion({0,0,-1},part->rotation());
+            const float current = std::atan2(-forward.x,-forward.z)*RAD2DEG;
             const float target = std::atan2(-direction.x, -direction.z) * RAD2DEG;
             const float limit = controller.turnSpeed * RAD2DEG * dt;
             const float delta = std::clamp(WrapDegrees(target - current), -limit, limit);
