@@ -322,9 +322,7 @@ void RuntimeSession::pause() {
     Event("runtime", "pause", correlation_);
 }
 void RuntimeSession::resume() {
-    if (state_ != RuntimeState::Paused&&state_ != RuntimeState::Playing) return;
-    lastShiftKey_=1;suppressJump_=true; // controles só retomam após liberar teclas de ação
-    if(state_==RuntimeState::Playing)return; // fechar menu não é retomar simulação pausada
+    if (state_ != RuntimeState::Paused) return;
     state_ = RuntimeState::Playing;
     music_.resume(audio_);
     lastShiftKey_=1; // keys held in a menu/another app need a release first
