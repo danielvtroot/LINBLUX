@@ -116,6 +116,77 @@ void ModelGizmoSession() {
     CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==after);
     CHECK(scene.remove(b));const auto missing=projectio::toJson(scene);CHECK(!session.applyEdit(edit,true,error));CHECK(projectio::toJson(scene)==missing);
 }
+void SurfaceSnapping() {
+    using namespace gizmomath;
+    const auto box=[](Vector3 p,Vector3 s,Vector3 e=Vector3{}) {return TransformSnapshot{p,QuatFromEulerDegrees(e),s};};
+    const Vector3 x{1,0,0},y{0,1,0},z{0,0,1};
+    auto platform=box({0,-.5f,0},{100,1,100});
+    auto top=box({20,1.13f,4},{2,2,2});
+    auto snap=SnapSurfaces({{top,1}},{{platform,2}},y,{},.2f);
+    CHECK(snap.snapped&&snap.target==2);CHECK(NearlyEqual(snap.correction,{0,-.13f,0},.0001f));
+    top.position=Vector3Add(top.position,snap.correction);CHECK(std::fabs(BoxSeparation(top,platform))<.0001f);
+    CHECK(BoxSeparation(box({0,-.1f,0},{2,2,2}),platform)<0);
+    for(float degrees:{0.f,15.f,30.f,45.f,90.f})for(float size:{.2f,2.f,2000.f}) {
+        auto wall=box({0,0,0},{size*3,size*2,size*4},{0,degrees,0});
+        const auto normal=Vector3RotateByQuaternion(x,wall.rotation);
+        auto moving=box(Vector3Scale(normal,size*2+.07f),{size,size,size},{0,degrees,0});
+        const auto result=SnapSurfaces({{moving,1}},{{wall,2}},normal,{},.1f);
+        CHECK(result.snapped);CHECK(Vector3Distance(result.correction,Vector3Scale(normal,-.07f))<.001f);
+        moving.position=Vector3Add(moving.position,result.correction);
+        CHECK(std::fabs(BoxSeparation(moving,wall))<.001f);
+        CHECK(Vector3Length(Vector3CrossProduct(result.correction,normal))<.001f);
+    }
+    for(float angle:{15.f,30.f,45.f}) {
+        auto wall=box({0,0,0},{2,8,8});const float support=std::cos(angle*DEG2RAD)+std::sin(angle*DEG2RAD);
+        auto moving=box({1+support+.08f,0,0},{2,2,2},{0,angle,0});
+        const auto result=SnapSurfaces({{moving,1}},{{wall,2}},x,{},.15f);
+        CHECK(result.snapped);moving.position=Vector3Add(moving.position,result.correction);
+        CHECK(std::fabs(BoxSeparation(moving,wall))<.0001f);
+    }
+    auto a=box({2.1f,0,0},{2,2,2}),b=box({0,0,0},{2,2,2});
+    CHECK(!SnapSurfaces({{a,1}},{{b,2}},y,{},.2f).snapped);
+    CHECK(SnapSurfaces({{a,1}},{{b,2}},x,z,.2f).snapped);
+    auto distant=b;distant.position.y=8;CHECK(!SnapSurfaces({{a,1}},{{distant,2}},x,{},.2f).snapped);
+    CHECK(!SnapSurfaces({{a,1}},{{b,2}},x,{},.05f).snapped);
+    auto obstacle=box({3.15f,0,0},{.2f,2,2});
+    CHECK(!SnapSurfaces({{a,1}},{{b,2},{obstacle,3}},x,{},.2f).snapped);
+    auto invalid=a;invalid.position.x=std::numeric_limits<float>::quiet_NaN();
+    CHECK(!SnapSurfaces({{invalid,1}},{{b,2}},x,{},.2f).snapped);
+    CHECK(!SnapSurfaces({{a,1}},{{b,2}},x,{},-1).snapped);
+
+    // Modelo com pivô deslocado/filho rotacionado: gesto, contato, undo/redo e cancelamento.
+    Scene scene;std::string error;
+    auto* p=scene.createPart(PartShape::Block,{10,6,0},{2,2,2},"Principal");
+    auto* child=scene.createPart(PartShape::Block,{14,6,1},{1,2,3},"Filho");child->setRotationEulerDegrees({0,30,0});
+    auto* model=scene.group({p->id(),child->id()},"Modelo",error);CHECK(model);
+    ModelFrame pivot;scene.modelFrame(model->id(),pivot,error);pivot.position={3,4,0};scene.setModelPivot(model->id(),pivot,error);
+    PhysicsWorld physics;physics.attach(scene);Gizmo gizmo;gizmo.setSnap(1,0,0);TransformSession base(gizmo,physics);EditHistory history;
+    ModelTransformSession session(scene,physics,base,history);EditorCamera camera;camera.setOrbit({10,6,0},30,.65f,.43f);
+    const Rectangle view{0,0,800,600};GizmoInput input;session.update(ToolMode::Move,model,camera,view,true,true,input);
+    const auto layout=gizmolayout::Build(*session.proxy(),ToolMode::Move,camera,view,false,gizmo.visualSettings());
+    const auto original=projectio::toJson(scene);const auto start=p->position();
+    const auto begin=[&](){input={};input.mousePosition=layout.moveHandle[1];input.leftPressed=input.leftDown=true;
+        CHECK(session.update(ToolMode::Move,model,camera,view,true,true,input).started);};
+    const auto move=[&](){input.leftPressed=false;input.mousePosition=Vector2Add(layout.moveHandle[1],Vector2Scale(layout.axisDirection[0],30));
+        session.update(ToolMode::Move,model,camera,view,true,true,input);};
+    begin();move();const auto raw=p->position();session.end(true,"measure");CHECK(projectio::toJson(scene)==original);
+    auto target=box({raw.x-2.12f,6,0},{2,2,2});std::vector<SurfaceBox> targets{{target,9000}},moving;
+    begin();moving={{{p->position(),p->rotation(),p->size()},p->id()},{{child->position(),child->rotation(),child->size()},child->id()}};
+    input.surfaceSnap=true;input.movingBoxes=&moving;input.targetBoxes=&targets;move();
+    CHECK(gizmo.surfaceContact().snapped);CHECK(std::fabs(BoxSeparation({p->position(),p->rotation(),p->size()},target))<.0001f);
+    CHECK(NearlyEqual(child->position().x-14,p->position().x-10,.001f));
+    input.leftDown=false;session.update(ToolMode::Move,model,camera,view,true,true,input);CHECK(history.undoCount()==1);
+    TransformEdit edit;CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==original);
+    CHECK(history.redo(edit));CHECK(session.applyEdit(edit,true,error));const auto committed=projectio::toJson(scene);
+    input={};session.update(ToolMode::Move,model,camera,view,true,true,input);
+    auto active=gizmolayout::Build(*session.proxy(),ToolMode::Move,camera,view,false,gizmo.visualSettings());
+    input.mousePosition=active.moveHandle[1];input.leftDown=input.leftPressed=true;
+    session.update(ToolMode::Move,model,camera,view,true,true,input);
+    input.leftPressed=false;input.shiftDown=true;input.mousePosition=Vector2Add(input.mousePosition,Vector2Scale(active.axisDirection[0],17));
+    session.update(ToolMode::Move,model,camera,view,true,true,input);session.end(true,"escape");
+    CHECK(projectio::toJson(scene)==committed);CHECK(!gizmo.surfaceContact().snapped);
+    CHECK(Vector3Distance(start,raw)>.1f);
+}
 void InteractionControls() {
     Scene scene;scene.buildDefaultScene();std::string error;PhysicsWorld physics;physics.attach(scene);game::InteractionSystem interactions(scene,physics);
     auto* door=scene.createPart(PartShape::Block,{3,3,0},{1,2,1},"Porta");door->setAnchored(true);physics.syncScene(scene);
@@ -1647,6 +1718,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

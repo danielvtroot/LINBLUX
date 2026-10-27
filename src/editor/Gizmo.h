@@ -19,6 +19,9 @@ struct GizmoInput {
     bool windowFocused = true;
     bool shiftDown = false;
     bool altDown = false;   // escala centrada (as duas faces)
+    bool surfaceSnap = false; // Ctrl: encaixe geométrico durante Mover
+    const std::vector<gizmomath::SurfaceBox>* movingBoxes = nullptr;
+    const std::vector<gizmomath::SurfaceBox>* targetBoxes = nullptr;
 };
 
 // Resultado de um unico update. `partId` identifica a sessao encerrada mesmo
@@ -51,6 +54,7 @@ public:
     bool hoveringHandle() const { return hoveredHandle_ != gizmomath::HandleId::None; }
     gizmomath::HandleId hoveredHandle() const { return hoveredHandle_; }
     gizmomath::HandleId activeHandle() const { return activeHandle_; }
+    const gizmomath::SurfaceSnap& surfaceContact() const { return surfaceContact_; }
     int activeAxis() const { return activeAxis_; }
     int activePlane() const { return activePlane_; }
     // Signed, unwrapped (and snapped) sweep of the active rotate drag. The
@@ -115,6 +119,9 @@ private:
     Vector2 startMouse_{}, screenDirection_{}, secondScreenDirection_{};
     float screenUnits_ = 1.0f;
     Transform startTransform_{};
+    gizmomath::SurfaceSnap surfaceContact_{};
+    void snapPosition(Part& part,Vector3 candidate,Vector3 axisA,Vector3 axisB,
+                      const GizmoInput& input,float tolerance);
 };
 
 }  // namespace loblox
