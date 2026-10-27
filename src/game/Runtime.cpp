@@ -295,13 +295,14 @@ void RuntimeSession::stop(bool saveProgress) {
     state_ = RuntimeState::StoppingPlay;
     if (!activeAnimation_.empty()) Event("animation", "stop", correlation_, {{"clip", activeAnimation_}});
     activeAnimation_.clear();
-    scripts_.stop();ui_.clear();npcs_.reset();audio_.stopAll();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
+    scripts_.stop();ui_.clear();npcs_.reset();music_.stop(audio_);audio_.stopAll();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
     itemActions_.clear();
     if(saveProgress)try{progress_.flush();}catch(const std::exception& e){scripts_.hostError(e.what());}
     progress_.close();
     interactions_.reset();inventory_.reset();destroyCharacter(); physics_.reset(); scene_.reset();
     accumulator_ = 0; jumpPending_ = false; coyoteTime_=jumpBufferTime_=0; pose_ = {};
     blendFrom_ = {}; poseSource_.clear(); poseWalking_ = false; wasAirborne_ = false; blendTime_ = 0;
+    significantFall_=false;flightPeak_=position().y;flightTime_=0;
     shiftLockRequested_ = false; lastShiftKey_ = 0; // Stop nunca deixa o lock preso
     scriptCheckpoint_.reset();state_ = RuntimeState::Editing;
     spatialQueries_=0;scriptMovement_.reset();
@@ -382,6 +383,7 @@ bool RuntimeSession::respawn(std::string& error) {
     pose_ = {}; walkTime_ = 0; idleTime_ = 0; airTime_=0; walkWeight_ = 0; accumulator_ = 0; yaw_ = 0; jumpPending_ = false;
     blendFrom_ = {}; poseSource_.clear(); poseWalking_ = false; wasAirborne_ = false; blendTime_ = 0;
     previousCharacterPosition_=position();
+    significantFall_=false;flightPeak_=position().y;flightTime_=0;
     coyoteTime_=jumpBufferTime_=0;
     // Shift Lock is a player choice, not a property of the old character.
     // Keep it across respawns, but swallow a key already held during respawn.
@@ -597,9 +599,25 @@ void RuntimeSession::animate(float dt, float horizontal) {
     const auto* idle = assets.findAnimation(settings_.idleAnimation);
     const auto* walk = assets.findAnimation(settings_.walkAnimation);
     const bool walking = humanoidState_ == HumanoidState::Walking;
-    const bool jumping = humanoidState_ == HumanoidState::Jumping;
-    const bool falling = humanoidState_ == HumanoidState::Freefall;
-    const bool airborne = jumping || falling;
+    const bool descending = humanoidState_ == HumanoidState::Freefall;
+    const bool airborne = humanoidState_ == HumanoidState::Jumping || descending;
+    const auto center=position();
+    if(!airborne) {significantFall_=false;flightTime_=0;flightPeak_=center.y;}
+    else {
+        if(!wasAirborne_){flightPeak_=center.y;flightTime_=0;significantFall_=false;}
+        flightPeak_=std::max(flightPeak_,center.y);flightTime_+=dt;
+        // Freefall continua sendo estado físico durante a descida de um pulo.
+        // O clipe de queda exige queda efetiva E espaço até o chão; só o sinal
+        // da velocidade faria qualquer pulo trocar bruscamente de animação.
+        if(descending&&!significantFall_&&velocity().y<-8&&flightTime_>.3f&&flightPeak_-center.y>4.5f) {
+            const float clearance=std::max(3.f,settings_.collisionHeight*.5f);
+            const float reach=settings_.collisionHeight*.5f+clearance;
+            Part* floor=nullptr;Vector3 point{};
+            significantFall_=!physics_->raycast(center,{0,-1,0},reach,&floor,&point,nullptr,true);
+        }
+    }
+    const bool falling = descending&&significantFall_;
+    const bool jumping = airborne&&!falling;
     static const std::string airPose = "R6_AirPose";
     // A new take-off always starts its clip at the entry pose. A landing jump
     // can go from grounded to Jumping inside one fixed step, so waiting for a

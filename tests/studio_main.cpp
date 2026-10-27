@@ -1487,6 +1487,32 @@ void PartChildScripts() {
     CHECK(runtime.scene().findPart(part->id())->attributes().count("childRan")==1);
     CHECK(part->attributes().empty());runtime.stop();
 }
+void SignificantFallPresentation() {
+    Scene author;author.buildDefaultScene();author.gameAssets().createLinbluxCharacter();std::string error;
+    auto* fall=author.gameAssets().findAnimation(author.gameAssets().player.fallAnimation);CHECK(fall);if(!fall)return;
+    const auto marker=QuaternionFromEuler(.9f,0,0);fall->tracks[game::LeftShoulder].clear();fall->setKey(game::LeftShoulder,{0,{{0,0,0},marker}});
+    for(float fps:{30.f,60.f,144.f}) {
+        game::RuntimeSession runtime;CHECK(runtime.start(author,error));
+        for(int i=0;i<int(fps);++i)runtime.update(1/fps,{});CHECK(runtime.grounded());
+        for(float height:{2.f,7.f,20.f}) {
+            runtime.settings().jumpHeight=height;game::PlayerInput jump;jump.jump=true;runtime.update(1/fps,jump);
+            bool sawFall=false,sawDescent=false,landed=false;int fallingFrames=0;
+            for(int frame=0;frame<int(fps*2);++frame) {
+                runtime.update(1/fps,{});sawDescent|=runtime.humanoidState()==game::HumanoidState::Freefall;
+                sawFall|=runtime.significantFall();if(runtime.significantFall())++fallingFrames;
+                if(fallingFrames>fps*.15f&&runtime.significantFall())CHECK(NearlyEqual(runtime.pose()[game::LeftShoulder].rotation,marker,.03f));
+                if(frame>fps*.2f&&runtime.grounded()){landed=true;break;}
+            }
+            CHECK(sawDescent&&landed);CHECK(sawFall==(height>10));CHECK(!runtime.significantFall());
+            for(int i=0;i<5;++i)runtime.update(1/fps,{});
+        }
+        auto position=runtime.position();position.y+=2;CHECK(runtime.teleportPlayer(position,error));
+        for(int i=0;i<int(fps);++i){runtime.update(1/fps,{});CHECK(!runtime.significantFall());}
+        position=runtime.position();position.y+=30;CHECK(runtime.teleportPlayer(position,error));
+        bool saw=false;for(int i=0;i<int(fps)&&!saw;++i){runtime.update(1/fps,{});saw=runtime.significantFall();}
+        CHECK(saw);CHECK(runtime.respawn(error));CHECK(!runtime.significantFall());CHECK(runtime.validate(error));runtime.stop();
+    }
+}
 void IndependentFall() {
     Scene scene;scene.buildDefaultScene();scene.gameAssets().createR6();std::string error;
     auto& assets=scene.gameAssets();auto* fall=assets.findAnimation(assets.player.fallAnimation);
@@ -1504,7 +1530,7 @@ void IndependentFall() {
         if(runtime.humanoidState()==game::HumanoidState::Jumping)sawJump=true;
         if(runtime.humanoidState()==game::HumanoidState::Freefall) {
             sawFall=true;
-            if(++fallingFrames==14)CHECK(NearlyEqual(runtime.pose()[game::LeftShoulder].rotation,QuaternionIdentity(),.02f));
+            ++fallingFrames;CHECK(!runtime.significantFall()); // pulo normal mantém a apresentação de pulo
         }
     }
     CHECK(sawJump && sawFall && fallingFrames>=14);runtime.stop();
@@ -1780,6 +1806,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    NpcHeadingRegression();EditorSelectionAndNames();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    SignificantFallPresentation();NpcHeadingRegression();EditorSelectionAndNames();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }
