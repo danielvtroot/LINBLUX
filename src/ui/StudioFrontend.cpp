@@ -58,6 +58,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     std::string treeMarkup,propertyMarkup,ribbonMarkup,advancedMarkup,documentMarkup;size_t treeHash=0;
     std::map<std::pair<std::string,std::string>,std::string> styles;
     std::vector<game::ImageAsset> images;double imageScan=-10;std::string imageQuery;
+    std::vector<game::SoundAsset> audioFiles;double audioScan=-10;std::string audioQuery;
     std::set<InstanceId> collapsed;InstanceId dragNode=0,dragTarget=0;Vector2 dragStart{};
     bool dragging=false,mouseOwned=false,escapeConsumed=false,dialogOpen=false,treeKeyboard=false,restoreFocus=false;
     bool initialized=false,syncing=false,keyboardOwned=false;float shownHealth=100,healthTrail=100;int w=0,h=0;
@@ -185,12 +186,14 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         rect("bottom-divider",{l,float(h)-statusHeight-5-bottom,view.width,5});display("bottom-divider",hasAdvanced);
     }
     void showAdvanced(const std::string& name) {
-        if(name!="assets"){previewAudio.stopAll();previewVoice=0;}
+        if(name!="assets"&&name!="audio"){previewAudio.stopAll();previewVoice=0;}
+        if(name=="audio"){audioScan=-10;advancedMarkup.clear();}
         if(name=="script") {advanced.clear();advancedMarkup.clear();ui.showScriptEditor_=false;ui.openScriptEditor();return;}
         advanced=name;advancedMarkup.clear();ui.showScriptEditor_=false;ui.showAnimationEditor_=name=="animation";ui.showRigEditor_=name=="rig";ui.showGameSettings_=false;ui.showOutput_=name=="output";
         if(name=="animation") {auto& a=ui.scene_.gameAssets();if(!a.animations.empty())ui.openAnimation(a.findAnimation(a.player.walkAnimation)?a.player.walkAnimation:a.animations.front().id);}
     }
     void invalidateImages() {images.clear();imageScan=-10;propertyMarkup.clear();advancedMarkup.clear();}
+    void invalidateAudio() {audioFiles.clear();audioScan=-10;advancedMarkup.clear();propertyMarkup.clear();}
     static std::string Lower(std::string text) {for(auto& c:text)c=char(std::tolower(static_cast<unsigned char>(c)));return text;}
     static std::string ImageTypeLabel(const std::string& filename) {
         auto ext=std::filesystem::path(filename).extension().string();
@@ -296,6 +299,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     void commit(Rml::Element* e) {
         if(!e)return;
         if(e->GetId().rfind("image-query",0)==0){imageQuery=value(e);propertyMarkup.clear();advancedMarkup.clear();return;}
+        if(e->GetId()=="audio-search"){audioQuery=value(e);advancedMarkup.clear();return;}
         if(e->HasAttribute("data-rig-property")) {
             if(ui.runtime_.active())return;
             auto* rig=ui.scene_.gameAssets().findRig(ui.selectedRig_);
@@ -334,6 +338,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(target->GetId()=="property-search") {propertySearch=value(target);filterProperties();return;}
             if(target->GetId()=="tool-search"||target->GetId()=="tool-category") {filterTools();return;}
             if(target->GetId().rfind("image-query",0)==0) {imageQuery=value(target);propertyMarkup.clear();advancedMarkup.clear();return;}
+            if(target->GetId()=="audio-search") {audioQuery=value(target);advancedMarkup.clear();return;}
             if(attr(target,"type")=="checkbox"||target->GetTagName()=="select"||attr(target,"type")=="range")commit(target);
             if(target->GetId()=="prop-Item.Prototype"){focusValue=value(target);target->Blur();propertyMarkup.clear();}
             return;
@@ -454,12 +459,88 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         }
         if(action=="preview-sound"||action=="pause-sound"||action=="stop-sound"){
             if(action=="stop-sound"){previewAudio.stopAll();previewVoice=0;}
-            else if(action=="pause-sound"){if(previewAudio.isPaused(previewVoice))previewAudio.resume(previewVoice);else previewAudio.pause(previewVoice);}
+            else if(action=="pause-sound"){
+                if(!previewVoice||!previewAudio.hasVoice(previewVoice))ui.setStatus("Nenhuma prévia ativa.",true);
+                else if(previewAudio.isPaused(previewVoice))previewAudio.resume(previewVoice);
+                else previewAudio.pause(previewVoice);
+            }
             else {previewAudio.stopAll();previewVoice=0;
+                // O valor é um ID estável da biblioteca; só a reprodução usa a
+                // referência assets/<arquivo>. Arquivos não catalogados chegam
+                // como referência e continuam suportados pela prévia.
+                const auto* sound=ui.scene_.gameAssets().findSound(v);
+                const std::string reference=sound?sound->reference:(v.rfind("assets/",0)==0?v:std::string());
+                if(reference.empty()){ui.setStatus("Áudio não encontrado na biblioteca.",true);return;}
                 if(!previewAudio.deviceReady()){ui.setStatus("Nenhum dispositivo de áudio disponível para prévia.",true);return;}
-                const auto* sound=ui.scene_.gameAssets().findSound(v);std::string error;
-                previewVoice=previewAudio.play(v,sound?sound->volume:1,sound?sound->loop:false,error);
-                if(!previewVoice)ui.setStatus(error,true);else{previewRoot=game::ProjectAssetRoot();ui.setStatus("Prévia: "+(sound?sound->name:v));}}
+                const auto path=std::filesystem::path(game::AssetsDir())/std::filesystem::path(reference).filename();
+                if(!std::filesystem::is_regular_file(path)){ui.setStatus("Arquivo de áudio ausente: importe novamente.",true);return;}
+                std::string error;
+                previewVoice=previewAudio.play(reference,sound?sound->volume:1,sound?sound->loop:false,error);
+                if(!previewVoice)ui.setStatus(error,true);else{previewRoot=game::ProjectAssetRoot();ui.setStatus("Prévia: "+(sound?sound->name:reference));}}
+            return;
+        }
+        if(action=="catalog-sound"){
+            if(ui.runtime_.active())return;
+            const auto reference=game::NormalizeImageReference(v);
+            const auto filename=std::filesystem::path(reference).filename().string();
+            if(filename.empty()||!game::IsAudioReference(filename)){ui.setStatus("Arquivo de áudio inválido.",true);return;}
+            if(auto* existing=ui.scene_.gameAssets().findSound(std::filesystem::path(filename).stem().string());existing&&game::NormalizeImageReference(existing->reference)==reference){
+                ui.setStatus("Este áudio já está na biblioteca.",true);return;
+            }
+            double seconds=0;std::string error;
+            const auto path=std::filesystem::path(game::AssetsDir())/filename;
+            if(!game::ProbeAudio(path.string(),seconds,error)){ui.setStatus(error,true);return;}
+            auto& sound=ui.scene_.gameAssets().addSound(reference,std::filesystem::path(filename).stem().string());
+            sound.durationSeconds=seconds;invalidateAudio();ui.setStatus("Áudio adicionado à biblioteca: "+sound.name);
+            return;
+        }
+        if(action=="script-examples"){
+            const std::pair<const char*,const char*> examples[]={
+                {"musica_de_fundo.lua","Música de fundo"},
+                {"musica_de_fundo_playlist.lua","Playlist de música"},
+                {"som_ao_tocar.lua","Som ao tocar"},
+                {"som_interacao.lua","Som de interação"},
+                {"som_arma.lua","Som de arma"},
+                {"som_recarga.lua","Som de recarga"},
+            };
+            std::string menu;
+            for(const auto& example:examples)
+                menu+=Button("script-example",example.second,"script",example.first,"example");
+            el("context-menu")->SetInnerRML(i18n::Markup(menu));
+            auto b=bounds("script-examples");
+            rect("context-menu",{std::min(b.x,float(w)-260),b.y+28,256,float(6+std::size(examples)*25)});
+            display("context-menu",true);contextOpen=true;treeKeyboard=true;return;
+        }
+        if(action=="script-example"){
+            commands.push_back({action,v});
+            advanced="script";advancedMarkup.clear();dialogOpen=false;
+            display("context-menu",false);contextOpen=false;return;
+        }
+        if(action=="audio-copy"||action=="audio-insert"){
+            const auto* sound=ui.scene_.gameAssets().findSound(v);
+            if(!sound){ui.setStatus("Áudio não encontrado.",true);return;}
+            const std::string snippet="linblux.audio.play(\""+sound->id+"\", { volume = "+Num(sound->volume)+", loop = "+(sound->loop?"true":"false")+" })";
+            if(action=="audio-copy"){
+                SetClipboardText(snippet.c_str());
+                ui.setStatus("Código copiado: "+sound->name+". Cole em um Script.");
+                return;
+            }
+            if(ui.activeDocument_==0||ui.scriptDrafts_.find(ui.activeDocument_)==ui.scriptDrafts_.end()){
+                actions.dispatch({"script",""});
+            }
+            auto it=ui.scriptDrafts_.find(ui.activeDocument_);
+            if(it==ui.scriptDrafts_.end()){ui.setStatus("Abra ou crie um Script para inserir o código.",true);return;}
+            auto& draft=it->second;
+            if(draft.text.empty()&&draft.baseline.empty()){if(auto* node=ui.scene_.find(ui.activeDocument_);node&&IsScriptClass(node->instanceClass())){draft.text=static_cast<Script*>(node)->source;draft.baseline=draft.text;}}
+            const int at=std::clamp(draft.cursor,0,int(draft.text.size()));
+            std::string inserted=snippet;
+            if(at>0&&draft.text[size_t(at-1)]!='\n')inserted="\n"+inserted;
+            if(at<int(draft.text.size())&&draft.text[size_t(at)]!='\n')inserted+="\n";
+            draft.undo.push_back({draft.text,draft.cursor});
+            if(draft.undo.size()>200)draft.undo.erase(draft.undo.begin());
+            draft.text.insert(size_t(at),inserted);draft.cursor=at+int(inserted.size());draft.pendingCursor=draft.cursor;
+            draft.restoreFocus=true;draft.dirty=draft.text!=draft.baseline;
+            ui.showScriptEditor_=true;ui.setStatus("Código inserido no Script "+ui.scene_.find(ui.activeDocument_)->name()+".");
             return;
         }
         if(action=="rename-sound"||action=="remove-sound"){
@@ -533,7 +614,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         el("show-collision-shapes")->SetClass("active",ui.showCollisionShapes_);
         if(active&&!el("play")->HasAttribute("disabled"))el("play")->SetAttribute("disabled","");else if(!active)el("play")->RemoveAttribute("disabled");
         if(!active&&!el("stop")->HasAttribute("disabled"))el("stop")->SetAttribute("disabled","");else if(active)el("stop")->RemoveAttribute("disabled");
-        for(const char* name:{"script","animation","rig","settings","output","assets"})el(std::string("advanced-")+name)->SetClass("active",advanced==name);
+        for(const char* name:{"script","animation","rig","settings","output","assets","audio"})el(std::string("advanced-")+name)->SetClass("active",advanced==name);
     }
     void tree() {
         size_t hash=ui.scene_.objects().size()+size_t(ui.scene_.selection()?ui.scene_.selection()->id():0)*399;
@@ -867,10 +948,101 @@ if(c.action=="r6")showAdvanced("rig");
         text("tooltip",tooltip);const auto mouse=GetMousePosition();
         style("tooltip","left",Num(std::clamp(mouse.x+12,4.f,float(w)-325))+"px");style("tooltip","top",Num(std::min(mouse.y+20,float(h)-40))+"px");
     }
+    // Página Áudio do Studio. A biblioteca é a mesma GameAssets.sounds usada
+    // pelo runtime e pelo Lua: aqui só há apresentação, busca e comandos
+    // estáveis. Nenhum catálogo paralelo é criado.
+    void audioPanel() {
+        auto& assets=ui.scene_.gameAssets();
+        if(GetTime()-audioScan>2){audioFiles=game::ListAudioAssets(game::AssetsDir());audioScan=GetTime();}
+        const auto& music=assets.music;
+        auto lower=[](std::string text){for(auto& c:text)c=char(std::tolower(static_cast<unsigned char>(c)));return text;};
+        auto find=[&](const std::string& id)->const game::SoundAsset*{return assets.findSound(id);};
+        auto displayName=[&](const std::string& id){const auto* sound=find(id);return sound?sound->name:std::string();};
+        auto button=[&](const std::string& id,const std::string& action,const std::string& label,const std::string& icon,const std::string& value){
+            std::string markup="<button id=\""+Escape(id)+"\" data-action=\""+Escape(action)+"\" data-value=\""+Escape(value)+"\">";
+            if(!icon.empty())markup+="<img src=\"icon-"+Escape(icon)+"\"/>";
+            return markup+Escape(i18n::Text(label))+"</button>";
+        };
+        auto matches=[&](const game::SoundAsset& sound){return audioQuery.empty()||lower(sound.name+" "+sound.id+" "+sound.filename+" "+sound.kind).find(lower(audioQuery))!=std::string::npos;};
+        auto knownReference=[&](const std::string& reference){const auto canonical=game::NormalizeImageReference(reference);for(const auto& sound:assets.sounds)if(game::NormalizeImageReference(sound.reference)==canonical)return true;return false;};
+        std::string s;
+        s+="<div class=\"audio-heading\"><div><h2>Áudio da experiência</h2><p class=\"muted\">Importe MP3, WAV ou OGG. O arquivo é copiado para <code>assets/</code>; o nome amigável pode mudar sem quebrar scripts ou referências.</p></div>";
+        s+=button("audio-import","import-sound","Importar áudio","folder","");
+        s+="</div><div class=\"audio-toolbar\"><input id=\"audio-search\" class=\"audio-search\" placeholder=\"Pesquisar por nome, arquivo ou tipo\" value=\""+Escape(audioQuery)+"\"/></div>";
+        // Música declarativa: aparece antes da biblioteca para que a faixa de
+        // fundo e a playlist fiquem visíveis sem rolar a lista inteira.
+        s+="<div class=\"music-panel\"><h3>Música da experiência</h3><p class=\"muted\">A música começa somente no Play. Quando a playlist tem faixas, ela tem precedência sobre a música de fundo. Faixas ausentes são ignoradas com aviso, sem impedir o jogo.</p><div class=\"music-grid\">";
+        s+="<label class=\"music-field\"><span>Música de fundo</span><select id=\"music-background\" data-action=\"music-background\"><option value=\"\">Nenhuma</option>";
+        bool backgroundKnown=music.background.empty();
+        for(const auto& sound:assets.sounds){if(sound.id==music.background)backgroundKnown=true;s+="<option value=\""+Escape(sound.id)+"\" "+(sound.id==music.background?"selected=\"selected\"":"")+">"+Escape(sound.name+" · "+sound.filename)+"</option>";}
+        if(!backgroundKnown)s+="<option value=\""+Escape(music.background)+"\" selected=\"selected\">Faixa ausente · "+Escape(music.background)+"</option>";
+        s+="</select></label>";
+        s+="<label class=\"music-field\"><span>Volume da música</span><input id=\"music-volume\" type=\"range\" min=\"0\" max=\"1\" step=\"0.05\" value=\""+Num(music.volume)+"\" data-action=\"music-volume\"/></label>";
+        s+="<label class=\"music-field\"><span>Repetir fundo</span><input id=\"music-loop\" type=\"checkbox\" data-action=\"music-loop\" "+(music.loop?"checked=\"checked\"":"")+"/></label>";
+        s+="<label class=\"music-field\"><span>Repetir playlist</span><input id=\"music-repeat\" type=\"checkbox\" data-action=\"music-repeat\" "+(music.repeat?"checked=\"checked\"":"")+"/></label>";
+        s+="</div><div class=\"playlist\"><div class=\"playlist-heading\"><b>Playlist</b><span>"+std::to_string(music.playlist.size())+" faixa(s) · uma por vez</span></div>";
+        if(music.playlist.empty())s+="<div class=\"playlist-empty\">Nenhuma faixa na playlist. Use <b>Playlist</b> nos cards abaixo.</div>";
+        for(std::size_t i=0;i<music.playlist.size();++i){
+            const auto id=music.playlist[i];const auto* sound=find(id);
+            s+="<div class=\"playlist-row\"><span class=\"playlist-index\">"+std::to_string(i+1)+"</span><span class=\"playlist-track"+(sound?"":" invalid")+"\">"+(sound?Escape(sound->name):"Faixa ausente · "+Escape(id))+"</span><span class=\"playlist-actions\">";
+            s+=button("music-playlist-up-"+std::to_string(i),"music-playlist-up","↑","",std::to_string(i));
+            s+=button("music-playlist-down-"+std::to_string(i),"music-playlist-down","↓","",std::to_string(i));
+            s+=button("music-playlist-remove-"+std::to_string(i),"music-playlist-remove","×","",std::to_string(i));
+            s+="</span></div>";
+        }
+        if(!music.playlist.empty())s+=button("music-playlist-clear","music-playlist-clear","Limpar playlist","delete","");
+        s+="</div></div>";
+        s+="<h3>Sons e músicas importados</h3>";
+        if(assets.sounds.empty())s+="<div class=\"audio-empty\">Nenhum áudio na experiência. Importe um MP3, WAV ou OGG para tocar por Lua ou usar como música de fundo.</div>";
+        s+="<div class=\"audio-grid\">";
+        std::size_t shown=0;
+        for(const auto& sound:assets.sounds){
+            if(!matches(sound))continue;
+            ++shown;
+            const auto reference=game::NormalizeImageReference(sound.reference);
+            const auto path=std::filesystem::path(game::AssetsDir())/std::filesystem::path(reference).filename();
+            const bool missing=reference.empty()||!std::filesystem::is_regular_file(path);
+            const bool isMusic=sound.kind=="music";
+            const std::size_t uses=game::DescribeSoundUsage(ui.scene_,reference).size();
+            s+="<div id=\"audio-card-"+Escape(sound.id)+"\" class=\"audio-card\"><div class=\"audio-card-header\"><span class=\"audio-name\" title=\""+Escape(sound.name)+"\">"+Escape(sound.name)+"</span><span class=\"audio-kind"+(isMusic?" music":"")+"\">"+std::string(isMusic?"MÚSICA":"SOM")+"</span></div>";
+            s+="<span class=\"audio-meta\">"+Escape(sound.filename)+" · "+(sound.durationSeconds>0?Num(float(sound.durationSeconds))+" s":"duração desconhecida")+" · "+std::to_string(uses)+" uso(s)</span>";
+            if(missing)s+="<span class=\"audio-meta audio-missing\">Arquivo ausente: importe novamente ou remova da biblioteca.</span>";
+            s+="<label class=\"audio-inline\">Volume<input id=\"audio-volume-"+Escape(sound.id)+"\" type=\"range\" min=\"0\" max=\"1\" step=\"0.05\" value=\""+Num(sound.volume)+"\" data-action=\"sound-volume:"+Escape(sound.id)+"\"/></label>";
+            s+="<label class=\"audio-inline\">Repetir<input id=\"audio-loop-"+Escape(sound.id)+"\" type=\"checkbox\" data-action=\"sound-loop:"+Escape(sound.id)+"\" "+(sound.loop?"checked=\"checked\"":"")+"/></label>";
+            s+="<label class=\"audio-inline\">Tipo<select id=\"audio-kind-"+Escape(sound.id)+"\" data-action=\"sound-kind:"+Escape(sound.id)+"\"><option value=\"sound\" "+(isMusic?"":"selected=\"selected\"")+">Som</option><option value=\"music\" "+(isMusic?"selected=\"selected\"":"")+">Música</option></select></label>";
+            s+="<div class=\"audio-actions\">";
+            s+=button("audio-play-"+sound.id,"preview-sound","Ouvir","play",sound.id);
+            s+=button("audio-pause-"+sound.id,"pause-sound","Pausar","pause",sound.id);
+            s+=button("audio-stop-"+sound.id,"stop-sound","Parar","stop",sound.id);
+            s+=button("audio-background-"+sound.id,"music-background","Fundo","music",sound.id);
+            s+=button("audio-playlist-"+sound.id,"music-playlist-add","+ Playlist","",sound.id);
+            s+=button("audio-copy-"+sound.id,"audio-copy","Copiar código","copy",sound.id);
+            s+=button("audio-insert-"+sound.id,"audio-insert","Inserir no script","script",sound.id);
+            s+=button("audio-rename-"+sound.id,"rename-sound","Renomear","edit",sound.id);
+            s+=button("audio-delete-"+sound.id,"remove-sound","Excluir","delete",sound.id);
+            s+="</div></div>";
+        }
+        // Arquivos presentes em assets/ que ainda não têm metadados (projetos
+        // antigos ou cópia manual) continuam visíveis e podem ser catalogados.
+        for(std::size_t i=0;i<audioFiles.size();++i){
+            const auto& file=audioFiles[i];
+            if(knownReference(file.reference)||!matches(file))continue;
+            ++shown;
+            s+="<div id=\"audio-card-extra-"+std::to_string(i)+"\" class=\"audio-card\"><div class=\"audio-card-header\"><span class=\"audio-name\">Áudio não catalogado</span><span class=\"audio-kind\">ARQUIVO</span></div>";
+            s+="<span class=\"audio-meta\">"+Escape(file.reference)+"</span><div class=\"audio-actions\">";
+            s+=button("audio-extra-play-"+std::to_string(i),"preview-sound","Ouvir","play",file.reference);
+            s+=button("audio-extra-catalog-"+std::to_string(i),"catalog-sound","Adicionar à biblioteca","image",file.reference);
+            s+="</div></div>";
+        }
+        if(shown==0&&!assets.sounds.empty())s+="<div class=\"audio-empty\">Nenhum áudio encontrado para esta busca.</div>";
+        s+="</div>";
+        html("advanced-content",s,advancedMarkup);
+    }
     void commonAdvanced() {
-        const bool common=advanced=="settings"||advanced=="assets";
+        const bool common=advanced=="settings"||advanced=="assets"||advanced=="audio";
         display("advanced-content",common);if(!common)return;
         if(editing()||ImGui::IsMouseDown(0))return;
+        if(advanced=="audio"){audioPanel();return;}
         std::string s;
         if(advanced=="settings") {
             const auto& a=ui.scene_.gameAssets();const auto& p=a.player;
@@ -1005,7 +1177,7 @@ bool StudioFrontend::initialize(std::string& error) {
     rlImGuiDeferPopupRendering(true);error.clear();return true;
 }
 void StudioFrontend::draw() {
-    auto& p=*impl_;p.previewAudio.update(GetFrameTime());if(p.advanced!="assets"||p.ui.runtime_.active()||(!p.previewRoot.empty()&&p.previewRoot!=game::ProjectAssetRoot())){p.previewAudio.stopAll();p.previewVoice=0;}const double started=GetTime();
+    auto& p=*impl_;p.previewAudio.update(GetFrameTime());if((p.advanced!="assets"&&p.advanced!="audio")||p.ui.runtime_.active()||(!p.previewRoot.empty()&&p.previewRoot!=game::ProjectAssetRoot())){p.previewAudio.stopAll();p.previewVoice=0;}const double started=GetTime();
     if(p.experiences) {
         p.experiences->frame();
         const bool exclusive=p.experiences->overlayActive();p.document->SetClass("experience-exclusive",exclusive);
@@ -1047,7 +1219,7 @@ void StudioFrontend::draw() {
 }
 void StudioFrontend::render(){auto& p=*impl_;const double started=GetTime();p.renderer->drawCalls=0;if(p.experiences)p.experiences->drawBackground();rlDrawRenderBatchActive();p.renderer->SetViewport(GetRenderWidth(),GetRenderHeight());p.renderer->BeginFrame();p.context->Render();p.renderer->EndFrame();
     rlImGuiRenderDeferredPopups();
-    if(p.mouseOwned && !(Within(GetMousePosition(),p.advancedRect)&&p.advanced!="settings"&&p.advanced!="assets"))SetMouseCursor(p.system.cursor);
+    if(p.mouseOwned && !(Within(GetMousePosition(),p.advancedRect)&&p.advanced!="settings"&&p.advanced!="assets"&&p.advanced!="audio"))SetMouseCursor(p.system.cursor);
     if(p.timing){p.renderTime+=GetTime()-started;if(++p.timingFrames==30){std::fprintf(stderr,"RML timing ms: presentation=%.2f scene=%.2f update=%.2f render=%.2f frame=%.2f draws=%d\n",p.presentationTime*1000/30,p.sceneTime*1000/30,p.updateTime*1000/30,p.renderTime*1000/30,p.frameTime*1000/30,p.renderer->drawCalls);p.timingFrames=0;p.presentationTime=p.sceneTime=p.updateTime=p.renderTime=p.frameTime=0;}}
 }
 void StudioFrontend::filter(EditorInput& in,InputContext& c) {
