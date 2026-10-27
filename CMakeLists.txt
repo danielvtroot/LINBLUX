@@ -196,6 +196,9 @@ add_custom_target(linblux_builtin_assets ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/builtin
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/logo.png ${CMAKE_CURRENT_SOURCE_DIR}/assets/builtin/character-face.png ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/builtin)
 add_dependencies(linblux linblux_builtin_assets)
+add_custom_target(linblux_example_assets ALL COMMAND ${CMAKE_COMMAND} -E copy_directory
+  ${CMAKE_CURRENT_SOURCE_DIR}/assets/examples/lua ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/examples/lua)
+add_dependencies(linblux linblux_example_assets)
 add_custom_target(linblux_media_assets ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/logo.png ${CMAKE_CURRENT_SOURCE_DIR}/midia/careditfullhd.mp4 ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia)
@@ -207,6 +210,7 @@ if(LINBLUX_INSTALL_BACKGROUND_VIDEO)
   install(FILES midia/careditfullhd.mp4 DESTINATION share/linblux/midia COMPONENT Linblux)
 endif()
 install(DIRECTORY assets/examples/rifledemo DESTINATION share/linblux/examples COMPONENT Linblux)
+install(DIRECTORY assets/examples/lua DESTINATION share/linblux/examples COMPONENT Linblux)
 install(FILES README.md DESTINATION share/linblux COMPONENT Linblux)
 install(TARGETS linblux RUNTIME DESTINATION bin COMPONENT Linblux)
 install(DIRECTORY assets/ui/ DESTINATION share/linblux/ui COMPONENT Linblux)
@@ -283,7 +287,11 @@ if(XVFB_RUN_EXECUTABLE)
     set_tests_properties(linblux_experience_ui PROPERTIES TIMEOUT 300 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
     add_executable(linblux_rml_ui_tests tests/rml_ui_main.cpp tests/x11_focus.cpp)
     target_link_libraries(linblux_rml_ui_tests PRIVATE linblux_editor X11::X11)
-    add_dependencies(linblux_rml_ui_tests linblux_ui_assets)
+    add_dependencies(linblux_rml_ui_tests linblux_ui_assets linblux_example_assets)
+    add_test(NAME linblux_editor_precision_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
+    set_tests_properties(linblux_editor_precision_ui PROPERTIES TIMEOUT 60 ENVIRONMENT "LINBLUX_EDITOR_PRECISION_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;editor;scene;ui")
+    add_test(NAME linblux_audio_panel_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
+    set_tests_properties(linblux_audio_panel_ui PROPERTIES TIMEOUT 60 ENVIRONMENT "LINBLUX_AUDIO_PANEL_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;editor;audio;ui")
     add_test(NAME linblux_rml_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
     # The integration suite renders the interface at four resolutions on the
     # software rasteriser. Four-sample UI MSAA makes that pass slower, so keep

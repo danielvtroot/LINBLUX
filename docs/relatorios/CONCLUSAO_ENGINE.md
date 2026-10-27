@@ -608,3 +608,21 @@ Dependência crítica identificada no baseline: StudioFrontend publicado já usa
 GameAssets.music; backend e suporte ainda só no WIP local. Próximo incremento
 de recuperação deve validar/publicar esse WIP existente, sem reimplementação,
 para fonte remota reconstruível. Depois ESC sem pausa e demais requisitos.
+
+
+## 27/10 — Recuperação do backend de música/Studio Audio
+
+PUBLICADO anterior:76749729517e833e67ed1cb2886f54f33c98ac2a (pulo).
+DEPENDÊNCIA RECUPERADA: painel publicado já usava backend MusicSettings e ações
+ainda locais. WIP original auditado e integrado, com testes de playlist, IDs,
+referências, Lua stop_all, salvar/reabrir/exportar/importar e runtime. Relatório39
+registra também chamada de limpeza levada no hunk de7674972; não considerar
+hashes intermediários como distribuições. Sem reset, descarte ou force-push.
+IMPLEMENTADO/TESTADO: parada explícita não reinicia playlist; spans restauram
+rótulos flex; exemplos instalados e criados como Script editável. Guia
+AUDIO_MUSICA.md. FAST17/17; Audio/UI2/2 e33 verificações X11; IMPACT23/23 em76s,
+cobertura parcial e sem FULL. Música continua opcional e Lua permanece funcional.
+PRÓXIMO: ESC sem pausa em Studio/Player, cursor e input isolados; depois mixer
+por categorias. Templates/armazenamento, rig visível/Editor, itens iniciais e
+recompensas, animações corporais de item, Editor3DValidation e demais testes
+físicos/limpeza auditada continuam PENDENTES. Alpha segue BLOQUEADO.

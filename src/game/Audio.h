@@ -1,4 +1,5 @@
 #pragma once
+#include <deque>
 
 #include <cstddef>
 #include <cstdint>
@@ -16,6 +17,8 @@ class Scene;
 
 namespace loblox::game {
 
+struct GameAssets;
+
 // Áudio de projeto: o arquivo é copiado para `assets/` da experiência e a
 // referência canônica é `assets/<arquivo>.{wav,ogg,mp3}`. A biblioteca abaixo
 // é apenas metadado serializado com a cena (nome, volume, loop). Nenhum
@@ -29,6 +32,20 @@ struct SoundAsset {
     float volume = 1.f;
     bool loop = false;
     std::string kind = "sound"; // "sound" ou "music"
+};
+
+// Música declarativa da experiência. Os ids são os mesmos IDs estáveis da
+// biblioteca de sons; referências ausentes são ignoradas em runtime para que
+// um projeto antigo continue abrindo e tocando o restante da playlist.
+// `background` é a faixa única (loop controlado por `loop`). Quando há
+// playlist, ela tem precedência e cada faixa toca uma vez, em ordem; `repeat`
+// reinicia a lista ao terminar.
+struct MusicSettings {
+    std::string background;
+    std::vector<std::string> playlist;
+    float volume = 0.8f;
+    bool loop = true;
+    bool repeat = true;
 };
 
 bool IsAudioReference(const std::string& reference);
@@ -71,6 +88,7 @@ public:
     bool isPaused(int handle) const;
     bool playing(int handle) const;
     bool looping(int handle) const;
+    bool hasVoice(int handle) const;
     std::string reference(int handle) const;
     double duration(int handle) const;
     std::size_t voiceCount() const { return voices_.size(); }
@@ -81,6 +99,10 @@ public:
     bool probe(const std::string& reference, double& seconds, std::string& error) const;
 
 private:
+    friend class MusicPlaylist;
+    void finishedNaturally(int handle);
+    bool takeFinished(int handle);
+    std::deque<int> finished_; // no máximo 64 términos, sem histórico ilimitado
     struct Voice {
         std::string path;
         std::string reference;
@@ -100,6 +122,43 @@ private:
     std::map<int, Voice> voices_;
     int nextHandle_ = 1;
     static constexpr std::size_t kMaxVoices = 64;
+};
+
+// Conduz a música declarativa com um único handle ativo. Não cria uma segunda
+// biblioteca: resolve SoundAsset por ID e usa AudioSystem para tocar. A classe
+// é determinística e headless-safe, como AudioSystem.
+class MusicPlaylist {
+public:
+    // Para qualquer voz anterior, resolve as faixas configuradas e inicia a
+    // primeira válida. Faixas ausentes/inválidas são puladas. Retorna false
+    // apenas quando nada pôde ser iniciado; `error` explica o motivo.
+    bool start(AudioSystem& audio,const GameAssets& assets,std::string& error);
+    void stop(AudioSystem& audio);
+    void pause(AudioSystem& audio);
+    void resume(AudioSystem& audio);
+    // Avança quando a voz atual terminou. Deve ser chamado depois de
+    // AudioSystem::update(), que remove vozes concluídas.
+    void update(AudioSystem& audio);
+    bool active() const { return active_; }
+    bool paused() const { return paused_; }
+    bool playlist() const { return playlist_; }
+    int handle() const { return handle_; }
+    std::size_t count() const { return tracks_.size(); }
+    std::size_t index() const { return index_; }
+    const std::string& currentId() const { return currentId_; }
+    const std::string& lastError() const { return lastError_; }
+private:
+    struct Track {
+        std::string id,reference;
+        float volume=1;
+    };
+    bool playIndex(AudioSystem& audio,std::size_t index,std::string& error);
+    std::vector<Track> tracks_;
+    std::size_t index_=0;
+    int handle_=0;
+    bool playlist_=false,repeat_=false,loop_=true,active_=false,paused_=false;
+    float volume_=1;
+    std::string currentId_,lastError_;
 };
 
 }  // namespace loblox::game

@@ -44,6 +44,44 @@ bool attributeBool(const Instance& object, const char* name) {
     if (const auto* flag = std::get_if<bool>(&it->second)) return *flag;
     return false;
 }
+void musicContracts(game::AudioSystem& audio,const std::string& wav,const std::string& ogg) {
+    std::string error;game::GameAssets assets;game::MusicPlaylist music;
+    require(!music.start(audio,assets,error)&&error.empty()&&audio.voiceCount()==0,"Música vazia criou voz automática");
+    auto& a=assets.addSound(wav,"Primeira");a.volume=.5f;a.durationSeconds=.25;const auto first=a.id;
+    auto& b=assets.addSound(ogg,"Segunda");b.durationSeconds=.25;const auto second=b.id;
+    assets.music.background=first;assets.music.volume=.6f;assets.music.loop=false;
+    require(music.start(audio,assets,error),error.c_str());
+    require(music.currentId()==first&&audio.voiceCount()==1&&!audio.looping(music.handle()),"Fundo não usou faixa única");
+    require(std::fabs(audio.volume(music.handle())-.3f)<.0001f,"Volume de música ignorou volume da biblioteca");
+    music.pause(audio);audio.update(.4f);music.update(audio);
+    require(music.paused()&&audio.hasVoice(music.handle()),"Pause avançou a faixa");
+    music.resume(audio);audio.update(.3f);music.update(audio);require(!music.active()&&audio.voiceCount()==0,"Faixa única não terminou");
+    assets.music.playlist={"id-ausente",first,second};assets.music.repeat=false;
+    require(music.start(audio,assets,error)&&music.count()==2,error.c_str());
+    audio.update(.3f);music.update(audio);require(music.currentId()==second&&audio.voiceCount()==1,"Playlist não avançou");
+    audio.update(.3f);music.update(audio);require(!music.active()&&audio.voiceCount()==0,"Playlist sem repetição não terminou");
+    assets.music.repeat=true;require(music.start(audio,assets,error),error.c_str());
+    audio.update(.3f);music.update(audio);audio.update(.3f);music.update(audio);
+    require(music.currentId()==first&&audio.voiceCount()==1,"Playlist não repetiu sem duplicar vozes");
+    audio.stopAll();music.update(audio);
+    require(!music.active()&&audio.voiceCount()==0,"Playlist reiniciou após stop_all explícito de Lua");
+    music.stop(audio);
+    Scene scene;scene.gameAssets()=assets;const auto serialized=projectio::toJson(scene);Scene reopened;
+    require(projectio::fromJson(reopened,serialized,error),error.c_str());
+    require(reopened.gameAssets().music.playlist==assets.music.playlist&&reopened.gameAssets().music.background==first,"Música não persistiu por IDs");
+    require(game::DescribeSoundUsage(reopened,wav).size()==2,"Referências de fundo/playlist não foram detectadas");
+    auto invalid=json::parse(serialized);invalid["game"]["music"]["volume"]=2;
+    require(!projectio::fromJson(reopened,invalid.dump(),error)&&projectio::toJson(reopened)==serialized,"Música inválida corrompeu a cena");
+    reopened.gameAssets().music.playlist={first,second};reopened.gameAssets().removeSound(first);
+    require(reopened.gameAssets().music.background.empty()&&reopened.gameAssets().music.playlist==std::vector<std::string>{second},"Remoção deixou ID de áudio órfão");
+    Scene author;author.buildDefaultScene();author.gameAssets()=assets;
+    author.createScript(InstanceClass::Script,nullptr,"PararMusica.lua")->source=
+        "linblux.time.after(0.1,function() linblux.audio.stop_all(); linblux.scene.root:set_attribute('parou_musica',true) end)";
+    game::RuntimeSession runtime;require(runtime.start(author,error),error.c_str());
+    require(runtime.audio().voiceCount()==1,"Runtime não iniciou música configurada");runtime.update(.1f,{});
+    require(attributeBool(*runtime.scene().workspace(),"parou_musica")&&runtime.scripts().errorCount()==0,"Script não controlou música declarativa");
+    require(runtime.audio().voiceCount()==0,"Runtime reiniciou música parada por Lua");runtime.stop();
+}
 }  // namespace
 
 int main() {
@@ -118,6 +156,7 @@ int main() {
         require(second > 0 && third > 0, "OGG/MP3 não tocaram");
         audio.stopAll();
         require(audio.voiceCount() == 0, "stop_all deixou vozes ativas");
+        musicContracts(audio,wavRef,oggRef);
 
         Scene ownerScene;auto* owner=ownerScene.createPart(PartShape::Block,{0,5,0});
         const auto ownedVoice=audio.play(wavRef,1,true,error,owner->id());require(ownedVoice>0,error.c_str());
@@ -176,8 +215,17 @@ int main() {
         require(runtime.audio().voiceCount() == 0, "Stop deixou áudio tocando");
 
         // Persistência: salvar, reabrir e herdar em nova experiência do padrão.
+        scene.gameAssets().music.background=soundId;
         library.save(scene);
         library.close();
+        const auto package=root/"audio-musica.lo";library.exportPackage(created,package);
+        {
+            experiences::ExperienceManager fresh(root/"other/data",root/"factory",root/"defaults");
+            const auto imported=fresh.importPackage(package);Scene portable;fresh.open(imported,portable);
+            require(portable.gameAssets().music.background==soundId&&fs::is_regular_file(imported.root/storedRef),"Pacote perdeu música ou arquivo");
+            game::RuntimeSession player;require(player.start(portable,error),error.c_str());
+            require(player.scripts().errorCount()==0&&player.audio().voiceCount()>0,"Música importada não iniciou no runtime");player.stop();fresh.close();
+        }
         Scene reopened;
         library.open(created, reopened);
         const auto* saved = reopened.gameAssets().findSound(soundId);
@@ -193,6 +241,7 @@ int main() {
         refused=false;try{library.removeAsset(storedRef,false);}catch(const std::exception&){refused=true;}
         require(refused,"Flag do chamador burlou referências na cena salva");
         require(reopened.removeById(script->id()),"Não removeu script que usa áudio");
+        reopened.gameAssets().music.background.clear();
         const auto originalScene=projectio::toJson(reopened);
         require(!game::RemoveSoundAsset(reopened,(created.root/"assets").string(),storedRef,[](std::string& e){e="Falha simulada de salvamento";return false;},error),"Exclusão ignorou falha de salvamento");
         require(fs::exists(created.root/storedRef)&&projectio::toJson(reopened)==originalScene,"Falha de salvamento perdeu arquivo ou metadados");

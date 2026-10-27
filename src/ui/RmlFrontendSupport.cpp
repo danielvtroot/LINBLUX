@@ -174,8 +174,22 @@ Image IconImage(const std::string& name, int resolution) {
         line(24, 22, 24, 35);
     } else if (name == "play" || name == "select") {
         triangle(15, 8, 15, 40, 39, 24);
+    } else if (name == "pause") {
+        solid(13, 10, 7, 28);
+        solid(28, 10, 7, 28);
     } else if (name == "stop") {
         solid(12, 12, 25, 25);
+    } else if (name == "audio") {
+        // Alto-falante com duas ondas: recurso de áudio, não marca externa.
+        line(7, 19, 7, 29); line(7, 19, 15, 19); line(15, 19, 24, 11);
+        line(24, 11, 24, 37); line(24, 37, 15, 29); line(15, 29, 7, 29);
+        line(29, 18, 33, 24); line(33, 24, 29, 30);
+        line(35, 13, 41, 24); line(41, 24, 35, 35);
+    } else if (name == "music") {
+        line(16, 11, 16, 33); line(16, 33, 10, 37);
+        line(16, 11, 36, 7); line(36, 7, 36, 29);
+        line(36, 29, 30, 33); line(30, 33, 27, 29); line(27, 29, 29, 24); line(29, 24, 34, 24);
+        disc(12, 36, 4, ink); disc(32, 32, 4, ink);
     } else if (name == "menu") {
         for (int y : {13, 24, 35}) line(3, y, 45, y);
     } else if (name == "move") {

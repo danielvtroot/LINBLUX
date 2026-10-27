@@ -172,6 +172,8 @@ struct GameAssets {
     // Biblioteca de áudio do projeto: metadados + referência canonical em
     // assets/. O arquivo em si é um asset da experiência, nunca um ponteiro.
     std::vector<SoundAsset> sounds;
+    // Música declarativa inicia apenas no Play e nunca altera a cena autoral.
+    MusicSettings music;
     std::string defaultRig;
     PlayerSettings player;
     Rig& createR6(); // compatibility constructor for authored legacy rigs

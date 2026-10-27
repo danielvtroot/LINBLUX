@@ -105,3 +105,9 @@ Apresentação de queda: Freefall físico permanece compatível; significativo
 exige tempo, descida acumulada desde ápice e distância do chão (Bullet).
 Rastreador transitório limpo no respawn/Stop, sem novos campos JSON.
 SignificantFallPresentation/studio cobre30/60/144FPS e clipe; relatório38.
+
+Música opcional: MusicSettings persiste IDs/fundo/playlist no GameAssets;
+MusicPlaylist conduz uma voz do AudioSystem. Stop explícito não avança faixa;
+términos naturais são registrados em fila limitada64. Configuração ausente não
+cria vozes nem campos JSON. Audio nativo e audio_panel_ui cobrem o fluxo;
+guia AUDIO_MUSICA.md e relatório39. Sem mixer/áudio espacial novos.
