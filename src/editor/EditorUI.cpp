@@ -1348,6 +1348,9 @@ void EditorUI::drawToolbar() {
     const auto snapMin=ImGui::GetItemRectMin(),snapMax=ImGui::GetItemRectMax();
     snapControl_={snapMin.x,snapMin.y,snapMax.x-snapMin.x,snapMax.y-snapMin.y};
     if(ImGui::IsItemHovered())ImGui::SetTooltip(i18n::Label("OFF: continuous fine movement. ON: increments from the drag's initial transform."));
+    ImGui::SameLine();
+    if(ImGui::Checkbox(i18n::Label("Encaixe"),&surfaceSnapEnabled_)) {endGizmoSession(true,"surface_snap_toggle");cancelRigGizmo();setStatus(surfaceSnapEnabled_?"Encaixe de face ativado — arraste Mover para encaixar peças (Ctrl: temporário).":"Encaixe de face desativado.");}
+    if(ImGui::IsItemHovered())ImGui::SetTooltip(i18n::Label("Encaixar faces de peças ao mover. Ctrl ativa temporariamente."));
     for(auto control:{std::pair<const char*,float*>{"Move",&moveSnap_},{"Scale",&scaleSnap_},{"Rotate",&rotateSnapDegrees_}}) {
         ImGui::SameLine();ImGui::SetNextItemWidth(52);
         if(ImGui::DragFloat(control.first,control.second,.01f,.001f,control.second==&rotateSnapDegrees_?180.f:128.f,"%.2f",ImGuiSliderFlags_AlwaysClamp)) {
@@ -1827,11 +1830,13 @@ void EditorUI::drawViewport() {
     gizmoInput.altDown = input.alt;
     // Volumes reais dos filhos: o pivô deslocado de um Modelo não é seu centro geométrico.
     std::vector<gizmomath::SurfaceBox> snapMoving,snapTargets;
-    if(tool_==ToolMode::Move&&ImGui::GetIO().KeyCtrl&&selection) {
+    if(tool_==ToolMode::Move&&(surfaceSnapEnabled_||ImGui::GetIO().KeyCtrl)&&selection) {
         for(const auto* p:scene_.parts()) {
-            if(p->shape()!=PartShape::Block||p->color().a==0)continue;
+            if(p->color().a==0)continue;
+            // Esferas participam com uma caixa circunscrita (cubo de lado 2r)
+            const Vector3 sz=p->shape()==PartShape::Sphere?Vector3{p->sphereRadius()*2,p->sphereRadius()*2,p->sphereRadius()*2}:p->size();
             auto& boxes=p==selection||selection->isAncestorOf(p)?snapMoving:snapTargets;
-            boxes.push_back({{p->position(),p->rotation(),p->size()},p->id()});
+            boxes.push_back({{p->position(),p->rotation(),sz},p->id()});
         }
         gizmoInput.surfaceSnap=true;gizmoInput.movingBoxes=&snapMoving;gizmoInput.targetBoxes=&snapTargets;
     }
@@ -1983,7 +1988,7 @@ void EditorUI::drawViewport() {
 
     if(selection&&tool_==ToolMode::Move&&!runtime_.active()) {
         const ImVec2 p{imagePosition.x+12,imagePosition.y+12};
-        const char* hint="Ctrl: encaixar | Shift: liberar grade | Alt+clique: atravessar | F8: contornos";
+        const char* hint=surfaceSnapEnabled_?"Encaixe ativo | Ctrl: forçar | Shift: liberar grade | Alt+clique: atravessar | F8: contornos":"Ctrl: encaixar face | Shift: liberar grade | Alt+clique: atravessar | F8: contornos";
         const auto s=ImGui::CalcTextSize(hint);
         drawList->AddRectFilled({p.x-6,p.y-4},{p.x+s.x+6,p.y+s.y+4},IM_COL32(18,18,22,200),4);
         drawList->AddText(p,IM_COL32(235,220,220,255),hint);

@@ -252,6 +252,7 @@ private:
         rigImageControl_{},rigImageRemoveControl_{};
     bool gizmoLocalSpace_ = false;
     bool snapEnabled_ = true;
+    bool surfaceSnapEnabled_ = false; // toggle visual; Ctrl ainda ativa temporariamente
     Rectangle snapControl_{};
     float moveSnap_ = 1.0f;
     float scaleSnap_ = 0.5f;

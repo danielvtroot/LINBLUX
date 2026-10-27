@@ -129,6 +129,7 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="rename") {if(c.value.empty()||c.value.size()>128)throw std::runtime_error("Name must contain 1..128 bytes");if(auto* node=e.scene_.find(c.instance))node->setName(c.value);else if(auto* rig=e.scene_.gameAssets().findRig(e.selectedRig_))rig->name=c.value;}
         else if(c.action=="reparent") {std::string error;if(!e.scene_.reparent(e.scene_.find(c.instance),e.scene_.find(std::stoull(c.value)),error))throw std::runtime_error(error);}
         else if(c.action=="snap") {e.endGizmoSession(true,"snap");e.cancelRigGizmo();e.snapEnabled_=c.value=="true";}
+        else if(c.action=="surface-snap") {e.endGizmoSession(true,"surface_snap");e.cancelRigGizmo();e.surfaceSnapEnabled_=c.value=="true";e.setStatus(e.surfaceSnapEnabled_?"Encaixe de face ativado — arraste Mover para encaixar peças.":"Encaixe de face desativado.");}
         else if(c.action=="move-snap"||c.action=="scale-snap"||c.action=="rotate-snap") {float v=Number(c.value);if(v<=0||v>180)throw std::runtime_error("Snap increment must be 0..180");e.endGizmoSession(true,"snap");e.cancelRigGizmo();(c.action=="move-snap"?e.moveSnap_:c.action=="scale-snap"?e.scaleSnap_:e.rotateSnapDegrees_)=v;}
         else if(c.action=="anchor") {if(auto* node=e.scene_.selection();node&&node->isPart())static_cast<Part*>(node)->setAnchored(!static_cast<Part*>(node)->anchored());}
         else if(c.action=="import-image") {

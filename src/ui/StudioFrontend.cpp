@@ -1257,6 +1257,7 @@ void StudioFrontend::draw() {
     p.text("project",p.experiences?p.experiences->documentTitle():std::filesystem::path(p.ui.projectPath_).filename().string());p.text("message",p.ui.status_);
     p.text("scene-count",std::to_string(p.ui.scene_.parts().size())+" "+i18n::Text("parts")+" · "+std::to_string(p.ui.scene_.objects().size())+" "+i18n::Text("instances"));
     p.el("snap")->SetAttribute("type","checkbox");if(p.ui.snapEnabled_)p.el("snap")->SetAttribute("checked","");else p.el("snap")->RemoveAttribute("checked");
+    if(auto* ss=p.el("surface-snap")){ss->SetAttribute("type","checkbox");if(p.ui.surfaceSnapEnabled_)ss->SetAttribute("checked","");else ss->RemoveAttribute("checked");}
     if(auto* space=dynamic_cast<Rml::ElementFormControl*>(p.el("transform-space"));space&&p.context->GetFocusElement()!=space) {
         const std::string value=p.ui.gizmoLocalSpace_?"local":"world";
         if(space->GetValue()!=value)space->SetValue(value);
