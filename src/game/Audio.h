@@ -16,6 +16,8 @@ class Scene;
 
 namespace loblox::game {
 
+struct GameAssets;
+
 // Áudio de projeto: o arquivo é copiado para `assets/` da experiência e a
 // referência canônica é `assets/<arquivo>.{wav,ogg,mp3}`. A biblioteca abaixo
 // é apenas metadado serializado com a cena (nome, volume, loop). Nenhum
@@ -29,6 +31,20 @@ struct SoundAsset {
     float volume = 1.f;
     bool loop = false;
     std::string kind = "sound"; // "sound" ou "music"
+};
+
+// Música declarativa da experiência. Os ids são os mesmos IDs estáveis da
+// biblioteca de sons; referências ausentes são ignoradas em runtime para que
+// um projeto antigo continue abrindo e tocando o restante da playlist.
+// `background` é a faixa única (loop controlado por `loop`). Quando há
+// playlist, ela tem precedência e cada faixa toca uma vez, em ordem; `repeat`
+// reinicia a lista ao terminar.
+struct MusicSettings {
+    std::string background;
+    std::vector<std::string> playlist;
+    float volume = 0.8f;
+    bool loop = true;
+    bool repeat = true;
 };
 
 bool IsAudioReference(const std::string& reference);
