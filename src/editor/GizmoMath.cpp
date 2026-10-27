@@ -6,6 +6,97 @@
 
 namespace loblox::gizmomath {
 
+namespace {
+std::array<Vector3,3> BoxAxes(const TransformSnapshot& box) {
+    const auto q=UnitQuaternion(box.rotation);
+    return {Vector3RotateByQuaternion({1,0,0},q),Vector3RotateByQuaternion({0,1,0},q),
+            Vector3RotateByQuaternion({0,0,1},q)};
+}
+float Radius(const TransformSnapshot& box,Vector3 axis) {
+    const auto basis=BoxAxes(box);const auto h=HalfExtents(box.size);
+    return std::fabs(Vector3DotProduct(axis,basis[0]))*h.x+
+           std::fabs(Vector3DotProduct(axis,basis[1]))*h.y+
+           std::fabs(Vector3DotProduct(axis,basis[2]))*h.z;
+}
+bool ValidBox(const TransformSnapshot& b) {
+    for(float f:{b.position.x,b.position.y,b.position.z,b.size.x,b.size.y,b.size.z,
+                 b.rotation.x,b.rotation.y,b.rotation.z,b.rotation.w})if(!std::isfinite(f))return false;
+    return b.size.x>0&&b.size.y>0&&b.size.z>0&&QuaternionDotProduct(b.rotation,b.rotation)>1e-10f;
+}
+bool NearBoxes(const TransformSnapshot& a,const TransformSnapshot& b,float margin) {
+    const auto d=Vector3Subtract(a.position,b.position);
+    for(int i=0;i<3;++i){Vector3 n{};(&n.x)[i]=1;
+        if(std::fabs((&d.x)[i])>Radius(a,n)+Radius(b,n)+margin)return false;}
+    return true;
+}
+// Tolerância absoluta pequena com parcela proporcional à precisão float nas coordenadas.
+float ContactEpsilon(const TransformSnapshot& a,const TransformSnapshot& b) {
+    float scale=1;
+    for(float x:{a.position.x,a.position.y,a.position.z,b.position.x,b.position.y,b.position.z,
+                 a.size.x,a.size.y,a.size.z,b.size.x,b.size.y,b.size.z})scale=std::max(scale,std::fabs(x));
+    return std::max(1e-5f,scale*4*std::numeric_limits<float>::epsilon());
+}
+}
+
+float BoxSeparation(const TransformSnapshot& a,const TransformSnapshot& b) {
+    if(!ValidBox(a)||!ValidBox(b))return std::numeric_limits<float>::infinity();
+    const auto aa=BoxAxes(a),bb=BoxAxes(b);const auto delta=Vector3Subtract(a.position,b.position);
+    float gap=-std::numeric_limits<float>::infinity();
+    const auto test=[&](Vector3 n){if(Vector3LengthSqr(n)<1e-10f)return;
+        n=Vector3Normalize(n);gap=std::max(gap,std::fabs(Vector3DotProduct(delta,n))-Radius(a,n)-Radius(b,n));};
+    for(auto n:aa)test(n);for(auto n:bb)test(n);
+    for(auto u:aa)for(auto v:bb)test(Vector3CrossProduct(u,v));
+    return gap;
+}
+
+SurfaceSnap SnapSurfaces(const std::vector<SurfaceBox>& moving,const std::vector<SurfaceBox>& targets,
+                         Vector3 axisA,Vector3 axisB,float tolerance) {
+    SurfaceSnap best;
+    if(!std::isfinite(tolerance)||tolerance<=0||Vector3LengthSqr(axisA)<1e-8f)return best;
+    axisA=Vector3Normalize(axisA);
+    axisB=Vector3Subtract(axisB,Vector3Scale(axisA,Vector3DotProduct(axisA,axisB)));
+    axisB=Vector3LengthSqr(axisB)>1e-8f?Vector3Normalize(axisB):Vector3{};
+    float distance=tolerance+1e-6f;
+    for(const auto& source:moving)for(const auto& target:targets) {
+        if(source.id==target.id||!ValidBox(source.pose)||!ValidBox(target.pose)||
+           !NearBoxes(source.pose,target.pose,tolerance))continue;
+        const auto sa=BoxAxes(source.pose),ta=BoxAxes(target.pose);
+        for(int face=0;face<6;++face) {
+            auto normal=face<3?ta[face]:sa[face-3];
+            const auto centers=Vector3Subtract(source.pose.position,target.pose.position);
+            if(Vector3DotProduct(centers,normal)<0)normal=Vector3Negate(normal);
+            const float gap=Vector3DotProduct(centers,normal)-Radius(source.pose,normal)-Radius(target.pose,normal);
+            const auto projected=Vector3Add(Vector3Scale(axisA,Vector3DotProduct(normal,axisA)),
+                                            Vector3Scale(axisB,Vector3DotProduct(normal,axisB)));
+            const float denominator=Vector3LengthSqr(projected);if(denominator<1e-6f)continue;
+            const auto correction=Vector3Scale(projected,-gap/denominator);
+            const float length=Vector3Length(correction);if(length>distance)continue;
+            auto candidate=source.pose;candidate.position=Vector3Add(candidate.position,correction);
+            const float epsilon=ContactEpsilon(candidate,target.pose);
+            if(std::fabs(BoxSeparation(candidate,target.pose))>epsilon)continue;
+            // Não encaixar uma face deixando outra peça do conjunto dentro de um obstáculo.
+            bool safe=true;
+            for(const auto& member:moving) {
+                auto pose=member.pose;pose.position=Vector3Add(pose.position,correction);
+                for(const auto& obstacle:targets)if(member.id!=obstacle.id&&ValidBox(obstacle.pose)&&
+                    NearBoxes(pose,obstacle.pose,0)&&BoxSeparation(pose,obstacle.pose)<-ContactEpsilon(pose,obstacle.pose)){
+                    safe=false;break;
+                }
+                if(!safe)break;
+            }
+            if(!safe)continue;
+            // Projeta o centro na face alvo e limita-o ao retângulo para indicar o contato.
+            auto point=Vector3Scale(Vector3Add(candidate.position,target.pose.position),.5f);
+            const auto offset=Vector3Subtract(point,target.pose.position);point=target.pose.position;
+            for(int i=0;i<3;++i)point=Vector3Add(point,Vector3Scale(ta[i],std::clamp(Vector3DotProduct(offset,ta[i]),
+                -(&target.pose.size.x)[i]*.5f,(&target.pose.size.x)[i]*.5f)));
+            point=Vector3Add(point,Vector3Scale(normal,Radius(target.pose,normal)-Vector3DotProduct(Vector3Subtract(point,target.pose.position),normal)));
+            best={true,correction,point,normal,target.id};distance=length;
+        }
+    }
+    return best;
+}
+
 int HandleAxis(HandleId id) {
     switch (id) {
         case HandleId::XAxis: case HandleId::XPositive: case HandleId::XNegative:

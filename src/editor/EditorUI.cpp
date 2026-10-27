@@ -1819,6 +1819,16 @@ void EditorUI::drawViewport() {
     gizmoInput.windowFocused = context.windowFocused;
     gizmoInput.shiftDown = input.shift;
     gizmoInput.altDown = input.alt;
+    // Volumes reais dos filhos: o pivô deslocado de um Modelo não é seu centro geométrico.
+    std::vector<gizmomath::SurfaceBox> snapMoving,snapTargets;
+    if(tool_==ToolMode::Move&&ImGui::GetIO().KeyCtrl&&selection) {
+        for(const auto* p:scene_.parts()) {
+            if(p->shape()!=PartShape::Block||p->color().a==0)continue;
+            auto& boxes=p==selection||selection->isAncestorOf(p)?snapMoving:snapTargets;
+            boxes.push_back({{p->position(),p->rotation(),p->size()},p->id()});
+        }
+        gizmoInput.surfaceSnap=true;gizmoInput.movingBoxes=&snapMoving;gizmoInput.targetBoxes=&snapTargets;
+    }
 
     // Prioridade unica: o gizmo processa a entrada antes da camera e da
     // selecao. O estado atual (nao o do frame anterior) decide se a camera
@@ -1946,6 +1956,14 @@ void EditorUI::drawViewport() {
     resolveViewport();
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    if(selection&&tool_==ToolMode::Move&&!runtime_.active()) {
+        const ImVec2 p{imagePosition.x+12,imagePosition.y+12};
+        const char* hint="Ctrl: encaixar faces | Shift: liberar grade";
+        const auto s=ImGui::CalcTextSize(hint);
+        drawList->AddRectFilled({p.x-6,p.y-4},{p.x+s.x+6,p.y+s.y+4},IM_COL32(18,18,22,200),4);
+        drawList->AddText(p,IM_COL32(235,220,220,255),hint);
+    }
 
     if (selectedPart != nullptr) {
         char selectionLabel[128];

@@ -15,6 +15,13 @@ desfazer/refazer, câmera e estado de UI. Não possui física runtime nem Lua.
 **APIs principais:** `EditHistory`, `TransformSession`, `ModelTransformSession`, `Gizmo`,
 `GizmoLayout`, `TransformMetrics`, `EditorCamera`, `EditorUI`.
 
+**Encaixe de construção:** `gizmomath::SnapSurfaces` usa caixas orientadas e SAT;
+Ctrl durante Mover fornece os volumes reais da seleção/filhos e dos alvos.
+Correções respeitam eixo/plano, rejeitam interseções adicionais e participam do
+histórico existente. Shift libera a grade. Limites em `docs/EDITOR_PRECISAO.md`;
+sem rotação automática, malhas ou encaixe dedicado de vértices. Testes numéricos
+em `linblux_studio`, marcador e gizmos em `linblux_gizmo_visual`.
+
 **Invariantes:** transformações preservam hierarquia e IDs; undo/redo restaura
 estado anterior; edição não cria corpos físicos nem executa scripts; a câmera
 de edição não é a câmera do Player.

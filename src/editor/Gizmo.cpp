@@ -99,6 +99,24 @@ void Gizmo::cancel(Part* part, bool restoreTransform) {
     activeHandle_ = gizmomath::HandleId::None;
     hoveredHandle_ = gizmomath::HandleId::None;
     draggedPartId_ = kInvalidInstanceId;
+    surfaceContact_ = {};
+}
+
+void Gizmo::snapPosition(Part& part,Vector3 candidate,Vector3 a,Vector3 b,
+                         const GizmoInput& input,float tolerance) {
+    surfaceContact_={};
+    // Um clique sem movimento não desloca o objeto para uma face próxima.
+    if(input.surfaceSnap&&input.targetBoxes&&Vector2Distance(input.mousePosition,
+        Vector2Add(startMouse_,{dragViewport_.x,dragViewport_.y}))>=2) {
+        std::vector<gizmomath::SurfaceBox> moving;
+        if(input.movingBoxes)moving=*input.movingBoxes;
+        else if(part.shape()==PartShape::Block)moving.push_back({{part.position(),part.rotation(),part.size()},part.id()});
+        const auto delta=Vector3Subtract(candidate,part.position());
+        for(auto& box:moving)box.pose.position=Vector3Add(box.pose.position,delta);
+        surfaceContact_=gizmomath::SnapSurfaces(moving,*input.targetBoxes,a,b,tolerance);
+        if(surfaceContact_.snapped)candidate=Vector3Add(candidate,surfaceContact_.correction);
+    }
+    part.setPosition(candidate);
 }
 
 GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& camera,
@@ -158,9 +176,10 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                 Vector2DotProduct(Vector2Subtract(localMouse, startMouse_), screenDirection_) * screenUnits_ :
                 parameter - startParam_;
             if (handle_ == Handle::Axis) {
-                part->setPosition(gizmomath::MoveAxis(
+                snapPosition(*part,gizmomath::MoveAxis(
                     {startTransform_.position, startTransform_.rotation, startTransform_.size},
-                    axis, delta, input.shiftDown ? 0.0f : moveSnap_));
+                    axis, delta, input.shiftDown ? 0.0f : moveSnap_),axis,{},input,
+                    std::clamp(camera.worldUnitsPerPixel(center,viewport.height)*10,.02f,2.f));
             } else {
                 const auto snapshot = gizmomath::TransformSnapshot{
                     startTransform_.position, startTransform_.rotation, startTransform_.size};
@@ -202,9 +221,10 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                 }
                 delta = Vector3Subtract(hit, startPlaneHit_);
             }
-            part->setPosition(gizmomath::MovePlane(
+            snapPosition(*part,gizmomath::MovePlane(
                 {startTransform_.position, startTransform_.rotation, startTransform_.size}, a, b,
-                delta, input.shiftDown ? 0.0f : moveSnap_));
+                delta, input.shiftDown ? 0.0f : moveSnap_),a,b,input,
+                std::clamp(camera.worldUnitsPerPixel(center,viewport.height)*10,.02f,2.f));
             return finish(result);
         }
         if (handle_ == Handle::RotateRing) {
@@ -306,6 +326,7 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
     accumulatedAngle_ = 0;
     centeredScale_ = input.altDown && mode == ToolMode::Scale;
     dragging_ = true;
+    surfaceContact_ = {};
 
     if (handle_ == Handle::Axis || handle_ == Handle::ScaleFace) {
         const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, dragLocalSpace_);
@@ -391,6 +412,18 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
     rlDrawRenderBatchActive();
     rlDisableDepthTest();
     rlDisableDepthMask();
+
+    if(surfaceContact_.snapped) {
+        Vector2 p,q;
+        const Vector2 size{viewport.width,viewport.height};
+        const auto end=Vector3Add(surfaceContact_.point,Vector3Scale(surfaceContact_.normal,
+            camera.worldUnitsPerPixel(surfaceContact_.point,viewport.height)*24));
+        if(camera.projectChecked(surfaceContact_.point,size,p)&&camera.projectChecked(end,size,q)) {
+            DrawCircleV(p,7,{16,18,22,230});DrawCircleLinesV(p,7,{242,70,78,255});
+            DrawLineEx(p,q,2,{242,70,78,255});
+            DrawText("Encaixe",int(p.x+12),int(p.y-9),16,{255,225,225,255});
+        }
+    }
 
     const Vector2 center = layout.center;
     const auto highlighted = [this](gizmomath::HandleId id) {

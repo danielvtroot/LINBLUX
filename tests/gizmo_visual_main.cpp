@@ -522,6 +522,44 @@ void VerifyRotatedPartRendering(RenderTexture2D target, SceneRenderer& renderer,
     }
 }
 
+void VerifySurfaceFeedback() {
+    char directory[]="/tmp/linblux-surface-snap-XXXXXX";CHECK(mkdtemp(directory)!=nullptr);
+    for(const Vector2 size:{Vector2{1280,720},Vector2{1920,1080}}) {
+        gCase="surface-snap-"+std::to_string(int(size.x));gCaseFailures=0;
+        Scene scene;auto* moving=scene.createPart(PartShape::Block,{0,2,0},{4,4,4},"Peça móvel");
+        auto* floor=scene.createPart(PartShape::Block,{0,-.5f,0},{30,1,30},"Piso");floor->setAnchored(true);
+        EditorCamera camera;camera.setOrbit({0,2,0},24,.65f,.5f);
+        Gizmo gizmo;gizmo.setSnap(0,0,0);const Rectangle view{0,0,size.x,size.y};
+        const auto layout=gizmolayout::Build(*moving,ToolMode::Move,camera,view,false);
+        GizmoInput input;input.mousePosition=layout.moveHandle[1];input.leftPressed=input.leftDown=true;
+        CHECK(gizmo.update(ToolMode::Move,moving,camera,view,true,true,input).started);
+        input.leftPressed=false;input.mousePosition=Vector2Add(input.mousePosition,Vector2Scale(layout.axisDirection[0],35));
+        gizmo.update(ToolMode::Move,moving,camera,view,true,true,input);const auto raw=moving->position();
+        gizmo.cancel(moving,true);
+        auto* fixed=scene.createPart(PartShape::Block,{raw.x-4.12f,2,0},{4,4,4},"Parede");fixed->setAnchored(true);
+        std::vector<gizmomath::SurfaceBox> targets{{{fixed->position(),fixed->rotation(),fixed->size()},fixed->id()}};
+        input={};input.mousePosition=layout.moveHandle[1];input.leftPressed=input.leftDown=true;
+        gizmo.update(ToolMode::Move,moving,camera,view,true,true,input);
+        input.leftPressed=false;input.surfaceSnap=true;input.targetBoxes=&targets;
+        input.mousePosition=Vector2Add(input.mousePosition,Vector2Scale(layout.axisDirection[0],35));
+        gizmo.update(ToolMode::Move,moving,camera,view,true,true,input);
+        CHECK(gizmo.surfaceContact().snapped);
+        CHECK(std::fabs(gizmomath::BoxSeparation({moving->position(),moving->rotation(),moving->size()},targets[0].pose))<.0001f);
+        auto texture=LoadRenderTexture(int(size.x),int(size.y));SceneRenderer renderer;
+        BeginTextureMode(texture);renderer.drawScene(scene,camera,int(size.x),int(size.y),moving->id());
+        gizmo.drawOverlay(*moving,ToolMode::Move,camera,view);EndTextureMode();
+        auto capture=LoadImageFromTexture(texture.texture);ImageFlipVertical(&capture);
+        const auto point=camera.project(gizmo.surfaceContact().point,size);
+        int red=0;for(int dy=-9;dy<=9;++dy)for(int dx=-9;dx<=9;++dx) {
+            const auto pixel=PixelAt(capture,{point.x+dx,point.y+dy});
+            if(pixel.r>180&&pixel.g<110&&pixel.b<120)++red;
+        }
+        CHECK(red>10);
+        const auto path=std::string(directory)+"/snap-"+std::to_string(int(size.x))+".png";
+        CHECK(ExportImage(capture,path.c_str()));std::printf("Surface capture: %s\n",path.c_str());
+        UnloadImage(capture);UnloadRenderTexture(texture);
+    }
+}
 }  // namespace
 
 int main() {
@@ -559,6 +597,7 @@ int main() {
 
     VerifyRotatedPartRendering(target, renderer, camera);
     VerifyBaseplateStudTransform(target, renderer, camera);
+    VerifySurfaceFeedback();
 
     const ToolMode modes[3] = {ToolMode::Move, ToolMode::Scale, ToolMode::Rotate};
     const char* modeNames[3] = {"Move", "Scale", "Rotate"};
