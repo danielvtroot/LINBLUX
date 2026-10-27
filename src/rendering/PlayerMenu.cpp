@@ -8,7 +8,7 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
  const bool paused=open_;
  progress_=std::clamp(progress_+(paused?1.f:-1.f)*std::min(GetFrameTime(),.05f)/.18f,0.f,1.f);
  if(progress_<=0)return false;
- const float s=std::clamp(height/720.f,.75f,1.5f),w=std::min(820*s,width*.94f),side=170*s;
+ const float s=std::clamp(height/720.f,.75f,1.5f),w=std::min(width-16.f,std::clamp(width*.55f,480*s,840.f)),side=170*s;
  const float t=progress_*progress_*(3-2*progress_),left=-w*(1-t);
  const Color white{242,238,242,255},muted{185,177,185,255},red{215,38,63,255},panel{23,23,28,247};
  DrawRectangle(0,0,width,height,{0,0,0,(unsigned char)(90*t)});DrawRectangle(int(left),0,int(w),height,panel);

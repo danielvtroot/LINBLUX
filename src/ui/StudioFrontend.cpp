@@ -1146,10 +1146,13 @@ if(c.action=="r6")showAdvanced("rig");
         }
         menuProgress=std::clamp(menuProgress+(paused?1.f:-1.f)*std::min(GetFrameTime(),.05f)/.18f,0.f,1.f);
         const float eased=menuProgress*menuProgress*(3-2*menuProgress);
-        style("pause-panel","left",Num(-view.width*(1-eased))+"px");
+        const float panelWidth=std::min(view.width,std::clamp(view.width*.70f,580.f,760.f));
+        style("pause-panel","width",Num(panelWidth)+"px");
+        style("pause-panel","left",Num(-panelWidth*(1-eased))+"px");
         style("pause","pointer-events",paused?"auto":"none");
         pauseWasOpen=paused;
         display("pause",active&&(paused||menuProgress>0),"block");display("health",false);display("game-topbar",active&&!paused&&menuProgress==0,"flex");
+        display("game-settings",false); // configurações permanecem na navegação do painel
         const auto cursor=ui.gameplayCursor();
         display("mouse-lock-cursor",active&&cursor.visual==GameCursorVisual::MouseLock);
         style("mouse-lock-cursor","left",Num(cursor.position.x-view.x)+"px");
@@ -1161,7 +1164,7 @@ if(c.action=="r6")showAdvanced("rig");
         if(!active)return;
         const float health=ui.runtime_.health(),maximum=std::max(1.f,ui.runtime_.settings().maxHealth);
         char s[64];std::snprintf(s,sizeof(s),"%.0f / %.0f",health,maximum);text("pause-health",s);
-        text("pause-experience",std::filesystem::path(ui.projectPath_).stem().string());
+        text("pause-experience",ui.experienceUi_?ui.experienceUi_->documentTitle():std::filesystem::path(ui.projectPath_).stem().string());
         if(IsAudioDeviceReady())el("master-volume")->RemoveAttribute("disabled");else el("master-volume")->SetAttribute("disabled","");
         text("master-volume-label",IsAudioDeviceReady()?std::to_string(int(GetMasterVolume()*100))+"%":"Dispositivo de áudio indisponível nesta sessão.");
         text("player-name",ui.runtime_.rig().name);text("map-name",std::filesystem::path(ui.projectPath_).filename().string());
