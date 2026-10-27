@@ -626,3 +626,26 @@ PRÓXIMO: ESC sem pausa em Studio/Player, cursor e input isolados; depois mixer
 por categorias. Templates/armazenamento, rig visível/Editor, itens iniciais e
 recompensas, animações corporais de item, Editor3DValidation e demais testes
 físicos/limpeza auditada continuam PENDENTES. Alpha segue BLOQUEADO.
+
+## Sessão ferramenta de terminal: recuperação desenvolvimento, menu, snap, renderização, Explorador e Player — 27/10/2026
+
+Commits publicados (origin/main confirmado):
+
+| Hash | O que foi feito |
+|---|---|
+| `b6a3a47` | **Menu Player sem pausar simulação** — `gameMenuOpen_` desacopla ESC do `RuntimeState::Paused`; simulação, NPCs, física e música continuam durante o menu; `linblux_player_menu_ui` PASSOU 46.5s; `linblux_player_window_ui` PASSOU 21.9s (novo: F10/F11 com menu aberto em 1366×768) |
+| `effa896` | **Encaixe de face toggle** — checkbox "Encaixe de face" no ribbon ativa surface snap permanentemente (Ctrl mantém modo temporário); esferas incluídas como caixas circunscritas; hint atualizado |
+| `d695b0b` | **Melhor profundidade visual** — contraste hemisférico 3× maior (0.58+0.20×up vs 0.72+0.06×up); sol 0.38; wireframe de esferas em modo edges |
+| `8070713` | **Explorador melhorado** — menu inserção (+) expõe ServerStorage e ReplicatedStorage; rótulos em pt-BR |
+| `7dab595` | **Menu de áudio do Player** — percentual de volume, botão Mudo/Ativar som, nota de limitação no painel RmlUi |
+
+**Testes finais (10/10 PASSED):**
+audio, defaults, engine_default_lifecycle, game, player_menu_ui (46.5s), player_window_ui (21.9s), player_validate, item_actions, manipulation, rifledemo.
+
+**Bloqueadores pré-existentes não alterados:**
+- `linblux_tests > Salvar/carregar JSON` — falha de serialização
+- `linblux_engine_default_restart` — timeout no restart da engine padrão
+- Regressão RmlUi (maximizar/F10/F11 em fixtures específicas) — investigação pendente
+- Pacote/instalação limpa não revalidado com estes commits
+- Volume separado de música/efeitos não implementado (nota adicionada na UI)
+- Sem tag/Release até validações críticas concluídas
