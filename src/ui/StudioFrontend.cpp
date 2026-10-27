@@ -278,7 +278,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         field->SetDisabled(false);field->SetValue(initial);focusValue=initial;display("dialog-overlay",true,"flex");field->Focus();
     }
     void applyPlayerSetting(const std::string& setting,const std::string& v) {
-        if(ui.runtime_.state()!=game::RuntimeState::Paused)return;
+        if(!ui.gameMenuOpen())return;
         auto next=ui.runtime_.settings();
         try {
             size_t count=0;
@@ -317,7 +317,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         }
         const auto action=attr(e,"data-action"),property=attr(e,"data-property"),setting=attr(e,"data-setting");
         std::string v=value(e);if(attr(e,"type")=="checkbox")v=e->HasAttribute("checked")?"true":"false";
-        if(action=="player-volume"){if(ui.runtime_.state()!=game::RuntimeState::Paused||!IsAudioDeviceReady())return;try{SetMasterVolume(std::clamp(std::stof(v),0.f,1.f));}catch(...){}return;}
+        if(action=="player-volume"){if(!ui.gameMenuOpen()||!IsAudioDeviceReady())return;try{SetMasterVolume(std::clamp(std::stof(v),0.f,1.f));}catch(...){}return;}
         if(action=="choose-material"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
         if(!property.empty())commands.push_back({"property:"+property,v,e->GetAttribute<InstanceId>("data-node",0)});
         else if(!action.empty())commands.push_back({action,v});
@@ -368,8 +368,8 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(auto* button=ancestor(target,"data-player-page")) {
             if(!ui.runtime_.active())return;
             const auto chosen=attr(button,"data-player-page");
-            if(ui.runtime_.state()==game::RuntimeState::Paused&&page==chosen)commands.push_back({"resume",""});
-            else {if(ui.runtime_.state()!=game::RuntimeState::Paused){actions.dispatch({"pause",""});pauseWasOpen=true;}page=chosen;el("pause-content")->SetScrollTop(0);}
+            if(ui.gameMenuOpen()&&page==chosen)commands.push_back({"resume",""});
+            else {if(!ui.gameMenuOpen()){actions.dispatch({"pause",""});pauseWasOpen=true;}page=chosen;el("pause-content")->SetScrollTop(0);}
             return;
         }
         if(auto* button=ancestor(target,"data-player-step")) {
@@ -855,7 +855,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(!capture)context->ProcessMouseMove(int(mouse.x*dpi),int(mouse.y*dpi),0);
         auto* hover=context->GetHoverElement();bool controls=ancestor(hover,"data-action")||ancestor(hover,"data-experience")||ancestor(hover,"data-page")||ancestor(hover,"data-player-page")||ancestor(hover,"data-player-step")||ancestor(hover,"data-split");
         const bool transforming=ui.transform_.active()||ui.rigGizmo_.dragging();
-        mouseOwned=!capture&&(dialogOpen || (!transforming&&(!Within(mouse,view) || (ui.runtime_.state()==game::RuntimeState::Paused) || controls || dragging || !split.empty())));
+        mouseOwned=!capture&&(dialogOpen || (!transforming&&(!Within(mouse,view) || (ui.gameMenuOpen()) || controls || dragging || !split.empty())));
         if(experiences&&experiences->blocksStudioInput()){mouseOwned=true;keyboardOwned=true;}
         const int mods=(io.KeyCtrl?Rml::Input::KM_CTRL:0)|(io.KeyShift?Rml::Input::KM_SHIFT:0)|(io.KeyAlt?Rml::Input::KM_ALT:0);
         if(!capture) {
@@ -902,7 +902,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         keyboardOwned=keyboardOwned||editing()||dialogOpen;
         // Player buttons participate in RmlUi's native Tab/Enter navigation.
         // Only the paused context receives these events; gameplay gets none.
-        const bool playerPaused=ui.runtime_.state()==game::RuntimeState::Paused;
+        const bool playerPaused=ui.gameMenuOpen();
         if(playerPaused) {
             if(ImGui::IsKeyPressed(ImGuiKey_Tab,false)) {
                 // Trap navigation in the pause subtree instead of reaching
@@ -1137,19 +1137,22 @@ if(c.action=="r6")showAdvanced("rig");
         html("advanced-content",s,advancedMarkup);
     }
     void syncGame() {
-        const bool active=ui.runtime_.active(),paused=ui.runtime_.state()==game::RuntimeState::Paused;
+        const bool active=ui.runtime_.active(),paused=ui.gameMenuOpen();
         // A fresh pause opens on the session page; a tab chosen during the
         // same pause remains selected until play resumes.
         if(paused&&!pauseWasOpen) {
             page="game";
             el("pause-content")->SetScrollTop(0);
         }
-        menuProgress=std::clamp(menuProgress+(paused?1.f:-1.f)*std::min(GetFrameTime(),.05f)/.18f,0.f,1.f);
+        menuProgress=std::clamp(menuProgress+(paused?1.f:-1.f)*std::clamp(GetFrameTime(),0.f,.25f)/.18f,0.f,1.f);
         const float eased=menuProgress*menuProgress*(3-2*menuProgress);
-        style("pause-panel","left",Num(-view.width*(1-eased))+"px");
+        const float panelWidth=std::min(view.width,std::clamp(view.width*.70f,580.f,760.f));
+        style("pause-panel","width",Num(panelWidth)+"px");
+        style("pause-panel","left",Num(-panelWidth*(1-eased))+"px");
         style("pause","pointer-events",paused?"auto":"none");
         pauseWasOpen=paused;
         display("pause",active&&(paused||menuProgress>0),"block");display("health",false);display("game-topbar",active&&!paused&&menuProgress==0,"flex");
+        display("game-settings",false); // configurações permanecem na navegação do painel
         const auto cursor=ui.gameplayCursor();
         display("mouse-lock-cursor",active&&cursor.visual==GameCursorVisual::MouseLock);
         style("mouse-lock-cursor","left",Num(cursor.position.x-view.x)+"px");
@@ -1161,10 +1164,11 @@ if(c.action=="r6")showAdvanced("rig");
         if(!active)return;
         const float health=ui.runtime_.health(),maximum=std::max(1.f,ui.runtime_.settings().maxHealth);
         char s[64];std::snprintf(s,sizeof(s),"%.0f / %.0f",health,maximum);text("pause-health",s);
-        text("pause-experience",std::filesystem::path(ui.projectPath_).stem().string());
+        text("pause-experience",ui.experienceUi_?ui.experienceUi_->documentTitle():std::filesystem::path(ui.projectPath_).stem().string());
         if(IsAudioDeviceReady())el("master-volume")->RemoveAttribute("disabled");else el("master-volume")->SetAttribute("disabled","");
         text("master-volume-label",IsAudioDeviceReady()?std::to_string(int(GetMasterVolume()*100))+"%":"Dispositivo de áudio indisponível nesta sessão.");
         text("player-name",ui.runtime_.rig().name);text("map-name",std::filesystem::path(ui.projectPath_).filename().string());
+        text("session-state",ui.runtime_.state()==game::RuntimeState::Paused?"Simulação pausada explicitamente":"Simulação em andamento");
         if(paused) {
             auto set=[&](const char* id,const std::string& v){if(auto* f=dynamic_cast<Rml::ElementFormControl*>(el(id));f&&context->GetFocusElement()!=f&&f->GetValue()!=v)f->SetValue(v);};
             const auto& p=ui.runtime_.settings();text("camera-mode",p.cameraMode==game::CameraMode::Classic?"Livre":p.cameraMode==game::CameraMode::Follow?"Acompanhar":"Primeira pessoa");

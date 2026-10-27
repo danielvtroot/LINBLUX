@@ -24,11 +24,13 @@ int main(int argc,char** argv) {
     }
     if(project.empty()){std::fprintf(stderr,"Informe --project CAMINHO ou --validate CAMINHO.\n");return 2;}
     SetTraceLogLevel(LOG_WARNING);Scene authoring;std::string error,storageIdentity;
+    std::string experienceTitle=std::filesystem::path(project).stem().string();
+    if(experienceTitle.size()>7&&experienceTitle.compare(experienceTitle.size()-7,7,".loblox")==0)experienceTitle.resize(experienceTitle.size()-7);
     try {
         experiences::ExperienceManager library;
         const std::filesystem::path path(project);
-        if(path.extension()==".lo"){const auto experience=library.importPackage(path);library.loadReadOnly(experience,authoring);storageIdentity="experience:"+experience.manifest.installationId;}
-        else if(path.filename()=="experience.json"||std::filesystem::is_directory(path)){const auto experience=library.inspect(path.filename()=="experience.json"?path.parent_path():path);library.loadReadOnly(experience,authoring);storageIdentity="experience:"+experience.manifest.installationId;}
+        if(path.extension()==".lo"){const auto experience=library.importPackage(path);library.loadReadOnly(experience,authoring);storageIdentity="experience:"+experience.manifest.installationId;experienceTitle=experience.manifest.name;}
+        else if(path.filename()=="experience.json"||std::filesystem::is_directory(path)){const auto experience=library.inspect(path.filename()=="experience.json"?path.parent_path():path);library.loadReadOnly(experience,authoring);storageIdentity="experience:"+experience.manifest.installationId;experienceTitle=experience.manifest.name;}
         else {if(!projectio::load(authoring,project,error))throw std::runtime_error(error);game::SetProjectAssetRoot(std::filesystem::absolute(path).parent_path().string());storageIdentity="scene:"+std::filesystem::weakly_canonical(path).string();}
     }catch(const std::exception& e){std::fprintf(stderr,"Falha ao abrir experiência: %s\n",e.what());return 1;}
     struct AudioDeviceGuard {bool owned=false;~AudioDeviceGuard(){if(owned&&IsAudioDeviceReady())CloseAudioDevice();}} audioDevice;
@@ -56,8 +58,8 @@ int main(int argc,char** argv) {
         SceneRenderer renderer;PlayerMenu menu;const auto logo=game::AssetTexture(game::BuiltinAssetPath("logo.png"));int rendered=0;
         while(!WindowShouldClose()&&(!frames||rendered++<frames)) {
             const Rectangle menuButton{16,16,104,52};
-            if(IsKeyPressed(KEY_ESCAPE)||(CheckCollisionPointRec(GetMousePosition(),menuButton)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))){if(runtime.state()==game::RuntimeState::Paused)runtime.resume();else runtime.pause();EnableCursor();}
-            const bool paused=runtime.state()==game::RuntimeState::Paused;
+            if(IsKeyPressed(KEY_ESCAPE)||(CheckCollisionPointRec(GetMousePosition(),menuButton)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))){menu.toggle();if(!menu.open())runtime.resume();EnableCursor();}
+            const bool paused=menu.open(); // captura de entrada; simulação continua Playing
             game::PlayerInput input;
             if(!paused)input.script=game::CaptureScriptInput();
             if(!paused){input.movement={float(IsKeyDown(KEY_D)-IsKeyDown(KEY_A)),float(IsKeyDown(KEY_W)-IsKeyDown(KEY_S))};input.jump=IsKeyDown(KEY_SPACE);input.shiftKey=IsKeyDown(KEY_LEFT_SHIFT);input.zoom=GetMouseWheelMove();if(!runtime.playerCamera().scripted()&&(IsMouseButtonDown(MOUSE_BUTTON_RIGHT)||runtime.shiftLockActive()||runtime.playerCamera().firstPerson()||runtime.settings().cameraLock)){if(!IsCursorHidden())DisableCursor();input.look=GetMouseDelta();}else if(IsCursorHidden())EnableCursor();}
@@ -77,7 +79,7 @@ int main(int argc,char** argv) {
             DrawRectangleRounded(menuButton,.16f,6,ui::theme::panel);
             if(logo.id)DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{24,24,36,36},{0,0},0,WHITE);
             for(int i=0;i<3;++i)DrawRectangle(78,31+8*i,22,2,ui::theme::text);
-            const bool quit=menu.draw(runtime,GetScreenWidth(),GetScreenHeight(),font,logo,std::filesystem::path(project).stem().string());
+            const bool quit=menu.draw(runtime,GetScreenWidth(),GetScreenHeight(),font,logo,experienceTitle);
             EndDrawing();
             if(quit)break;
         }

@@ -114,16 +114,37 @@ int main() {
         // the full editor + player sequence without this environment variable.
         capture("studio-1366");
         if(std::getenv("LINBLUX_PLAYER_MENU_ONLY")) {
-            for(auto size:{Vector2{1280,720},Vector2{1920,1080}}){
+            scene.createScript(InstanceClass::Script,nullptr,"MenuContinua.lua")->source=R"(
+local npc=linblux.npc.create{name='NPC do menu',position=linblux.vec3(30,2.6,30),size=linblux.vec3(2,5,2),speed=2}
+linblux.npc.move_to(npc,linblux.vec3(65,2.6,30))
+linblux.scene.root:set_attribute('menu_npc',npc.id)
+linblux.events.on('update',function() linblux.scene.root:set_attribute('menu_clock',linblux.time.now()) end)
+)";
+            const bool windowOnly=std::getenv("LINBLUX_MENU_WINDOW_ONLY")!=nullptr;
+            const auto sizes=windowOnly?std::vector<Vector2>{{1366,768}}:std::vector<Vector2>{{1280,720},{1920,1080}};
+            for(auto size:sizes){
                 resizeWindow(int(size.x),int(size.y));click("play");frames(6);auto& rt=EditorUITestAccess::runtime(ui);
-                CHECK(rt.takeDamage(40,error));key("Escape");frames(16);CHECK(rt.state()==game::RuntimeState::Paused);CHECK(!EditorUITestAccess::captured(ui));
+                CHECK(rt.takeDamage(40,error));key("Escape");frames(16);CHECK(rt.state()==game::RuntimeState::Playing&&ui.gameMenuOpen());CHECK(!EditorUITestAccess::captured(ui));
+                const auto clock=std::get<double>(rt.scene().workspace()->attributes().at("menu_clock"));
+                const auto npcId=InstanceId(std::get<double>(rt.scene().workspace()->attributes().at("menu_npc")));
+                const auto npcBefore=rt.scene().findPart(npcId)->position();frames(12);
+                CHECK(std::get<double>(rt.scene().workspace()->attributes().at("menu_clock"))>clock);
+                CHECK(Vector3Distance(rt.scene().findPart(npcId)->position(),npcBefore)>.02f);
                 const auto vp=ui.frontend()->viewport(),panel=ui.frontend()->elementBounds("pause-panel");
                 CHECK(std::fabs(panel.x-vp.x)<2);CHECK(panel.width<=vp.width*.94f);CHECK(panel.height>=vp.height-2);
                 for(const char* id:{"resume","page-game","page-settings","page-controls","page-audio","page-video","page-about","leave","pause-close"}){
                     const auto r=ui.frontend()->elementBounds(id);CHECK(r.width>20&&r.height>20);CHECK(r.x>=vp.x&&r.y>=vp.y&&r.x+r.width<=vp.x+vp.width+2&&r.y+r.height<=vp.y+vp.height+2);
                 }
                 capture("side-menu-"+std::to_string(int(size.x)));
-                if(size.x==1920){key("Escape");frames(14);CHECK(rt.state()==game::RuntimeState::Playing);key("shift+F5");CHECK(!ui.playing());continue;}
+                if(windowOnly) {
+                    key("F10");frames(4);CHECK(EditorUITestAccess::maximized(ui));CHECK(rt.state()==game::RuntimeState::Playing&&ui.gameMenuOpen());capture("menu-maximized-1366");
+                    key("F10");frames(4);CHECK(!EditorUITestAccess::maximized(ui));
+                    key("F11");frames(6);CHECK(EditorUITestAccess::fullscreen(ui));CHECK(GetScreenWidth()==1920&&GetScreenHeight()==1080);capture("menu-fullscreen");
+                    key("F11");frames(6);CHECK(!EditorUITestAccess::fullscreen(ui));CHECK(GetScreenWidth()==1366&&GetScreenHeight()==768);
+                    key("Escape");frames(8);CHECK(!ui.gameMenuOpen()&&rt.state()==game::RuntimeState::Playing);
+                    key("shift+F5");CHECK(!ui.playing());continue;
+                }
+                if(size.x==1920){key("Escape");frames(14);CHECK(rt.state()==game::RuntimeState::Playing&&!ui.gameMenuOpen());key("shift+F5");CHECK(!ui.playing());continue;}
                 const auto position=rt.position();event("keydown w");frames(5);event("keyup w");CHECK(Vector3Distance(position,rt.position())<.001f);
                 click("page-settings");const auto mode=rt.settings().cameraMode;click("camera-next");CHECK(rt.settings().cameraMode!=mode);
                 const float sensitivity=rt.settings().sensitivity;const auto slider=ui.frontend()->elementBounds("sensitivity-slider");clickAt({slider.x+slider.width*.7f,slider.y+slider.height/2});CHECK(rt.settings().sensitivity!=sensitivity);
@@ -133,7 +154,7 @@ int main() {
                 click("page-controls");CHECK(ui.frontend()->elementText("controls-page").find("W A S D")!=std::string::npos);
                 click("page-about");capture("side-help-"+std::to_string(int(size.x)));
                 click("page-game");click("respawn");frames(4);CHECK(rt.health()==rt.settings().maxHealth);
-                if(rt.state()!=game::RuntimeState::Paused)key("Escape");frames(14);click("pause-close");frames(14);CHECK(rt.state()==game::RuntimeState::Playing);
+                if(!ui.gameMenuOpen())key("Escape");frames(14);click("pause-close");frames(14);CHECK(rt.state()==game::RuntimeState::Playing&&!ui.gameMenuOpen());
                 key("Escape");frames(14);click("leave");CHECK(!ui.playing());
             }
             std::printf("Player side menu: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);rlImGuiShutdown();CloseWindow();return failures?1:0;
