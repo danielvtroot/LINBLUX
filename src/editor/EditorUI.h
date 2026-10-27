@@ -68,6 +68,7 @@ public:
 
     ToolMode tool() const { return tool_; }
     bool playing() const;
+    bool gameMenuOpen() const {return gameMenuOpen_||runtime_.state()==game::RuntimeState::Paused;}
     bool experienceOverlay() const;
     GameplayCursorState gameplayCursor() const;
 
@@ -191,6 +192,7 @@ private:
     std::unique_ptr<StudioFrontend> frontend_;
     game::RuntimeSession runtime_;
     bool gameplayCapture_ = false;
+    bool gameMenuOpen_ = false;
     bool gameplaySkipDelta_ = true;
     bool gameplayRestoreNoCursorChange_ = false, gameplayRestoreDrawCursor_ = false;
     Vector2 gameplayRestoreCursor_{};

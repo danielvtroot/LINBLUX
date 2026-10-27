@@ -5,7 +5,7 @@
 #include <cstdio>
 namespace loblox {
 bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font font,Texture2D logo,const std::string& title){
- const bool paused=runtime.state()==game::RuntimeState::Paused;
+ const bool paused=open_;
  progress_=std::clamp(progress_+(paused?1.f:-1.f)*std::min(GetFrameTime(),.05f)/.18f,0.f,1.f);
  if(progress_<=0)return false;
  const float s=std::clamp(height/720.f,.75f,1.5f),w=std::min(820*s,width*.94f),side=170*s;
@@ -25,14 +25,14 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
  };
  if(logo.id)DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{left+16*s,18*s,34*s,34*s},{0,0},0,WHITE);
  text("LINBLUX",left+58*s,26*s,17,white);
- if(button("Continuar",{left+10*s,76*s,side-20*s,36*s},true))runtime.resume();
+ if(button("Continuar",{left+10*s,76*s,side-20*s,36*s},true)){open_=false;runtime.resume();}
  const char* pages[]={"Jogador","Câmera","Controles","Áudio","Vídeo","Ajuda"};
  for(int i=0;i<6;++i)if(button(pages[i],{left+10*s,(126+42*i)*s,side-20*s,36*s},page_==i)){page_=i;scroll_=0;}
  if(button("Sair",{left+10*s,height-54*s,side-20*s,38*s}))quit=true;
  const float x=left+side+22*s,available=w-side-44*s;
  std::string heading=title;while(!heading.empty()&&MeasureTextEx(font,heading.c_str(),17*s,s).x>available-42*s)heading.pop_back();
  text(heading,x,26*s,17,white);
- if(button("×",{left+w-48*s,18*s,32*s,32*s}))runtime.resume();
+ if(button("×",{left+w-48*s,18*s,32*s,32*s})){open_=false;runtime.resume();}
  DrawLine(int(x),int(66*s),int(left+w-18*s),int(66*s),{70,52,60,255});
  const Rectangle content{x,76*s,available,height-90*s};
  if(paused&&CheckCollisionPointRec(mouse,content))scroll_=std::clamp(scroll_-GetMouseWheelMove()*36*s,0.f,250*s);

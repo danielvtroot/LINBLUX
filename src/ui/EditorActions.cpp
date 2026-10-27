@@ -41,8 +41,8 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             e.endGizmoSession(true,"space_toggle");e.cancelRigGizmo();e.clearTransformReadout();
             e.gizmoLocalSpace_=c.value=="local";e.gizmo_.setLocalSpace(e.gizmoLocalSpace_);
         }
-        else if(c.action=="pause") {e.runtime_.pause();e.setGameplayCapture(false);}
-        else if(c.action=="resume")e.runtime_.resume();
+        else if(c.action=="pause") {e.gameMenuOpen_=true;e.setGameplayCapture(false);}
+        else if(c.action=="resume") {e.gameMenuOpen_=false;e.runtime_.resume();}
         else if(c.action=="respawn") {std::string error;if(!e.runtime_.respawn(error))throw std::runtime_error(error);}
         else if(c.action=="maximize-game")e.toggleGameMaximized();
         else if(c.action=="fullscreen-game")e.toggleGameFullscreen();
