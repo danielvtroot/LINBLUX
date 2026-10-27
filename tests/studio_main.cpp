@@ -116,6 +116,30 @@ void ModelGizmoSession() {
     CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==after);
     CHECK(scene.remove(b));const auto missing=projectio::toJson(scene);CHECK(!session.applyEdit(edit,true,error));CHECK(projectio::toJson(scene)==missing);
 }
+void EditorSelectionAndNames() {
+    Scene scene;std::string error;
+    auto* a=scene.createPart(PartShape::Block,{0,2,4},{2,2,2},"Peça grande");
+    auto* b=scene.createPart(PartShape::Block,{0,2,0},{4,2,2},"Peça grande");
+    auto* copy=scene.duplicatePart(*b);copy->setPosition({10,2,0});
+    CHECK(b->name()=="Peça grande_002"&&copy->name()=="Peça grande_003");
+    CHECK(a->name()=="Peça grande");
+    auto* legacy=scene.createPart(PartShape::Block,{20,2,0},{1,1,1},"Plataforma inicial325");
+    auto* duplicate=scene.duplicatePart(*legacy);CHECK(duplicate->name()=="Plataforma inicial325_002");
+    CHECK(legacy->name()=="Plataforma inicial325");
+    std::string unicode;for(int i=0;i<64;++i)unicode+="Á";
+    auto* named=scene.createPart(PartShape::Block,{30,2,0},{1,1,1},unicode);
+    auto* namedCopy=scene.duplicatePart(*named);CHECK(namedCopy->name().size()<=128);CHECK(scene.validate(error));
+    const Ray ray{{0,2,10},{0,0,-2}};
+    auto hits=scene.pickParts(ray,20);CHECK(hits.size()==2);CHECK(hits[0].part==a&&hits[1].part==b);
+    CHECK(NearlyEqual(hits[0].distance,5));CHECK(scene.pickPart(ray,20)==a);
+    auto color=a->color();color.a=0;a->setColor(color);
+    hits=scene.pickParts(ray,20);CHECK(hits.size()==1&&hits[0].part==b);
+    CHECK(scene.pickParts({{0,2,10},{0,0,0}},20).empty());
+    CHECK(scene.pickParts(ray,-1).empty());
+    Scene loaded;CHECK(projectio::fromJson(loaded,projectio::toJson(scene),error));
+    CHECK(loaded.find(legacy->id())->name()==legacy->name());CHECK(loaded.find(b->id())->name()==b->name());
+    CHECK(loaded.find(namedCopy->id())->name()==namedCopy->name());
+}
 void SurfaceSnapping() {
     using namespace gizmomath;
     const auto box=[](Vector3 p,Vector3 s,Vector3 e=Vector3{}) {return TransformSnapshot{p,QuatFromEulerDegrees(e),s};};
@@ -1724,6 +1748,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    EditorSelectionAndNames();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

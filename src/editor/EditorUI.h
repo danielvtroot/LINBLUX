@@ -186,6 +186,7 @@ private:
     unsigned long long frame_ = 0;
     bool traceInput_ = false;
     bool showCollisionShapes_ = false;
+    EditorGeometryView editorGeometry_{};
     std::unique_ptr<StudioFrontend> frontend_;
     game::RuntimeSession runtime_;
     bool gameplayCapture_ = false;

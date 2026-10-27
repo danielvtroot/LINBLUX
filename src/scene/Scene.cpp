@@ -10,15 +10,23 @@
 
 namespace loblox {
 Part* Scene::pickPart(Ray ray,float maxDistance,Vector3* point) const {
-    if(Vector3LengthSqr(ray.direction)<1e-8f)return nullptr;
-    ray.direction=Vector3Normalize(ray.direction);Part* best=nullptr;
+    const auto hits=pickParts(ray,maxDistance);
+    if(hits.empty())return nullptr;
+    if(point)*point=hits.front().point;return hits.front().part;
+}
+std::vector<Scene::PartPick> Scene::pickParts(Ray ray,float maxDistance) const {
+    std::vector<PartPick> hits;
+    for(float v:{ray.position.x,ray.position.y,ray.position.z,ray.direction.x,ray.direction.y,ray.direction.z,maxDistance})
+        if(!std::isfinite(v))return hits;
+    if(maxDistance<=0||Vector3LengthSqr(ray.direction)<1e-8f)return hits;
+    ray.direction=Vector3Normalize(ray.direction);
     for(auto* part:parts()) {
+        if(part->color().a==0)continue;
         const auto hit=part->intersect(ray);
-        if(hit.hit&&hit.distance>=0&&hit.distance<maxDistance) {
-            best=part;maxDistance=hit.distance;if(point)*point=hit.point;
-        }
+        if(hit.hit&&hit.distance>=0&&hit.distance<maxDistance)hits.push_back({part,hit.distance,hit.point});
     }
-    return best;
+    std::sort(hits.begin(),hits.end(),[](const auto& a,const auto& b){return a.distance==b.distance?a.part->id()<b.part->id():a.distance<b.distance;});
+    return hits;
 }
 
 namespace {
@@ -776,8 +784,16 @@ std::string Scene::makeUniqueName(const std::string& base) const {
     if (!used(base)) {
         return base;
     }
+    std::string stem=base;
+    const auto underscore=stem.find_last_of('_');
+    if(underscore!=std::string::npos&&stem.size()-underscore>=4&&
+        std::all_of(stem.begin()+underscore+1,stem.end(),[](unsigned char c){return c>='0'&&c<='9';}))stem.resize(underscore);
     for (int index = 2; index < 100000; ++index) {
-        const std::string candidate = base + std::to_string(index);
+        const auto digits=std::to_string(index);
+        const auto suffix="_"+std::string(digits.size()<3?3-digits.size():0,'0')+digits;
+        auto cut=std::min(stem.size(),128-suffix.size());
+        while(cut<stem.size()&&cut>0&&(static_cast<unsigned char>(stem[cut])&0xc0)==0x80)--cut;
+        const std::string candidate = stem.substr(0,cut)+suffix;
         if (!used(candidate)) {
             return candidate;
         }

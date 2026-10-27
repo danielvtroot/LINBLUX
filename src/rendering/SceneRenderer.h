@@ -19,6 +19,11 @@ struct RigRenderState {
     int selectedBody = -1;
     bool pivots = false;
 };
+struct EditorGeometryView {
+    bool edges=true;
+    bool bounds=false;
+    bool normals=false;
+};
 
 // Desenha a cena com recursos minimos (sem sombras/post-processamento).
 // Recursos graficos compartilhados sao liberados com o ultimo renderer.
@@ -39,6 +44,9 @@ public:
     // Cor final da Part considerando o material escolhido.
     static Color MaterialColor(const Part& part);
     static Color MaterialColor(Color color, PartMaterial material);
+    // Passe opcional de autoria. O Player não o chama.
+    void drawEditorGuides(const Scene& scene,Camera3D camera,const EditorGeometryView& options,
+                          InstanceId hovered=0) const;
     void drawCollisionShapes(const Scene& scene,const PhysicsWorld& physics,
                              const EditorCamera& camera,InstanceId selection) const;
 
