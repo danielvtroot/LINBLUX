@@ -234,6 +234,7 @@ int AudioSystem::play(const std::string& reference, float volume, bool loop, std
 }
 
 bool AudioSystem::stop(int handle) {
+    takeFinished(handle);
     const auto it = voices_.find(handle);
     if (it == voices_.end()) return false;
     release(it->second);
@@ -303,6 +304,16 @@ bool AudioSystem::looping(int handle) const {
 
 bool AudioSystem::hasVoice(int handle) const { return find(handle) != nullptr; }
 
+void AudioSystem::finishedNaturally(int handle) {
+    if(finished_.size()>=kMaxVoices)finished_.pop_front();
+    finished_.push_back(handle);
+}
+bool AudioSystem::takeFinished(int handle) {
+    const auto it=std::find(finished_.begin(),finished_.end(),handle);
+    if(it==finished_.end())return false;
+    finished_.erase(it);return true;
+}
+
 std::string AudioSystem::reference(int handle) const {
     const Voice* voice = find(handle);
     return voice ? voice->reference : std::string();
@@ -330,6 +341,7 @@ void AudioSystem::update(float dt,const Scene* scene) {
                 continue;
             }
             if (!IsMusicStreamPlaying(voice.music)) {
+                finishedNaturally(it->first);
                 release(voice);
                 it = voices_.erase(it);
                 continue;
@@ -340,6 +352,7 @@ void AudioSystem::update(float dt,const Scene* scene) {
         // Sem dispositivo: o mesmo contrato, conduzido pela duração decodificada.
         voice.played += dt;
         if (!voice.loop && voice.played >= voice.duration) {
+            finishedNaturally(it->first);
             it = voices_.erase(it);
             continue;
         }
@@ -350,6 +363,7 @@ void AudioSystem::update(float dt,const Scene* scene) {
 void AudioSystem::stopAll() {
     for (auto& entry : voices_) release(entry.second);
     voices_.clear();
+    finished_.clear();
 }
 
 bool MusicPlaylist::playIndex(AudioSystem& audio,std::size_t index,std::string& error){
@@ -419,6 +433,9 @@ void MusicPlaylist::resume(AudioSystem& audio){
 void MusicPlaylist::update(AudioSystem& audio){
     if(!active_||paused_)return;
     if(handle_>0&&audio.hasVoice(handle_))return;
+    // Um stop explícito (inclusive Lua stop_all) não significa fim de faixa.
+    // Respeitar o criador: só avançar quando o backend terminou naturalmente.
+    if(!audio.takeFinished(handle_)){active_=false;handle_=0;currentId_.clear();return;}
     handle_=0;
     if(!playlist_){
         active_=false;currentId_.clear();return;

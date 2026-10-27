@@ -44,6 +44,37 @@ bool attributeBool(const Instance& object, const char* name) {
     if (const auto* flag = std::get_if<bool>(&it->second)) return *flag;
     return false;
 }
+void musicContracts(game::AudioSystem& audio,const std::string& wav,const std::string& ogg) {
+    std::string error;game::GameAssets assets;game::MusicPlaylist music;
+    require(!music.start(audio,assets,error)&&error.empty()&&audio.voiceCount()==0,"Música vazia criou voz automática");
+    auto& a=assets.addSound(wav,"Primeira");a.volume=.5f;a.durationSeconds=.25;const auto first=a.id;
+    auto& b=assets.addSound(ogg,"Segunda");b.durationSeconds=.25;const auto second=b.id;
+    assets.music.background=first;assets.music.volume=.6f;assets.music.loop=false;
+    require(music.start(audio,assets,error),error.c_str());
+    require(music.currentId()==first&&audio.voiceCount()==1&&!audio.looping(music.handle()),"Fundo não usou faixa única");
+    require(std::fabs(audio.volume(music.handle())-.3f)<.0001f,"Volume de música ignorou volume da biblioteca");
+    music.pause(audio);audio.update(.4f);music.update(audio);
+    require(music.paused()&&audio.hasVoice(music.handle()),"Pause avançou a faixa");
+    music.resume(audio);audio.update(.3f);music.update(audio);require(!music.active()&&audio.voiceCount()==0,"Faixa única não terminou");
+    assets.music.playlist={"id-ausente",first,second};assets.music.repeat=false;
+    require(music.start(audio,assets,error)&&music.count()==2,error.c_str());
+    audio.update(.3f);music.update(audio);require(music.currentId()==second&&audio.voiceCount()==1,"Playlist não avançou");
+    audio.update(.3f);music.update(audio);require(!music.active()&&audio.voiceCount()==0,"Playlist sem repetição não terminou");
+    assets.music.repeat=true;require(music.start(audio,assets,error),error.c_str());
+    audio.update(.3f);music.update(audio);audio.update(.3f);music.update(audio);
+    require(music.currentId()==first&&audio.voiceCount()==1,"Playlist não repetiu sem duplicar vozes");
+    audio.stopAll();music.update(audio);
+    require(!music.active()&&audio.voiceCount()==0,"Playlist reiniciou após stop_all explícito de Lua");
+    music.stop(audio);
+    Scene scene;scene.gameAssets()=assets;const auto serialized=projectio::toJson(scene);Scene reopened;
+    require(projectio::fromJson(reopened,serialized,error),error.c_str());
+    require(reopened.gameAssets().music.playlist==assets.music.playlist&&reopened.gameAssets().music.background==first,"Música não persistiu por IDs");
+    require(game::DescribeSoundUsage(reopened,wav).size()==2,"Referências de fundo/playlist não foram detectadas");
+    auto invalid=json::parse(serialized);invalid["game"]["music"]["volume"]=2;
+    require(!projectio::fromJson(reopened,invalid.dump(),error)&&projectio::toJson(reopened)==serialized,"Música inválida corrompeu a cena");
+    reopened.gameAssets().music.playlist={first,second};reopened.gameAssets().removeSound(first);
+    require(reopened.gameAssets().music.background.empty()&&reopened.gameAssets().music.playlist==std::vector<std::string>{second},"Remoção deixou ID de áudio órfão");
+}
 }  // namespace
 
 int main() {
@@ -118,6 +149,7 @@ int main() {
         require(second > 0 && third > 0, "OGG/MP3 não tocaram");
         audio.stopAll();
         require(audio.voiceCount() == 0, "stop_all deixou vozes ativas");
+        musicContracts(audio,wavRef,oggRef);
 
         Scene ownerScene;auto* owner=ownerScene.createPart(PartShape::Block,{0,5,0});
         const auto ownedVoice=audio.play(wavRef,1,true,error,owner->id());require(ownedVoice>0,error.c_str());

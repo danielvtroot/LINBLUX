@@ -1,4 +1,5 @@
 #pragma once
+#include <deque>
 
 #include <cstddef>
 #include <cstdint>
@@ -98,6 +99,10 @@ public:
     bool probe(const std::string& reference, double& seconds, std::string& error) const;
 
 private:
+    friend class MusicPlaylist;
+    void finishedNaturally(int handle);
+    bool takeFinished(int handle);
+    std::deque<int> finished_; // no máximo 64 términos, sem histórico ilimitado
     struct Voice {
         std::string path;
         std::string reference;
