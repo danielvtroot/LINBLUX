@@ -74,6 +74,13 @@ void musicContracts(game::AudioSystem& audio,const std::string& wav,const std::s
     require(!projectio::fromJson(reopened,invalid.dump(),error)&&projectio::toJson(reopened)==serialized,"Música inválida corrompeu a cena");
     reopened.gameAssets().music.playlist={first,second};reopened.gameAssets().removeSound(first);
     require(reopened.gameAssets().music.background.empty()&&reopened.gameAssets().music.playlist==std::vector<std::string>{second},"Remoção deixou ID de áudio órfão");
+    Scene author;author.buildDefaultScene();author.gameAssets()=assets;
+    author.createScript(InstanceClass::Script,nullptr,"PararMusica.lua")->source=
+        "linblux.time.after(0.1,function() linblux.audio.stop_all(); linblux.scene.root:set_attribute('parou_musica',true) end)";
+    game::RuntimeSession runtime;require(runtime.start(author,error),error.c_str());
+    require(runtime.audio().voiceCount()==1,"Runtime não iniciou música configurada");runtime.update(.1f,{});
+    require(attributeBool(*runtime.scene().workspace(),"parou_musica")&&runtime.scripts().errorCount()==0,"Script não controlou música declarativa");
+    require(runtime.audio().voiceCount()==0,"Runtime reiniciou música parada por Lua");runtime.stop();
 }
 }  // namespace
 
@@ -208,8 +215,17 @@ int main() {
         require(runtime.audio().voiceCount() == 0, "Stop deixou áudio tocando");
 
         // Persistência: salvar, reabrir e herdar em nova experiência do padrão.
+        scene.gameAssets().music.background=soundId;
         library.save(scene);
         library.close();
+        const auto package=root/"audio-musica.lo";library.exportPackage(created,package);
+        {
+            experiences::ExperienceManager fresh(root/"other/data",root/"factory",root/"defaults");
+            const auto imported=fresh.importPackage(package);Scene portable;fresh.open(imported,portable);
+            require(portable.gameAssets().music.background==soundId&&fs::is_regular_file(imported.root/storedRef),"Pacote perdeu música ou arquivo");
+            game::RuntimeSession player;require(player.start(portable,error),error.c_str());
+            require(player.scripts().errorCount()==0&&player.audio().voiceCount()>0,"Música importada não iniciou no runtime");player.stop();fresh.close();
+        }
         Scene reopened;
         library.open(created, reopened);
         const auto* saved = reopened.gameAssets().findSound(soundId);
@@ -225,6 +241,7 @@ int main() {
         refused=false;try{library.removeAsset(storedRef,false);}catch(const std::exception&){refused=true;}
         require(refused,"Flag do chamador burlou referências na cena salva");
         require(reopened.removeById(script->id()),"Não removeu script que usa áudio");
+        reopened.gameAssets().music.background.clear();
         const auto originalScene=projectio::toJson(reopened);
         require(!game::RemoveSoundAsset(reopened,(created.root/"assets").string(),storedRef,[](std::string& e){e="Falha simulada de salvamento";return false;},error),"Exclusão ignorou falha de salvamento");
         require(fs::exists(created.root/storedRef)&&projectio::toJson(reopened)==originalScene,"Falha de salvamento perdeu arquivo ou metadados");
