@@ -1988,6 +1988,21 @@ void EditorUI::drawViewport() {
         drawList->AddRectFilled({p.x-6,p.y-4},{p.x+s.x+6,p.y+s.y+4},IM_COL32(18,18,22,200),4);
         drawList->AddText(p,IM_COL32(235,220,220,255),hint);
     }
+    if(selectedPart&&selectedPart->shape()==PartShape::Block) {
+        const auto& pose=selectedPart->transform();
+        for(const auto* other:scene_.parts()) {
+            if(other==selectedPart||other->shape()!=PartShape::Block||other->color().a==0)continue;
+            const auto& target=other->transform();
+            const float gap=gizmomath::BoxSeparation({pose.position,pose.rotation,pose.size},{target.position,target.rotation,target.size});
+            if(gap>=-.001f)continue;
+            const auto message=std::string(SameTransform(pose,target)?"Geometria coincidente: ":"Sobreposição: ")+other->name();
+            const ImVec2 p{imagePosition.x+12,imagePosition.y+(tool_==ToolMode::Move?36.f:12.f)};
+            const auto s=ImGui::CalcTextSize(message.c_str());
+            drawList->AddRectFilled({p.x-6,p.y-4},{std::min(p.x+s.x+6,imagePosition.x+viewportRect.width-8),p.y+s.y+4},IM_COL32(40,18,20,225),4);
+            drawList->PushClipRect({imagePosition.x,imagePosition.y},{imagePosition.x+viewportRect.width,imagePosition.y+viewportRect.height},true);
+            drawList->AddText(p,IM_COL32(255,156,138,255),message.c_str());drawList->PopClipRect();break;
+        }
+    }
 
     if (selectedPart != nullptr) {
         char selectionLabel[128];
