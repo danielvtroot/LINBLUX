@@ -685,6 +685,22 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             s+="</div>";
         };
         auto check=[&](const std::string& name,bool checked){s+="<div class=\"property\" data-property-name=\""+name+"\"><label>"+name+"</label><input id=\"prop-"+name+"\" type=\"checkbox\" data-node=\""+id+"\" data-property=\""+name+"\" "+(checked?"checked=\"checked\"":"")+"/></div>";};
+        // Sons de objeto guardam a referência estável assets/<arquivo>, nunca
+        // um caminho absoluto. O seletor mostra o nome amigável e envia o ID
+        // da biblioteca para sound-assign; um valor ausente é preservado e
+        // fica visível como "referência não catalogada".
+        auto soundSelect=[&](const char* field,const char* caption) {
+            std::string reference;
+            const auto found=node->attributes().find(field);
+            if(found!=node->attributes().end())if(const auto* text=std::get_if<std::string>(&found->second))reference=game::NormalizeImageReference(*text);
+            const game::SoundAsset* selected=nullptr;
+            if(!reference.empty())for(const auto& sound:ui.scene_.gameAssets().sounds)if(game::NormalizeImageReference(sound.reference)==reference){selected=&sound;break;}
+            s+="<div class=\"property\" data-property-name=\""+std::string(field)+"\"><label>"+Escape(caption)+"</label><select id=\"prop-"+field+"\" data-action=\"sound-assign:"+field+"\"><option value=\"\">Nenhum</option>";
+            for(const auto& sound:ui.scene_.gameAssets().sounds)
+                s+="<option value=\""+Escape(sound.id)+"\" "+(selected==&sound?"selected=\"selected\"":"")+">"+Escape(sound.name+" · "+sound.filename)+"</option>";
+            if(!reference.empty()&&!selected)s+="<option value=\"\" selected=\"selected\">Referência não catalogada · "+Escape(reference)+"</option>";
+            s+="</select></div>";
+        };
         group("DATA");input("Name",node->name());
         s+="<div class=\"property\" data-property-name=\"ClassName\"><label>ClassName</label><span class=\"readonly\">"+Escape(node->className())+"</span></div>";
         if(node->parent()){s+="<div class=\"property\" data-property-name=\"Parent\"><label>Parent</label><select data-property=\"Parent\" data-node=\""+id+"\">";for(const auto& parent:ui.scene_.objects())if(!IsScriptClass(parent->instanceClass()) && parent.get()!=node && !node->isAncestorOf(parent.get()))s+="<option value=\""+std::to_string(parent->id())+"\" "+(parent.get()==node->parent()?"selected=\"selected\"":"")+">"+Escape(parent->name())+"</option>";s+="</select></div>";}
@@ -696,7 +712,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             for(int i=0;i<PartMaterialCount();++i) {
                 s+="<option value=\""+std::to_string(i)+"\" "+(i==int(p.material())?"selected=\"selected\"":"")+">"+PartMaterialName(PartMaterialFromIndex(i))+"</option>";
             }
-            s+="</select></div>";group("PHYSICS");check("Anchored",p.anchored());check("CanCollide",p.canCollide());
+            s+="</select></div>";group("SOM DO OBJETO");soundSelect("Sound","Som ao tocar");soundSelect("SoundInteract","Som de interação");group("PHYSICS");check("Anchored",p.anchored());check("CanCollide",p.canCollide());
             const auto& body=p.bodyProperties();input("Density",Num(body.density));input("Friction",Num(body.friction));
             input("Restitution",Num(body.restitution));input("LinearDamping",Num(body.linearDamping),"Linear damping");input("AngularDamping",Num(body.angularDamping),"Angular damping");
             group("SPAWN");
@@ -753,6 +769,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
                     input("Model.Rotation."+std::to_string(axis),Num((&angles.x)[axis]),"Rotação "+std::string(1,char('X'+axis)));}
                 input("Model.Scale",Num(frame.scale),"Escala uniforme");group("Pivô sem mover as peças");
                 for(int axis=0;axis<3;++axis){input("Pivot.Position."+std::to_string(axis),Num((&frame.position.x)[axis]),"Pivô "+std::string(1,char('X'+axis)));}
+                group("SOM DA ARMA");soundSelect("SoundFire","Som do disparo");soundSelect("SoundReload","Som de recarga");soundSelect("SoundInteract","Som de interação");
                 s+=Button("attachment","Criar Attachment","model","","property")+Button("ungroup","Desagrupar modelo","model");
             }
         } else if(node->instanceClass()==InstanceClass::Attachment) {
@@ -792,6 +809,8 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             // Imagens de superfície têm seletor visual próprio; não repetir o
             // caminho técnico como campo de texto avançado.
             if(a.first.rfind("decal_",0)==0||a.first.rfind("texture_",0)==0)continue;
+            // Sons têm seletor visual próprio por campo estável.
+            if(a.first=="Sound"||a.first=="SoundFire"||a.first=="SoundReload"||a.first=="SoundInteract")continue;
             if(!attributesOpen){group("ATTRIBUTES");attributesOpen=true;}
             std::string v;
             if(const auto* text=std::get_if<std::string>(&a.second))v=*text;

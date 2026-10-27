@@ -11,8 +11,11 @@
 #include "serialization/ProjectIO.h"
 #include "core/Diagnostics.h"
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <stdexcept>
 namespace loblox {
 namespace {
@@ -78,6 +81,35 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="script")e.insertScript(InstanceClass::Script);
         else if(c.action=="local-script")e.insertScript(InstanceClass::LocalScript);
         else if(c.action=="module")e.insertScript(InstanceClass::ModuleScript);
+        else if(c.action=="script-example") {
+            // Exemplos são conteúdo instalado e somente leitura. Aceitamos
+            // apenas um basename .lua e nunca um caminho fornecido pela UI.
+            const auto name=c.value;
+            const bool safe=!name.empty()&&name.size()<=96&&name.size()>4&&name.rfind(".lua")==name.size()-4&&
+                name.find('/')==std::string::npos&&name.find('\\')==std::string::npos&&name.find("..")==std::string::npos&&
+                std::all_of(name.begin(),name.end(),[](char ch){return std::isalnum(static_cast<unsigned char>(ch))||ch=='_'||ch=='-'||ch=='.';});
+            if(!safe)throw std::runtime_error("Nome de exemplo inválido.");
+            std::string path=game::BuiltinAssetPath("examples/lua/"+name);
+            if(path.empty())path=game::BuiltinAssetPath("assets/examples/lua/"+name);
+            if(path.empty())throw std::runtime_error("Exemplo não instalado: "+name+". Reinstale os recursos do Studio.");
+            std::ifstream file(path,std::ios::binary);
+            if(!file)throw std::runtime_error("Não foi possível abrir o exemplo "+name+".");
+            std::ostringstream buffer;buffer<<file.rdbuf();
+            if(!file.good()&&!file.eof())throw std::runtime_error("Falha ao ler o exemplo "+name+".");
+            const auto source=buffer.str();
+            if(source.empty()||source.size()>256*1024)throw std::runtime_error("Exemplo vazio ou acima do limite de 256 KiB.");
+            e.insertScript(InstanceClass::Script);
+            auto* node=e.scene_.selection();
+            if(!node||!IsScriptClass(node->instanceClass()))throw std::runtime_error("Não foi possível criar o Script do exemplo.");
+            static_cast<Script*>(node)->source=source;
+            auto draft=e.scriptDrafts_.find(node->id());
+            if(draft!=e.scriptDrafts_.end()) {
+                draft->second.text=source;draft->second.baseline=source;draft->second.dirty=false;
+                draft->second.cursor=0;draft->second.pendingCursor=-1;draft->second.restoreFocus=true;
+            }
+            e.showScriptEditor_=true;
+            e.setStatus("Exemplo criado como Script: "+name+" · edite à vontade.");
+        }
         else if(c.action=="open-script")e.openScript(c.instance);
         else if(c.action=="activate-document")e.activateDocument(InstanceId(std::stoull(c.value)));
         else if(c.action=="close-document")e.closeDocument(InstanceId(std::stoull(c.value)));
