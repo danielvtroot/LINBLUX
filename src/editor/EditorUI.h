@@ -17,6 +17,7 @@
 #include "editor/TransformSession.h"
 #include "editor/ModelTransformSession.h"
 #include "game/Runtime.h"
+#include "rendering/SceneRenderer.h"
 #include "raylib.h"
 
 namespace loblox {
@@ -186,6 +187,7 @@ private:
     unsigned long long frame_ = 0;
     bool traceInput_ = false;
     bool showCollisionShapes_ = false;
+    EditorGeometryView editorGeometry_{};
     std::unique_ptr<StudioFrontend> frontend_;
     game::RuntimeSession runtime_;
     bool gameplayCapture_ = false;

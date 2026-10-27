@@ -46,6 +46,7 @@ struct EditorUITestAccess {
     static const Part* modelProxy(EditorUI& ui){return ui.modelTransform_.proxy();}
     static size_t undoCount(EditorUI& ui){return ui.history_.undoCount();}
     static bool partDragging(EditorUI& ui){return ui.transform_.active();}
+    static bool editorEdges(EditorUI& ui){return ui.editorGeometry_.edges;}
 };
 }
 using namespace loblox;
@@ -162,6 +163,32 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             resizeWindow(1920,1080);if(runtime.state()==game::RuntimeState::Paused)key("Escape");frames(2);capture("hotbar-1080-page2");
             for(const auto item:runtime.inventory().list())runtime.inventory().remove(item);frames(2);CHECK(runtime.inventory().list().empty());capture("hotbar-empty");
             key("shift+F5");CHECK(!ui.playing());std::printf("Item controls UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
+        if(std::getenv("LINBLUX_EDITOR_PRECISION_ONLY")) {
+            part->setTransform({{14,5,0},QuaternionIdentity(),{2,2,2}});
+            auto* behind=scene.createPart(PartShape::Block,{14,5,-5},{2,2,2},"Peça atrás");behind->setAnchored(true);
+            camera.setOrbit({14,5,0},30,0,0);click("cmd-tool-0");frames(3);
+            auto view=ui.frontend()->viewport();const auto projected=camera.project(part->position(),{view.width,view.height});
+            const Vector2 point{view.x+projected.x,view.y+projected.y};clickAt(point);CHECK(scene.selection()==part);
+            event("keydown alt");clickAt(point);event("keyup alt");CHECK(scene.selection()==behind);
+            event("keydown alt");clickAt(point);event("keyup alt");CHECK(scene.selection()==part);
+            const bool edges=EditorUITestAccess::editorEdges(ui);key("F8");CHECK(EditorUITestAccess::editorEdges(ui)!=edges);
+            key("F8");CHECK(EditorUITestAccess::editorEdges(ui)==edges);
+            click("cmd-tool-1");frames(2);auto& gizmo=EditorUITestAccess::partGizmo(ui);
+            const auto layout=gizmolayout::Build(*part,ToolMode::Move,camera,view,false,gizmo.visualSettings());
+            const auto h=layout.moveHandle[1],d=layout.axisDirection[0];const auto original=part->position();
+            const auto drag=[&](){event("mousemove "+std::to_string(int(view.x+h.x))+" "+std::to_string(int(view.y+h.y)));event("mousedown 1");
+                CHECK(gizmo.dragging());event("mousemove "+std::to_string(int(view.x+h.x+d.x*30))+" "+std::to_string(int(view.y+h.y+d.y*30)));};
+            drag();const auto raw=part->position();event("mouseup 1");key("ctrl+z");CHECK(NearlyEqual(part->position(),original));
+            auto* target=scene.createPart(PartShape::Block,{raw.x-2.12f,5,0},{2,2,2},"Alvo de encaixe");target->setAnchored(true);frames(2);
+            event("keydown ctrl");drag();CHECK(gizmo.surfaceContact().snapped);capture("precision-contact");
+            CHECK(std::fabs(gizmomath::BoxSeparation({part->position(),part->rotation(),part->size()},
+                {target->position(),target->rotation(),target->size()}))<.0001f);
+            event("mouseup 1");event("keyup ctrl");key("ctrl+z");CHECK(NearlyEqual(part->position(),original));
+            click("cmd-tool-0");auto* model=scene.group({part->id(),behind->id()},"Modelo selecionável",error);CHECK(model);scene.select(nullptr);frames(2);
+            event("keydown shift");clickAt(point);event("keyup shift");CHECK(scene.selection()==model);capture("precision-model-selection");
+            std::printf("Editor precision UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
             rlImGuiShutdown();CloseWindow();return failures?1:0;
         }
         if(std::getenv("LINBLUX_MODELS_ONLY")) {

@@ -968,6 +968,38 @@ void SceneRenderer::drawSelection(const Part& part) const {
     rlDrawRenderBatchActive();rlEnableDepthMask();rlEnableDepthTest();
 }
 
+void SceneRenderer::drawEditorGuides(const Scene& scene,Camera3D camera,const EditorGeometryView& options,
+                                     InstanceId hovered) const {
+    if(!options.edges&&!options.bounds&&!options.normals&&!hovered)return;
+    BeginMode3D(camera);rlDrawRenderBatchActive();rlEnableDepthTest();rlDisableDepthMask();
+    for(const auto* p:scene.parts()) {
+        if(p->color().a==0)continue;
+        if((options.edges||p->id()==hovered)&&!scene.selected(p->id())) {
+            const Color color=p->id()==hovered?Color{240,230,225,230}:Color{36,39,44,135};
+            if(p->shape()==PartShape::Block)DrawRotatedBoxWires(p->position(),p->size(),p->rotation(),color);
+            else if(p->id()==hovered)DrawSphereWires(p->position(),p->sphereRadius(),8,12,color);
+        }
+        if(options.bounds) {
+            Vector3 low{INFINITY,INFINITY,INFINITY},high{-INFINITY,-INFINITY,-INFINITY};
+            for(int bits=0;bits<8;++bits) {
+                const auto h=p->halfExtents();const auto v=Vector3Add(p->position(),Vector3RotateByQuaternion(
+                    {(bits&1)?h.x:-h.x,(bits&2)?h.y:-h.y,(bits&4)?h.z:-h.z},p->rotation()));
+                low=Vector3Min(low,v);high=Vector3Max(high,v);
+            }
+            DrawBoundingBox({low,high},{195,112,224,160});
+        }
+        if(options.normals&&scene.selected(p->id())&&p->shape()==PartShape::Block) {
+            const auto dimensions=p->size();
+            for(int i=0;i<3;++i)for(float side:{-1.f,1.f}) {
+                Vector3 local{};(&local.x)[i]=side;const auto n=Vector3RotateByQuaternion(local,p->rotation());
+                const auto face=Vector3Add(p->position(),Vector3Scale(n,(&dimensions.x)[i]*.5f));
+                DrawLine3D(face,Vector3Add(face,Vector3Scale(n,.8f)),{245,110,95,230});
+            }
+        }
+    }
+    rlDrawRenderBatchActive();rlEnableDepthMask();EndMode3D();
+}
+
 
 void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float intensity, float brightness) {
     if (!state.rig) return;

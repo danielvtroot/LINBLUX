@@ -1103,6 +1103,12 @@ void EditorUI::handleShortcuts(const EditorInput& input, const InputRoute& route
     if (route.editorKeys && input.focus && !input.modified) {
         focusSelection();
     }
+    if(route.editorKeys&&!transform_.active()&&ImGui::IsKeyPressed(ImGuiKey_F8,false)) {
+        if(input.shift)editorGeometry_.bounds=!editorGeometry_.bounds;
+        else if(ImGui::GetIO().KeyCtrl)editorGeometry_.normals=!editorGeometry_.normals;
+        else editorGeometry_.edges=!editorGeometry_.edges;
+        setStatus("F8: contornos | Shift+F8: limites | Ctrl+F8: normais");
+    }
     if (route.editorKeys && input.tool >= 0) {
         const ToolMode tools[] = {ToolMode::Select, ToolMode::Move, ToolMode::Scale, ToolMode::Rotate};
         setTool(tools[input.tool], "shortcut");
@@ -1892,11 +1898,19 @@ void EditorUI::drawViewport() {
                 Vector2{viewportRect.width, viewportRect.height});
             Part* hit = nullptr;
             Vector3 point{};
-            hit=scene_.pickPart(ray,5000.f,&point);const bool partHit=hit!=nullptr;
+            const auto picks=scene_.pickParts(ray,5000.f);
+            std::size_t picked=0;
+            if(input.alt&&!picks.empty()) {
+                const auto current=std::find_if(picks.begin(),picks.end(),[&](const auto& p){return p.part==selectedPart;});
+                if(current!=picks.end())picked=(std::size_t(current-picks.begin())+1)%picks.size();
+            }
+            if(!picks.empty()){hit=picks[picked].part;point=picks[picked].point;}
+            const bool partHit=hit!=nullptr;
             float nearest = partHit ? Vector3Distance(ray.position, point) : 5000.f;
             std::string rigHit;
             int bodyHit = -1;
             for (const auto& rig : scene_.gameAssets().rigs) {
+                if(input.alt)break; // ciclo solicitado é sobre as Parts, sem rig ocultando o alvo
                 const auto world = rig.evaluate(rig.id == selectedRig_ ? previewPose_ : game::Pose{}, rig.root);
                 for (int b = 0; b < game::kBodyCount; ++b) {
                     const auto inverse = game::Inverse(world[b]);
@@ -1912,7 +1926,10 @@ void EditorUI::drawViewport() {
             if (!rigHit.empty()) selectRig(rigHit, bodyHit);
             else if (partHit) {
                 cancelRigGizmo(); selectedRig_.clear();
-                if(ImGui::GetIO().KeyCtrl&&hit)scene_.toggleSelection(hit);else scene_.select(hit);
+                Instance* chosen=hit;
+                if(input.shift)for(auto* parent=hit->parent();parent;parent=parent->parent())
+                    if(parent->instanceClass()==InstanceClass::Model){chosen=parent;break;}
+                if(ImGui::GetIO().KeyCtrl)scene_.toggleSelection(chosen);else scene_.select(chosen);
             } else {
                 cancelRigGizmo(); selectedRig_.clear();
                 scene_.select(nullptr);
@@ -1940,6 +1957,13 @@ void EditorUI::drawViewport() {
     renderer_.drawScene(scene_, camera_, viewportWidth_, viewportHeight_,
                         selection != nullptr ? selection->id() : kInvalidInstanceId,
                         rigState.rig ? &rigState : nullptr);
+    InstanceId hover=0;
+    if(hovered&&!transform_.active()&&!rigConsumed&&route.owner==InputOwner::Viewport) {
+        const auto ray=camera_.rayFromScreen({input.mouse.x-viewportRect.x,input.mouse.y-viewportRect.y},
+                                             {viewportRect.width,viewportRect.height});
+        if(const auto* p=scene_.pickPart(ray,5000))hover=p->id();
+    }
+    renderer_.drawEditorGuides(scene_,camera_.camera(),editorGeometry_,hover);
     if(showCollisionShapes_) {
         physics_.syncScene(scene_);
         renderer_.drawCollisionShapes(scene_,physics_,camera_,selection?selection->id():0);
@@ -1959,10 +1983,25 @@ void EditorUI::drawViewport() {
 
     if(selection&&tool_==ToolMode::Move&&!runtime_.active()) {
         const ImVec2 p{imagePosition.x+12,imagePosition.y+12};
-        const char* hint="Ctrl: encaixar faces | Shift: liberar grade";
+        const char* hint="Ctrl: encaixar | Shift: liberar grade | Alt+clique: atravessar | F8: contornos";
         const auto s=ImGui::CalcTextSize(hint);
         drawList->AddRectFilled({p.x-6,p.y-4},{p.x+s.x+6,p.y+s.y+4},IM_COL32(18,18,22,200),4);
         drawList->AddText(p,IM_COL32(235,220,220,255),hint);
+    }
+    if(selectedPart&&selectedPart->shape()==PartShape::Block) {
+        const auto& pose=selectedPart->transform();
+        for(const auto* other:scene_.parts()) {
+            if(other==selectedPart||other->shape()!=PartShape::Block||other->color().a==0)continue;
+            const auto& target=other->transform();
+            const float gap=gizmomath::BoxSeparation({pose.position,pose.rotation,pose.size},{target.position,target.rotation,target.size});
+            if(gap>=-.001f)continue;
+            const auto message=std::string(SameTransform(pose,target)?"Geometria coincidente: ":"Sobreposição: ")+other->name();
+            const ImVec2 p{imagePosition.x+12,imagePosition.y+(tool_==ToolMode::Move?36.f:12.f)};
+            const auto s=ImGui::CalcTextSize(message.c_str());
+            drawList->AddRectFilled({p.x-6,p.y-4},{std::min(p.x+s.x+6,imagePosition.x+viewportRect.width-8),p.y+s.y+4},IM_COL32(40,18,20,225),4);
+            drawList->PushClipRect({imagePosition.x,imagePosition.y},{imagePosition.x+viewportRect.width,imagePosition.y+viewportRect.height},true);
+            drawList->AddText(p,IM_COL32(255,156,138,255),message.c_str());drawList->PopClipRect();break;
+        }
     }
 
     if (selectedPart != nullptr) {
@@ -2659,7 +2698,7 @@ void EditorUI::insertPart(PartShape shape) {
     const Vector3 position{focus.x, std::max(6.0f, focus.y + 4.0f), focus.z};
     const Vector3 size = shape == PartShape::Sphere ? Vector3{3.0f, 3.0f, 3.0f}
                                                     : Vector3{4.0f, 4.0f, 4.0f};
-    Part* part = scene_.createPart(shape, position, size);
+    Part* part = scene_.createPart(shape, position, size,shape==PartShape::Sphere?"Esfera":"Peça");
     if (part == nullptr) {
         setStatus("Falha ao criar a peca.", true);
         return;
@@ -2670,8 +2709,8 @@ void EditorUI::insertPart(PartShape shape) {
         std::string error; if (!scene_.reparent(part,parent,error)) setStatus(error,true);
     }
     scene_.select(part);
-    setStatus(shape == PartShape::Sphere ? "Sphere criada e ancorada."
-                                         : "Block criado e ancorado.");
+    setStatus(shape == PartShape::Sphere ? "Esfera criada e ancorada."
+                                         : "Peça criada e ancorada.");
 }
 
 void EditorUI::insertSpawnLocation() {

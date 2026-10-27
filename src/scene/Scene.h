@@ -121,6 +121,8 @@ public:
     // Invariantes de cena. Retorna false com uma descricao sem alterar nada.
     bool validate(std::string& error) const;
     Part* pickPart(Ray ray, float maxDistance, Vector3* point=nullptr) const;
+    struct PartPick {Part* part;float distance;Vector3 point;};
+    std::vector<PartPick> pickParts(Ray ray,float maxDistance) const;
 
     std::string makeUniqueName(const std::string& base) const;
 

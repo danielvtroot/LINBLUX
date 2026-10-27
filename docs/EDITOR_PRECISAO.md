@@ -27,3 +27,26 @@ para mover um conjunto com este encaixe, agrupe-o como Modelo.
 Testes: `linblux_studio` cobre contato, restrições, rotações, dimensões, pivô,
 filhos e histórico. `linblux_gizmo_visual` verifica o marcador renderizado e os
 gizmos existentes; gera capturas em 1280×720 e 1920×1080 em diretório temporário.
+
+## Leitura da construção e seleção
+
+O Editor mostra arestas discretas respeitando a profundidade da cena; não altera
+o material nem ativa linhas no Player. **F8** alterna contornos, **Shift+F8**
+alterna caixas AABB e **Ctrl+F8** mostra normais das faces das caixas selecionadas.
+O comando existente **Mostrar colisores** continua consultando o Bullet real;
+uma AABB de depuração não representa um novo collider.
+
+**Alt+clique** percorre as Parts que o raio cruza, da frente para trás, retornando
+à primeira. **Shift+clique** seleciona o Modelo ancestral mais próximo.
+Ctrl+clique mantém a multisseleção. O gizmo continua tendo prioridade quando uma
+alça é clicada. Geometria com alfa zero não captura seleção. F enquadra a seleção,
+e F2 renomeia pelo Explorador, preservando nomes com espaços.
+
+Novas peças inseridas pela interface usam `Peça` ou `Esfera`. Ao duplicar nomes
+existentes, a engine usa sufixos `_002`, `_003` etc., sem concatenar números a
+cada geração. Nomes salvos anteriormente não são alterados e referências usam
+IDs. O limite de 128 bytes é respeitado sem cortar uma sequência UTF-8 no meio.
+
+O passe de contornos não corrige superfícies duplicadas: coplanaridade continua
+um problema de geometria. Não há SSAO/PBR/sombras de contato novas neste trabalho.
+Desempenho de GPU integrada ainda não foi medido.
