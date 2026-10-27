@@ -26,7 +26,8 @@ Evidências:
   coleta/equipar/disparar/recarga/drop/recoleta. `npc-movement-final.log`.
 - Build Studio/Player/studio_tests:35,37s. FAST `20261027T211050Z-12170`:
   17/17, testes12,1s, build25,1s; cobertura desconhecida.
-- IMPACT deste incremento registrado no checkpoint ao concluir.
+- IMPACT `20261027T211213Z-13562`:23/23 em64,7s, sem timeout; cobertura
+  parcial, gráficos validados separadamente no Player real. Sem FULL.
 
 As mudanças locais de música/áudio preexistentes não integram o commit: somente
 o hunk de partMotion é indexado. Sem claims de colisão arbitrária perfeita,
