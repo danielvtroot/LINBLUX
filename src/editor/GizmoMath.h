@@ -1,6 +1,8 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
+#include <vector>
 
 #include "core/Math.h"
 
@@ -31,6 +33,23 @@ struct TransformSnapshot {
     Quaternion rotation;
     Vector3 size;
 };
+
+// Geometria de encaixe: somente caixas orientadas, nunca esfera tratada como caixa.
+struct SurfaceBox {
+    TransformSnapshot pose;
+    std::uint64_t id = 0;
+};
+struct SurfaceSnap {
+    bool snapped = false;
+    Vector3 correction{}, point{}, normal{};
+    std::uint64_t target = 0;
+};
+// Maior separação nos 15 eixos SAT. Negativo = interseção; zero = contato.
+float BoxSeparation(const TransformSnapshot& a, const TransformSnapshot& b);
+// moving já contém a posição candidata. Correção restrita ao eixo/plano ativo.
+SurfaceSnap SnapSurfaces(const std::vector<SurfaceBox>& moving,
+                        const std::vector<SurfaceBox>& targets,
+                        Vector3 axisA, Vector3 axisB, float tolerance);
 
 Vector3 Axis(int index, Quaternion rotation, bool local);
 float SnapDelta(float delta, float increment);
