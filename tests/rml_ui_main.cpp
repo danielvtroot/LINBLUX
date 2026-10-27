@@ -174,7 +174,8 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             CHECK(ui.frontend()->elementBounds("music-background").width>80);
             clickVisible("audio-background-"+id);CHECK(scene.gameAssets().music.background==id);
             clickVisible("audio-playlist-"+id);CHECK(scene.gameAssets().music.playlist==std::vector<std::string>{id});
-            capture("audio-library");
+            ui.frontend()->scrollIntoView("audio-delete-"+id);frames(3);capture("audio-library");
+            ui.frontend()->scrollIntoView("audio-import");frames(3);capture("audio-music-settings");
             clickVisible("music-playlist-remove-0");CHECK(scene.gameAssets().music.playlist.empty());
             CHECK(actions.dispatch({"music-background",""}));
             CHECK(projectio::save(scene,config.defaultProjectPath,error));Scene reopened;
