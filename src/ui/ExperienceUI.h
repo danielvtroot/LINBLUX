@@ -70,7 +70,7 @@ private:
     void resetDocument();
     void closeDocument();
     bool unsaved() const;
-    void choose(const std::string& purpose,bool save=false,bool directory=false,bool images=false);
+    void choose(const std::string& purpose,bool save=false,bool directory=false,bool images=false,bool audio=false);
     void selectedFile(const std::string& purpose,const std::string& path);
     void releaseLoadingImages();
     std::string value(const std::string& id) const;

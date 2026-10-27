@@ -26,6 +26,7 @@ public:
     void enableExperiences(experiences::ExperienceManager& manager,bool home);
     void resetDocumentView();
     void invalidateImageLibrary();
+    void invalidateAudio();
 private:
     struct Impl;std::unique_ptr<Impl> impl_;
 };

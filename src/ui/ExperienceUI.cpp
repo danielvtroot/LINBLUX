@@ -85,12 +85,14 @@ bool ExperienceUI::save(std::string& error) {
     try{manager_.save(editor_.scene_);editor_.setProjectPath(manager_.activePlace().string());documentOpened();return true;}
     catch(const std::exception& e){error=e.what();return false;}
 }
-void ExperienceUI::choose(const std::string& purpose,bool saveFile,bool directory,bool images) {
+void ExperienceUI::choose(const std::string& purpose,bool saveFile,bool directory,bool images,bool audio) {
     const auto initial=directory?manager_.libraryRoot().string()+"/":saveFile?(manager_.libraryRoot()/"Experience.lo").string():std::string(std::getenv("HOME")?std::getenv("HOME"):"/")+"/";
-    if(!chooser_.begin(images?"Choose an image":directory?"Choose experience library":saveFile?"Export Experiência LINBLUX":"Open / Import Experience",initial,saveFile,directory,images)){error_=chooser_.error();return;}
+    std::string title=audio?"Importar áudio — MP3, WAV ou OGG":images?"Selecionar imagem":directory?"Selecionar biblioteca":saveFile?"Exportar Experiência LINBLUX":"Abrir / Importar Experiência";
+    if(!chooser_.begin(title,initial,saveFile,directory,images,audio)){error_=chooser_.error();return;}
     dialogPurpose_=purpose;editor_.camera_.releaseCapture();editor_.setGameplayCapture(false);
 }
 void ExperienceUI::chooseAsset(){choose("asset",false,false,true);}
+void ExperienceUI::chooseAudio(){choose("audio",false,false,false,true);}
 void ExperienceUI::removeAsset(const std::string& reference,bool usedByScene) {
     manager_.removeAsset(reference,usedByScene);
     dirty_=true;
@@ -152,6 +154,8 @@ void ExperienceUI::selectedFile(const std::string& purpose,const std::string& pa
     else if(purpose=="library") {manager_.setLibraryRoot(path);if(page_=="new")setValue("exp-location",path);else dirty_=true;}
     else if(purpose=="asset") {
         EditorActions actions(editor_);if(!actions.dispatch({"import-image",path}))throw std::runtime_error(editor_.status_);editor_.frontend_->invalidateImageLibrary();
+    } else if(purpose=="audio") {
+        EditorActions actions(editor_);if(!actions.dispatch({"import-sound",path}))throw std::runtime_error(editor_.status_);editor_.frontend_->invalidateAudio();
     } else if(purpose.rfind("media-",0)==0) {
         ImageInfo info;if(!ReadSafeImageInfo(path,info))throw std::runtime_error("Invalid image or memory budget exceeded");
         setValue("exp-"+purpose.substr(6),path);
