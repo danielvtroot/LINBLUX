@@ -1144,7 +1144,7 @@ if(c.action=="r6")showAdvanced("rig");
             page="game";
             el("pause-content")->SetScrollTop(0);
         }
-        menuProgress=std::clamp(menuProgress+(paused?1.f:-1.f)*std::min(GetFrameTime(),.05f)/.18f,0.f,1.f);
+        menuProgress=std::clamp(menuProgress+(paused?1.f:-1.f)*std::clamp(GetFrameTime(),0.f,.25f)/.18f,0.f,1.f);
         const float eased=menuProgress*menuProgress*(3-2*menuProgress);
         const float panelWidth=std::min(view.width,std::clamp(view.width*.70f,580.f,760.f));
         style("pause-panel","width",Num(panelWidth)+"px");
@@ -1168,6 +1168,7 @@ if(c.action=="r6")showAdvanced("rig");
         if(IsAudioDeviceReady())el("master-volume")->RemoveAttribute("disabled");else el("master-volume")->SetAttribute("disabled","");
         text("master-volume-label",IsAudioDeviceReady()?std::to_string(int(GetMasterVolume()*100))+"%":"Dispositivo de áudio indisponível nesta sessão.");
         text("player-name",ui.runtime_.rig().name);text("map-name",std::filesystem::path(ui.projectPath_).filename().string());
+        text("session-state",ui.runtime_.state()==game::RuntimeState::Paused?"Simulação pausada explicitamente":"Simulação em andamento");
         if(paused) {
             auto set=[&](const char* id,const std::string& v){if(auto* f=dynamic_cast<Rml::ElementFormControl*>(el(id));f&&context->GetFocusElement()!=f&&f->GetValue()!=v)f->SetValue(v);};
             const auto& p=ui.runtime_.settings();text("camera-mode",p.cameraMode==game::CameraMode::Classic?"Livre":p.cameraMode==game::CameraMode::Follow?"Acompanhar":"Primeira pessoa");

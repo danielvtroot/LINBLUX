@@ -120,7 +120,9 @@ linblux.npc.move_to(npc,linblux.vec3(65,2.6,30))
 linblux.scene.root:set_attribute('menu_npc',npc.id)
 linblux.events.on('update',function() linblux.scene.root:set_attribute('menu_clock',linblux.time.now()) end)
 )";
-            for(auto size:{Vector2{1280,720},Vector2{1920,1080}}){
+            const bool windowOnly=std::getenv("LINBLUX_MENU_WINDOW_ONLY")!=nullptr;
+            const auto sizes=windowOnly?std::vector<Vector2>{{1366,768}}:std::vector<Vector2>{{1280,720},{1920,1080}};
+            for(auto size:sizes){
                 resizeWindow(int(size.x),int(size.y));click("play");frames(6);auto& rt=EditorUITestAccess::runtime(ui);
                 CHECK(rt.takeDamage(40,error));key("Escape");frames(16);CHECK(rt.state()==game::RuntimeState::Playing&&ui.gameMenuOpen());CHECK(!EditorUITestAccess::captured(ui));
                 const auto clock=std::get<double>(rt.scene().workspace()->attributes().at("menu_clock"));
@@ -134,6 +136,14 @@ linblux.events.on('update',function() linblux.scene.root:set_attribute('menu_clo
                     const auto r=ui.frontend()->elementBounds(id);CHECK(r.width>20&&r.height>20);CHECK(r.x>=vp.x&&r.y>=vp.y&&r.x+r.width<=vp.x+vp.width+2&&r.y+r.height<=vp.y+vp.height+2);
                 }
                 capture("side-menu-"+std::to_string(int(size.x)));
+                if(windowOnly) {
+                    key("F10");frames(4);CHECK(EditorUITestAccess::maximized(ui));CHECK(rt.state()==game::RuntimeState::Playing&&ui.gameMenuOpen());capture("menu-maximized-1366");
+                    key("F10");frames(4);CHECK(!EditorUITestAccess::maximized(ui));
+                    key("F11");frames(6);CHECK(EditorUITestAccess::fullscreen(ui));CHECK(GetScreenWidth()==1920&&GetScreenHeight()==1080);capture("menu-fullscreen");
+                    key("F11");frames(6);CHECK(!EditorUITestAccess::fullscreen(ui));CHECK(GetScreenWidth()==1366&&GetScreenHeight()==768);
+                    key("Escape");frames(8);CHECK(!ui.gameMenuOpen()&&rt.state()==game::RuntimeState::Playing);
+                    key("shift+F5");CHECK(!ui.playing());continue;
+                }
                 if(size.x==1920){key("Escape");frames(14);CHECK(rt.state()==game::RuntimeState::Playing&&!ui.gameMenuOpen());key("shift+F5");CHECK(!ui.playing());continue;}
                 const auto position=rt.position();event("keydown w");frames(5);event("keyup w");CHECK(Vector3Distance(position,rt.position())<.001f);
                 click("page-settings");const auto mode=rt.settings().cameraMode;click("camera-next");CHECK(rt.settings().cameraMode!=mode);
