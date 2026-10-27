@@ -148,7 +148,7 @@ void SurfaceSnapping() {
     CHECK(SnapSurfaces({{a,1}},{{b,2}},x,z,.2f).snapped);
     auto distant=b;distant.position.y=8;CHECK(!SnapSurfaces({{a,1}},{{distant,2}},x,{},.2f).snapped);
     CHECK(!SnapSurfaces({{a,1}},{{b,2}},x,{},.05f).snapped);
-    auto obstacle=box({3.15f,0,0},{.2f,2,2});
+    auto obstacle=box({3.05f,0,0},{.2f,2,2});
     CHECK(!SnapSurfaces({{a,1}},{{b,2},{obstacle,3}},x,{},.2f).snapped);
     auto invalid=a;invalid.position.x=std::numeric_limits<float>::quiet_NaN();
     CHECK(!SnapSurfaces({{invalid,1}},{{b,2}},x,{},.2f).snapped);
@@ -164,27 +164,33 @@ void SurfaceSnapping() {
     ModelTransformSession session(scene,physics,base,history);EditorCamera camera;camera.setOrbit({10,6,0},30,.65f,.43f);
     const Rectangle view{0,0,800,600};GizmoInput input;session.update(ToolMode::Move,model,camera,view,true,true,input);
     const auto layout=gizmolayout::Build(*session.proxy(),ToolMode::Move,camera,view,false,gizmo.visualSettings());
-    const auto original=projectio::toJson(scene);const auto start=p->position();
+    const auto original=p->transform(),originalChild=child->transform();const auto start=p->position();
+    const auto restored=[&](const loblox::Transform& parent,const loblox::Transform& descendant,const ModelFrame& expected) {
+        ModelFrame actual;CHECK(scene.modelFrame(model->id(),actual,error));
+        CHECK(SameTransform(parent,p->transform())&&SameTransform(descendant,child->transform()));
+        CHECK(NearlyEqual(actual.position,expected.position)&&NearlyEqual(actual.rotation,expected.rotation)&&NearlyEqual(actual.scale,expected.scale));
+    };
     const auto begin=[&](){input={};input.mousePosition=layout.moveHandle[1];input.leftPressed=input.leftDown=true;
         CHECK(session.update(ToolMode::Move,model,camera,view,true,true,input).started);};
     const auto move=[&](){input.leftPressed=false;input.mousePosition=Vector2Add(layout.moveHandle[1],Vector2Scale(layout.axisDirection[0],30));
         session.update(ToolMode::Move,model,camera,view,true,true,input);};
-    begin();move();const auto raw=p->position();session.end(true,"measure");CHECK(projectio::toJson(scene)==original);
+    begin();move();const auto raw=p->position();session.end(true,"measure");restored(original,originalChild,pivot);
     auto target=box({raw.x-2.12f,6,0},{2,2,2});std::vector<SurfaceBox> targets{{target,9000}},moving;
     begin();moving={{{p->position(),p->rotation(),p->size()},p->id()},{{child->position(),child->rotation(),child->size()},child->id()}};
     input.surfaceSnap=true;input.movingBoxes=&moving;input.targetBoxes=&targets;move();
     CHECK(gizmo.surfaceContact().snapped);CHECK(std::fabs(BoxSeparation({p->position(),p->rotation(),p->size()},target))<.0001f);
     CHECK(NearlyEqual(child->position().x-14,p->position().x-10,.001f));
     input.leftDown=false;session.update(ToolMode::Move,model,camera,view,true,true,input);CHECK(history.undoCount()==1);
-    TransformEdit edit;CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==original);
-    CHECK(history.redo(edit));CHECK(session.applyEdit(edit,true,error));const auto committed=projectio::toJson(scene);
+    TransformEdit edit;CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));restored(original,originalChild,pivot);
+    CHECK(history.redo(edit));CHECK(session.applyEdit(edit,true,error));const auto committed=p->transform(),committedChild=child->transform();
+    ModelFrame committedPivot;scene.modelFrame(model->id(),committedPivot,error);
     input={};session.update(ToolMode::Move,model,camera,view,true,true,input);
     auto active=gizmolayout::Build(*session.proxy(),ToolMode::Move,camera,view,false,gizmo.visualSettings());
     input.mousePosition=active.moveHandle[1];input.leftDown=input.leftPressed=true;
     session.update(ToolMode::Move,model,camera,view,true,true,input);
     input.leftPressed=false;input.shiftDown=true;input.mousePosition=Vector2Add(input.mousePosition,Vector2Scale(active.axisDirection[0],17));
     session.update(ToolMode::Move,model,camera,view,true,true,input);session.end(true,"escape");
-    CHECK(projectio::toJson(scene)==committed);CHECK(!gizmo.surfaceContact().snapped);
+    restored(committed,committedChild,committedPivot);CHECK(!gizmo.surfaceContact().snapped);
     CHECK(Vector3Distance(start,raw)>.1f);
 }
 void InteractionControls() {

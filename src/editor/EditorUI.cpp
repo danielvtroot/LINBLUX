@@ -1957,6 +1957,14 @@ void EditorUI::drawViewport() {
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
+    if(selection&&tool_==ToolMode::Move&&!runtime_.active()) {
+        const ImVec2 p{imagePosition.x+12,imagePosition.y+12};
+        const char* hint="Ctrl: encaixar faces | Shift: liberar grade";
+        const auto s=ImGui::CalcTextSize(hint);
+        drawList->AddRectFilled({p.x-6,p.y-4},{p.x+s.x+6,p.y+s.y+4},IM_COL32(18,18,22,200),4);
+        drawList->AddText(p,IM_COL32(235,220,220,255),hint);
+    }
+
     if (selectedPart != nullptr) {
         char selectionLabel[128];
         std::snprintf(selectionLabel, sizeof(selectionLabel), "%s (%s)",
