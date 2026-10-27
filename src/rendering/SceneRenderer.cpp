@@ -118,9 +118,9 @@ Color LitSurface(Color color, Vector3 normal, Vector3 point, Vector3 lightDirect
     const Color skyAmbient = BlendColor(gSurfaceLight.ambient, gSurfaceLight.sky, 0.45f);
     const Color ambientTint = BlendColor(Color{255, 255, 255, 255}, skyAmbient, 0.36f);
     const Color sunTint = BlendColor(Color{255, 255, 255, 255}, gSurfaceLight.sun, 0.45f);
-    const float ambient = (0.72f + 0.06f * up) * exposure;
+    const float ambient = (0.58f + 0.20f * up) * exposure;  // was 0.72+0.06: more contrast top/bottom
     const float lambert = std::max(0.0f, Vector3DotProduct(normal, lightDirection));
-    const float sun = 0.34f * lambert * std::clamp(sunIntensity, 0.0f, 3.0f) * exposure;
+    const float sun = 0.38f * lambert * std::clamp(sunIntensity, 0.0f, 3.0f) * exposure; // was 0.34
 
     float sheen = 0.0f;
     if (gloss > 0.0f && sunIntensity > 0.0f) {
@@ -975,9 +975,9 @@ void SceneRenderer::drawEditorGuides(const Scene& scene,Camera3D camera,const Ed
     for(const auto* p:scene.parts()) {
         if(p->color().a==0)continue;
         if((options.edges||p->id()==hovered)&&!scene.selected(p->id())) {
-            const Color color=p->id()==hovered?Color{240,230,225,230}:Color{36,39,44,135};
+            const Color color=p->id()==hovered?Color{240,230,225,230}:Color{42,46,54,165};
             if(p->shape()==PartShape::Block)DrawRotatedBoxWires(p->position(),p->size(),p->rotation(),color);
-            else if(p->id()==hovered)DrawSphereWires(p->position(),p->sphereRadius(),8,12,color);
+            else if(p->shape()==PartShape::Sphere)(p->id()==hovered?DrawSphereWires(p->position(),p->sphereRadius(),8,12,Color{240,230,225,230}):DrawSphereWires(p->position(),p->sphereRadius(),6,8,color));
         }
         if(options.bounds) {
             Vector3 low{INFINITY,INFINITY,INFINITY},high{-INFINITY,-INFINITY,-INFINITY};
