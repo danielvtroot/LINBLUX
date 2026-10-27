@@ -16,6 +16,11 @@ para testes visuais.
 `drawCollisionShapes`; `EditorCamera::camera`, `rayFromScreen`, `project`,
 `handleInput`, `focusOn`.
 
+**Autoria:** `drawEditorGuides` recebe `EditorGeometryView` (arestas/AABB/normais)
+e hover opcional. Passe com teste de profundidade e sem escrita de profundidade;
+não altera materiais nem é chamado pelo Player. O Studio alterna as opções por
+F8/Shift+F8/Ctrl+F8. A seleção existente continua separada do contorno discreto.
+
 **Invariantes:** `linblux_renderer` não depende de ImGui/RmlUi; a câmera do
 runtime é `Camera3D`; adaptadores de `EditorCamera` ficam na edição; render não
 é dono da cena nem da física.
