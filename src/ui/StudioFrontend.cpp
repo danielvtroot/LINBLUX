@@ -416,7 +416,10 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(action=="rename"){prompt("rename");return;}
         if(action=="open-dialog"||action=="save-dialog"){prompt(action=="open-dialog"?"open":"save-as");return;}
         if(action=="import-dialog"){prompt("import-image");return;}
-        if(action=="import-sound"){prompt("import-sound");return;}
+        if(action=="import-sound"){
+            if(experiences){experiences->chooseAudio();return;}
+            prompt("import-sound");return;
+        }
         if(action=="clear-image") {
             if(ui.runtime_.active())return;
             if(v=="rig-body") {
@@ -1280,5 +1283,6 @@ void StudioFrontend::resetDocumentView() {
     invalidateImageLibrary();Rml::ReleaseTextures(p.renderer.get());
 }
 void StudioFrontend::invalidateImageLibrary(){impl_->images.clear();impl_->imageScan=-10;impl_->advancedMarkup.clear();}
+void StudioFrontend::invalidateAudio(){impl_->invalidateAudio();}
 void StudioFrontend::prepareAdvanced(){auto r=impl_->advancedRect;ImGui::SetNextWindowDockID(0,ImGuiCond_Always);ImGui::SetNextWindowPos({r.x,r.y},ImGuiCond_Always);ImGui::SetNextWindowSize({r.width,r.height},ImGuiCond_Always);}
 }
