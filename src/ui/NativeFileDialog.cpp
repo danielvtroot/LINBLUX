@@ -26,7 +26,7 @@ NativeFileDialog::~NativeFileDialog() {
     if(process_>0){kill(process_,SIGTERM);waitpid(process_,nullptr,0);}
     if(pipe_>=0)::close(pipe_);
 }
-bool NativeFileDialog::begin(const std::string& title,const std::string& initial,bool save,bool directory,bool images) {
+bool NativeFileDialog::begin(const std::string& title,const std::string& initial,bool save,bool directory,bool images,bool audio) {
     if(active())return false;
     error_.clear();output_.clear();std::string helper;bool kde=false;
     for(const char* name:{"zenity","yad","kdialog"})if(!(helper=executable(name)).empty()){kde=std::strcmp(name,"kdialog")==0;break;}
@@ -34,13 +34,21 @@ bool NativeFileDialog::begin(const std::string& title,const std::string& initial
     std::vector<std::string> args{helper};
     if(kde) {
         args.push_back(directory?"--getexistingdirectory":save?"--getsavefilename":"--getopenfilename");args.push_back(initial);
-        if(!directory)args.push_back(images?"*.png *.jpg *.jpeg|Imagens":"*.lo *.json|Experiências LINBLUX");
+        if(!directory) {
+            if(images)args.push_back("*.png *.jpg *.jpeg|Imagens");
+            else if(audio)args.push_back("*.mp3 *.wav *.ogg|Áudio");
+            else args.push_back("*.lo *.json|Experiências LINBLUX");
+        }
         args.insert(args.end(),{"--title",i18n::Text(title)});
     } else {
         args.insert(args.end(),{"--file-selection","--title="+i18n::Text(title),"--filename="+initial,"--ok-label="+std::string(save?"Salvar":directory?"Selecionar":"Abrir"),"--cancel-label=Cancelar"});
         if(directory)args.push_back("--directory");
         if(save)args.insert(args.end(),{"--save","--confirm-overwrite"});
-        if(!directory)args.push_back(images?"--file-filter=Imagens | *.png *.jpg *.jpeg":"--file-filter=LINBLUX | *.lo *.json");
+        if(!directory) {
+            if(images)args.push_back("--file-filter=Imagens | *.png *.jpg *.jpeg");
+            else if(audio)args.push_back("--file-filter=Áudio | *.mp3 *.wav *.ogg");
+            else args.push_back("--file-filter=LINBLUX | *.lo *.json");
+        }
     }
     // Allocate argv before fork: Mesa may have worker threads, so the child
     // must go straight through async-signal-safe syscalls to exec.

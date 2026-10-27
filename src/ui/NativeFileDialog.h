@@ -9,7 +9,7 @@ struct DialogResult { bool accepted=false; std::string path,error; };
 class NativeFileDialog {
 public:
     ~NativeFileDialog();
-    bool begin(const std::string& title,const std::string& initial,bool save=false,bool directory=false,bool images=false);
+    bool begin(const std::string& title,const std::string& initial,bool save=false,bool directory=false,bool images=false,bool audio=false);
     std::optional<DialogResult> poll();
     bool active() const {return process_>0;}
     const std::string& error() const {return error_;}
