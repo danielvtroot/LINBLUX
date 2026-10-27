@@ -287,7 +287,11 @@ if(XVFB_RUN_EXECUTABLE)
     set_tests_properties(linblux_experience_ui PROPERTIES TIMEOUT 300 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
     add_executable(linblux_rml_ui_tests tests/rml_ui_main.cpp tests/x11_focus.cpp)
     target_link_libraries(linblux_rml_ui_tests PRIVATE linblux_editor X11::X11)
-    add_dependencies(linblux_rml_ui_tests linblux_ui_assets)
+    add_dependencies(linblux_rml_ui_tests linblux_ui_assets linblux_example_assets)
+    add_test(NAME linblux_editor_precision_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
+    set_tests_properties(linblux_editor_precision_ui PROPERTIES TIMEOUT 60 ENVIRONMENT "LINBLUX_EDITOR_PRECISION_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;editor;scene;ui")
+    add_test(NAME linblux_audio_panel_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
+    set_tests_properties(linblux_audio_panel_ui PROPERTIES TIMEOUT 60 ENVIRONMENT "LINBLUX_AUDIO_PANEL_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;editor;audio;ui")
     add_test(NAME linblux_rml_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
     # The integration suite renders the interface at four resolutions on the
     # software rasteriser. Four-sample UI MSAA makes that pass slower, so keep
