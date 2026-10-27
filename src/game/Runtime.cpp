@@ -390,6 +390,7 @@ bool RuntimeSession::respawn(std::string& error) {
     pose_ = {}; walkTime_ = 0; idleTime_ = 0; airTime_=0; walkWeight_ = 0; accumulator_ = 0; yaw_ = 0; jumpPending_ = false;
     blendFrom_ = {}; poseSource_.clear(); poseWalking_ = false; wasAirborne_ = false; blendTime_ = 0;
     previousCharacterPosition_=position();
+    significantFall_=false;flightPeak_=position().y;flightTime_=0;
     coyoteTime_=jumpBufferTime_=0;
     // Shift Lock is a player choice, not a property of the old character.
     // Keep it across respawns, but swallow a key already held during respawn.
