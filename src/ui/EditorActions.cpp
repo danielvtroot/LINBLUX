@@ -110,24 +110,75 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             if(!game::ImportMediaTo(game::AssetsDir(),c.value,game::MediaKind::Audio,asset,error))throw std::runtime_error(error);
             const std::string reference="assets/"+std::filesystem::path(asset).filename().string();
             auto* existing=e.scene_.gameAssets().findSound(reference);
-            auto& sound=existing?*existing:e.scene_.gameAssets().addSound(reference,std::filesystem::path(c.value).stem().string());sound.durationSeconds=seconds;
-            e.setStatus("Som importado: "+sound.name);
+            auto& sound=existing?*existing:e.scene_.gameAssets().addSound(reference,std::filesystem::path(c.value).stem().string());
+            sound.durationSeconds=seconds;
+            e.setStatus("Som importado: "+sound.name+" · "+std::to_string(int(std::lround(seconds)))+" s");
         }
         else if(c.action=="remove-sound") {
             if(e.runtime_.active())throw std::runtime_error("Pare a execução antes de excluir áudio.");std::string error;
+            const auto* sound=e.scene_.gameAssets().findSound(c.value);
+            const std::string reference=sound?sound->reference:game::NormalizeImageReference(c.value);
+            if(reference.empty())throw std::runtime_error("Áudio não encontrado.");
             if(!e.saveCurrentProject())throw std::runtime_error("Áudio preservado: salve a experiência antes de excluir.");
-            if(!game::RemoveSoundAsset(e.scene_,game::AssetsDir(),c.value,[&](std::string& message){const bool ok=e.saveCurrentProject();if(!ok)message=e.status_;return ok;},error))throw std::runtime_error(error);
+            if(!game::RemoveSoundAsset(e.scene_,game::AssetsDir(),reference,[&](std::string& message){const bool ok=e.saveCurrentProject();if(!ok)message=e.status_;return ok;},error))throw std::runtime_error(error);
             e.setStatus("Áudio excluído da experiência; arquivo original preservado.");
         }
         else if(c.action.rfind("rename-sound:",0)==0){
             auto* sound=e.scene_.gameAssets().findSound(c.action.substr(13));if(!sound)throw std::runtime_error("Áudio não encontrado.");
-            if(c.value.empty()||c.value.size()>128)throw std::runtime_error("Nome de áudio deve ter1–128 bytes.");
+            if(c.value.empty()||c.value.size()>128)throw std::runtime_error("Nome de áudio deve ter 1–128 bytes.");
             for(const auto& node:e.scene_.objects())if(IsScriptClass(node->instanceClass())&&static_cast<Script*>(node.get())->source.find(sound->name)!=std::string::npos)throw std::runtime_error("Um script usa o nome atual; use o ID estável antes de renomear.");
             sound->name=c.value;e.setStatus("Nome atualizado; ID e arquivo preservados.");
         }
-        else if(c.action.rfind("sound-volume:",0)==0||c.action.rfind("sound-loop:",0)==0){
-            const bool volume=c.action.rfind("sound-volume:",0)==0;auto* sound=e.scene_.gameAssets().findSound(c.action.substr(volume?13:11));if(!sound)throw std::runtime_error("Áudio não encontrado.");
-            if(volume){const auto v=Number(c.value);if(v<0||v>1)throw std::runtime_error("Volume entre0 e1.");sound->volume=v;}else sound->loop=c.value=="true";
+        else if(c.action.rfind("sound-volume:",0)==0||c.action.rfind("sound-loop:",0)==0||c.action.rfind("sound-kind:",0)==0){
+            const bool volume=c.action.rfind("sound-volume:",0)==0;const bool loop=c.action.rfind("sound-loop:",0)==0;
+            auto* sound=e.scene_.gameAssets().findSound(volume?c.action.substr(13):loop?c.action.substr(11):c.action.substr(11));
+            if(!sound)throw std::runtime_error("Áudio não encontrado.");
+            if(volume){const auto v=Number(c.value);if(v<0||v>1)throw std::runtime_error("Volume entre 0 e 1.");sound->volume=v;}
+            else if(loop)sound->loop=c.value=="true";
+            else {
+                if(c.value!="sound"&&c.value!="music")throw std::runtime_error("Tipo de áudio deve ser sound ou music.");
+                sound->kind=c.value;
+            }
+        }
+        else if(c.action=="music-background") {
+            if(!c.value.empty()&&!e.scene_.gameAssets().findSound(c.value))throw std::runtime_error("Áudio de fundo não encontrado.");
+            e.scene_.gameAssets().music.background=c.value;
+            e.setStatus(c.value.empty()?"Música de fundo removida.":"Música de fundo definida; ela inicia somente no Play.");
+        }
+        else if(c.action=="music-volume"||c.action=="music-loop"||c.action=="music-repeat") {
+            auto& music=e.scene_.gameAssets().music;
+            if(c.action=="music-volume"){
+                const auto v=Number(c.value);if(v<0||v>1)throw std::runtime_error("Volume de música entre 0 e 1.");music.volume=v;
+            }else if(c.action=="music-loop")music.loop=c.value=="true";
+            else music.repeat=c.value=="true";
+        }
+        else if(c.action=="music-playlist-add") {
+            auto& assets=e.scene_.gameAssets();const auto* sound=assets.findSound(c.value);
+            if(!sound)throw std::runtime_error("Áudio não encontrado.");
+            if(assets.music.playlist.size()>=128)throw std::runtime_error("Limite de 128 faixas na playlist.");
+            assets.music.playlist.push_back(sound->id);
+            e.setStatus("Adicionado à playlist: "+sound->name+".");
+        }
+        else if(c.action=="music-playlist-remove"||c.action=="music-playlist-up"||c.action=="music-playlist-down") {
+            auto& playlist=e.scene_.gameAssets().music.playlist;std::size_t used=0;
+            const auto index=std::stoull(c.value,&used);if(used!=c.value.size()||index>=playlist.size())throw std::runtime_error("Faixa da playlist inválida.");
+            if(c.action=="music-playlist-remove"){playlist.erase(playlist.begin()+std::ptrdiff_t(index));e.setStatus("Faixa removida da playlist.");}
+            else if(c.action=="music-playlist-up"&&index>0)std::swap(playlist[index],playlist[index-1]);
+            else if(c.action=="music-playlist-down"&&index+1<playlist.size())std::swap(playlist[index],playlist[index+1]);
+        }
+        else if(c.action=="music-playlist-clear") {
+            e.scene_.gameAssets().music.playlist.clear();
+            e.setStatus("Playlist limpa; a biblioteca de áudio foi preservada.");
+        }
+        else if(c.action.rfind("sound-assign:",0)==0) {
+            auto* node=e.scene_.selection();if(!node)throw std::runtime_error("Selecione uma peça ou Modelo para associar o som.");
+            const auto attribute=c.action.substr(13);
+            if(attribute.empty()||attribute.size()>64)throw std::runtime_error("Atributo de som inválido.");
+            if(c.value.empty()){node->removeAttribute(attribute);e.setStatus("Associação de som removida.");return true;}
+            const auto* sound=e.scene_.gameAssets().findSound(c.value);
+            if(!sound)throw std::runtime_error("Áudio não encontrado.");
+            if(!node->setAttribute(attribute,sound->reference))throw std::runtime_error("Limite de atributos do objeto atingido.");
+            e.setStatus("Som "+sound->name+" associado em "+attribute+".");
         }
         else if(c.action=="remove-image"||c.action=="remove-asset") {
             if(!e.experienceUi_)throw std::runtime_error("Abra uma experiência antes de remover imagens importadas");
