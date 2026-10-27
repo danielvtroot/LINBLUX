@@ -61,7 +61,13 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
   if(action(settings.allowFirstPerson?"Primeira pessoa: permitida":"Primeira pessoa: bloqueada"))settings.allowFirstPerson=!settings.allowFirstPerson;
  }
  if(page_==2){slider("Sensibilidade",settings.sensitivity,.0001f,.03f);line("WASD: mover · Espaço: pular");line("Botão direito: girar câmera");line("E: segurar para interagir");line("1–9: equipar · Delete: soltar");line("PgUp / PgDn: trocar página");line("Esc: abrir e fechar menu");}
- if(page_==3){if(IsAudioDeviceReady()){float volume=GetMasterVolume();slider("Volume geral",volume,0,1);if(paused)SetMasterVolume(volume);}else line("Dispositivo de áudio indisponível.");}
+ if(page_==3){if(IsAudioDeviceReady()){
+     float volume=GetMasterVolume();
+     slider("Volume geral",volume,0,1);if(paused)SetMasterVolume(volume);
+     const int pct=int(std::round(volume*100));
+     char label[16];std::snprintf(label,sizeof(label),"%d%%",pct);line(label);
+     if(action(volume>0?"Mudo (silenciar tudo)":"Ativar som")){SetMasterVolume(volume>0?0.f:1.f);}
+ }else line("Dispositivo de áudio indisponível nesta sessão.");}
  if(page_==4){if(action(IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE)?"Sair da tela cheia":"Entrar em tela cheia"))ToggleBorderlessWindowed();line("Ajuste a resolução pela janela.");}
  if(page_==5){line("LINBLUX Player · Alpha em desenvolvimento");line("Experiências locais com Lua e Bullet.");line("Use Esc para retornar ao jogo.");line("Menu protegido: scripts não o removem.");}
  EndScissorMode();count_=std::max(1,current);focus_=std::clamp(focus_,0,count_-1);return quit;
