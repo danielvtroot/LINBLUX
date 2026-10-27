@@ -165,6 +165,27 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             key("shift+F5");CHECK(!ui.playing());std::printf("Item controls UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
             rlImGuiShutdown();CloseWindow();return failures?1:0;
         }
+        if(std::getenv("LINBLUX_AUDIO_PANEL_ONLY")) {
+            game::SetProjectAssetRoot(directory);std::filesystem::create_directories(std::string(directory)+"/assets");
+            EditorActions actions(ui);const auto fixture=std::filesystem::path(__FILE__).parent_path()/"fixtures/audio/tone.wav";
+            CHECK(actions.dispatch({"import-sound",fixture.string()}));CHECK(!scene.gameAssets().sounds.empty());
+            const auto id=scene.gameAssets().sounds.front().id;
+            click("cmd-show:audio-");frames(3);CHECK(ui.frontend()->elementBounds("audio-import").width>80);
+            CHECK(ui.frontend()->elementBounds("music-background").width>80);
+            clickVisible("audio-background-"+id);CHECK(scene.gameAssets().music.background==id);
+            clickVisible("audio-playlist-"+id);CHECK(scene.gameAssets().music.playlist==std::vector<std::string>{id});
+            capture("audio-library");
+            clickVisible("music-playlist-remove-0");CHECK(scene.gameAssets().music.playlist.empty());
+            CHECK(actions.dispatch({"music-background",""}));
+            CHECK(projectio::save(scene,config.defaultProjectPath,error));Scene reopened;
+            CHECK(projectio::load(reopened,config.defaultProjectPath,error));CHECK(reopened.gameAssets().sounds.front().id==id);
+            CHECK(!actions.dispatch({"script-example","../../segredo.lua"}));
+            CHECK(actions.dispatch({"script-example","musica_de_fundo.lua"}));
+            CHECK(scene.selection()&&IsScriptClass(scene.selection()->instanceClass()));
+            if(scene.selection()&&IsScriptClass(scene.selection()->instanceClass()))CHECK(!static_cast<Script*>(scene.selection())->source.empty());
+            std::printf("Audio panel UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
         if(std::getenv("LINBLUX_EDITOR_PRECISION_ONLY")) {
             part->setTransform({{14,5,0},QuaternionIdentity(),{2,2,2}});
             auto* behind=scene.createPart(PartShape::Block,{14,5,-5},{2,2,2},"Peça atrás");behind->setAnchored(true);
