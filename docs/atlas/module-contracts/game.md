@@ -100,3 +100,8 @@ narrowing, limites e estado; filas são limitadas. Raycast pode ignorar a subár
 do Modelo e ignora representações guardadas/protótipos. Testes: item_actions,
 rifledemo (inclui .lo) e rifledemo_player. attachAuthored não reinicializa NPC
 já configurado pelo Script durante startup; a demo verifica rota e clipe walk.
+
+Apresentação de queda: Freefall físico permanece compatível; significativo
+exige tempo, descida acumulada desde ápice e distância do chão (Bullet).
+Rastreador transitório limpo no respawn/Stop, sem novos campos JSON.
+SignificantFallPresentation/studio cobre30/60/144FPS e clipe; relatório38.

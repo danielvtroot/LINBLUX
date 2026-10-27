@@ -594,3 +594,17 @@ cobertura parcial. Apenas hunk físico de Runtime incluído; música WIP preserv
 Próximo: distinguir pulo normal de queda significativa na apresentação, depois
 ESC sem congelar simulação. Templates/serviços, itens iniciais e demais
 requisitos da missão27/10 continuam pendentes. Alpha não liberado.
+
+
+## 27/10 — Pulo normal e queda significativa
+
+PUBLICADO anterior:987091b6d7d8cbbbdfe1c1f399d3899201ec7996.
+IMPLEMENTADO/TESTADO: clipe de queda condicionado a tempo, altura perdida e
+chão real Bullet; pulo normal mantém clipe, queda alta trava até pousar.
+Respawn/Stop limpos; Freefall legado preservado, sem novo formato. Relatório38.
+Studio/game/Player RifleDemo3/3; FAST17/17, cobertura desconhecida. Sem captura
+de salto específica nem máquina nova completa de clipes JumpStart/Land.
+Dependência crítica identificada no baseline: StudioFrontend publicado já usa
+GameAssets.music; backend e suporte ainda só no WIP local. Próximo incremento
+de recuperação deve validar/publicar esse WIP existente, sem reimplementação,
+para fonte remota reconstruível. Depois ESC sem pausa e demais requisitos.
