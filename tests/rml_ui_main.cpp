@@ -134,7 +134,7 @@ linblux.events.on('update',function() linblux.scene.root:set_attribute('menu_clo
                     const auto r=ui.frontend()->elementBounds(id);CHECK(r.width>20&&r.height>20);CHECK(r.x>=vp.x&&r.y>=vp.y&&r.x+r.width<=vp.x+vp.width+2&&r.y+r.height<=vp.y+vp.height+2);
                 }
                 capture("side-menu-"+std::to_string(int(size.x)));
-                if(size.x==1920){key("Escape");frames(14);CHECK(rt.state()==game::RuntimeState::Playing);key("shift+F5");CHECK(!ui.playing());continue;}
+                if(size.x==1920){key("Escape");frames(14);CHECK(rt.state()==game::RuntimeState::Playing&&!ui.gameMenuOpen());key("shift+F5");CHECK(!ui.playing());continue;}
                 const auto position=rt.position();event("keydown w");frames(5);event("keyup w");CHECK(Vector3Distance(position,rt.position())<.001f);
                 click("page-settings");const auto mode=rt.settings().cameraMode;click("camera-next");CHECK(rt.settings().cameraMode!=mode);
                 const float sensitivity=rt.settings().sensitivity;const auto slider=ui.frontend()->elementBounds("sensitivity-slider");clickAt({slider.x+slider.width*.7f,slider.y+slider.height/2});CHECK(rt.settings().sensitivity!=sensitivity);

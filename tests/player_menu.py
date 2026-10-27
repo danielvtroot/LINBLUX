@@ -45,7 +45,7 @@ try:
         # Actual left panel covers the window edge; the world remains visible right.
         r,g,b=image.getpixel((8,180));assert max(r,g,b)<45,(r,g,b)
         scale=height/720;click(int(70*scale),int(270*scale));shot('audio-'+str(width))
-        key('Escape');closed=shot('closed-'+str(width));assert image.tobytes()!=closed.tobytes(),'Esc did not close menu'
+        key('Escape');closed=shot('closed-'+str(width));assert max(closed.getpixel((8,180)))>55,'Esc did not remove side panel'
     command('windowsize',window,1280,720);time.sleep(.4);key('Escape');click(50,312);click(360,108);time.sleep(.4)
     assert 'WIDTH=1920' in command('getwindowgeometry','--shell',window),'fullscreen did not expand to monitor'
     shot('video-fullscreen');click(540,162);time.sleep(.4)
