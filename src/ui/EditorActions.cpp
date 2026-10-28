@@ -51,6 +51,11 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             e.editorGeometry_.edges=!e.editorGeometry_.edges;
             e.setStatus(e.editorGeometry_.edges?"Arestas: ativadas · F8":"Arestas: desativadas · F8");
         }
+        else if(c.action=="render-quality") {
+            if(c.value!="legacy"&&c.value!="low"&&c.value!="medium"&&c.value!="high")throw std::runtime_error("Qualidade inválida");
+            e.renderer_.setQuality(c.value=="legacy"?RenderQuality::Legacy:c.value=="low"?RenderQuality::Low:
+                c.value=="high"?RenderQuality::High:RenderQuality::Medium);
+        }
         else if(c.action=="editor-camera") {
             if(c.value!="fps"&&c.value!="focus")throw std::runtime_error("Unknown Studio camera mode");
             e.camera_.setNavigationMode(c.value=="fps"?EditorCamera::NavigationMode::FPS:EditorCamera::NavigationMode::Focus);
@@ -362,6 +367,28 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             else if(node->isPart()) {
                 auto& p=*static_cast<Part*>(node);e.endGizmoSession(true,"property");
                 if(name=="Anchored")p.setAnchored(c.value=="true");
+                else if(name=="Material3D.Preset") {
+                    if(c.value=="legacy")p.clearMaterial3D();
+                    else {const auto n=Number(c.value);if(n<0||n>5||std::floor(n)!=n)throw std::runtime_error("Preset inválido");
+                        std::string error;if(!p.setMaterial3D(MaterialPreset3D(int(n),p.color()),error))throw std::runtime_error(error);}
+                }
+                else if(name.rfind("Material3D.",0)==0) {
+                    auto m=p.material3D()?*p.material3D():LegacyMaterial3D(p.material(),p.color());
+                    if(name=="Material3D.BaseColor")m.baseColor=ReadColor(c.value);
+                    else if(name=="Material3D.Emissive")m.emissive=ReadColor(c.value);
+                    else if(name=="Material3D.BaseColorTexture")m.baseColorTexture=game::NormalizeImageReference(c.value);
+                    else if(name=="Material3D.NormalTexture")m.normalTexture=game::NormalizeImageReference(c.value);
+                    else if(name=="Material3D.MetallicRoughnessTexture")m.metallicRoughnessTexture=game::NormalizeImageReference(c.value);
+                    else if(name=="Material3D.OcclusionTexture")m.occlusionTexture=game::NormalizeImageReference(c.value);
+                    else {const float n=Number(c.value);
+                        if(name=="Material3D.Metallic")m.metallic=n;else if(name=="Material3D.Roughness")m.roughness=n;
+                        else if(name=="Material3D.NormalScale")m.normalScale=n;else if(name=="Material3D.EmissiveStrength")m.emissiveStrength=n;
+                        else if(name=="Material3D.TileU")m.studsPerTile.x=n;else if(name=="Material3D.TileV")m.studsPerTile.y=n;
+                        else if(name=="Material3D.OffsetU")m.offset.x=n;else if(name=="Material3D.OffsetV")m.offset.y=n;
+                        else if(name=="Material3D.Rotation")m.rotation=n;else if(name=="Material3D.Opacity"){if(n<0||n>1)throw std::runtime_error("Opacidade: 0–1");m.baseColor.a=unsigned(n*255);}
+                        else throw std::runtime_error("Propriedade de material desconhecida");}
+                    std::string error;if(!p.setMaterial3D(m,error))throw std::runtime_error(error);
+                }
                 else if(name=="CanCollide")p.setCanCollide(c.value=="true");
                 else if(name=="Density"||name=="Friction"||name=="Restitution"||name=="LinearDamping"||name=="AngularDamping") {
                     auto body=p.bodyProperties();const float value=Number(c.value);

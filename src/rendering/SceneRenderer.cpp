@@ -1,6 +1,8 @@
 #include "rendering/ExperienceOverlay.h"
 #include "game/Inventory.h"
 #include "rendering/SceneRenderer.h"
+#include "rendering/ModernMaterials.h"
+#include <cstdlib>
 #include "physics/PhysicsWorld.h"
 
 #include <algorithm>
@@ -919,7 +921,14 @@ static int rendererCount = 0;
 
 SceneRenderer::SceneRenderer() {
     ++rendererCount;
+    modern_=std::make_unique<ModernMaterials>();
+    if(const char* value=std::getenv("LINBLUX_RENDER_QUALITY")) {
+        const std::string q=value;
+        quality_=q=="legacy"?RenderQuality::Legacy:q=="low"?RenderQuality::Low:
+            q=="high"?RenderQuality::High:RenderQuality::Medium;
+    }
 }
+bool SceneRenderer::modernReady() const {return modern_->ready();}
 
 SceneRenderer::~SceneRenderer() {
     if(--rendererCount==0) {
@@ -1004,7 +1013,10 @@ void SceneRenderer::drawEditorGuides(const Scene& scene,Camera3D camera,const Ed
         if((options.edges||p->id()==hovered)&&!scene.selected(p->id())) {
             const Color color=p->id()==hovered?Color{240,230,225,230}:Color{42,46,54,165};
             if(p->shape()==PartShape::Block)DrawRotatedBoxWires(p->position(),p->size(),p->rotation(),color);
-            else if(p->shape()==PartShape::Sphere)DrawSphereGuideWires(p->position(),p->sphereRadius(),color);
+            else if(p->shape()==PartShape::Sphere) {
+                if(quality_==RenderQuality::Legacy||!modern_->ready()||!modern_->wireSphere(p->position(),p->sphereRadius(),color))
+                    DrawSphereGuideWires(p->position(),p->sphereRadius(),color);
+            }
         }
         if(options.bounds) {
             Vector3 low{INFINITY,INFINITY,INFINITY},high{-INFINITY,-INFINITY,-INFINITY};
@@ -1130,7 +1142,11 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
             if (part->id() == selectedId) drawSelection(*part);
             continue;
         }
-        if (part->instanceClass() == InstanceClass::Baseplate) {
+        if(quality_!=RenderQuality::Legacy&&part->instanceClass()!=InstanceClass::SpawnLocation&&
+           modern_->draw(*part,camera,lighting,quality_)) {
+            // Materials and decals are independent passes; skins below use
+            // their existing premultiplied compositing and asset references.
+        } else if (part->instanceClass() == InstanceClass::Baseplate) {
             drawBaseplate(*part, lightDirection, sunIntensity, brightness);
         } else if (part->instanceClass() == InstanceClass::SpawnLocation) {
             const Quaternion rotation = part->rotation();

@@ -184,6 +184,7 @@ float Part::sphereRadius() const {
 
 void Part::setColor(Color color) {
     color_ = color;
+    if(material3D_)material3D_->baseColor=color;
 }
 
 void Part::setMaterial(PartMaterial material) {

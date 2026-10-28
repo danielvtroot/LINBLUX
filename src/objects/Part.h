@@ -111,7 +111,8 @@ public:
     void setMaterial(PartMaterial material);
     const std::optional<Material3D>& material3D() const {return material3D_;}
     bool setMaterial3D(const Material3D& value,std::string& error) {
-        if(!value.validate(error))return false;material3D_=value;return true;
+        if(!value.validate(error))return false;
+        material3D_=value;return true;
     }
     void clearMaterial3D() {material3D_.reset();}
 

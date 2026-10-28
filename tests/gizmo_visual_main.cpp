@@ -664,6 +664,7 @@ void VerifySurfaceFeedback() {
 }  // namespace
 
 int main() {
+    setenv("LINBLUX_RENDER_QUALITY","legacy",1); // Existing legacy geometry contract.
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(900, 620, "loblox gizmo visual tests");
