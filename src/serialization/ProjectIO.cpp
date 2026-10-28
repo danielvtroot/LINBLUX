@@ -571,6 +571,10 @@ std::string toJson(const Scene& scene) {
                            {"cloudSpeed", lighting.cloudSpeed()},
                            {"cloudSoftness", lighting.cloudSoftness()},
                            {"skyRotation", lighting.skyRotation()}});
+        // Additive optional settings; old scenes keep their serialized fields.
+        if(!lighting.shadowsEnabled())objects.back()["shadowsEnabled"]=false;
+        if(lighting.shadowDistance()!=80)objects.back()["shadowDistance"]=lighting.shadowDistance();
+        if(lighting.shadowStrength()!=1)objects.back()["shadowStrength"]=lighting.shadowStrength();
     }
 
     std::function<void(const Instance*)> append = [&](const Instance* node) {
