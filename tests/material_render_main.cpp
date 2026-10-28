@@ -17,7 +17,8 @@ int main(){
     const auto out=std::filesystem::path(__FILE__).parent_path().parent_path()/".turbo/logs/mega3d-phase3/materials";
     std::filesystem::create_directories(out);
     {
-    Scene scene;scene.lighting()->setSkyEnabled(false);std::string error;
+    Scene scene;scene.lighting()->setSkyEnabled(false);
+    scene.lighting()->setSunDirection({-.5f,-.8f,-.6f});std::string error;
     auto* sphere=scene.createPart(PartShape::Sphere,{0,0,0},{6,6,6},"Smooth sphere");sphere->setColor({160,160,160,255});
     SceneRenderer renderer;Camera3D camera{{0,0,12},{0,0,0},{0,1,0},45,CAMERA_PERSPECTIVE};
     auto target=LoadRenderTexture(640,400);
@@ -27,6 +28,7 @@ int main(){
     };
     auto legacy=render(RenderQuality::Legacy);auto medium=render(RenderQuality::Medium);
     CHECK(renderer.modernReady());CHECK(differences(legacy,medium)>10000);
+    ExportImage(legacy,(out/"sphere-legacy.png").c_str());ExportImage(medium,(out/"sphere-medium.png").c_str());
     std::set<int> colors;for(int x=240;x<400;++x){auto p=GetImageColor(medium,x,195);colors.insert((p.r<<16)|(p.g<<8)|p.b);}
     CHECK(colors.size()>35);std::printf("Smooth sphere: %zu distinct samples/160\n",colors.size());
     auto player=render(RenderQuality::Medium,false);CHECK(differences(medium,player)==0);
