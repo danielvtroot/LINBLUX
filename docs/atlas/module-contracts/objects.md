@@ -44,3 +44,10 @@ existentes; clone/remoção são os da hierarquia. JSON v5 preserva quaternions 
 recusa documentos inválidos antes de substituir a cena. Testes: Attachments
 em linblux_studio, exemplo attachments.lua no Player, pacote/defaults em
 linblux_experiences e fluxo X11 em linblux_models_ui.
+
+
+**Materiais 3D:** `Part::material3D()` é opcional; `setMaterial3D` valida cor,
+metallic/roughness, emissão, normalScale e UVs/referências. `clearMaterial3D`
+restaura herança do material antigo. Cor e PartMaterial antigos são preservados
+para Compatível; setColor explícito também atualiza a cor base customizada.
+Duplicação copia o material. Não altera colisor, massa ou flags de física.

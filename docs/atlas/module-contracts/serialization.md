@@ -13,7 +13,7 @@ gravado atomicamente (temporário + fsync + rename).
 **APIs principais:** `projectio::toJson/fromJson/save/load/writeFileAtomically`;
 `scenelua::toLua/fromLua/save/load/ValidateSchema`.
 
-**Invariantes:** `kFormatVersion=3`; versões futuras são rejeitadas; a cena só é
+**Invariantes:** `kFormatVersion=7`; versões futuras são rejeitadas; a cena só é
 limpa após validação estrutural; o arquivo anterior permanece intacto se a
 escrita falhar antes do rename; IDs, hierarquia e propriedades são preservados;
 JSON é a persistência canônica e Lua é um formato suportado.
@@ -40,3 +40,11 @@ Objetos Decal/Texture v3 persistem `surface` via EncodeSurface/DecodeSurface,
 compartilhado com RigDecal. Leitura em candidato valida campos/face/UVs e cria
 as superfícies após as Parts, independente da ordem do arquivo. Projetos antigos
 continuam aceitos; parâmetros novos de adesivos usam defaults compatíveis.
+
+
+**Material3D v7:** campo opcional por Part, validado antes de alterar a cena.
+Sem ele, o escritor conserva a versão mínima v1–v6 anterior; não migra todos os
+arquivos automaticamente. BaseColor, parâmetros físicos, emissão, UV e quatro
+mapas passam pelo codec Material3D. Campo em versão anterior é rejeitado;
+valores não finitos/fora de limites não alteram o mundo. Referências de mapas
+entram na normalização/relocação portátil de imagens, com teste .lo em outro HOME.
