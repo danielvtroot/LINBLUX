@@ -2,6 +2,21 @@
 #include "serialization/ProjectIO.h"
 #include <fstream>
 #include <iomanip>
+struct ShadowCaptureInfo {
+    std::array<float,16> matrix{};float resolution=0,span=0,texel=0,bias=0;int taps=0;
+};
+inline ShadowCaptureInfo ReadShadowCaptureInfo(){
+    ShadowCaptureInfo info;
+    for(GLuint program=1;program<256;++program)if(glIsProgram(program)){
+        const int enabled=glGetUniformLocation(program,"shadowEnabled"),vp=glGetUniformLocation(program,"lightVP"),step=glGetUniformLocation(program,"shadowTexelDepth");
+        if(enabled<0||vp<0||step<0)continue;GLint active=0;glGetUniformiv(program,enabled,&active);if(!active)continue;
+        glGetUniformfv(program,vp,info.matrix.data());float texelDepth=0;glGetUniformfv(program,step,&texelDepth);
+        glGetUniformfv(program,glGetUniformLocation(program,"normalBias"),&info.bias);
+        const auto& m=info.matrix;const float sx=std::sqrt(m[0]*m[0]+m[4]*m[4]+m[8]*m[8]),sz=std::sqrt(m[2]*m[2]+m[6]*m[6]+m[10]*m[10]);
+        if(sx>0&&sz>0){info.span=2/sx;info.texel=texelDepth*2/sz;info.resolution=std::round(info.span/info.texel);}
+        const auto taps=glGetUniformLocation(program,"shadowTaps");if(taps>=0)glGetUniformiv(program,taps,&info.taps);return info;
+    }return info;
+}
 // Uses the authored character delivered with LINBLUX, including its real rig.
 // Environment-selected capture helper; not run as part of every regression.
 inline int CaptureCharacterShadows(const char* directory) {
@@ -21,26 +36,18 @@ inline int CaptureCharacterShadows(const char* directory) {
     auto* floor=scene.createPart(PartShape::Block,{0,-.5f,0},{160,1,160},"Piso do mundo distribuido");floor->setColor({190,190,190,255});floor->setAnchored(true);
     scene.lighting()->setSkyEnabled(false);scene.lighting()->setSunDirection({.7f,-1,.4f});scene.lighting()->setSunIntensity(1);scene.lighting()->setFogDensity(0);
     Camera3D camera{{8,6,12},{0,1.5f,0},{0,1,0},45,CAMERA_PERSPECTIVE};
+    if(!projectio::save(scene,(out/"character.json").string(),error)){std::fprintf(stderr,"Capture project: %s\n",error.c_str());++failures;}
     SceneRenderer renderer;
-    std::ofstream stats(out/"measurements.csv");stats<<"width,height,quality,aa,active,resolution,span,texel,normal_bias,ms\n";
-    const auto diagnostics=[&](){std::array<float,4> result{};
-        for(GLuint program=1;program<256;++program)if(glIsProgram(program)){
-            const int enabled=glGetUniformLocation(program,"shadowEnabled"),vp=glGetUniformLocation(program,"lightVP"),step=glGetUniformLocation(program,"shadowTexelDepth");
-            if(enabled<0||vp<0||step<0)continue;GLint active=0;glGetUniformiv(program,enabled,&active);if(!active)continue;
-            float m[16]{},texelDepth=0,bias=0;glGetUniformfv(program,vp,m);glGetUniformfv(program,step,&texelDepth);
-            const int biasLoc=glGetUniformLocation(program,"normalBias");glGetUniformfv(program,biasLoc,&bias);
-            const float sx=std::sqrt(m[0]*m[0]+m[4]*m[4]+m[8]*m[8]),sz=std::sqrt(m[2]*m[2]+m[6]*m[6]+m[10]*m[10]);
-            if(sx>0&&sz>0){const float span=2/sx,texel=texelDepth*2/sz;result={std::round(span/texel),span,texel,bias};break;}
-        }return result;};
+    std::ofstream stats(out/"measurements.csv");stats<<"width,height,quality,aa,active,resolution,span,texel,normal_bias,taps,ms\n";
     for(const Vector2 size:{Vector2{1366,768},Vector2{1920,1080}}){
         auto target=LoadRenderTexture(int(size.x),int(size.y));
         const auto draw=[&](){BeginTextureMode(target);renderer.drawScene(scene,camera,int(size.x),int(size.y),0);EndTextureMode();};
         const auto save=[&](const std::string& name){auto image=LoadImageFromTexture(target.texture);ImageFlipVertical(&image);failures+=!ExportImage(image,(out/(name+"-"+std::to_string(int(size.x))+".png")).c_str());UnloadImage(image);};
         for(const auto q:{RenderQuality::Low,RenderQuality::Medium,RenderQuality::High}){
-            renderer.setQuality(q);for(int frame=0;frame<2;++frame)draw();glFinish();const auto start=std::chrono::steady_clock::now();
-            for(int frame=0;frame<3;++frame)draw();glFinish();
-            const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()/3;
-            const auto d=diagnostics();stats<<int(size.x)<<','<<int(size.y)<<','<<int(q)<<','<<int(renderer.actualAntialiasing())<<','<<renderer.shadowsActive()<<','<<d[0]<<','<<d[1]<<','<<d[2]<<','<<d[3]<<','<<ms<<'\n';
+            renderer.setQuality(q);for(int frame=0;frame<3;++frame)draw();glFinish();std::vector<double> times;
+            for(int frame=0;frame<5;++frame){const auto start=std::chrono::steady_clock::now();draw();glFinish();times.push_back(std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count());}
+            std::sort(times.begin(),times.end());const double ms=times[2];
+            const auto d=ReadShadowCaptureInfo();stats<<int(size.x)<<','<<int(size.y)<<','<<int(q)<<','<<int(renderer.actualAntialiasing())<<','<<renderer.shadowsActive()<<','<<d.resolution<<','<<d.span<<','<<d.texel<<','<<d.bias<<','<<d.taps<<','<<ms<<'\n';
             const std::string label=q==RenderQuality::Low?"low":q==RenderQuality::Medium?"medium":"high";save(label);
             scene.lighting()->setShadowsEnabled(false);draw();save(label+"-unshadowed");scene.lighting()->setShadowsEnabled(true);
         }

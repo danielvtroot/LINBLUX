@@ -45,6 +45,19 @@ int main(){
     renderer.setQuality(RenderQuality::Low);auto low=render();CHECK(!renderer.shadowsActive());UnloadImage(low);renderer.setQuality(RenderQuality::Medium);
     block->setPosition({100,2,0});auto plane=render();light->setShadowsEnabled(false);auto planeOff=render();ExportImage(plane,(out/"plane-shadow.png").c_str());ExportImage(planeOff,(out/"plane-off.png").c_str());std::printf("Plane acne difference: %d pixels\n",delta(plane,planeOff));CHECK(delta(plane,planeOff)==0);UnloadImage(plane);UnloadImage(planeOff);block->setPosition({0,2,0});
     setenv("LINBLUX_DISABLE_SHADOWS","1",1);{SceneRenderer fallback;fallback.setAntialiasing(Antialiasing::None);light->setShadowsEnabled(true);BeginTextureMode(target);fallback.drawScene(scene,camera,640,400,0);EndTextureMode();CHECK(!fallback.shadowsActive());}unsetenv("LINBLUX_DISABLE_SHADOWS");
+    for(const auto q:{ShadowQuality::Economy,ShadowQuality::Soft,ShadowQuality::High}){
+        renderer.setShadowQuality(q);auto image=render();UnloadImage(image);const auto info=ReadShadowCaptureInfo();
+        CHECK(info.resolution==(q==ShadowQuality::High?2048:1024));CHECK(info.taps==(q==ShadowQuality::High?16:q==ShadowQuality::Soft?8:4));CHECK(info.texel>0&&info.texel<.1f);
+    }
+    renderer.setShadowQuality(ShadowQuality::Soft);auto stable=render();UnloadImage(stable);const auto fixed=ReadShadowCaptureInfo();
+    camera.position.x+=.001f;camera.target.x+=.001f;stable=render();UnloadImage(stable);const auto shifted=ReadShadowCaptureInfo();
+    CHECK(std::fabs(fixed.span-shifted.span)<.001f);
+    for(int axis=0;axis<2;++axis){const float step=(shifted.matrix[12+axis]-fixed.matrix[12+axis])*fixed.resolution*.5f;CHECK(std::fabs(step-std::round(step))<.01f);}
+    camera.position.x-=.001f;camera.target.x-=.001f;
+    setenv("LINBLUX_DISABLE_HIGH_SHADOWS","1",1);
+    {SceneRenderer fallback;fallback.setAntialiasing(Antialiasing::None);fallback.setShadowQuality(ShadowQuality::High);
+        BeginTextureMode(target);fallback.drawScene(scene,camera,640,400,0);EndTextureMode();const auto info=ReadShadowCaptureInfo();CHECK(fallback.shadowsActive());CHECK(info.resolution==1024);CHECK(info.taps==8);}
+    unsetenv("LINBLUX_DISABLE_HIGH_SHADOWS");renderer.setShadowQuality(ShadowQuality::Off);stable=render();UnloadImage(stable);CHECK(!renderer.shadowsActive());renderer.setShadowQuality(ShadowQuality::Auto);
     UnloadImage(unshadowed);UnloadImage(shadowed);
     // Sorting must depend on camera distance, not authored insertion order.
     scene.clearObjects();light->setShadowsEnabled(false);camera={{0,0,12},{0,0,0},{0,1,0},45,CAMERA_PERSPECTIVE};
