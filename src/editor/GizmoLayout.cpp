@@ -141,7 +141,7 @@ FacePick FaceUnderCursor(const Layout& layout,Vector2 mouse){
     for(int i=0;i<6;++i){const auto& face=layout.faces[i];if(!face.visible)continue;
         const float den=Vector3DotProduct(ray.direction,face.normal);if(std::fabs(den)<1e-6f)continue;
         const float distance=Vector3DotProduct(Vector3Subtract(face.center,ray.position),face.normal)/den;if(distance<0||distance>=hit.distance)continue;
-        bool inside=true;float sign=0;for(size_t k=0;k<face.projected.size();++k){auto a=face.projected[k],b=face.projected[(k+1)%face.projected.size()];const float cross=(b.x-a.x)*(mouse.y-a.y)-(b.y-a.y)*(mouse.x-a.x);if(std::fabs(cross)>.1f){if(sign*cross<0){inside=false;break;}sign=cross;}}
+        bool inside=true;float sign=0;for(size_t k=0;k<face.projected.size();++k){auto a=face.projected[k],b=face.projected[(k+1)%face.projected.size()];const float cross=(b.x-a.x)*(mouse.y-a.y)-(b.y-a.y)*(mouse.x-a.x);if(std::fabs(cross)>1e-5f){if(sign*cross<0){inside=false;break;}sign=cross;}}
         if(inside){hit={i,Vector3Add(ray.position,Vector3Scale(ray.direction,distance)),distance};}
     }return hit;
 }

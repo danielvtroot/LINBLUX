@@ -1772,6 +1772,7 @@ void EditorUI::drawViewport() {
     const GizmoUpdateResult gizmoResult=selectedModel||modelTransform_.active()
         ?modelTransform_.update(tool_,selection,camera_,viewportRect,hovered,gizmoAllowed,gizmoInput)
         :transform_.update(tool_,selectedPart,camera_,viewportRect,hovered,gizmoAllowed,gizmoInput);
+    if(tool_==ToolMode::Scale&&gizmo_.hoveringHandle())ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
     if (gizmoResult.started && selectedPart != nullptr) {
         // A transformacao real do inicio (nao o snapshot de desenho) e o que
         // o Undo precisa restaurar.
@@ -1917,7 +1918,7 @@ void EditorUI::drawViewport() {
         drawList->AddRectFilled({p.x-6,p.y-4},{p.x+s.x+6,p.y+s.y+4},IM_COL32(18,18,22,200),4);
         drawList->AddText(p,IM_COL32(235,220,220,255),hint);
     }
-    if(selectedPart&&selectedPart->shape()==PartShape::Block) {
+    if(tool_!=ToolMode::Select&&selectedPart&&selectedPart->shape()==PartShape::Block) {
         const auto& pose=selectedPart->transform();
         for(const auto* other:scene_.parts()) {
             if(other==selectedPart||other->shape()!=PartShape::Block||other->color().a==0)continue;
