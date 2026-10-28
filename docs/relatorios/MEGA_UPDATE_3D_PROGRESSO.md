@@ -71,6 +71,10 @@ de `2aebae4` foram recompilados em arquivos/archives isolados em
 executável final. As capturas `before` definitivas usam esse baseline; `after`
 usa `build-linblux/linblux`. Bibliotecas engine/UI e WIP são compartilhados;
 não se trata de baseline histórico de desempenho da engine inteira.
+As três cópias temporárias de fonte foram removidas após o build para não
+duplicar símbolos no ATLAS; hashes em `baseline-build/source-hashes.json`.
+Variações de ícone/localização da UI no binário isolado não entram na comparação
+3D. O código de renderer e a câmera/luz são os objetos da comparação visual.
 
 | Fixture | 1366×768 antes / depois | 1920×1080 antes / depois |
 |---|---|---|
@@ -128,6 +132,8 @@ registram resolução, RSS, hash do projeto e amostras da instrumentação exist
 Algumas janelas de 1366 não completaram 30 frames e estão como `unavailable`.
 Resizes/F8 podem compartilhar a janela de amostragem: dados observacionais,
 **não benchmark estável de GPU ou comprovação de ganho de desempenho**.
+RSS final observado: antes 220.6–287.7 MiB; depois 226.0–291.1 MiB (três
+fixtures, duas resoluções). Capturas definitivas: 25.9s antes + 32.0s depois.
 
 ```sh
 # Gerar fixtures apenas, sem executar engine:
@@ -136,6 +142,9 @@ python3 tests/mega3d_capture.py --output .turbo/logs/mega3d-phase01
 # build-linblux/linblux --stage before|after pelo run_command do TURBO,
 # com timeout 100s e tela -screen 0 1920x1080x24 -noreset.
 ```
+
+Tempo de execução da sessão: aproximadamente 25 minutos, incluindo orientação,
+compilação, diagnóstico das fixtures, capturas e validação. Sem medir GPU real.
 
 ## Publicação e retomada
 
