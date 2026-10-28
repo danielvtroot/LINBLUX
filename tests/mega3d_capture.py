@@ -101,7 +101,16 @@ def capture(binary, root, stage):
                     xdo('windowfocus','--sync',window); xdo('mousemove',5,5)
                     time.sleep(3)
                     shot = output/(name+'-'+str(width)+'.png')
-                    subprocess.run(['scrot','-o','-u',str(shot)],check=True,timeout=5)
+                    deadline=time.monotonic()+15
+                    while True:
+                        subprocess.run(['scrot','-o','-u',str(shot)],check=True,timeout=5)
+                        # A mapped GLFW window may precede its first GL frame
+                        # while software rendering competes with a compiler.
+                        rendered=Image.open(shot).convert('RGB')
+                        if max(hi for lo,hi in rendered.getextrema())>100:break
+                        assert process.poll() is None, log
+                        assert time.monotonic()<deadline, 'Studio did not render a frame'
+                        time.sleep(.25)
                     assert Image.open(shot).size == (width,height)
                     timing = re.findall(r'RML timing ms:.*',log.read_text())
                     rss = re.search(r'VmRSS:\s+(\d+) kB',Path('/proc',str(process.pid),'status').read_text())

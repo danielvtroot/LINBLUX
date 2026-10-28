@@ -2,6 +2,8 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <memory>
+#include "rendering/RenderSettings.h"
 
 #include "core/Math.h"
 #include "objects/Part.h"
@@ -12,6 +14,7 @@ namespace loblox {
 class Scene;
 class EditorCamera;
 class PhysicsWorld;
+class ModernMaterials;
 struct RigRenderState {
     const game::Rig* rig = nullptr;
     game::Pose pose{};
@@ -34,6 +37,9 @@ public:
 
     SceneRenderer(const SceneRenderer&) = delete;
     SceneRenderer& operator=(const SceneRenderer&) = delete;
+    void setQuality(RenderQuality quality) {quality_=quality;}
+    RenderQuality quality() const {return quality_;}
+    bool modernReady() const;
 
     void drawScene(const Scene& scene, const EditorCamera& camera, int width, int height,
                    InstanceId selectedId, const RigRenderState* rig = nullptr);
@@ -54,6 +60,8 @@ public:
                              Camera3D camera,InstanceId selection) const;
 
 private:
+    RenderQuality quality_=RenderQuality::Medium;
+    std::unique_ptr<ModernMaterials> modern_;
     void drawBaseplate(const Part& baseplate, Vector3 lightDirection, float sunIntensity,
                        float brightness);
     void drawSelection(const Part& part) const;

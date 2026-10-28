@@ -12,6 +12,7 @@
 #include "core/Config.h"
 #include "core/Diagnostics.h"
 #include "game/Navigation.h"
+#include "game/ImageAssets.h"
 #include "objects/Baseplate.h"
 #include "objects/SpawnLocation.h"
 #include "editor/Gizmo.h"
@@ -1619,6 +1620,37 @@ void TestBaseplatePhysics() {
     EndSection();
 }
 
+void TestMaterial3DCompatibility() {
+    using namespace loblox;
+    Section("Material 3D aditivo e JSON transacional");
+    Scene scene;std::string error;auto* part=scene.createPart(PartShape::Block,{0,2,0},{4,4,4},"Material");
+    const auto legacy=projectio::toJson(scene);CHECK(nlohmann::json::parse(legacy)["version"]==1);
+    for(int preset=0;preset<6;++preset) {
+        auto m=MaterialPreset3D(preset,{160,120,80,255});
+        m.baseColorTexture="assets/albedo.png";m.normalTexture="assets/normal.png";
+        m.metallicRoughnessTexture="assets/mr.png";m.occlusionTexture="assets/ao.png";
+        m.studsPerTile={2,3};m.offset={.25f,.5f};m.rotation=30;
+        CHECK(part->setMaterial3D(m,error));const auto encoded=projectio::toJson(scene);
+        CHECK(nlohmann::json::parse(encoded)["version"]==7);
+        Scene loaded;CHECK(projectio::fromJson(loaded,encoded,error));const auto* copy=loaded.findPart(part->id());
+        CHECK(copy&&copy->material3D()&&EncodeMaterial3D(*copy->material3D())==EncodeMaterial3D(m));
+        CHECK(copy&&copy->material()==part->material()&&copy->color().r==part->color().r);
+        auto* duplicate=scene.duplicatePart(*part);CHECK(duplicate&&duplicate->material3D());
+        scene.remove(duplicate);
+        auto bad=nlohmann::json::parse(encoded);for(auto& o:bad["objects"])if(o.contains("material3D"))o["material3D"]["roughness"]=-1;
+        CHECK(!projectio::fromJson(loaded,bad.dump(),error));CHECK(projectio::toJson(loaded)==encoded);
+        bad=nlohmann::json::parse(encoded);bad["version"]=6;CHECK(!projectio::fromJson(loaded,bad.dump(),error));
+    }
+    CHECK(game::ImageInUse(scene,"assets/normal.png"));
+    CHECK(game::ReplaceImageReferences(scene,"assets/normal.png","assets/replaced.png")==1);
+    CHECK(part->material3D()->normalTexture=="assets/replaced.png");
+    auto invalid=*part->material3D();invalid.normalScale=INFINITY;CHECK(!part->setMaterial3D(invalid,error));
+    part->clearMaterial3D();auto cleared=nlohmann::json::parse(projectio::toJson(scene));auto expected=nlohmann::json::parse(legacy);
+    cleared["nextId"]=expected["nextId"];CHECK(cleared==expected);
+    Scene old;CHECK(projectio::fromJson(old,legacy,error));CHECK(!old.findPart(part->id())->material3D());
+    EndSection();
+}
+
 void TestSphereBoundsCompatibility() {
     using namespace loblox;
     Section("Esfera: tamanho legado, raio real e navegacao");
@@ -1697,6 +1729,7 @@ int main() {
     TestBaseplatePhysics();
     TestClearObjects();
     TestSphereBoundsCompatibility();
+    TestMaterial3DCompatibility();
 
     std::printf("\n%d checagens, %d falhas\n", gChecks, gFailures);
     if (gFailures != 0) {

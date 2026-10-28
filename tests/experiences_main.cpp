@@ -70,6 +70,10 @@ int main(int argc,char** argv) {
         auto* part=scene.createPart(PartShape::Block,{7,4,3},{2,3,4},"PortablePart");part->setRotationEulerDegrees({0,37,0});
         part->setAttribute("decal_image",project.manifest.icon);const auto partId=part->id();
         BodyProperties body;body.density=2.5f;body.friction=.3f;body.restitution=.7f;body.linearDamping=.2f;body.angularDamping=.4f;std::string bodyError;CHECK(part->setBodyProperties(body,bodyError));
+        auto material=MaterialPreset3D(3,part->color());material.roughness=.32f;
+        material.baseColorTexture=project.manifest.banner;material.normalTexture=project.manifest.icon;
+        material.metallicRoughnessTexture=project.manifest.banner;material.occlusionTexture=project.manifest.icon;
+        CHECK(part->setMaterial3D(material,bodyError));
         auto* portableModel=scene.group({partId},"Modelo portátil",bodyError);CHECK(portableModel);const auto modelId=portableModel->id();
         ModelFrame portableFrame;CHECK(scene.modelFrame(modelId,portableFrame,bodyError));portableFrame.scale=1.5f;portableFrame.rotation=QuatFromEulerDegrees({0,20,0});
         CHECK(scene.transformModel(modelId,portableFrame,bodyError));
@@ -135,6 +139,11 @@ int main(int argc,char** argv) {
         for(const auto& rig:receivedScene.gameAssets().rigs)for(const auto& body:rig.bodies)
             if(!body.image.empty())CHECK(!game::ResolveImagePath(game::AssetsDir(),body.image).empty());
         CHECK(receivedScene.findPart(partId));CHECK(receivedScene.gameAssets().findRig(rigId));
+        const auto& receivedMaterial=receivedScene.findPart(partId)->material3D();CHECK(receivedMaterial.has_value());
+        if(receivedMaterial){CHECK(NearlyEqual(receivedMaterial->roughness,.32f));
+            for(const auto* reference:{&receivedMaterial->baseColorTexture,&receivedMaterial->normalTexture,
+                &receivedMaterial->metallicRoughnessTexture,&receivedMaterial->occlusionTexture})
+                CHECK(reference->rfind("assets/",0)==0&&!game::ResolveImagePath(game::AssetsDir(),*reference).empty());}
         CHECK(receivedScene.find(muzzleId)&&receivedScene.find(muzzleId)->parent()->id()==partId);
         ModelFrame receivedMuzzle;CHECK(receivedScene.attachmentFrame(muzzleId,receivedMuzzle,bodyError));
         CHECK(std::get<bool>(receivedScene.find(modelId)->attributes().at("_linblux_item_prototype")));

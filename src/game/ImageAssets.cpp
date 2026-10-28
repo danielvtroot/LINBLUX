@@ -387,13 +387,25 @@ bool ImageReferenceMatches(const std::string& a,const std::string& b) {
     return !a.empty()&&!b.empty()&&key(a)==key(b);
 }
 bool IsImageProperty(const std::string& key) {
-    return key=="item_icon"||key=="image"||key=="decal_image"||key=="texture_image"||key=="FaceTexture"||
+    return key=="baseColorTexture"||key=="normalTexture"||key=="metallicRoughnessTexture"||key=="occlusionTexture"||
+        key=="item_icon"||key=="image"||key=="decal_image"||key=="texture_image"||key=="FaceTexture"||
         key=="skyFront"||key=="skyBack"||key=="skyLeft"||key=="skyRight"||key=="skyUp"||key=="skyDown";
 }
 std::vector<ImageUsage> DescribeImageUsage(const Scene& scene,const std::string& reference) {
     std::vector<ImageUsage> uses;
     const auto add=[&](ImageUsage use){if(ImageReferenceMatches(use.reference,reference))uses.push_back(std::move(use));};
     for(const auto& object:scene.objects()) {
+        if(object->isPart()) {
+            const auto& part=static_cast<const Part&>(*object);
+            if(part.material3D()) {
+                const auto& m=*part.material3D();
+                for(const auto& pair:{std::pair<const char*,const std::string*>{"baseColorTexture",&m.baseColorTexture},
+                    {"normalTexture",&m.normalTexture},{"metallicRoughnessTexture",&m.metallicRoughnessTexture},{"occlusionTexture",&m.occlusionTexture}}) {
+                    ImageUsage use;use.object=part.id();use.property=std::string("material3D.")+pair.first;
+                    use.reference=*pair.second;use.kind="material";use.where=part.name()+" · "+pair.first;add(std::move(use));
+                }
+            }
+        }
         for(const auto& [key,value]:object->attributes()) {
             const auto* image=std::get_if<std::string>(&value);if(!image||!IsImageProperty(key))continue;
             ImageUsage use;use.object=object->id();use.property=key;use.reference=*image;
@@ -437,7 +449,15 @@ bool SetImageUsage(Scene& scene,const ImageUsage& use,const std::string& replace
             if(it==body.decals.end()||it->surface.image!=use.reference)return false;it->surface.image=target;}
     }else {
         auto* object=scene.find(use.object);if(!object)return false;
-        if(IsSurfaceClass(object->instanceClass())&&use.property=="surface.image") {
+        if(object->isPart()&&use.property.rfind("material3D.",0)==0) {
+            auto& part=static_cast<Part&>(*object);if(!part.material3D())return false;auto m=*part.material3D();
+            std::string* field=use.property=="material3D.baseColorTexture"?&m.baseColorTexture:
+                use.property=="material3D.normalTexture"?&m.normalTexture:
+                use.property=="material3D.metallicRoughnessTexture"?&m.metallicRoughnessTexture:
+                use.property=="material3D.occlusionTexture"?&m.occlusionTexture:nullptr;
+            if(!field||*field!=use.reference)return false;*field=target;
+            if(!part.setMaterial3D(m,error))return false;
+        }else if(IsSurfaceClass(object->instanceClass())&&use.property=="surface.image") {
             auto& surface=static_cast<Surface&>(*object);auto value=surface.properties();if(value.image!=use.reference)return false;
             value.image=target;if(!surface.setProperties(value))return false;
         }else {

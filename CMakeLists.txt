@@ -100,6 +100,7 @@ add_library(linblux_engine STATIC
   src/core/Diagnostics.cpp
   src/objects/Instance.cpp
   src/objects/Part.cpp
+  src/objects/Material3D.cpp
   src/objects/Workspace.cpp
   src/objects/Lighting.cpp
   src/objects/Baseplate.cpp
@@ -138,7 +139,7 @@ add_library(linblux_editing STATIC
 target_link_libraries(linblux_editing PUBLIC linblux_engine)
 add_library(linblux_core INTERFACE) # transitional test/embedding facade
  target_link_libraries(linblux_core INTERFACE linblux_engine linblux_editing)
-add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp src/rendering/PlayerMenu.cpp src/rendering/ExperienceOverlay.cpp src/rendering/LuaUiRenderer.cpp)
+add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp src/rendering/ModernMaterials.cpp src/rendering/PlayerMenu.cpp src/rendering/ExperienceOverlay.cpp src/rendering/LuaUiRenderer.cpp)
 target_link_libraries(linblux_renderer PUBLIC linblux_engine)
 add_library(linblux_presentation STATIC src/ui/Localization.cpp)
 target_link_libraries(linblux_presentation PUBLIC linblux_engine)
@@ -266,6 +267,10 @@ endif()
 find_program(XVFB_RUN_EXECUTABLE xvfb-run)
 if(XVFB_RUN_EXECUTABLE)
   add_executable(linblux_decal_render_tests tests/decal_render_main.cpp)
+  add_executable(linblux_material_render_tests tests/material_render_main.cpp)
+  target_link_libraries(linblux_material_render_tests PRIVATE linblux_renderer)
+  add_test(NAME linblux_material_render COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24" $<TARGET_FILE:linblux_material_render_tests>)
+  set_tests_properties(linblux_material_render PROPERTIES TIMEOUT 60 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;rendering")
   target_link_libraries(linblux_decal_render_tests PRIVATE linblux_editor)
   add_test(NAME linblux_decal_render COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 256x256x24" $<TARGET_FILE:linblux_decal_render_tests>)
   set_tests_properties(linblux_decal_render PROPERTIES TIMEOUT 45 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")

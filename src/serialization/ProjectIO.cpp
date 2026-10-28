@@ -40,6 +40,7 @@ struct ParsedObject {
     Transform transform;
     Color color{255, 255, 255, 255};
     PartMaterial material = PartMaterial::SmoothPlastic;
+    std::optional<Material3D> material3D;
     bool anchored = false;
     bool canCollide = true;
     BodyProperties bodyProperties;
@@ -452,6 +453,7 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
         return false;
     }
     out.anchored = anchored->get<bool>();
+    if(value.contains("material3D"))out.material3D=DecodeMaterial3D(value.at("material3D"));
     out.canCollide = canCollide->get<bool>();
     if(value.contains("body")) {
         const auto& body=value["body"];
@@ -513,6 +515,7 @@ std::string toJson(const Scene& scene) {
     const bool attachments=std::any_of(scene.objects().begin(),scene.objects().end(),[](const auto& o){return o->instanceClass()==InstanceClass::Attachment;});
     const bool joints=std::any_of(scene.objects().begin(),scene.objects().end(),[](const auto& o){return o->instanceClass()==InstanceClass::Attachment&&static_cast<const Attachment&>(*o).jointTarget();});
     root["version"] = joints ? 6 : attachments ? 5 : preciseModels ? 4 : hierarchy ? 3 : hasGame ? 2 : 1;
+    if(std::any_of(scene.parts().begin(),scene.parts().end(),[](const Part* p){return p->material3D().has_value();}))root["version"]=7;
     if (hasGame) root["game"] = gameData;
     root["nextId"] = scene.nextId();
 
@@ -599,6 +602,7 @@ std::string toJson(const Scene& scene) {
                            {"anchored", part->anchored()},
                            {"canCollide", part->canCollide()}});
         if(preciseModels||attachments){const auto q=part->rotation();objects.back()["orientation"]={q.x,q.y,q.z,q.w};}
+        if(part->material3D())objects.back()["material3D"]=EncodeMaterial3D(*part->material3D());
         const auto& body=part->bodyProperties();
         objects.back()["body"]={{"density",body.density},{"friction",body.friction},
             {"restitution",body.restitution},{"linearDamping",body.linearDamping},{"angularDamping",body.angularDamping}};
@@ -676,6 +680,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         if (!ParseObject(root["objects"][i], i, object, lighting, hasLighting, error)) {
             return false;
         }
+        if(object.material3D&&version<7){error="Material3D requer versão 7";return false;}
         if (version < 3 && (object.instanceClass == InstanceClass::Folder || object.instanceClass == InstanceClass::Model ||
             IsScriptClass(object.instanceClass) || (IsRootServiceClass(object.instanceClass) &&
                 object.instanceClass!=InstanceClass::Workspace && object.instanceClass!=InstanceClass::Lighting))) {
@@ -866,6 +871,7 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         part->setRotation(object.transform.rotation);
         part->setColor(object.color);
         part->setMaterial(object.material);
+        if(object.material3D&&!part->setMaterial3D(*object.material3D,error))return false;
         part->setAnchored(object.anchored);
         part->setCanCollide(object.canCollide);
         if(!part->setBodyProperties(object.bodyProperties,error))return false;

@@ -26,8 +26,9 @@ para GL_LINES, com flush e restauração da projeção; mantém o depth test e a
 oclusão por paredes. Não se aplica polygon offset de triângulos a linhas.
 AABB de esfera usa `position ± sphereRadius`, independente de rotação/tamanho
 dos outros eixos, consistente com desenho, picking e Bullet.
-As guias de esfera compartilham pontos e tesselação (7 faixas/12 setores) com a
-superfície existente, evitando cordas de outra tesselação dentro das faces.
+No caminho Compatível, guias e esfera compartilham 7 faixas/12 setores. No
+caminho moderno, as guias usam arestas espaçadas da própria malha suave,
+com a mesma rotação, evitando cordas de outra tesselação dentro das faces.
 
 **Invariantes:** `linblux_renderer` não depende de ImGui/RmlUi; a câmera do
 runtime é `Camera3D`; adaptadores de `EditorCamera` ficam na edição; render não
@@ -54,3 +55,30 @@ Fixtures/capturas do executável real: `tests/mega3d_capture.py`, fases 0/1 em
 
 **Limites:** desempenho de GPU integrada não foi medido neste ambiente; o
 renderer usa raylib/OpenGL e não há pipeline Vulkan. Testes visuais são lentos.
+
+
+**Fase 3 / ModernMaterials:** GLSL 330 compartilhado por Studio e Player para
+Parts/solo; normais por inversa transposta, iluminação por pixel, especular e
+esfera suave. Presets Plástico/Concreto/Madeira/Metal/Vidro simples/Emissivo;
+textura de cor, normal, metallic-roughness (G/B), oclusão R, UVs por dimensão da
+face, tile/offset/rotação. Texturas da ImageAssets são premultiplicadas: o shader
+recupera RGB antes de decodificar sRGB (apenas cor); mapas de dados ficam lineares.
+Iluminação linear + tonemap + saída sRGB uma vez, fog em display-space. Céu,
+decals premultiplicados e rigs permanecem nos seus passes existentes.
+
+Médio é o padrão (difuso/especular por pixel); Baixo omite especular/normais/MR;
+Alto usa GGX/Schlick com ambiente aproximado, **não PBR completo/IBL**.
+Visualizar → Qualidade 3D ou `LINBLUX_RENDER_QUALITY=legacy|low|medium|high`;
+Player também aceita `--quality`. Shader inválido/indisponível cai no caminho
+CPU anterior. `LINBLUX_DISABLE_MATERIAL_SHADER=1` é injeção de falha para teste.
+Malhas/shader são do renderer; mapas/texturas são da ImageAssets e não são
+liberados ao destruir Material. Flush e restauração isolam shader, textura e
+profundidade. Rigs/SpawnLocation decorativo ainda usam a aparência anterior.
+Não inclui sombras, IBL, SSAO, batching nem ordenação de transparência (fase 4/5).
+
+Regressão `linblux_material_render`: shader real, gradiente da esfera, quatro
+mapas, alfa, restauração de estado/Legacy, fallback forçado e igualdade de pixels
+entre chamadas Studio/Player com mesma câmera sem overlays; perfis em duas
+resoluções. Fontes primárias consultadas para o contrato de matrizes/DrawMesh:
+[vertex shader raylib 5.5](https://github.com/raysan5/raylib/blob/5.5/examples/shaders/resources/shaders/glsl330/lighting.vs),
+[rmodels](https://github.com/raysan5/raylib/blob/5.5/src/rmodels.c).
