@@ -1960,3 +1960,511 @@ Lacuna arquitetural comum aos três primeiros e ausente aqui: **instanciação d
 Modelo** (prefab). Hoje duplicar um Modelo é copiar a subárvore, não
 instanciar um protótipo — e não há propagação de mudanças.
 
+---
+
+# 19. Bibliotecas candidatas (avaliação honesta)
+
+> Critério: resolver um problema **comprovado** neste relatório, caber em GPU
+> integrada/3 GB, ser compilável junto do CMake atual e ter licença compatível
+> com distribuição local. Versões e licenças devem ser conferidas no `LICENSE`
+> do repositório oficial antes de adotar.
+
+## 19.1 Renderização
+
+| Biblioteca | Licença (verificar) | Resolve | Custo | Veredito |
+| --- | --- | --- | --- | --- |
+| **raylib (atual)** | Zlib | já faz janela, input, batch, textura, shader | — | **manter** |
+| **bgfx** | BSD-2 | render graph multi-API, passes, MSAA, backends | alto (reescreve o desenho) | não agora |
+| **sokol_gfx** | MIT | camada fina, poucos arquivos, GL/GLES | médio | alternativa viável a bgfx |
+| **wgpu-native / Dawn** | Apache-2.0 / BSD-3 | WebGPU, pipeline states | alto (novo modelo) | só se houver plano Vulkan |
+| **Filament** | Apache-2.0 | PBR, sombras, IBL, mobile-first | muito alto (~dezenas de MB) | não para 3 GB |
+| **Diligent Engine** | Apache-2.0 | PBR, sombras, multi-API | alto | não agora |
+| **Magnum** | MIT | matemática+cenas+GL | médio-alto | não |
+| **meshoptimizer** | MIT | otimização de malha, LOD | baixo | **útil** se houver malhas |
+| **cgltf** | MIT | import glTF | baixo | **útil** para importar modelos |
+
+**Conclusão:** para os problemas visuais relatados, **trocar de renderizador não
+resolve nada**. O que resolve é: (a) desligar/corrigir o passe de arestas,
+(b) adicionar depth bias, (c) adicionar sombra de contato, (d) melhorar o modelo
+de luz. Nada disso precisa de biblioteca nova.
+
+Migrar para bgfx/wgpu só se justifica quando existir **um** destes requisitos:
+sombras em cascata com muitas luzes, instancing massivo, ou backend Vulkan
+obrigatório. Nenhum está no caminho atual.
+
+## 19.2 Física
+
+| Biblioteca | Licença | Veredito |
+| --- | --- | --- |
+| **Bullet (atual)** | Zlib | **manter**; atende caixas/esferas/cápsula/juntas |
+| **Jolt** | MIT | moderno, mais rápido, melhor stacking; migração real de ~1-2 semanas e muda o “feel” |
+| **ReactPhysics3D** | Zlib | leve, mas menos maduro para juntas |
+| **PhysX 5** | BSD-3 | pesado, overkill |
+
+Migrar para Jolt **não** conserta “NPC arrastando” (§11.2 é animação/velocidade,
+não solver). Só se justifica se aparecer necessidade de muitos corpos empilhados
+ou *determinismo* entre plataformas.
+
+## 19.3 Navegação
+
+| Biblioteca | Licença | Veredito |
+| --- | --- | --- |
+| **Recast & Detour** | Zlib | **única adição realmente valiosa** se NPCs forem prioridade: navmesh real, off-mesh links, crowd |
+| NavGrid atual | — | correto para grades; limitado a XZ e sem desvio |
+
+## 19.4 Áudio
+
+| Biblioteca | Licença | Veredito |
+| --- | --- | --- |
+| **raylib (atual)** | Zlib | manter para música |
+| **miniaudio** | domínio público / MIT-0 | **útil** para mixer, bus, efeitos em memória, pan/atenuação |
+| **OpenAL Soft** | LGPL-2.1 (link dinâmico) | espacialização 3D pronta |
+| SoLoud | Zlib | alternativa simples |
+
+## 19.5 Matemática e utilidades
+
+| Biblioteca | Licença | Veredito |
+| --- | --- | --- |
+| **raymath (atual)** | Zlib | suficiente; `float32` é a limitação, não a API |
+| **glm** | MIT | só se precisar de `double`/matrizes explícitas; custo de conversão |
+| **stb_image (via raylib)** | domínio público | manter |
+
+---
+
+# 20. Problemas comprovados × hipóteses
+
+## 20.1 Comprovados pelo código (fato)
+
+| # | Problema | Evidência |
+| --- | --- | --- |
+| F1 | O contorno de arestas é **ligado por padrão** para todas as Parts não selecionadas | `EditorGeometryView{edges=true}` + `drawEditorGuides` |
+| F2 | O contorno usa **depth test ligado, sem depth bias**, com linha de 1 px e alpha 165 | `rlEnableDepthTest` + `rlDisableDepthMask`; `grep` sem `glPolygonOffset` |
+| F3 | O contorno **não existe no Player** | só `EditorUI::drawViewport` chama o passe |
+| F4 | Não há **sombra** nem **AO** de nenhum tipo | nenhum passe/função no renderer |
+| F5 | A luz é **por face**, com cor constante em toda a superfície | `LitSurface` avaliado por face; `up` constante |
+| F6 | Piso 1,09 vs parede de fundo 0,68 (1,60×) — a luz **separa** orientações | cálculo de §5.5 com valores padrão |
+| F7 | Toda Part nova é `SmoothPlastic` cinza `163,162,165` | `Part.h` |
+| F8 | Encaixe só translada; **sem snap de rotação** | `SnapSurfaces` só altera `position` |
+| F9 | Encaixe escolhe pelo **menor deslocamento**, não pela face sob o cursor | `if(length>distance)continue` |
+| F10 | Tolerância de encaixe ≈ 10 px, saturada em 2,0 unidades | `worldUnitsPerPixel*10` |
+| F11 | Editor desenha **todos os rigs** do projeto | `authoredRigs = true` |
+| F12 | NPC anda a **8 u/s** (metade do jogador) e não tem aceleração | `NpcProperties` + `desired` |
+| F13 | Rig tem 5,0 u; cápsula do jogador tem 5,8 u | `MakeR6` + `PlayerSettings` |
+| F14 | Sem foot IK nem root motion | nenhuma referência no código |
+| F15 | Áudio sem atenuação/pan; efeitos são streams; 64 vozes | `Audio.cpp` |
+| F16 | `.lo` não tem checksum | `ExperienceManager.cpp` |
+| F17 | 57 testes; nenhum mede FPS, z-precision, ordem de transparência ou `LitSurface` numericamente | `ctest -N` + busca |
+| F18 | Duas convenções de Euler convivem | `Math.h` + comentário |
+| F19 | Sem backface culling e sem frustum culling na cena | `rlDisableBackfaceCulling`; nenhum teste de visibilidade |
+| F20 | Sem ordenação de transparência | ordem de `scene.parts()` |
+
+## 20.2 Hipóteses (precisam de experimento)
+
+| # | Hipótese | Como confirmar | Como refutar |
+| --- | --- | --- | --- |
+| H1 | O tracejado vem de **empate de profundidade** linha-vs-triângulo | aplicar depth bias e comparar capturas | se o tracejado persistir com depth test desligado, a causa é outra (ex.: culling/largura) |
+| H2 | O FXAA **piora** a leitura da aresta | capturar com FXAA off | se não mudar, FXAA é irrelevante |
+| H3 | O descasamento de **gama** (céu sRGB vs cena sRGB sombreada) lava o contraste | comparar cena com céu desligado | se o contraste for o mesmo, é irrelevante |
+| H4 | O “achar plano” vem de **albedo+material idênticos**, não da luz | pintar piso/parede de cores diferentes e comparar | se continuar plano, a causa é a ausência de gradiente/sombra |
+| H5 | Patinação dos pés é a maior causa de “NPC arrastando” | medir deslocamento da sola vs solo | se a sola não deslizar, a causa é velocidade/atrito |
+| H6 | O veto de segurança (S5) rejeita encaixes válidos frequentemente | instrumentar `safe=false` e contar | se raro, é irrelevante |
+| H7 | Há interpolação de física em algum ponto do runtime | procurar buffer/`lerp` de posição entre passos | se não houver, o comentário está errado (§10.3) |
+| H8 | Rig 0,8 u menor que a cápsula causa flutuação | medir `y` da sola no Play | se o offset compensa, o problema é só documental |
+
+---
+
+# 21. Plano de modernização por fases
+
+> Regra: cada fase é **independente**, tem teste próprio e não muda formato de
+> arquivo. Nenhuma fase exige trocar renderizador ou física.
+
+## NÍVEL A — Correções rápidas (horas, risco baixo)
+
+### A1. Arestas desligadas por padrão + botão visível
+- **Problema:** linhas indesejadas sempre ligadas (F1).
+- **Evidência:** §6.1, §6.5, relatório 36.
+- **Solução:** `EditorGeometryView.edges = false`; botão “Arestas” no ribbon com
+  estado; manter F8; hover continua desenhando aresta da peça sob o cursor.
+- **Arquivos:** `src/rendering/SceneRenderer.h`, `src/editor/EditorUI.h`,
+  `src/editor/EditorUI.cpp`, `src/ui/StudioFrontend.cpp` (ribbon),
+  `assets/ui/documents/studio.rml` (se o botão for markup).
+- **Dependências:** nenhuma.
+- **Risco:** baixo. **Compatibilidade:** total.
+- **Testes:** `linblux_gizmo_visual`, `linblux_editor_precision_ui` (o teste já
+  alterna F8, então precisa ajustar a expectativa inicial).
+
+### A2. Depth bias no contorno (quando ligado)
+- **Problema:** H1/H2 (tracejado).
+- **Solução:** `rlEnablePolygonOffset(-1.0f, -1.0f)` antes do passe e
+  `rlDisablePolygonOffset()` depois; **ou** desenhar arestas com depth test
+  desligado e alpha 90; **ou** substituir `DrawLine3D` por quads de 1,2 px.
+- **Arquivos:** `src/rendering/SceneRenderer.cpp`.
+- **Risco:** baixo (só visual, só Editor). **Testes:** captura antes/depois.
+
+### A3. FXAA configurável
+- **Problema:** FXAA erode arestas finas (H2).
+- **Solução:** expor `fxaa` em `Config.h`/UI; padrão ligado, mas permitir off
+  para inspeção.
+- **Arquivos:** `src/editor/EditorUI.cpp`, `src/core/Config.h`.
+- **Testes:** `linblux_graphics_quality`.
+
+### A4. Documentar/expôr o atalho de arestas e o estado na UI
+- **Problema:** o usuário não sabia que F8 existia.
+- **Solução:** dica no viewport já existe parcialmente (`EditorUI.cpp:1991`);
+  acrescentar indicador de estado (“Arestas: ON”).
+
+### A5. Corrigir `Part::bounds` para esfera (contrato único)
+- **Problema:** AABB de depuração/navegação não representa esferas (A11).
+- **Solução:** decidir o contrato — recomendo manter `sphereRadius()` como
+  diâmetro uniforme e fazer `bounds()` devolver `{r,r,r}` **e** trocar
+  `drawEditorGuides`/`NavGrid` para usar `sphereRadius()`.
+- **Arquivos:** `src/objects/Part.h`, `src/rendering/SceneRenderer.cpp`,
+  `src/game/Navigation.cpp`.
+- **Risco:** baixo, mas muda navegação em torno de esferas. **Testes:**
+  `linblux_studio`, `linblux_game`.
+
+## NÍVEL B — Modernização moderada (dias, risco controlado)
+
+### B1. Sombras de contato (fake AO) — o maior ganho visual por esforço
+- **Problema:** falta de contato visual piso/parede (F4, §6.3).
+- **Solução:** em `drawScene`, para cada Part apoiada, desenhar um quad escuro
+  com gradiente radial na base (blend normal, depth write off), ou escurecer a
+  face inferior conforme proximidade. Sem shader novo, sem luz extra.
+- **Arquivos:** `src/rendering/SceneRenderer.cpp` (~1 função nova).
+- **Risco:** médio (overdraw, ordem). **Testes:** captura + `gizmo_visual`.
+
+### B2. Variação de material/albedo por contexto
+- **Problema:** tudo cinza igual (F7, H4).
+- **Solução:** paleta padrão com 3–4 tons de construção; `Metal`/`Concrete`
+  documentados na UI; opcional: “aplicar material a iguais”.
+- **Arquivos:** `src/objects/Part.h`, `src/editor/EditorUI.cpp` (propriedades).
+- **Risco:** baixo. **Compatibilidade:** projetos existentes mantêm a cor.
+
+### B3. Snap de rotação e escolha de face por cursor
+- **Problema:** S1, S2 (§9.6).
+- **Solução:** §9.7 itens 1 e 2.
+- **Arquivos:** `src/editor/GizmoMath.{h,cpp}`, `src/editor/Gizmo.cpp`.
+- **Risco:** médio (matemática com casos de borda). **Testes:** novos unitários
+  em `tests/studio_main.cpp` + `gizmo_visual`.
+
+### B4. Animação proporcional à velocidade (`Animator::speed`)
+- **Problema:** patinação (F14, §11.2).
+- **Solução:** `animator.speed = clamp(speedHorizontal / 5.0f, 0.6f, 1.8f)` para
+  walk; para NPC, idem com base 8. Expor `strideLength` no rig.
+- **Arquivos:** `src/game/Npc.cpp`, `src/game/Runtime.cpp`, `src/game/Rig.cpp`.
+- **Risco:** baixo. **Testes:** medir deslocamento da sola vs solo.
+
+### B5. Alinhar rig e cápsula (5,0 vs 5,8)
+- **Problema:** F13.
+- **Solução:** decidir a altura canônica (recomendo 5,8) e ajustar `MakeR6`
+  (pernas 2→2,4) **ou** `collisionHeight` (5,8→5,0); documentar.
+- **Arquivos:** `src/game/Rig.cpp`, `src/game/Rig.h`.
+- **Risco:** médio (muda o visual de todo rig existente e as animações em
+  unidades).
+- **Compatibilidade:** rigs salvos com tamanhos explícitos não mudam; só o
+  `MakeR6` padrão.
+
+### B6. Áudio com atenuação e pan
+- **Problema:** F15.
+- **Solução:** calcular ganho por distância no `AudioSystem::play`/`update` com
+  posição do listener; pan simples por produto escalar com a direita da câmera.
+- **Arquivos:** `src/game/Audio.{h,cpp}`.
+- **Risco:** baixo. **Testes:** `linblux_audio`.
+
+### B7. Step-up para o jogador
+- **Problema:** jogador trava em degraus de 0,2 que o NPC sobe.
+- **Solução:** reutilizar a lógica de `isSpaceClear` do NPC ao detectar
+  velocidade horizontal baixa + contato frontal.
+- **Arquivos:** `src/game/Runtime.cpp`.
+- **Risco:** médio. **Testes:** `linblux_rifledemo_player`.
+
+## NÍVEL C — Novos subsistemas (semanas)
+
+### C1. Iluminação por pixel via shader
+- **Problema:** cor chapada por face; sem gradiente (F5).
+- **Solução:** shader GLSL 330 com normal+posição+cor por vértice; hemisférica e
+  direcional por pixel; opcionalmente sombra por depth map.
+- **Arquivos:** `src/rendering/SceneRenderer.cpp` (novo caminho), novo
+  `shaders/`; manter o caminho CPU como fallback.
+- **Risco:** alto (maior mudança desde o início do motor). **Testes:** captura
+  comparativa + `graphics_quality`.
+
+### C2. Sombra direcional (shadow map único, 1024²)
+- **Problema:** F4.
+- **Solução:** render para depth texture a partir do sol, `sampler2DShadow`,
+  PCF 3×3. 1 passe extra.
+- **Dependências:** C1 (ou um shader mínimo separado).
+- **Risco:** alto. **Custo:** ~2× draw calls.
+
+### C3. Navmesh (Recast & Detour) para NPC
+- **Problema:** §11.3 limitações.
+- **Solução:** gerar navmesh das Parts estáticas; substituir `NavGrid` mantendo
+  a interface `findPath`.
+- **Arquivos:** `src/game/Navigation.*`, `src/game/Npc.cpp`.
+- **Risco:** médio-alto. **Testes:** headless de path em fixtures conhecidas.
+
+### C4. Mixer de áudio com buses
+- **Solução:** miniaudio com master/música/efeitos, efeitos em memória.
+- **Risco:** médio (troca de backend).
+
+### C5. Prefab / instanciação de Modelo
+- **Problema:** §18.4.
+- **Solução:** `Model` com referência a protótipo + overrides; sem mudar formato
+  atual (campo opcional `prototype_id`).
+- **Risco:** alto (serialização).
+
+## NÍVEL D — Migrações arquiteturais (meses)
+
+### D1. Render graph + backend moderno (bgfx/wgpu/Vulkan)
+- **Quando:** só com requisito de muitas luzes/sombras, instancing massivo ou
+  plataforma sem GL.
+- **Custo:** reescrever todo `SceneRenderer`, todos os shaders, todos os testes
+  gráficos.
+- **Veredito:** **não recomendado** para o estado e o alvo atuais.
+
+### D2. Troca de física (Bullet → Jolt)
+- **Quando:** necessidade comprovada de determinismo ou de muitos corpos.
+- **Custo:** reescrever `PhysicsWorld` (≈630 linhas + testes), recalibrar
+  constantes.
+- **Veredito:** **não recomendado agora**; não resolve nenhum sintoma relatado.
+
+### D3. ECS / cena com transforms relativos
+- **Problema:** hierarquia só organizacional; Model assa transforms.
+- **Custo:** muda `Scene`, `Part`, serialização, todos os editores.
+- **Veredito:** adiar; o modelo atual é previsível e testado.
+
+## 21.1 Ordem recomendada (curta)
+
+```
+A1 → A2 → B1 → B2 → A3/A4 → B4 → B5 → B3 → B6 → B7 → C3 → C1 → C2 → resto
+```
+
+Justificativa: A1/A2/B1/B2 atacam **exatamente** os sintomas visuais relatados
+(linhas, contraste, profundidade) com risco baixo e sem tocar física, Lua,
+formato ou Player. B4 ataca o sintoma de NPC. B3 ataca a imprecisão do encaixe.
+Só depois faz sentido investir em shader (C1) e sombra (C2).
+
+---
+
+# 22. Riscos, compatibilidade e licenças
+
+## 22.1 Riscos por tipo de mudança
+
+| Mudança | Compatibilidade de arquivo | Compatibilidade de comportamento | Risco |
+| --- | --- | --- | --- |
+| Default de `edges` | nenhuma alteração | Editor fica diferente (esperado) | baixo |
+| Depth bias | nenhuma | só visual | baixo |
+| Sombra de contato | nenhuma | só visual | médio (overdraw) |
+| Snap de rotação | nenhuma | arraste passa a girar peças — precisa ser **opt-in** | médio |
+| `Animator::speed` | nenhuma | animação muda de velocidade | baixo |
+| Rig 5,0 → 5,8 | rigs autorais não mudam; **novos** mudam | muda o personagem padrão | médio |
+| Step-up do jogador | nenhuma | muda rotas possíveis | médio |
+| Shader por pixel | nenhuma | muda toda a aparência | alto |
+| Navmesh | nenhuma | NPC pode escolher rotas diferentes | alto |
+
+## 22.2 Licenças
+
+O projeto usa raylib (Zlib), Bullet (Zlib), Lua 5.4 (MIT), RmlUi (MIT), Dear
+ImGui (MIT), nlohmann/json (MIT), FreeType (FTL/GPLv2 dual), libavformat
+(LGPL/GPL conforme build, sob flag `LINBLUX_AUDIO_METADATA_FFMPEG`). Todas são
+compatíveis com distribuição local, **desde que**:
+
+- FFmpeg seja compilado sem componentes GPL se o projeto for distribuído sob
+  licença permissiva;
+- o texto de atribuição de cada biblioteca seja incluído na distribuição;
+- versões exatas sejam fixadas (o CMake atual usa `find_package`/paths locais —
+  convém registrar versões).
+
+Bibliotecas sugeridas em §19 mantêm o mesmo perfil (Zlib/MIT/Apache-2.0/BSD),
+com a exceção do OpenAL Soft (LGPL, exige link dinâmico).
+
+---
+
+# 23. Recomendações finais
+
+1. **As linhas tracejadas não são z-fighting de geometria e não são um recurso
+   desejado do motor.** São um passe de depuração (`drawEditorGuides`) ligado por
+   padrão, desenhado com depth test e sem bias, em toda Part não selecionada.
+   Desligá-lo por padrão resolve a queixa principal em uma linha.
+2. **A “falta de profundidade” não é falta de luz** — a luz já separa piso de
+   parede em 1,60×. É falta de **contraste de material** e de **contato/sombra**.
+   Duas correções de custo baixo (B1, B2) mudam mais a leitura que qualquer
+   shader novo.
+3. **O encaixe não é matematicamente errado, é semanticamente incompleto**: não
+   gira para a face, não escolhe a face sob o cursor e usa tolerância grande.
+   Três ajustes localizados (B3) resolvem.
+4. **NPC “arrastando” é majoritariamente animação**: velocidade 8 u/s contra um
+   passo natural de ~5 u/s, sem foot IK e com transição de direção instantânea.
+   B4 resolve o pior sintoma sem tocar física.
+5. **Não migre renderizador nem física.** Nada nos sintomas relatados exige
+   bgfx, wgpu, Vulkan, Jolt ou PhysX. O gargalo é de **política visual e de
+   calibração**, não de infraestrutura.
+6. **Antes de qualquer refatoração de render, crie três testes** que hoje não
+   existem: (a) captura com/sem arestas e com/sem bias, (b) `LitSurface` por
+   normal/material, (c) ordem de transparência. Sem eles, qualquer mudança
+   visual é irreversível na prática.
+
+---
+
+# 24. Referências exatas ao código
+
+> Caminhos relativos à raiz do projeto. Números de linha confirmados na leitura
+> do arquivo nesta auditoria; tolerância de ±algumas linhas após edições.
+
+| Tema | Símbolo | Arquivo |
+| --- | --- | --- |
+| Desenho da cena | `SceneRenderer::drawScene` | `src/rendering/SceneRenderer.cpp` |
+| Contornos/AABB/normais | `SceneRenderer::drawEditorGuides` | `src/rendering/SceneRenderer.cpp:971` |
+| Seleção wireframe | `SceneRenderer::drawSelection` | `src/rendering/SceneRenderer.cpp` |
+| Céu procedural | `DrawProceduralSky`, `InitProceduralSky` | `src/rendering/SceneRenderer.cpp` |
+| Luz por face | `LitSurface`, `ApplyFog`, `Shade` | `src/rendering/SceneRenderer.cpp` |
+| Cor/gloss de material | `MaterialColor`, `MaterialGloss` | `src/rendering/SceneRenderer.cpp` |
+| Contorno de caixa | `DrawRotatedBoxWires` | `src/rendering/SceneRenderer.cpp` |
+| Chamada dos contornos | `drawEditorGuides(...)` em `drawViewport` | `src/editor/EditorUI.cpp:1971` |
+| Default de arestas | `EditorGeometryView` | `src/rendering/SceneRenderer.h:22`, `src/editor/EditorUI.h:191` |
+| F8 / Shift+F8 / Ctrl+F8 | atalhos | `src/editor/EditorUI.cpp:1106` |
+| Encaixe (condição) | `surfaceSnapEnabled_ || KeyCtrl` | `src/editor/EditorUI.cpp:1833` |
+| Caixa circunscrita de esfera no snap | `snapMoving/snapTargets` | `src/editor/EditorUI.cpp:1837` |
+| Diagnóstico de sobreposição | `BoxSeparation` no viewport | `src/editor/EditorUI.cpp:1996` |
+| Tolerância de encaixe | `worldUnitsPerPixel*10` | `src/editor/Gizmo.cpp:182`, `:227` |
+| Marcador de contato | desenho do círculo | `src/editor/Gizmo.cpp:530` |
+| Snap geométrico | `gizmomath::SnapSurfaces` | `src/editor/GizmoMath.cpp:52` |
+| Tolerância de contato | `ContactEpsilon` | `src/editor/GizmoMath.cpp` |
+| Escala em mundo | `ScaleFaceAlongAxis` | `src/editor/GizmoMath.cpp:220` |
+| Giro | `gizmomath::Rotate` | `src/editor/GizmoMath.cpp` |
+| Layout de tela | `gizmolayout::Build`, `PixelLength` | `src/editor/GizmoLayout.cpp` |
+| Estado de arraste | `Gizmo::update` | `src/editor/Gizmo.cpp` |
+| Sessão de física | `TransformSession::update` | `src/editor/TransformSession.cpp` |
+| Sessão de Modelo | `ModelTransformSession::update` | `src/editor/ModelTransformSession.cpp` |
+| Corpo/ação | `PhysicsWorld::createBody` | `src/physics/PhysicsWorld.cpp:120` |
+| Iterações do solver | `m_numIterations = 16` | `src/physics/PhysicsWorld.cpp:60` |
+| CCD | `setCcdMotionThreshold` | `src/physics/PhysicsWorld.cpp:153` |
+| Margem de caixa | `setImplicitShapeDimensions` | `src/physics/PhysicsWorld.cpp:333` |
+| Suspensão em edição | `setPartEditing` | `src/physics/PhysicsWorld.cpp:356` |
+| Juntas fixas | `syncJoints` (64 iterações) | `src/physics/PhysicsWorld.cpp` |
+| Cápsula do jogador | `btCapsuleShape` | `src/game/Runtime.cpp:356` |
+| Comentário de interpolação | “already interpolated” | `src/game/Runtime.cpp:189` |
+| Controlador de NPC | `NpcSystem::update` | `src/game/Npc.cpp:520+` |
+| Yaw do NPC | `setBodyYaw` | `src/game/Npc.cpp:584` |
+| Degrau do NPC | `isSpaceClear` + `setPosition` | `src/game/Npc.cpp:600` |
+| Waypoint | `waypointRadius` | `src/game/Npc.cpp:170` |
+| String pulling | `NavGrid::findPath` | `src/game/Navigation.cpp:268` |
+| Rig padrão | `MakeR6` | `src/game/Rig.cpp:61` |
+| Textura | `game::AssetTexture` | `src/game/ImageAssets.cpp:499` |
+| Áudio | `AudioSystem::play` | `src/game/Audio.cpp:193` |
+| Sandbox Lua | globais removidos | `src/scripting/LuaRuntime.cpp:1534` |
+| Hook de instruções | `lua_sethook` | `src/scripting/LuaRuntime.cpp:1762` |
+| Layout do Studio | `layout()` | `src/ui/StudioFrontend.cpp:145` |
+| Árvore | `tree()` | `src/ui/StudioFrontend.cpp:643` |
+| Esfera | `Part::sphereRadius` | `src/objects/Part.cpp:181` |
+| UI | documento e estilo | `assets/ui/documents/studio.rml`, `assets/ui/styles/studio.rcss` |
+
+---
+
+# 25. Informações que ainda precisam ser investigadas
+
+| # | Questão | Por que importa | Como investigar |
+| --- | --- | --- | --- |
+| Q1 | O tracejado desaparece com depth bias? | confirma H1 | patch de 2 linhas + captura |
+| Q2 | Existe interpolação de física no runtime? | suavidade e correção do comentário | busca por buffer de posição entre passos |
+| Q3 | Qual o `y` real da sola do rig no Play? | F13 (0,8 u) | medir em `rifledemo` |
+| Q4 | Quanto o FXAA altera a aresta? | H2 | captura com FXAA off |
+| Q5 | O descasamento de gama importa? | H3 | cena sem céu vs com céu |
+| Q6 | Com que frequência o veto do snap rejeita? | H6 | instrumentar contador |
+| Q7 | Custo real por frame de `tree()`/`properties()`? | UI em cenas grandes | profiler |
+| Q8 | `TransformSession` libera `editingParts_` em todos os caminhos de erro? | peça “congelada” após erro | testes de falha injetada |
+| Q9 | Há vazamento de `Texture2D` ao trocar de cena? | 3 GB de RAM | contar texturas |
+| Q10 | O `.lo` é determinístico byte a byte? | diffs e reprodutibilidade | exportar 2× e comparar hash |
+| Q11 | Quanto custa um frame com 2.000 Parts? | meta de desempenho | benchmark instrumentado |
+| Q12 | `drawEditorGuides` também desenha no Play em algum caminho? | vazamento de depuração | busca por chamadas; hoje só Editor |
+
+---
+
+# Apêndice A — Respostas curtas às perguntas do pedido
+
+**Por que o LINBLUX desenha linhas tracejadas?**
+Porque `drawEditorGuides` desenha as arestas de **todas** as Parts não
+selecionadas, com `GL_LINES` de 1 px, alpha 165, depth test ligado e **sem depth
+bias**. A linha coincide exatamente com a aresta do triângulo; onde a
+profundidade empata, o pixel da linha é rejeitado e aparece a face — resultando
+em traço intermitente. Somam-se FXAA e blending duplo. É um recurso de depuração
+ligado por padrão (F8 desliga).
+
+**Como o renderizador funciona?**
+Um único passe forward imediato: limpa a tela, desenha o céu procedural, entra
+em `BeginMode3D`, emite cada Part como 12 triângulos (caixa) ou 168 (esfera) com
+cor calculada **na CPU por face** (`LitSurface`) e névoa por vértice, desenha
+decals como quads texturados, e depois (só no Editor) os contornos. Não há
+sombras, AO, PBR, culling de face traseira nem ordenação de transparência.
+
+**Por que as paredes parecem iguais?**
+Porque têm a **mesma cor** (`163,162,165`), o **mesmo material**
+(`SmoothPlastic`, gloss 0,10) e a luz é **constante por face**: a parede inteira
+recebe um único valor. A luz *separa* orientações (piso 1,09 / parede de fundo
+0,68), mas sem gradiente, sem sombra e sem AO o olho não lê o encontro entre
+superfícies.
+
+**Qual é a causa das dificuldades de snap?**
+Falta snap de rotação para a normal da face; escolha da face pelo menor
+deslocamento (não pelo cursor); tolerância de ~10 px que satura em 2 unidades;
+concorrência com a grade; veto de segurança silencioso; e esferas usando caixa
+circunscrita.
+
+**Como corrigir os gizmos matematicamente?**
+§9.7: alinhar rotação à normal (`QuaternionFromAxisAngle` com eixo = `a×n` e
+ângulo = `atan2(|a×n|, a·n)`), ordenar candidatas por deslocamento **+**
+proximidade do cursor em tela, reduzir o clamp da tolerância, e aplicar a grade
+antes do encaixe.
+
+**Como melhorar texturas e iluminação?**
+Texturas já têm mipmap, trilinear e anisotrópico; falta `GL_SRGB8_ALPHA8`,
+depth bias no decal e decal projetado. Iluminação: sombra de contato (barata),
+AO por face (barata), luz por pixel (shader), sombra direcional (passe extra).
+Ordem recomendada: contraste de material → contato → pixel → sombra.
+
+**Como funciona a física Bullet?**
+Um `btDiscreteDynamicsWorld` com passo fixo 1/60, até 5 subpassos, solver 16
+iterações, split impulse, CCD nos dinâmicos, margem de caixa recalculada a cada
+redimensionamento, um corpo por Part, juntas fixas de 64 iterações, suspensão
+por `DISABLE_SIMULATION` durante edição. O jogador é uma cápsula própria
+(r 0,9 / altura 5,8) com velocidade escrita pelo controlador.
+
+**Por que NPCs se arrastam?**
+Velocidade padrão 8 u/s (metade do jogador), sem aceleração, atrito zero
+enquanto o controlador atua, direção da velocidade mudando antes do yaw, passada
+fixa de 0,8 s contra ~5 u/s naturais (patinação de 1,6×) e degrau por teleporte.
+
+**Quais bibliotecas novas realmente valem a pena?**
+Recast & Detour (navmesh), miniaudio (mixer/espacial), meshoptimizer e cgltf (se
+houver malhas). Nenhuma outra resolve os sintomas atuais.
+
+**É melhor evoluir raylib ou migrar renderizador?**
+Evoluir. Os problemas são de passe, bias, contraste e sombra — não de API
+gráfica. Migrar para bgfx/wgpu/Vulkan não muda um único pixel do que incomoda
+hoje e multiplica o risco.
+
+**Quais arquivos precisam mudar?**
+Ver §24 e as fases em §21: `SceneRenderer.{h,cpp}`, `EditorUI.{h,cpp}`,
+`Gizmo.{h,cpp}`, `GizmoMath.{h,cpp}`, `Part.h`, `Navigation.cpp`, `Npc.cpp`,
+`Runtime.cpp`, `Rig.{h,cpp}`, `Audio.{h,cpp}`, `StudioFrontend.cpp`,
+`studio.rml`/`studio.rcss`, e os testes correspondentes.
+
+**Como modernizar tudo sem quebrar a engine?**
+Uma fase por vez, cada uma com teste próprio, sem alterar formato de arquivo;
+manter o caminho CPU como fallback do shader; tornar comportamento novo
+*opt-in* quando muda a sensação de edição (snap de rotação, step-up).
+
+---
+
+# Apêndice B — Checklist de verificação deste relatório
+
+- [x] Código-fonte **não modificado** (somente leitura); ver `git status` na
+      entrega.
+- [x] Arquivo salvo em `docs/relatorios/AUDITORIA_COMPLETA_MOTOR_3D_LINBLUX.md`.
+- [x] Nenhum segredo, token, credencial ou caminho pessoal incluído.
+- [x] Nenhuma experiência privada do usuário copiada.
+- [x] Fatos e hipóteses separados (§20).
+- [x] Limitações de acesso declaradas: sem `clangd`, `rg` ou `ctags`; extração
+      textual via ATLAS; nenhuma captura de tela foi produzida nesta auditoria;
+      nenhum teste FULL executado.
+
