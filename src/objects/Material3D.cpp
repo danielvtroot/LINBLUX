@@ -50,7 +50,7 @@ Material3D DecodeMaterial3D(const nlohmann::json& j) {
     Material3D m;
     const auto color=[&](const char* key,Color fallback){if(!j.contains(key))return fallback;
         const auto& a=j.at(key);if(!a.is_array()||a.size()!=4)throw std::runtime_error("Cor requer RGBA");
-        Color c;for(int i=0;i<4;++i){if(!a[i].is_number_integer()||a[i].get<int>()<0||a[i].get<int>()>255)throw std::runtime_error("RGBA fora de 0..255");(&c.r)[i]=a[i].get<int>();}return c;};
+        Color c;for(int i=0;i<4;++i){if(!a[i].is_number_integer()||a[i].get<double>()<0||a[i].get<double>()>255)throw std::runtime_error("RGBA fora de 0..255");(&c.r)[i]=a[i].get<int>();}return c;};
     m.baseColor=color("baseColor",m.baseColor);m.emissive=color("emissive",m.emissive);
     m.metallic=j.value("metallic",m.metallic);m.roughness=j.value("roughness",m.roughness);
     m.normalScale=j.value("normalScale",m.normalScale);m.emissiveStrength=j.value("emissiveStrength",m.emissiveStrength);

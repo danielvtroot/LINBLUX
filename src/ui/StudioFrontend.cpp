@@ -1280,6 +1280,10 @@ void StudioFrontend::draw() {
         const std::string value=p.ui.gizmoLocalSpace_?"local":"world";
         if(space->GetValue()!=value)space->SetValue(value);
     }
+    if(auto* quality=dynamic_cast<Rml::ElementFormControl*>(p.el("render-quality"));quality&&p.context->GetFocusElement()!=quality) {
+        const auto q=p.ui.renderer_.quality();const std::string value=q==RenderQuality::Legacy?"legacy":q==RenderQuality::Low?"low":q==RenderQuality::High?"high":"medium";
+        if(quality->GetValue()!=value)quality->SetValue(value);
+    }
     p.ui.gizmo_.setSnap(p.ui.snapEnabled_?p.ui.moveSnap_:0,p.ui.snapEnabled_?p.ui.scaleSnap_:0,p.ui.snapEnabled_?p.ui.rotateSnapDegrees_:0);
     p.context->Update();p.syncing=false;rlImGuiSetExternalTextInput(p.editing());
     if(p.timing){p.presentationTime+=beforeScene-started;p.sceneTime+=afterScene-beforeScene;p.updateTime+=GetTime()-afterScene;p.frameTime+=GetFrameTime();}

@@ -387,7 +387,8 @@ bool ImageReferenceMatches(const std::string& a,const std::string& b) {
     return !a.empty()&&!b.empty()&&key(a)==key(b);
 }
 bool IsImageProperty(const std::string& key) {
-    return key=="item_icon"||key=="image"||key=="decal_image"||key=="texture_image"||key=="FaceTexture"||
+    return key=="baseColorTexture"||key=="normalTexture"||key=="metallicRoughnessTexture"||key=="occlusionTexture"||
+        key=="item_icon"||key=="image"||key=="decal_image"||key=="texture_image"||key=="FaceTexture"||
         key=="skyFront"||key=="skyBack"||key=="skyLeft"||key=="skyRight"||key=="skyUp"||key=="skyDown";
 }
 std::vector<ImageUsage> DescribeImageUsage(const Scene& scene,const std::string& reference) {

@@ -128,7 +128,7 @@ bool ModernMaterials::draw(const Part& part,Camera3D camera,const Lighting* ligh
     if(!material_.maps[MATERIAL_MAP_ALBEDO].texture.id)material_.maps[MATERIAL_MAP_ALBEDO].texture.id=rlGetTextureIdDefault();
     SetShaderValue(shader_,GetShaderLocation(shader_,"mapFlags"),&flags.x,SHADER_UNIFORM_VEC4);
     Vector3 scale=part.shape()==PartShape::Sphere?Vector3{part.sphereRadius(),part.sphereRadius(),part.sphereRadius()}:part.size();
-    const auto matrix=MatrixMultiply(MatrixMultiply(MatrixScale(scale.x,scale.y,scale.z),MatrixRotateQuaternion(part.rotation())),
+    const auto matrix=MatrixMultiply(MatrixMultiply(MatrixScale(scale.x,scale.y,scale.z),QuaternionToMatrix(part.rotation())),
                                      MatrixTranslate(part.position().x,part.position().y,part.position().z));
     rlDrawRenderBatchActive();
     DrawMesh(part.shape()==PartShape::Sphere?sphere_:cube_,material_,matrix);

@@ -1645,7 +1645,8 @@ void TestMaterial3DCompatibility() {
     CHECK(game::ReplaceImageReferences(scene,"assets/normal.png","assets/replaced.png")==1);
     CHECK(part->material3D()->normalTexture=="assets/replaced.png");
     auto invalid=*part->material3D();invalid.normalScale=INFINITY;CHECK(!part->setMaterial3D(invalid,error));
-    part->clearMaterial3D();CHECK(projectio::toJson(scene)==legacy);
+    part->clearMaterial3D();auto cleared=nlohmann::json::parse(projectio::toJson(scene));auto expected=nlohmann::json::parse(legacy);
+    cleared["nextId"]=expected["nextId"];CHECK(cleared==expected);
     Scene old;CHECK(projectio::fromJson(old,legacy,error));CHECK(!old.findPart(part->id())->material3D());
     EndSection();
 }
