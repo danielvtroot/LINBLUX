@@ -569,6 +569,23 @@ void VerifyEditorGuideDepth() {
     // ignore rotation. Compare against an explicit axis-aligned radius box.
     scene.clearObjects();auto* sphere=scene.createPart(PartShape::Sphere,{0,0,0},{8,2,6},"Sphere");
     sphere->setRotationEulerDegrees({20,40,15});
+    camera.position={0,0,5};
+    clean=render({});edges=render({true,false,false});
+    const float y=std::sin(PI/14),z=std::cos(PI/14);
+    const auto sa=GetWorldToScreenEx({0,-y,z},camera,640,400);
+    const auto sb=GetWorldToScreenEx({0,y,z},camera,640,400);
+    covered=0;
+    for(int i=3;i<97;++i) {
+        const auto p=Vector2Lerp(sa,sb,float(i)/100);bool found=false;
+        for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx) {
+            const auto c=GetImageColor(clean,int(p.x)+dx,int(p.y)+dy);
+            const auto e=GetImageColor(edges,int(p.x)+dx,int(p.y)+dy);
+            if(int(c.r)+c.g+c.b-int(e.r)-e.g-e.b>40)found=true;
+        }
+        covered+=found;
+    }
+    std::printf("Sphere guide seam coverage: %d/94\n",covered);CHECK(covered>=90);
+    UnloadImage(clean);UnloadImage(edges);
     auto bounds=render({false,true,false});
     ProjectedBounds expected;
     for(const auto corner:OrientedBox{{0,0,0},QuaternionIdentity(),{1,1,1}}.corners()) {
@@ -576,7 +593,9 @@ void VerifyEditorGuideDepth() {
         expected.minX=std::min(expected.minX,p.x);expected.maxX=std::max(expected.maxX,p.x);
         expected.minY=std::min(expected.minY,p.y);expected.maxY=std::max(expected.maxY,p.y);
     }
-    const auto purple=FindBounds(bounds,[](Color c){return c.r>120&&c.b>130&&c.b>c.g*1.25f;});
+    const auto purple=FindBounds(bounds,[](Color c){return c.r>c.g+20&&c.b>c.r+10;});
+    std::printf("Sphere AABB pixels: %d,%d-%d,%d; projected: %.1f,%.1f-%.1f,%.1f\n",
+        purple.minX,purple.minY,purple.maxX,purple.maxY,expected.minX,expected.minY,expected.maxX,expected.maxY);
     CHECK(BoundsNear(purple,expected,3));
     UnloadImage(bounds);UnloadRenderTexture(target);
 }

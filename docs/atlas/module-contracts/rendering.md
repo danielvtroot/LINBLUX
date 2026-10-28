@@ -26,6 +26,8 @@ para GL_LINES, com flush e restauração da projeção; mantém o depth test e a
 oclusão por paredes. Não se aplica polygon offset de triângulos a linhas.
 AABB de esfera usa `position ± sphereRadius`, independente de rotação/tamanho
 dos outros eixos, consistente com desenho, picking e Bullet.
+As guias de esfera compartilham pontos e tesselação (7 faixas/12 setores) com a
+superfície existente, evitando cordas de outra tesselação dentro das faces.
 
 **Invariantes:** `linblux_renderer` não depende de ImGui/RmlUi; a câmera do
 runtime é `Camera3D`; adaptadores de `EditorCamera` ficam na edição; render não
