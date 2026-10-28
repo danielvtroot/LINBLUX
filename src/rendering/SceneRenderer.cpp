@@ -1130,12 +1130,13 @@ void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width
 
     const auto& npcVisuals=scene.npcVisuals();
     const auto hasRigVisual=[&](InstanceId id){for(const auto& visual:npcVisuals)if(visual.part==id)return true;return false;};
+    const bool modernAvailable=quality_!=RenderQuality::Legacy&&modern_->available();
     const bool wantsShadow=(quality_==RenderQuality::Medium||quality_==RenderQuality::High)&&lighting&&lighting->shadowsEnabled()&&lighting->sunIntensity()>0&&lighting->shadowStrength()>0;
     std::vector<Part*> opaque,transparent;
     std::vector<ShadowCaster> casters;
     for(auto* part:scene.parts()) {
         if(!part||game::InventoryHidden(*part)||hasRigVisual(part->id()))continue;
-        const auto* m=quality_!=RenderQuality::Legacy&&part->material3D()?&*part->material3D():nullptr;
+        const auto* m=modernAvailable&&part->material3D()?&*part->material3D():nullptr;
         const auto alpha=m?m->baseColor.a:part->color().a;if(!alpha)continue;
         const bool textured=m&&!m->baseColorTexture.empty();
         (alpha<255||textured?transparent:opaque).push_back(part);

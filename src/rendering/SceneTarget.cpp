@@ -76,6 +76,7 @@ GLint depthFormat(unsigned fbo) {
 }
 }
 void SceneTarget::release() {
+    if(!multisample_&&!color_&&!depth_&&!resolved_.id)return;
     FrameState state;
     if(state.read==GLint(multisample_)||state.read==GLint(resolved_.id))state.read=0;
     if(state.draw==GLint(multisample_)||state.draw==GLint(resolved_.id))state.draw=0;

@@ -28,7 +28,7 @@ out vec4 finalColor;
 uniform sampler2D texture0,normalMap,mrMap,aoMap,shadowMap;
 uniform mat4 lightVP;
 uniform int shadowEnabled;
-uniform float normalBias,shadowDistance,shadowStrength;
+uniform float normalBias,shadowDistance,shadowStrength,shadowTexelDepth;
 uniform vec4 baseColor,mapFlags;
 uniform vec3 cameraPosition,sunDirection,sunColor,ambientColor,emissiveColor,objectSize,fogColor;
 uniform vec2 tile,uvOffset;
@@ -44,7 +44,8 @@ float visibility(vec3 geometricNormal,float nl){
     vec4 clip=lightVP*vec4(worldPosition+geometricNormal*normalBias,1.);
     vec3 p=clip.xyz/clip.w*.5+.5;
     if(any(lessThanEqual(p,vec3(0)))||any(greaterThanEqual(p,vec3(1))))return 1.;
-    float bias=.00015+.00065*(1.-nl),lit=0.;
+    float slope=min(4.,sqrt(max(0.,1.-nl*nl))/max(nl,.15));
+    float bias=max(.00002,shadowTexelDepth*(.75+2.*slope)),lit=0.;
     for(int x=-1;x<=1;++x)for(int y=-1;y<=1;++y)
         lit+=p.z-bias<=texture(shadowMap,p.xy+vec2(x,y)/1024.).r?1.:0.;
     float fade=1.-smoothstep(shadowDistance*.8,shadowDistance,length(cameraPosition-worldPosition));
@@ -147,7 +148,7 @@ bool ModernMaterials::draw(const Part& part,Camera3D camera,const Lighting* ligh
     const auto color=[](Color c){return Vector3{c.r/255.f,c.g/255.f,c.b/255.f};};
     const auto c=color(m.baseColor);const Vector4 base{c.x,c.y,c.z,m.baseColor.a/255.f};
     SetShaderValue(shader_,GetShaderLocation(shader_,"baseColor"),&base.x,SHADER_UNIFORM_VEC4);
-    i("shadowEnabled",shadow_.active());f("normalBias",shadow_.normalBias());
+    i("shadowEnabled",shadow_.active());f("normalBias",shadow_.normalBias());f("shadowTexelDepth",shadow_.depthBiasScale());
     f("shadowDistance",light?light->shadowDistance():80);f("shadowStrength",light?light->shadowStrength():1);
     if(shadow_.active())SetShaderValueMatrix(shader_,GetShaderLocation(shader_,"lightVP"),shadow_.matrix());
     material_.maps[MATERIAL_MAP_HEIGHT].texture={shadow_.active()?shadow_.texture():0,1024,1024,1,19};

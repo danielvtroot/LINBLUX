@@ -14,6 +14,7 @@ public:
     bool shadowActive() const {return shadow_.active();}
     bool wireSphere(Vector3 center,float radius,Quaternion rotation,Color color);
     bool ready() const {return ready_;}
+    bool available() {return initialize();}
 private:
     bool initialize();
     DirectionalShadow shadow_;

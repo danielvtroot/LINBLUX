@@ -16,6 +16,7 @@ public:
     unsigned texture() const {return depth_;}
     Matrix matrix() const {return matrix_;}
     float normalBias() const {return normalBias_;}
+    float depthBiasScale() const {return depthBiasScale_;}
 private:
     bool initialize();
     void release();
@@ -23,6 +24,6 @@ private:
     unsigned framebuffer_=0,depth_=0;
     Shader shader_{};Material material_{};
     Matrix matrix_{};
-    float normalBias_=.01f;
+    float normalBias_=.01f,depthBiasScale_=0;
 };
 }

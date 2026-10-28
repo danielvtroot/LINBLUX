@@ -37,6 +37,7 @@ bool DirectionalShadow::initialize() {
     return valid;
 }
 void DirectionalShadow::release() {
+    if(!framebuffer_&&!shader_.id&&!material_.maps){active_=false;return;}
     FrameState state;
     if(state.read==GLint(framebuffer_))state.read=0;
     if(state.draw==GLint(framebuffer_))state.draw=0;
@@ -76,7 +77,7 @@ void DirectionalShadow::update(const std::vector<ShadowCaster>& casters,Camera3D
     const float cy=std::round(((low.y+high.y)*.5f-view.m13)/texel)*texel+view.m13;
     const float nearPlane=std::max(.1f,-high.z-range*.5f),farPlane=std::max(nearPlane+1,-low.z+range*.5f);
     const auto projection=MatrixOrtho(cx-span*.5f,cx+span*.5f,cy-span*.5f,cy+span*.5f,nearPlane,farPlane);
-    matrix_=MatrixMultiply(view,projection);normalBias_=std::max(.002f,texel*.12f);
+    matrix_=MatrixMultiply(view,projection);normalBias_=std::max(.002f,texel*.2f);depthBiasScale_=texel/(farPlane-nearPlane);
     FrameState state;glBindFramebuffer(GL_FRAMEBUFFER,framebuffer_);rlViewport(0,0,1024,1024);
     glDisable(GL_SCISSOR_TEST);glDisable(GL_FRAMEBUFFER_SRGB);rlEnableDepthTest();rlEnableDepthMask();rlDisableBackfaceCulling();
     rlSetMatrixProjection(projection);rlSetMatrixModelview(view);glClear(GL_DEPTH_BUFFER_BIT);
