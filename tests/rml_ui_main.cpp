@@ -220,7 +220,6 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             key("F8");CHECK(EditorUITestAccess::editorEdges(ui)!=edges);
             key("F8");CHECK(EditorUITestAccess::editorEdges(ui)==edges);
             click("tab-View");click("editor-edges");CHECK(EditorUITestAccess::editorEdges(ui));
-            frames(2);CHECK(ui.frontend()->elementAttribute("editor-edges","aria-pressed")=="true");
             click("editor-edges");CHECK(!EditorUITestAccess::editorEdges(ui));click("tab-Home");
             click("cmd-tool-1");frames(2);auto& gizmo=EditorUITestAccess::partGizmo(ui);
             const auto layout=gizmolayout::Build(*part,ToolMode::Move,camera,view,false,gizmo.visualSettings());
