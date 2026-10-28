@@ -15,7 +15,9 @@ int checks=0,failures=0;
 int delta(Image a,Image b,int threshold=6){int count=0;for(int y=0;y<a.height;++y)for(int x=0;x<a.width;++x){auto p=GetImageColor(a,x,y),q=GetImageColor(b,x,y);count+=std::abs(int(p.r)-q.r)+std::abs(int(p.g)-q.g)+std::abs(int(p.b)-q.b)>threshold;}return count;}
 int luminance(Color c){return int(c.r)+c.g+c.b;}
 }
+#include "shadow_acceptance.h"
 int main(){
+    if(const char* path=std::getenv("LINBLUX_SHADOW_ACCEPTANCE"))return CaptureCharacterShadows(path);
     SetTraceLogLevel(LOG_WARNING);InitWindow(640,400,"LINBLUX depth quality");if(!IsWindowReady())return 77;
     const auto out=std::filesystem::path(__FILE__).parent_path().parent_path()/".turbo/logs/mega3d-phase4/depth";std::filesystem::create_directories(out);
     {
