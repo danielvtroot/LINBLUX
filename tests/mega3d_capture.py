@@ -43,7 +43,7 @@ def fixtures(root):
             part('Side wall', [-15,5,0], [1,10,20])
             target = part('Decal block', [2,3,0], [8,6,2])
             objects.append(dict(id=len(objects)+1,parent=target,name='Calibration decal',
-                                **{'class':'Decal'},surface=dict(image=str(decal),face=0)))
+                                **{'class':'Decal'},surface=dict(image=str(decal),face=1)))
             part('Sphere unequal axes', [10,2,2], [8,4,6], 'Sphere')
         elif name == 'material-gallery':
             for i, material in enumerate(('SmoothPlastic','Plastic','Wood','Metal','Concrete','Neon')):
@@ -54,7 +54,7 @@ def fixtures(root):
             for i, angle in enumerate((0,15,30,45,90)):
                 part('Rotated '+str(angle), [(i-2)*6,2,0], [4,4,1], rotation=[0,angle,0])
             objects.append(dict(id=len(objects)+1,parent=1,name='Distant pivot', **{'class':'Model'},
-                                modelPivot=dict(position=[50,2,0],rotation=[0,0,0,1],scale=[1,1,1])))
+                                modelPivot=dict(position=[50,2,0],rotation=[0,0,0,1],scale=1)))
             model = objects[-1]['id']
             part('Model child', [0,2,-8], [4,4,2]); objects[-1]['parent'] = model
         world = dict(format='loblox-project',version=6,nextId=len(objects)+1,objects=objects)
@@ -68,6 +68,11 @@ def capture(binary, root, stage):
     summary = []
     for name in ('grey-room','material-gallery','editor-snap'):
         project = root/'fixtures'/(name+'.json')
+        # Reject invalid fixtures before opening Studio (which correctly falls
+        # back to its default scene on a failed load).
+        validator=Path(__file__).resolve().parent.parent/'build-linblux/linblux_player'
+        subprocess.run([str(validator),'--validate',str(project)],check=True,timeout=15,
+                       env=dict(os.environ,XDG_STATE_HOME=str(output/'validation-state')))
         original = project.read_bytes()
         isolated = output/name
         isolated.mkdir(exist_ok=True)

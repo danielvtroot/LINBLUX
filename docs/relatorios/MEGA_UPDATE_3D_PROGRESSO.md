@@ -55,10 +55,22 @@ restart registrada. Fases 2–7 não implementadas.
 
 ## Evidência visual e build
 
-Capturas do **executável real** `build-linblux/linblux`, supervisionadas pelo
+Capturas depois do **executável real** `build-linblux/linblux`, supervisionadas pelo
 runner TURBO, com HOME/XDG isolados. Todas as três fixtures capturadas nas duas
 resoluções. Diretório reconstruível, ignorado no Git:
 `.turbo/logs/mega3d-phase01/{before,after}/`.
+
+As primeiras capturas foram feitas no executável real anterior. A inspeção
+completa encontrou `modelPivot.scale` inválido na fixture editor-snap (o Studio
+preservou corretamente a cena padrão). O gerador foi corrigido e agora valida
+**cada fixture no Player antes de capturar**, recusando fallback. Também passou
+a expor o decal na face voltada para a câmera. Para comparar todas as fixtures
+corrigidas contra o mesmo código anterior, renderer/header e EditorUI originais
+de `2aebae4` foram recompilados em arquivos/archives isolados em
+`.turbo/logs/mega3d-phase01/baseline-build/`, sem reverter fonte nem substituir o
+executável final. As capturas `before` definitivas usam esse baseline; `after`
+usa `build-linblux/linblux`. Bibliotecas engine/UI e WIP são compartilhados;
+não se trata de baseline histórico de desempenho da engine inteira.
 
 | Fixture | 1366×768 antes / depois | 1920×1080 antes / depois |
 |---|---|---|
