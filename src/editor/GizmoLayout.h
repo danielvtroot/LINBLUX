@@ -14,45 +14,41 @@ namespace loblox { class EditorCamera; }
 // desenho (Gizmo::drawOverlay) e o hit test (Gizmo::update) consomem o MESMO
 // Layout, entao nao existe icone desenhado em uma posicao e clicavel em outra.
 //
-// O overlay e screen-space por decisao de projeto:
-//   - o tamanho em pixels nao depende da distancia da camera (com limites);
-//   - pontos atras do near plane sao rejeitados (projectChecked), nunca
-//     projetados como coordenadas espelhadas;
-//   - alças que sairiam da viewport sao trazidas para dentro com linhas-guia,
-//     de modo que Parts grandes ou cameras muito proximas nao as escondem.
+// Precision Tools: compact geometry around the projected pivot. Face size
+// never controls handle distance; no leaders run to offscreen world faces.
 namespace loblox::gizmolayout {
 
 struct Settings {
     // Tamanho visual: 90 px em uma viewport de referencia de 600 px, limitado
     // para continuar utilizavel em resolucoes pequenas ou grandes.
-    float basePixelLength = 90.0f;
-    float minPixelLength = 60.0f;
-    float maxPixelLength = 132.0f;
+    float basePixelLength = 70.0f;
+    float minPixelLength = 64.0f;
+    float maxPixelLength = 80.0f;
     float referenceViewportMin = 600.0f;
 
-    float axisButtonHalf = 16.0f;
-    float planeButtonHalf = 12.0f;
-    float ringRadiusFactor = 0.78f;
-    float planeOffsetFactor = 0.23f;
+    float axisButtonHalf = 10.0f;
+    float planeButtonHalf = 6.0f;
+    float ringRadiusFactor = 0.96f;
+    float planeOffsetFactor = 0.32f;
 
-    float rotateMarkerHalfWidth = 13.0f;
-    float rotateMarkerHalfHeight = 11.0f;
+    float rotateMarkerHalfWidth = 7.0f;
+    float rotateMarkerHalfHeight = 7.0f;
     // > diagonal do retangulo (26x22) para que dois marcadores nunca se cubram.
-    float rotateMarkerSeparation = 36.0f;
+    float rotateMarkerSeparation = 22.0f;
 
-    float scaleHandleHalfWidth = 17.0f;
-    float scaleHandleHalfHeight = 17.0f;
+    float scaleHandleHalfWidth = 6.0f;
+    float scaleHandleHalfHeight = 6.0f;
     // Distancia do icone ate a face, medida em pixels.
     float scaleHandleOffsetPx = 15.0f;
-    float scaleHandleSeparation = 35.0f;
+    float scaleHandleSeparation = 24.0f;
 
     float viewportMargin = 8.0f;
     // Raio maximo (fracao do menor lado da viewport) para icones que
     // pertenceriam a uma face fora da tela.
     float maxHandleRadiusFactor = 0.46f;
 
-    float axisLineTolerance = 8.0f;
-    float ringTolerance = 8.0f;
+    float axisLineTolerance = 5.0f;
+    float ringTolerance = 5.0f;
     int ringSegments = 96;
 };
 
@@ -74,6 +70,7 @@ struct Layout {
     std::array<Vector2, 3> axisButton{};
     // axis * 2 + (side > 0). Six arrows share one layout for draw/picking.
     std::array<Vector2, 6> moveHandle{};
+    std::array<bool, 6> moveVisible{};
     std::array<Vector2, 3> planeCenter{};
     std::array<std::array<Vector2,4>,3> planeCorners{};
     std::array<bool,3> planeVisible{};
@@ -104,6 +101,8 @@ Rectangle AxisButtonRect(const Layout& layout, int axis, const Settings& setting
 Rectangle PlaneButtonRect(const Layout& layout, int plane, const Settings& settings = {});
 Rectangle RotateMarkerRect(const Layout& layout, int axis, const Settings& settings = {});
 Rectangle ScaleHandleRect(const Layout& layout, int index, const Settings& settings = {});
+
+std::array<Vector2,3> MoveArrowCorners(const Layout& layout,int axis,const Settings& settings = {});
 
 // Hit test. Prioridade e ordem ficam em Gizmo::update; aqui so geometria.
 int PickPlane(const Layout& layout, Vector2 mouse, const Settings& settings = {});

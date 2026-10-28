@@ -13,9 +13,9 @@
 namespace loblox {
 namespace {
 
-const Color kAxisColors[3] = {{235, 72, 66, 255}, {62, 174, 92, 255}, {55, 125, 225, 255}};
+const Color kAxisColors[3] = {{193, 119, 125, 255}, {126, 169, 148, 255}, {124, 153, 192, 255}};
 const Color kPlaneColors[3] = {{75, 145, 235, 125}, {68, 185, 106, 125}, {230, 90, 78, 125}};
-const Color kHighlight{255, 195, 42, 255};
+const Color kHighlight{239, 58, 81, 255};
 const Color kOutline{32, 38, 46, 255};
 void Triangle2D(Vector2 a,Vector2 b,Vector2 c,Color color) {
     const auto u=Vector2Subtract(b,a),v=Vector2Subtract(c,a);
@@ -342,8 +342,9 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
 
     if (handle_ == Handle::Axis || handle_ == Handle::ScaleFace) {
         const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, dragLocalSpace_);
-        dragOrigin_=handle_==Handle::ScaleFace?gizmomath::ScaleHandleCenter(
-            gizmolayout::MakeSnapshot(*part),activeAxis_,pickedSide,true,0):startTransform_.position;
+        // Compact face handles live at the pivot. Use that same projection
+        // reference; the world resize calculation still anchors the opposite face.
+        dragOrigin_=startTransform_.position;
         const Vector3 viewForward = Vector3Normalize(Vector3Subtract(dragOrigin_,camera.position()));
         axisViewForward_=viewForward;
         // Looking down an axis makes ray/axis intersection singular. The
@@ -421,6 +422,15 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
         rlDrawRenderBatchActive();rlEnableDepthMask();EndMode3D();
     }
 
+    const auto faceHandle=dragging_?activeHandle_:hoveredHandle_;
+    if(mode==ToolMode::Scale&&gizmomath::IsScaleFace(faceHandle)&&part.shape()==PartShape::Block){
+        const int axis=gizmomath::HandleAxis(faceHandle),side=gizmomath::HandleSide(faceHandle);
+        static const int faces[6][4]={{0,4,7,3},{1,2,6,5},{0,3,2,1},{4,5,6,7},{0,1,5,4},{3,7,6,2}};
+        const auto& f=faces[axis*2+(side>0)];const auto c=part.bounds().corners();
+        BeginMode3D(camera.camera());rlDrawRenderBatchActive();rlDisableDepthMask();rlDisableBackfaceCulling();
+        DrawTriangle3D(c[f[0]],c[f[1]],c[f[2]],{239,58,81,42});DrawTriangle3D(c[f[0]],c[f[2]],c[f[3]],{239,58,81,42});
+        rlDrawRenderBatchActive();rlEnableDepthMask();EndMode3D();
+    }
     // Passe proprio do gizmo, independente da profundidade da cena:
     //  1. descarrega o batch da cena (nenhum vertice antigo muda de estado);
     //  2. isola depth test e depth write;
@@ -439,116 +449,56 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
         return dragging_ ? activeHandle_ == id : hoveredHandle_ == id;
     };
 
-    // Ordem de desenho: linhas/guias primeiro, depois areas e por ultimo os
-    // botoes com o texto. Assim um elemento desenhado depois nunca cobre o
-    // centro clicavel de outro handle.
-    if (mode == ToolMode::Move) {
-        for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
-            for (int side : {-1, 1}) {
-                const Color color = highlighted(AxisHandleId(axisIndex, side))
-                                        ? kHighlight : kAxisColors[axisIndex];
-                DrawLineEx(center, layout.moveHandle[axisIndex * 2 + (side > 0)],
-                           4.0f * pixelScale_, color);
-            }
+    const auto axisName=[](int axis){return axis==0?"X":axis==1?"Y":"Z";};
+    const auto badge=[&](Rectangle rect,Color color){
+        DrawRectangleRec(rect,{28,30,36,248});DrawRectangleLinesEx(rect,1,color);
+        DrawRectangleRec({rect.x+rect.width*.5f-2,rect.y+rect.height*.5f-2,4,4},color);
+    };
+    // All stems stop inside the compact layout. No link to the real face.
+    if(mode==ToolMode::Move){
+        for(int plane=0;plane<3;++plane)if(layout.planeVisible[plane]){
+            const auto& q=layout.planeCorners[plane];const auto color=highlighted(PlaneHandleId(plane))?kHighlight:Color{164,170,183,150};
+            Triangle2D(q[0],q[1],q[2],{28,30,36,205});Triangle2D(q[0],q[2],q[3],{28,30,36,205});
+            for(int i=0;i<4;++i)DrawLineEx(q[i],q[(i+1)%4],1,color);
         }
-        // Ticks de snap no eixo ativo: mostram onde cada incremento cai sem
-        // alterar o hit test (sao apenas guias visuais).
-        if (dragging_ && handle_ == Handle::Axis && moveSnap_ > 0.0f && activeAxis_ >= 0) {
-            const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, localSpace_);
-            const Vector3 pivot = startTransform_.position;
-            const Vector2 direction = layout.axisDirection[static_cast<std::size_t>(activeAxis_)];
-            const Vector2 normal{-direction.y, direction.x};
-            for (int step = -6; step <= 6; ++step) {
-                if (step == 0) continue;
-                Vector2 tick{};
-                const Vector3 world = Vector3Add(
-                    pivot, Vector3Scale(axis, static_cast<float>(step) * moveSnap_));
-                if (!camera.projectChecked(world, Vector2{viewport.width, viewport.height}, tick)) continue;
-                const float half = (step % 5 == 0) ? 5.0f : 3.0f;
-                DrawLineEx(Vector2Subtract(tick, Vector2Scale(normal, half)),
-                           Vector2Add(tick, Vector2Scale(normal, half)), 1.5f,
-                           Color{235, 240, 248, 170});
-            }
+        for(int axis=0;axis<3;++axis){
+            const auto p=layout.moveHandle[axis*2+1],d=Vector2Normalize(Vector2Subtract(p,center));
+            const auto color=highlighted(AxisHandleId(axis,1))?kHighlight:kAxisColors[axis];
+            DrawLineEx(Vector2Add(center,Vector2Scale(d,9)),Vector2Subtract(p,Vector2Scale(d,4)),highlighted(AxisHandleId(axis,1))?2.5f:1.75f,color);
+            const auto corners=gizmolayout::MoveArrowCorners(layout,axis,settings);Triangle2D(corners[0],corners[1],corners[2],color);
+            DrawText(axisName(axis),int(p.x+9),int(p.y-7),12,color);
         }
-        for (int plane = 0; plane < 3; ++plane) {
-            if(!layout.planeVisible[plane])continue;
-            const auto& q=layout.planeCorners[plane];
-            const Color color = highlighted(PlaneHandleId(plane)) ? kHighlight : kPlaneColors[plane];
-            Triangle2D(q[0],q[1],q[2],color);Triangle2D(q[0],q[2],q[3],color);
-            for(int i=0;i<4;++i)DrawLineEx(q[i],q[(i+1)%4],1.5f,highlighted(PlaneHandleId(plane))?kHighlight:kPlaneColors[plane]);
+    }else if(mode==ToolMode::Scale){
+        for(int axis=0;axis<3;++axis)for(int side:{-1,1}){
+            const int index=axis*2+(side>0);const auto p=layout.scaleHandle[index],d=Vector2Normalize(Vector2Subtract(p,center));
+            const bool active=highlighted(gizmomath::ScaleFaceHandleId(axis,side));const auto color=active?kHighlight:kAxisColors[axis];
+            DrawLineEx(Vector2Add(center,Vector2Scale(d,10)),Vector2Subtract(p,Vector2Scale(d,8)),1,{143,150,164,160});
+            badge(gizmolayout::ScaleHandleRect(layout,index,settings),color);
+            DrawText(TextFormat("%s%s",axisName(axis),side>0?"+":"−"),int(p.x+9),int(p.y-6),12,color);
         }
-        for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
-            for (int side : {-1, 1}) {
-                const Color color = highlighted(AxisHandleId(axisIndex, side))
-                                        ? kHighlight : kAxisColors[axisIndex];
-                const auto p = layout.moveHandle[axisIndex * 2 + (side > 0)];
-                const auto d = Vector2Scale(layout.axisDirection[axisIndex], float(side));
-                const Vector2 n{-d.y, d.x};
-                const auto tip = Vector2Add(p, Vector2Scale(d, 14 * pixelScale_));
-                const auto base = Vector2Subtract(p, Vector2Scale(d, 10 * pixelScale_));
-                Triangle2D(tip, Vector2Add(base, Vector2Scale(n, 11 * pixelScale_)),
-                           Vector2Subtract(base, Vector2Scale(n, 11 * pixelScale_)), color);
-                if(side>0)DrawText(axisIndex==0?"X":axisIndex==1?"Y":"Z",int(tip.x+5),int(tip.y-8),14,color);
-            }
+    }else if(mode==ToolMode::Rotate){
+        for(int axis=0;axis<3;++axis){
+            const auto color=highlighted(RotateHandleId(axis))?kHighlight:kAxisColors[axis];
+            for(const auto& segment:layout.ring[axis])DrawLineEx(segment.a,segment.b,highlighted(RotateHandleId(axis))?2.25f:1.25f,color);
         }
-    } else if (mode == ToolMode::Rotate) {
-        for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
-            const Color color = highlighted(RotateHandleId(axisIndex))
-                                    ? kHighlight : kAxisColors[axisIndex];
-            for (const gizmolayout::Segment& segment : layout.ring[static_cast<std::size_t>(axisIndex)]) {
-                DrawLineEx(segment.a, segment.b, 7.0f, Color{31, 38, 48, 235});
-                DrawLineEx(segment.a, segment.b, highlighted(RotateHandleId(axisIndex)) ? 4.5f : 3.0f,
-                           color);
-                // Round joins also cover subpixel segments near an edge-on
-                // ring's extremum; a collection of flat line ends leaves holes.
-                DrawCircleV(segment.a, highlighted(RotateHandleId(axisIndex)) ? 2.25f : 1.5f, color);
-                DrawCircleV(segment.b, highlighted(RotateHandleId(axisIndex)) ? 2.25f : 1.5f, color);
-            }
-        }
-        for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
-            const Vector2 anchor = layout.rotateAnchor[static_cast<std::size_t>(axisIndex)];
-            const Vector2 marker = layout.rotateMarker[static_cast<std::size_t>(axisIndex)];
-            if (layout.rotateAnchorValid[static_cast<std::size_t>(axisIndex)] &&
-                Vector2Distance(anchor, marker) > 3.0f) {
-                DrawLineEx(anchor, marker, 2.0f, Color{31, 38, 48, 235});
-            }
-        }
-        for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
-            const Color color = highlighted(RotateHandleId(axisIndex))
-                                    ? kHighlight : kAxisColors[axisIndex];
-            const auto p=layout.rotateMarker[axisIndex];
-            DrawCircleV(p,10*pixelScale_,color);DrawCircleLinesV(p,10*pixelScale_,kOutline);
-        }
-    } else if (mode == ToolMode::Scale) {
-        for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
-            for (int side : {-1, 1}) {
-                const int index = axisIndex * 2 + (side > 0 ? 1 : 0);
-                if (!layout.scaleAnchorValid[static_cast<std::size_t>(index)]) continue;
-                const Vector2 anchor = layout.scaleAnchor[static_cast<std::size_t>(index)];
-                const Vector2 handle = layout.scaleHandle[static_cast<std::size_t>(index)];
-                if (Vector2Distance(anchor, handle) > 3.0f) {
-                    DrawLineEx(anchor, handle, 1.5f, Color{45, 52, 62, 210});
-                }
-            }
-        }
-        for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
-            for (int side : {-1, 1}) {
-                const int index = axisIndex * 2 + (side > 0 ? 1 : 0);
-                const bool highlight =
-                    highlighted(gizmomath::ScaleFaceHandleId(axisIndex, side));
-                const Color color = highlight ? kHighlight : kAxisColors[axisIndex];
-                const auto p=layout.scaleHandle[index];
-                DrawCircleV(p,14*pixelScale_,kOutline);DrawCircleV(p,12.5f*pixelScale_,color);
-                if(side<0){DrawCircleV(p,8.5f*pixelScale_,kOutline);DrawCircleV(p,3*pixelScale_,color);}
-                if(highlight)DrawCircleLinesV(p,16*pixelScale_,kHighlight);
-            }
+        for(int axis=0;axis<3;++axis){
+            const auto color=highlighted(RotateHandleId(axis))?kHighlight:kAxisColors[axis];
+            const auto rect=gizmolayout::RotateMarkerRect(layout,axis,settings);badge(rect,color);
+            DrawText(axisName(axis),int(rect.x+rect.width+3),int(rect.y+1),12,color);
         }
     }
-
-    if(dragging_) {
+    DrawRectangleRec({center.x-2,center.y-2,4,4},{219,222,229,255});
+    if(dragging_){
         const auto delta=Vector3Subtract(part.position(),startTransform_.position);
-        DrawText(TextFormat("%s  X %.3f  Y %.3f  Z %.3f",gridMode_==gizmomath::GridMode::Absolute?"Grade absoluta":"Incremento",
-            delta.x,delta.y,delta.z),12,int(viewport.height)-28,16,{235,240,248,255});
+        const char* text=mode==ToolMode::Scale?TextFormat("L %.2f   A %.2f   P %.2f",part.size().x,part.size().y,part.size().z):
+            mode==ToolMode::Rotate?TextFormat("%s  %.1f graus",axisName(activeAxis_),appliedRotation_*RAD2DEG):
+            TextFormat("Distancia %.3f u",Vector3Length(delta));
+        const float width=std::min(viewport.width-8,float(MeasureText(text,15)+24));
+        const float x=std::clamp(center.x+18,4.f,std::max(4.f,viewport.width-width-4));
+        const float y=std::clamp(center.y+layout.pixelLength+20,4.f,std::max(4.f,viewport.height-47));
+        DrawRectangleRounded({x,y,width,39},.15f,4,{24,26,31,244});DrawRectangle(int(x),int(y+5),2,29,kHighlight);
+        DrawText(mode==ToolMode::Scale?(centeredScale_?"ESCALA CENTRADA":"ESCALA POR FACE"):mode==ToolMode::Rotate?"GIRAR":"MOVER",int(x+10),int(y+4),10,{164,170,183,255});
+        DrawText(text,int(x+10),int(y+18),15,{235,238,243,255});
     }
     if(surfaceContact_.snapped) {
         Vector2 p,q;
