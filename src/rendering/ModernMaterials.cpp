@@ -50,7 +50,7 @@ float visibility(vec3 geometricNormal,float nl){
     // full penumbra radius: contact remains attached to the real geometry.
     vec2 dx=dFdx(p.xy),dy=dFdy(p.xy);float zx=dFdx(p.z),zy=dFdy(p.z),det=dx.x*dy.y-dx.y*dy.x;
     vec2 gradient=abs(det)>1e-10?vec2(zx*dy.y-zy*dx.y,zy*dx.x-zx*dy.x)/det:vec2(0);
-    if(any(lessThanEqual(p,vec3(0)))||any(greaterThanEqual(p,vec3(1))))return 1.;
+    if(length(cameraPosition-worldPosition)>=shadowDistance||any(lessThanEqual(p,vec3(0)))||any(greaterThanEqual(p,vec3(1))))return 1.;
     float slope=min(12.,sqrt(max(0.,1.-nl*nl))/max(nl,.05));
     float bias=max(.000005,shadowTexelDepth*(.3+.85*slope));
     const vec2 disk[16]=vec2[16](

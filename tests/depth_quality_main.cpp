@@ -41,7 +41,7 @@ int main(){
     ExportImage(unshadowed,(out/"shadow-off.png").c_str());ExportImage(shadowed,(out/"shadow-on.png").c_str());
     light->setSunDirection({-.7f,-1,-.4f});auto moved=render();CHECK(delta(shadowed,moved)>150);UnloadImage(moved);light->setSunDirection({.7f,-1,.4f});
     light->setShadowStrength(0);auto zero=render();CHECK(!renderer.shadowsActive());CHECK(delta(unshadowed,zero)==0);UnloadImage(zero);light->setShadowStrength(1);
-    light->setShadowDistance(16);auto distant=render();CHECK(!renderer.shadowsActive());UnloadImage(distant);light->setShadowDistance(80);
+    light->setShadowDistance(16);auto distant=render();CHECK(delta(unshadowed,distant)==0);UnloadImage(distant);light->setShadowDistance(80);
     renderer.setQuality(RenderQuality::Low);auto low=render();CHECK(!renderer.shadowsActive());UnloadImage(low);renderer.setQuality(RenderQuality::Medium);
     block->setPosition({100,2,0});auto plane=render();light->setShadowsEnabled(false);auto planeOff=render();ExportImage(plane,(out/"plane-shadow.png").c_str());ExportImage(planeOff,(out/"plane-off.png").c_str());std::printf("Plane acne difference: %d pixels\n",delta(plane,planeOff));CHECK(delta(plane,planeOff)==0);UnloadImage(plane);UnloadImage(planeOff);block->setPosition({0,2,0});
     setenv("LINBLUX_DISABLE_SHADOWS","1",1);{SceneRenderer fallback;fallback.setAntialiasing(Antialiasing::None);light->setShadowsEnabled(true);BeginTextureMode(target);fallback.drawScene(scene,camera,640,400,0);EndTextureMode();CHECK(!fallback.shadowsActive());}unsetenv("LINBLUX_DISABLE_SHADOWS");

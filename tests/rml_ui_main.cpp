@@ -208,6 +208,17 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             std::printf("Audio panel UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
             rlImGuiShutdown();CloseWindow();return failures?1:0;
         }
+        if(std::getenv("LINBLUX_SHADOW_CONTROLS_ONLY")) {
+            EditorActions actions(ui);click("tab-View");
+            CHECK(actions.dispatch({"shadow-quality","soft"}));CHECK(renderer.shadowQuality()==ShadowQuality::Soft);frames(2);
+            clickVisible("shadow-quality");key("Home");key("Down");key("Return");CHECK(renderer.shadowQuality()==ShadowQuality::Off);frames(2);CHECK(!renderer.shadowsActive());
+            CHECK(actions.dispatch({"shadow-quality","economy"}));CHECK(renderer.shadowQuality()==ShadowQuality::Economy);frames(2);
+            CHECK(actions.dispatch({"shadow-quality","high"}));CHECK(renderer.shadowQuality()==ShadowQuality::High);frames(2);capture("shadow-quality-controls");
+            CHECK(actions.dispatch({"render-quality","low"}));frames(2);CHECK(!renderer.shadowsActive());
+            CHECK(actions.dispatch({"render-quality","medium"}));CHECK(actions.dispatch({"shadow-quality","auto"}));frames(2);
+            std::printf("Shadow controls UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
         if(std::getenv("LINBLUX_EDITOR_PRECISION_ONLY")) {
             part->setTransform({{14,5,0},QuaternionIdentity(),{2,2,2}});
             auto* behind=scene.createPart(PartShape::Block,{14,5,-5},{2,2,2},"Peça atrás");behind->setAnchored(true);
