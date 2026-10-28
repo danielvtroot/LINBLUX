@@ -32,6 +32,15 @@ int main(){
     std::set<int> colors;for(int x=240;x<400;++x){auto p=GetImageColor(medium,x,195);colors.insert((p.r<<16)|(p.g<<8)|p.b);}
     CHECK(colors.size()>35);std::printf("Smooth sphere: %zu distinct samples/160\n",colors.size());
     auto player=render(RenderQuality::Medium,false);CHECK(differences(medium,player)==0);
+    sphere->setRotationEulerDegrees({15,25,35});
+    auto rotated=render(RenderQuality::Medium);
+    BeginTextureMode(target);renderer.drawScene(scene,camera,640,400,0);
+    renderer.drawEditorGuides(scene,camera,{true,false,false});EndTextureMode();
+    auto guides=LoadImageFromTexture(target.texture);ImageFlipVertical(&guides);
+    CHECK(differences(rotated,guides)>100);
+    ExportImage(guides,(out/"sphere-guides.png").c_str());
+    auto afterGuides=render(RenderQuality::Medium);CHECK(differences(rotated,afterGuides)==0);
+    UnloadImage(rotated);UnloadImage(guides);UnloadImage(afterGuides);sphere->setRotationEulerDegrees({0,0,0});
     auto restored=render(RenderQuality::Legacy);CHECK(differences(legacy,restored)==0);
     UnloadImage(legacy);UnloadImage(medium);UnloadImage(player);UnloadImage(restored);
     // Actual image asset path, including premultiplication. Opacity must not

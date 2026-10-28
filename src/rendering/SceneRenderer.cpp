@@ -1014,7 +1014,7 @@ void SceneRenderer::drawEditorGuides(const Scene& scene,Camera3D camera,const Ed
             const Color color=p->id()==hovered?Color{240,230,225,230}:Color{42,46,54,165};
             if(p->shape()==PartShape::Block)DrawRotatedBoxWires(p->position(),p->size(),p->rotation(),color);
             else if(p->shape()==PartShape::Sphere) {
-                if(quality_==RenderQuality::Legacy||!modern_->ready()||!modern_->wireSphere(p->position(),p->sphereRadius(),color))
+                if(quality_==RenderQuality::Legacy||!modern_->ready()||!modern_->wireSphere(p->position(),p->sphereRadius(),p->rotation(),color))
                     DrawSphereGuideWires(p->position(),p->sphereRadius(),color);
             }
         }

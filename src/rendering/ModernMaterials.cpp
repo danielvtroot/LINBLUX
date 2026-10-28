@@ -4,6 +4,8 @@
 #include "raymath.h"
 #include "rlgl.h"
 #include <cstdlib>
+#include <array>
+#include <set>
 namespace loblox {
 namespace {
 const char* vertex=R"GLSL(#version 330
@@ -91,6 +93,27 @@ bool ModernMaterials::initialize() {
     shader_.locs[SHADER_LOC_MAP_METALNESS]=GetShaderLocation(shader_,"mrMap");
     shader_.locs[SHADER_LOC_MAP_OCCLUSION]=GetShaderLocation(shader_,"aoMap");
     cube_=GenMeshCube(1,1,1);sphere_=GenMeshSphere(1,32,48);
+    // Sparse guides composed of the actual mesh edges, not long chords or
+    // every triangle. Keep their subsegments to follow the smooth surface.
+    std::set<std::array<int,6>> seen;
+    const auto vertexAt=[&](int i){const int index=sphere_.indices?sphere_.indices[i]:i;
+        return Vector3{sphere_.vertices[index*3],sphere_.vertices[index*3+1],sphere_.vertices[index*3+2]};};
+    const auto meridian=[](Vector3 p){float angle=std::atan2(p.z,p.x);if(angle<0)angle+=2*PI;
+        return int(std::lround(angle/(2*PI)*48))%48;};
+    for(int t=0;t<sphere_.triangleCount;++t)for(int edge=0;edge<3;++edge) {
+        auto a=vertexAt(t*3+edge),b=vertexAt(t*3+(edge+1)%3);
+        const bool pa=a.x*a.x+a.z*a.z<1e-8f,pb=b.x*b.x+b.z*b.z<1e-8f;
+        const int longitude=pa?meridian(b):meridian(a);
+        const int latitude=int(std::lround(std::acos(std::clamp(a.y,-1.f,1.f))/PI*32));
+        const bool ring=std::fabs(a.y-b.y)<1e-5f&&!pa&&!pb&&latitude%4==0;
+        const bool line=(pa||pb||meridian(a)==meridian(b))&&longitude%4==0;
+        if(!ring&&!line)continue;
+        std::array<int,3> ka{int(std::lround(a.x*1e5)),int(std::lround(a.y*1e5)),int(std::lround(a.z*1e5))};
+        std::array<int,3> kb{int(std::lround(b.x*1e5)),int(std::lround(b.y*1e5)),int(std::lround(b.z*1e5))};
+        if(kb<ka){std::swap(ka,kb);std::swap(a,b);}
+        const std::array<int,6> key{ka[0],ka[1],ka[2],kb[0],kb[1],kb[2]};
+        if(seen.insert(key).second)sphereGuides_.push_back({a,b});
+    }
     material_=LoadMaterialDefault();material_.shader=shader_;
     ready_=cube_.vaoId&&sphere_.vaoId;return ready_;
 }
@@ -135,11 +158,11 @@ bool ModernMaterials::draw(const Part& part,Camera3D camera,const Lighting* ligh
     // DrawMesh cleans its own texture/VAO/shader state. Scene remains uncullled.
     rlDisableBackfaceCulling();return true;
 }
-bool ModernMaterials::wireSphere(Vector3 center,float radius,Color color) {
+bool ModernMaterials::wireSphere(Vector3 center,float radius,Quaternion rotation,Color color) {
     if(!initialize())return false;
-    Material material=LoadMaterialDefault();material.maps[MATERIAL_MAP_ALBEDO].color=color;
-    rlDrawRenderBatchActive();rlEnableWireMode();
-    DrawMesh(sphere_,material,MatrixMultiply(MatrixScale(radius,radius,radius),MatrixTranslate(center.x,center.y,center.z)));
-    rlDisableWireMode();MemFree(material.maps);return true;
+    for(const auto& line:sphereGuides_)DrawLine3D(
+        Vector3Add(center,Vector3Scale(Vector3RotateByQuaternion(line.first,rotation),radius)),
+        Vector3Add(center,Vector3Scale(Vector3RotateByQuaternion(line.second,rotation),radius)),color);
+    return true;
 }
 }
