@@ -1,6 +1,7 @@
 #pragma once
 namespace loblox {
 enum class RenderQuality { Legacy, Low, Medium, High };
+enum class ShadowQuality { Auto, Off, Economy, Soft, High };
 enum class Antialiasing { Auto, None, FXAA, MSAA4 };
 inline const char* RenderQualityName(RenderQuality q) {
     switch(q){case RenderQuality::Legacy:return "Compatível";case RenderQuality::Low:return "Baixo";
