@@ -1652,3 +1652,311 @@ a única forma de evitar patinação é casar `Animator::speed` com a velocidade
 real**. O campo existe e não é usado para isso em todos os caminhos (o NPC usa
 `intensity` por velocidade, o jogador usa o clipe fixo).
 
+---
+
+# 13. Explorador, hierarquia e armazenamento
+
+## 13.1 Modelo de dados
+
+| Camada | Tipo | Observação |
+| --- | --- | --- |
+| `Instance` | base abstrata | id estável, nome, pai, filhos, classe |
+| `Part` | `Instance` + transform/matéria/física | 1 corpo Bullet por Part |
+| `Model` | `Container` com `ModelFrame` opcional | agrupa e permite transformar em conjunto |
+| `Attachment` | junta fixa entre duas Parts | vira `btFixedConstraint` |
+| `Surface` (`Decal`, `Texture`) | filhos de Part | textura por face |
+| `Script`, `LocalScript`, `ModuleScript` | containers de código | executam só no Play |
+| `Folder`, `Workspace`, `Lighting`, storages | organização | — |
+
+Transformações: `Part` guarda **posição/rotação/tamanho absolutos** (espaço de
+mundo). `Model` tem um *pivô* próprio e **assa** a transformação nos filhos
+(`Scene::transformModel`). Isso é simples e previsível, mas implica:
+
+- mover um Modelo é O(n) em filhos e **acumula erro** de escala (§8.6);
+- não há transform relativo ao pai (ao contrário de Godot/Unity/Unreal), então
+  “girar o pai e o filho acompanhar” só existe via operação explícita no Modelo.
+
+## 13.2 Explorador (RmlUi)
+
+- Árvore reconstruída em HTML e injetada de uma vez
+  (`el("tree")->SetInnerRML(...)`), **somente quando um hash muda**
+  (`treeHash`), o que evita reconstrução por frame no caso comum.
+- O hash é recalculado **todo frame** percorrendo todos os objetos e todos os
+  rigs (`std::hash<std::string>` de nome + id + pai). Custo O(n) por frame,
+  pequeno em cenas de centenas de Parts e relevante em milhares.
+- Busca filtra por nome+classe com `relevant()` recursivo: pior caso O(n²).
+- Suporta arrastar-e-soltar (`tree-row.drop-target`), renomear com
+  `_002`/`_003` (preserva nomes antigos, espaços, IDs e limites UTF-8),
+  colapsar/expandir, contexto (duplicar, agrupar, apagar).
+- Não há virtualização: 5.000 objetos geram 5.000 nós DOM de uma vez.
+
+## 13.3 Armazenamento
+
+| Formato | Situação | Validação |
+| --- | --- | --- |
+| Projeto JSON (legado) | `--project caminho.json` | schema versionado |
+| Pasta de experiência | `experience.json` + `assets/` | `inspect`/`loadReadOnly` |
+| Pacote `.lo` | `LOEXP v1` binário | magic + versão; ZIP **explicitamente rejeitado** |
+| Layout do Studio | JSON em `LayoutPath()` | escrito em `.tmp` + `rename` atômico |
+| Progresso do jogador | `ProgressStore` por `storageIdentity` | chave `experience:<installationId>` |
+
+Boas práticas já presentes: escrita atômica (`.tmp` + `rename`) no layout e no
+export `.lo` (`.lo-export-<id>`); leitura *read-only* de experiência importada;
+verificação de tamanho/truncamento antes de decodificar; `ids` estáveis em vez
+de ponteiros no serializado.
+
+Riscos: não há **checksum** no `.lo`; não há migração de schema declarada para o
+projeto JSON (só `version`); assets são copiados, então um projeto duplicado
+duplica imagens/áudios.
+
+---
+
+# 14. Lua 5.4 e inventário
+
+## 14.1 Sandbox — o que existe de verdade
+
+| Controle | Valor | Efeito |
+| --- | --- | --- |
+| Hook de instruções | a cada **1.000** instruções | interrompe laço infinito |
+| Quota por tarefa | 100.000 instruções | script malicioso não roda para sempre |
+| Quota por frame | 250.000 instruções | orçamento compartilhado entre scripts |
+| Memória | 256 KB – 256 MB | limite configurável |
+| Tarefas / listeners | ≤ 1.024 cada | anti-explosão |
+| Consultas espaciais | ≤ 128 | anti-explosão por frame |
+| Módulos | ≤ 64, profundidade ≤ 16 | anti-recursão |
+| Globais removidos | `dofile`, `loadfile`, `load`, `collectgarbage`, `pcall`, `xpcall` | sem I/O nem fuga de erro |
+| Nós nativos | orçamento próprio | criação de Instances limitada |
+
+Isso é **mais robusto** que a média dos motores embarcados: quota por tarefa,
+por frame, memória, profundidade de módulo e remoção de `load`.
+
+Consequência de projeto: sem `pcall`, **um erro de script não é capturável pelo
+próprio script**; ele é reportado ao host (`message(true, ...)`) e a tarefa
+morre. É uma escolha defensável (erro visível), mas significa que bibliotecas
+Lua que usam `pcall` não funcionam.
+
+## 14.2 Superfície de API
+
+- Instâncias: criar, destruir, nomear, propriedades, hierarquia, atributos com
+  orçamento.
+- Transformação: `Position`, `Rotation` (Euler), `Size`, pivô de Model,
+  `Attachment` com Euler ZYX.
+- Eventos: `Touched`, `Activated`, listeners, tarefas com `task.wait`-like.
+- Jogador: vida, dano, câmera, inventário, `ItemActions` (munição, recarga,
+  cooldown).
+- Áudio: `Sound`/música por referência `assets/...`.
+- UI: `DrawLuaUi` (desenho 2D via Lua).
+
+**Três convenções de rotação** convivem (§8.2) — é a principal armadilha da API
+para quem escreve scripts.
+
+## 14.3 Inventário e itens
+
+- `Inventory` é estado **de sessão**: guarda IDs, nunca ponteiros. O item no
+  mundo continua sendo uma Part; equipar apenas reposiciona via `ModelFrame`
+  (`grip`) e oculta a Part do desenho (`InventoryHidden`).
+- `ItemActions` é **agnóstico de tipo**: só aplica regras genéricas (intervalo,
+  consumo, munição, recarga). O efeito (raycast, projétil, som) é do script.
+  Isso é uma boa decisão de arquitetura: uma lanterna e uma arma usam a mesma
+  infraestrutura.
+- `equip`/`drop`/`collect` emitem `InventoryChange` drenados por
+  `takeChanges()`, permitindo HUD/áudio sem acoplamento.
+
+---
+
+# 15. Áudio
+
+## 15.1 Implementação real
+
+| Aspecto | Situação |
+| --- | --- |
+| Backend | raylib (`Music` streams) |
+| Vozes simultâneas | **64** (`kMaxVoices`) |
+| Efeitos | tocados como **stream** (`LoadMusicStream`), não como `Sound` em memória |
+| Música | `MusicPlaylist` declarativa (faixa única ou playlist com `repeat`) |
+| Volume | global por voz (0..1) |
+| Espacialização | **ausente** (sem atenuação por distância, sem pan) |
+| Duração | `ProbeAudio` com cache invalidado por tamanho+mtime |
+| Formato | `.wav`, `.ogg`, `.mp3` via referência `assets/<arquivo>` |
+| Metadados | `SoundAsset` (nome, volume, loop, `kind`), nunca ponteiro |
+| Limpeza | voz com dono é liberada quando a Part dona desaparece |
+
+**Por que usar stream para efeitos:** economiza RAM (crítico em 3 GB), mas
+impede disparos muito rápidos do mesmo som (abrir stream custa I/O) e limita o
+total a 64. **Por que o áudio parece “chapado”:** sem atenuação por distância e
+sem pan, um tiro a 50 unidades soa igual a um tiro a 2.
+
+## 15.2 O que falta (impacto decrescente)
+
+1. Atenuação por distância + pan (2D) ou espacialização real (OpenAL/miniaudio).
+2. Cache de efeitos curtos em memória (`Sound`), mantendo stream só para música.
+3. Barramento (master/música/efeitos) — hoje só volume por voz + master da UI.
+4. Fade in/out e crossfade na playlist (hoje troca seca).
+
+Nada disso exige trocar de biblioteca; 1 e 2 são ~200 linhas em `Audio.cpp`.
+
+---
+
+# 16. RmlUi e interface
+
+## 16.1 Composição
+
+- Documento `assets/ui/documents/studio.rml` (53 linhas, quase tudo em uma
+  linha por painel) + `studio.rcss` (252 linhas) + `player.rcss`,
+  `experiences.rcss`, `theme.rcss`.
+- Posicionamento **absoluto em pixels**, calculado em C++ `layout()`:
+  `panelTop = 144`, `statusHeight = 23`, `viewport-label = 26`,
+  toolbox 222 px (clamp 180..25% da largura), explorer/properties 326 px
+  (clamp 270..34%), `bottom` 290 px (clamp 180..52% da altura).
+- O viewport 3D é o **espaço restante**; a UI não sobrepõe o 3D (exceto
+  `game-layer` e popups).
+- Duas classes de compactação: `compact` (largura < 1400) e `player-compact`
+  (< 950).
+- Escala por DPI via `transform: scale(dpi)` no `#studio`.
+- Divisores arrastáveis (`data-split`) com persistência em JSON.
+
+## 16.2 Riscos e limitações comprovadas
+
+| Ponto | Evidência | Consequência |
+| --- | --- | --- |
+| Constantes mágicas de layout | 144, 26, 23, 5 px espalhados em `layout()` | qualquer mudança de altura do ribbon quebra o viewport |
+| Duas fontes de verdade do ribbon | HTML em `studio.rml` **e** string gerada em `ribbon()` | divergência silenciosa entre markup e C++ |
+| `padding-right: 216px` no ribbon para reservar o `#snap-group` (210 px) | `studio.rcss` | em fonte maior o grupo cobre botões |
+| Sem escala de fonte | `font-size: 12px` fixo | ilegível em 4K sem DPI scaling externo |
+| `tree()` reconstrói DOM inteiro | `SetInnerRML` | perda de foco/scroll em árvores grandes |
+| `properties()` retorna cedo durante edição | comentário no código | evita perder clique, mas adia atualização |
+| Medição de pixels por `ImGui` para o viewport | `traceBoxes()` | duas medições de layout por frame quando muda |
+| Sem tema claro / contraste configurável | `studio.rcss` | único tema escuro |
+
+Um ponto positivo relevante: o Studio mede os retângulos reais do RmlUi
+(`bounds(id)` → `GetAbsoluteOffset` + `GetBox().GetSize`) e usa **esses** números
+para o viewport, em vez de repetir as constantes. É o padrão correto.
+
+---
+
+# 17. Testes e cobertura
+
+## 17.1 Inventário (fatos do `ctest -N`)
+
+**57 testes registrados**, 31 arquivos em `tests/`. Distribuição:
+
+| Grupo | Testes | Tipo |
+| --- | --- | --- |
+| Headless de domínio | `linblux_studio`, `linblux_game`, `linblux_tests`, `linblux_manipulation`, `linblux_spawn`, `linblux_experiences`, `linblux_image_assets`, `linblux_audio`, `linblux_defaults`, `linblux_engine_default_*`, `linblux_item_actions`, `linblux_atlas`, `linblux_turbo` | C++ puro |
+| Player / CLI | `linblux_player_help`, `_validate`, `linblux_help`, `linblux_startup_no_display` | processo |
+| Gráficos (exigem Xvfb/GL) | `linblux_decal_render`, `linblux_rig_image`, `linblux_gizmo_visual`, `linblux_sky_capture`, `linblux_graphics_quality` (+1080), `linblux_visual_studio`, `linblux_health_hud`, `linblux_rifledemo_player`, `linblux_player_menu` | captura/inspeção |
+| Integração de UI (X11 + RmlUi) | `linblux_experience_ui`, `linblux_editor_precision_ui`, `linblux_audio_panel_ui`, `linblux_rml_ui`, `linblux_rig_decals_ui`, `linblux_mouse_lock`, `linblux_script_input_ui`, `linblux_item_controls_ui`, `linblux_models_ui`, `linblux_body_properties_ui`, `linblux_manipulation_ui`, `linblux_rig_input`, `linblux_studio_ui`, `linblux_game_ui`, `linblux_editor_input`, `linblux_player_menu_ui`, `linblux_player_window_ui`, `linblux_lua_ui_render` | automação de input |
+| Python (subprocesso) | `linblux_editor_restart`, `linblux_experience_startup`, `linblux_engine_default_restart`, `linblux_lua_player_validation`, `linblux_lua_ui_player`, `linblux_progress_player_ui`, `linblux_rifledemo_player`, `linblux_backup`, `linblux_video`, `linblux_home_video`, `linblux_lua_interface`, `linblux_experience_startup` | scripts |
+
+Densidade de asserções (por `CHECK`/`REQUIRE` no arquivo):
+
+| Arquivo | Asserções |
+| --- | --- |
+| `tests/studio_main.cpp` | 670 |
+| `tests/test_main.cpp` | 461 |
+| `tests/rml_ui_main.cpp` | 400 |
+| `tests/game_main.cpp` | 252 |
+| `tests/editor_input_main.cpp` | 144 |
+| `tests/experiences_main.cpp` | 100 |
+
+## 17.2 O que **é** testado
+
+- **Encaixe geométrico**: caixas de 0,2 a 2000, rotações 0/15/30/45/90°,
+  contato, restrições, obstáculos, pivô deslocado, filho rotacionado,
+  undo/redo e cancelamento (relatório 35).
+- **NPC**: 8 direções, giro por passo ≤ `turnSpeed·dt`, deslocamento 3,8–4,1 u
+  em 2 s a `speed=2`, parada, rigidez vertical, material preservado, invariantes
+  (relatório 37, em Bullet real).
+- **Precisão do editor em X11**: 63 verificações (Alt+clique, Shift+Modelo, F8,
+  arraste com Ctrl, contato sem penetração, undo).
+- **Arestas/hover/AABB/normais**: `gizmo_visual` compara pixels em 1280×720 e
+  1920×1080.
+- **Céu**: `sky_capture` valida o shader e o fallback.
+- **Persistência**: `defaults`, `engine_default_lifecycle`, `backup`,
+  `experiences`.
+- **Lua**: `lua_interface`, `lua_player_validation`, `lua_ui_player`.
+
+## 17.3 O que **não** é testado (lacunas comprovadas)
+
+| Lacuna | Risco | Teste sugerido |
+| --- | --- | --- |
+| Sem teste de **linhas tracejadas com depth bias** | a correção de §6.4 pode regredir | captura comparando com/sem offset (novo) |
+| Sem teste de **precisão de z-buffer por distância** | decisões de near/far sem base | teste gráfico em 5 profundidades |
+| Sem teste de **loop-de-luz**: `LitSurface` nunca é comparado numericamente | mudanças de iluminação só por captura | unitário: 6 normais × 6 materiais |
+| Sem teste de **ordem de transparência** | blending incorreto invisível em teste | cena com 3 caixas alpha |
+| Sem teste de **snap com rotação** (S1) | comportamento inexistente | — |
+| Sem teste de **escolha de face por cursor** (S2) | regressão provável | unitário em `SnapSurfaces` |
+| Sem teste de **`transformModel` repetido** | erro acumulado (§8.6) | 100 escalas |
+| Sem teste de **`Animator::speed` vs velocidade** | patinação (§11.2) | medir deslocamento da sola |
+| Sem teste de **memória/vazamento de textura** | 3 GB de RAM | contagem de `Texture2D` após N cenas |
+| Sem teste de **desempenho** (FPS, ms/frame) | nenhuma meta medida | benchmark no `linblux_graphics_quality` |
+| Sem teste de **regressão visual automatizada** (diff de imagem como gate) | capturas são inspecionadas à mão | hash perceptual + tolerância |
+
+Também não há teste de `PhysicsWorld` isolado quanto a **margem após
+redimensionamentos sucessivos**, apesar do comentário explícito no código.
+
+## 17.4 Infraestrutura de testes
+
+- TURBO roda os testes gráficos supervisionados, com timeout por teste,
+  orçamento global, encerramento de grupo e log completo em `.turbo/logs/`.
+- Estados `PASSED_PARTIAL`, `BUDGET_EXHAUSTED`, `TIMEOUT`, `REUSED`,
+  `NO_TESTS` e `UNKNOWN` **não** são aprovação plena — a documentação do projeto
+  é explícita nisso, e é uma prática acima da média.
+
+---
+
+# 18. Comparação com engines conhecidas
+
+> Comparações são **conceituais e por arquitetura pública**; nenhuma foi medida
+> neste projeto. Servem para localizar o LINBLUX no espaço de decisões.
+
+## 18.1 Renderização
+
+| Engine | Modelo | LINBLUX |
+| --- | --- | --- |
+| Godot 4 | `RenderingServer` desacoplado da cena; Forward+/Mobile/Compatibility; shadow maps, SSAO, GI opcional | renderer embutido na cena, sem servidor, sem sombra |
+| Unity | SRP (URP/HDRP), passes nomeados, shader graph, lightmaps | passe único em C++ |
+| Unreal | deferred, Lumen/Nanite, virtual shadow maps | forward imediato por face na CPU |
+| Roblox | `Lighting.Technology` em níveis (Voxel → ShadowMap → Future com sombras e PBR via `SurfaceAppearance`) | meio caminho: cor por face + `Neon` unlit, sem sombra e sem PBR |
+| Blender (viewport) | EEVEE/Workbench, gizmos e snapping maduros | mais próximo do **Workbench** (`Solid` com matcap/studio light) |
+
+O LINBLUX está, hoje, no nível “Workbench/Roblox Voxel antigo”: geometria
+simples, luz direcional por face, sem sombra. **Isso é coerente com o alvo**
+(notebook de 3 GB, GPU integrada, mapas pequenos) e não é, por si, um defeito.
+
+## 18.2 Gizmos e snapping
+
+| Engine | Abordagem | Lição aplicável |
+| --- | --- | --- |
+| Godot 4 | `EditorNode3DGizmoPlugin` com `add_handles`, `get_handle_value`, `set_handle`, `commit_handle`; handles desenhados com alpha e testados por proximidade | o LINBLUX já tem o equivalente (`HandleId` + `Layout`), e está **bem** nesse aspecto |
+| Blender | snap com **alvo explícito** (vértice/aresta/face/volume/incremento) + “Snap Base”; incremento e absoluto separados | o LINBLUX só tem “face” e “grade”, sem escolher o alvo nem o ponto-base — lacuna principal (§9.6) |
+| Unity | `Gizmos` em espaço de mundo + `Handles` para editores customizados | separação entre “debug gizmo” e “handle de edição” |
+| Roblox Studio | arraste com snap de stud e alinhamento por superfície; sem snap de rotação por normal | o LINBLUX imita e já vai além (SAT, veto de obstáculo) |
+
+## 18.3 Física
+
+| Engine | Abordagem | LINBLUX |
+| --- | --- | --- |
+| Godot | Jolt/GodotPhysics, character body com `move_and_slide` | cápsula Bullet com velocidade escrita (equivalente manual) |
+| Unity | PhysX, `CharacterController` com step offset e slope limit nativos | sem step offset para o jogador |
+| Unreal | Chaos, `CharacterMovementComponent` com rede, step-up, crouch, root motion | muito mais simples |
+| Roblox | solver próprio, Humanoid com estados (Running/Jumping/Climbing) | NPC com máquina de estados mínima |
+
+O que o LINBLUX tem de sólido: um corpo por Part, suspensão durante edição,
+CCD, margem corrigida, juntas fixas com iterações próprias. O que falta é
+**controller** (chão/encosta/degrau) e **política de atrito** unificada entre
+jogador e NPC.
+
+## 18.4 Editor e dados
+
+| Engine | Editor | LINBLUX |
+| --- | --- | --- |
+| Godot | cena como árvore de nós, `PackedScene`, recursos externos | árvore de Instances + JSON/`.lo` |
+| Unity | prefabs, cenas, `.meta`/GUID | Modelos sem prefab instanciável |
+| Roblox | `rbxlx/rbxl` XML/binary, serviços fixos | `.lo` binário versionado |
+| Blender | `.blend` com bibliotecas e *append/link* | sem biblioteca de assets reutilizável |
+
+Lacuna arquitetural comum aos três primeiros e ausente aqui: **instanciação de
+Modelo** (prefab). Hoje duplicar um Modelo é copiar a subárvore, não
+instanciar um protótipo — e não há propagação de mudanças.
+
