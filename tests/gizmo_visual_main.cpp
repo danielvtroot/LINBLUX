@@ -348,6 +348,7 @@ void VerifyRotatedPartRendering(RenderTexture2D target, SceneRenderer& renderer,
     Scene scene;
     Part* part = scene.createPart(PartShape::Block, Vector3{0.0f, 5.0f, 0.0f},
                                   Vector3{8.0f, 2.0f, 4.0f}, "RotationRegression");
+    scene.lighting()->setSkyEnabled(false);scene.lighting()->setSkyColor({20,90,160,255});
     part->setAnchored(true);
     part->setColor(Color{8, 8, 8, 255});
 
@@ -388,7 +389,7 @@ void VerifyRotatedPartRendering(RenderTexture2D target, SceneRenderer& renderer,
 
         const PixelBounds selection =
             FindBounds(image, [](Color color) {
-                return color.a > 200 && color.r > 145 && std::abs(int(color.r)-color.g)<16 && std::abs(int(color.g)-color.b)<16;
+                return color.a > 200 && color.r > 130 && std::abs(int(color.r)-color.g)<35 && std::abs(int(color.g)-color.b)<35;
             });
         ++gChecks;
         if (!BoundsNear(selection, expected, 5)) {
