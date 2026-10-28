@@ -223,7 +223,7 @@ Image RenderCase(RenderTexture2D target, SceneRenderer& renderer, Scene& scene, 
     EndTextureMode();if(gSceneImage.data)UnloadImage(gSceneImage);gSceneImage=LoadImageFromTexture(target.texture);ImageFlipVertical(&gSceneImage);
     const Rectangle view{0,0,float(target.texture.width),float(target.texture.height)};
     GizmoInput input;input.mousePosition={-100,-100};
-    if(mode==ToolMode::Scale){const auto layout=gizmolayout::Build(part,mode,camera,view,false);for(const auto& face:layout.faces)if(face.visible){input.mousePosition=face.screen;break;}}
+    if(mode==ToolMode::Scale||(mode==ToolMode::Move&&gizmo.faceMove())){const auto layout=gizmolayout::Build(part,ToolMode::Scale,camera,view,false);for(const auto& face:layout.faces)if(face.visible){input.mousePosition=face.screen;break;}}
     gizmo.update(mode,&part,camera,view,true,true,input);
     BeginTextureMode(target);gizmo.drawOverlay(part,mode,camera,view);
     EndTextureMode();
@@ -589,6 +589,24 @@ int main() {
     VerifySurfaceFeedback();
     VerifyEditorGuideDepth();
 
+    // Move must expose the same visible mesh as Scale, including positive axes
+    // (legacy Move HandleSide returns zero for a positive axis).
+    gizmo.setFaceMove(true);
+    for(float width:{2.f,191.f})for(float yaw:{.75f,-2.4f}){
+        nearPart->setTransform({{0,5,0},QuaternionIdentity(),{width,10,1}});
+        gCase="DirectFaceMove/"+std::to_string(width)+"/"+std::to_string(yaw);
+        const Image image=RenderCase(target,renderer,scene,*nearPart,gizmo,ToolMode::Move,camera,nearPart->position(),20,yaw,.4f);
+        const Rectangle view{0,0,float(kWidth),float(kHeight)};
+        const int axis=gizmomath::HandleAxis(gizmo.hoveredHandle());CHECK(axis>=0);
+        if(axis>=0){const auto normal=Vector3Scale(gizmomath::Axis(axis,nearPart->rotation(),false),gizmomath::HandleSide(gizmo.hoveredHandle())<0?-1.f:1.f);
+            std::array<gizmolayout::Mesh,3> meshes{};meshes[0]=gizmolayout::FaceGrip(*nearPart,camera,view,gizmo.faceAnchor(),normal);
+            int colored=0;for(const auto& t:meshes[0].triangles){const auto q=Vector2Scale(Vector2Add(Vector2Add(t.screen[0],t.screen[1]),t.screen[2]),1.f/3);
+                if(!Inside(image,q))continue;const auto color=PixelAt(image,q);if(color.r>100&&color.r>color.g*1.8f&&ControlAt(image,q))++colored;}
+            CHECK(colored>10);
+        }
+        UnloadImage(image);++casesRun;
+    }
+    gizmo.setFaceMove(false);
     const ToolMode modes[3] = {ToolMode::Move, ToolMode::Scale, ToolMode::Rotate};
     const char* modeNames[3] = {"Move", "Scale", "Rotate"};
     const ViewConfig views[5] = {

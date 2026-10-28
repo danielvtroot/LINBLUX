@@ -313,7 +313,7 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
         // tip outside the projected face. Its triangles are the drawn mesh.
         if(previousHover!=gizmomath::HandleId::None && faceIndex_>=0){
             const int index=faceIndex_;
-            std::array<gizmolayout::Mesh,3> controls{};const auto normal=mode==ToolMode::Move?Vector3Scale(gizmomath::Axis(gizmomath::HandleAxis(previousHover),part->rotation(),localSpace_),float(gizmomath::HandleSide(previousHover))):layout.faces[index].normal;
+            std::array<gizmolayout::Mesh,3> controls{};const auto normal=mode==ToolMode::Move?Vector3Scale(gizmomath::Axis(gizmomath::HandleAxis(previousHover),part->rotation(),localSpace_),float(gizmomath::HandleSide(previousHover)<0?-1:1)):layout.faces[index].normal;
             controls[0]=gizmolayout::FaceGrip(*part,camera,viewport,faceAnchorWorld_,normal);
             if(gizmolayout::PickMesh(controls,localMouse)==0)facePick={index,faceAnchorWorld_,Vector3Distance(camera.position(),faceAnchorWorld_)};
         }
@@ -473,7 +473,7 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
             for(size_t i=0;i<face.polygon.size();++i)DrawLine3D(Vector3Add(face.polygon[i],offset),Vector3Add(face.polygon[(i+1)%face.polygon.size()],offset),{237,80,99,210});
         }
         rlDrawRenderBatchActive();EndMode3D();
-        const auto normal=mode==ToolMode::Move?Vector3Scale(gizmomath::Axis(gizmomath::HandleAxis(faceHandle),part.rotation(),dragging_?dragLocalSpace_:localSpace_),float(gizmomath::HandleSide(faceHandle))):face.normal;
+        const auto normal=mode==ToolMode::Move?Vector3Scale(gizmomath::Axis(gizmomath::HandleAxis(faceHandle),part.rotation(),dragging_?dragLocalSpace_:localSpace_),float(gizmomath::HandleSide(faceHandle)<0?-1:1)):face.normal;
         mesh(gizmolayout::FaceGrip(part,camera,viewport,anchor,normal),accent);
         // Preview only the original active face; never draw diagonal debug axes.
         if(dragging_&&!layout.sphere){Part original(0,"preview",PartShape::Block);original.setTransform(startTransform_);
