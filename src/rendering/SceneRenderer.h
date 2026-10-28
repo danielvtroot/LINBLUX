@@ -42,6 +42,8 @@ public:
     RenderQuality quality() const {return quality_;}
     bool modernReady() const;
     bool shadowsActive() const;
+    void setShadowQuality(ShadowQuality value){shadowQuality_=value;}
+    ShadowQuality shadowQuality() const {return shadowQuality_;}
     void setAntialiasing(Antialiasing value) {antialiasing_=value;}
     Antialiasing antialiasing() const {return antialiasing_;}
     Antialiasing actualAntialiasing() const;
@@ -66,6 +68,7 @@ public:
 
 private:
     void drawScenePass(const Scene&,Camera3D,int,int,InstanceId,const RigRenderState*,bool);
+    ShadowQuality shadowQuality_=ShadowQuality::Auto;
     Antialiasing antialiasing_=Antialiasing::Auto;
     std::unique_ptr<SceneTarget> target_;
     RenderQuality quality_=RenderQuality::Medium;

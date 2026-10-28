@@ -83,10 +83,21 @@ resoluções. Fontes primárias consultadas para o contrato de matrizes/DrawMesh
 [vertex shader raylib 5.5](https://github.com/raysan5/raylib/blob/5.5/examples/shaders/resources/shaders/glsl330/lighting.vs),
 [rmodels](https://github.com/raysan5/raylib/blob/5.5/src/rmodels.c).
 
-**Fase 4 / profundidade e qualidade (28/10/2026):** `DirectionalShadow` possui
-FBO/depth texture 1024², ajusta o frustum aos casters próximos da câmera e
-estabiliza seu centro em texels. PCF 3×3, normal bias e depth bias proporcional
-à inclinação/texel e profundidade do frustum; fade no limite de distância.
+**Fase 4 / profundidade e qualidade — revisão visual:** `DirectionalShadow`
+possui depth texture comparativa 1024² em Econômicas/Suaves e 2048² em Alta.
+O fit considera a interseção do volume visível da câmera com os bounds dos
+receptores; chão enorme e paredes fora de vista não dominam o XY do mapa.
+Casters fora da câmera cujo footprint na luz alcança os receptores continuam
+incluídos. Este recorte pertence somente ao passe de sombras, não ao renderer
+principal/índice espacial da fase 5. Centro estabilizado em texels, extensão
+quantizada com histerese; alcance efetivo adaptativo de 36/48 até 64 unidades,
+sempre limitado pelo máximo configurado em Lighting. Não há cascatas.
+
+Comparação bilinear (`sampler2DShadow`/GL_COMPARE_REF_TO_TEXTURE) e disco
+simétrico fixo no espaço da luz: 4/8/16 taps, sem ruído temporal/de tela.
+Correção de profundidade do plano receptor por derivadas, bias residual de
+normal/inclinação e fade em distância/borda. O filtro afeta somente a sombra;
+AA da cena permanece no `SceneTarget` e não é substituto para este filtro.
 Parts/solo recebem sombras; Parts opacas e corpos dos rigs projetam sombras.
 Rigs e marcadores SpawnLocation ainda recebem iluminação CPU, sem consultar
 shadow map. Vidro não projeta sombra opaca; textura alfa usa corte de 0.5 no
@@ -128,3 +139,21 @@ cores planas, fallback e redimensionamento nas duas resoluções. Teste gráfico
 sempre pelo TURBO; mini benchmark llvmpipe não representa GPU integrada.
 Contrato do depth FBO baseado na API pública e no
 [exemplo oficial raylib 5.5](https://github.com/raysan5/raylib/blob/5.5/examples/shaders/shaders_shadowmap.c).
+
+**Controles da revisão:** Visualizar → Sombras (`auto/off/economy/soft/high`),
+`SceneRenderer::setShadowQuality` ou `LINBLUX_SHADOW_QUALITY`. Auto usa Suaves
+no Médio e Alta no Alto; Baixo/Compatível mantêm zero shadow map mesmo com
+um override alto. Alta indisponível cai para 1024²/8 taps, mantendo o shader de
+material; falha do alvo básico desliga sombras. A indisponibilidade é lembrada,
+sem tentar realocar 2048² em todo frame. `LINBLUX_DISABLE_HIGH_SHADOWS=1`
+injeta o fallback. As opções são de sessão; o formato de cena não mudou.
+
+`tests/shadow_acceptance.h` carrega o personagem/rig **distribuído com a engine**,
+cria o chão correspondente, captura 1366×768/1920×1080 e oito frames de movimento.
+Diagnóstico lê resolução/texel/matriz/taps dos uniforms reais da GPU, não apenas
+o enum solicitado. `shadow_studio_capture.py` compara o executável real antigo
+com o recompilado no mesmo JSON, câmera e luz. Uso supervisionado pelo TURBO.
+Regressão verifica 4/8/16 taps, 1024/2048, fallback, zero acne no piso vazio,
+contato preservado e deslocamento inteiro de texel sob translação pequena.
+A estabilidade em giros grandes/trocas de volume não é garantia de ausência de
+popping; não há filtro temporal. Medições llvmpipe não comprovam GPU física.

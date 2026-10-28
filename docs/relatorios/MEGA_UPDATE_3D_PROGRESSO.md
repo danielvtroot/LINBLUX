@@ -405,3 +405,86 @@ Esta primeira correção trata só dos gizmos; sombras seguem para commit separa
   original. Originais não foram alterados; manifests e hashes ficam nos artefatos.
 - WIPs anteriores preservados. Fase 5 não iniciada. Aceitação final do usuário
   permanece aberta; sombras ainda não aprovadas nesta revisão.
+
+## Revisão visual obrigatória — sombras (28/10/2026)
+
+Correção restrita ao segundo problema reprovado; **fase 5 não iniciada**.
+Os visuais foram inspecionados em capturas reais, além dos testes automatizados.
+Aceitação final do usuário e reprodução no arquivo original continuam abertas:
+nenhum caminho/imagem original foi fornecido, mesmo após solicitação.
+
+### Diagnóstico e correção
+
+- No rig real distribuído com LINBLUX, o código anterior cobria **111,5 unidades
+  em 1024²**, texel de **0,108887 unidade**. Médio e Alto usavam o mesmo mapa e
+  nove comparações pontuais em grade 3×3. Os grandes degraus foram reproduzidos
+  em câmera próxima/oblíqua; MSAA/FXAA da cena não removiam a quantização interna.
+  O perfil da captura original do usuário é desconhecido; a reprodução fixa
+  explicitamente os perfis e registra parâmetros reais lidos dos uniforms GL.
+- Ajustado o fit à região visível dos receptores, sem descartar casters fora da
+  câmera que projetam sombra nessa região. Centro em texels e extensão quantizada
+  com histerese reduzem instabilidade sob pequenos movimentos.
+- Comparação bilinear de profundidade + disco simétrico fixo, com 4/8/16 amostras;
+  sem aleatoriedade por pixel/frame. Derivadas do plano receptor corrigem a
+  profundidade de cada amostra, com bias residual menor e contato preservado.
+- Médio automático: **1024², 50 unidades, texel 0,0488281, 8 taps** nesta cena.
+  Alto automático: **2048², 66 unidades, texel 0,0322266, 16 taps**.
+  Há melhoria de aproveitamento/filtragem antes do aumento de resolução:
+  2,23× mais densidade no Médio; 3,38× no Alto, comparados ao mapa anterior.
+- Visualizar → Sombras oferece Automático, Desligadas, Econômicas, Suaves e Alta.
+  Também há `LINBLUX_SHADOW_QUALITY=auto|off|economy|soft|high` e setter do renderer.
+  Baixo/Compatível não alocam nem executam shadow map, mesmo com override alto.
+  Alta indisponível cai para 1024²/8 taps; falha básica desliga sombras.
+  Sem blur global, SSAO, mudanças em materiais/BRDF, física, Lua ou backend.
+
+### Evidência e validação
+
+- Dois executáveis reais recompilados: `build-linblux/linblux` e `linblux_player`.
+  Raylib/Bullet/Lua não foram reconstruídos. O build foi incremental sobre os
+  consumidores dos cabeçalhos afetados; nenhuma suíte FULL/RmlUi geral executada.
+- TURBO FAST **14/14 PASSED**, sem cache, timeout ou pendências; testes 10.1s,
+  build 128.9s, total 145.3s; run `20261028T080609Z-32428`.
+- Regressões focadas **PASSARAM**: depth quality (**190 checks**, qualidade,
+  fallback real para 1024², translação de câmera, estados GL/depth, AA e contato),
+  materiais (**31**, fallback com zero diferenças), decals (**9**), controle de
+  sombras por UI real (**32**, teste curto isolado) e Player/menu real (**19.60s**).
+  Piso vazio: **0 pixels de acne**; ponto de contato: soma RGB **634 → 354**.
+  Matemática/gizmos/Studio também foram validados na primeira correção e no FAST.
+- Capturas antes/depois de 1366×768 e 1920×1080 com JSON/câmera/luz idênticos:
+  `.turbo/logs/visual-correction/shadows/{before,after}` (rig real, perfis e oito
+  frames de movimento) e `shadows/{studio-before,studio-after}` (Studio real).
+  Os manifests do Studio têm o mesmo hash de projeto. Antes usa o executável
+  preservado de `0b88cd5`. Depois usa o recompilado. Não houve pós-blur das imagens.
+- A inspeção dos PNGs do Studio nas duas resoluções e do renderer confirma uma
+  borda de sombra significativamente mais contínua, com os grandes degraus/bandas
+  anteriores removidos. Corpo, chão, decal e UI permanecem nítidos no seu passe.
+  O movimento pode ser comparado no visualizador local, sem interpolar os frames:
+  `.turbo/logs/visual-correction/index.html` (gizmos, sombras e Studio).
+- IMPACT foi consultado; testes relevantes foram selecionados pelo risco de
+  renderer/passe GL, consumidores de materiais/decals e runtime Player. O restante
+  do plano estrutural não foi executado decorativamente. Isto não é aprovação
+  global/Release. O restart historicamente falho não foi repetido sem relação.
+
+### Custo medido e limites
+
+Somente llvmpipe, 2 threads, rig entregue pela engine + chão, três frames de
+preparo e mediana de cinco frames. O host apresentou carga/variação de outros
+processos; estas amostras curtas **não** permitem concluir desempenho de GPU
+física nem uma comparação estatística de velocidade com o baseline:
+
+| Resolução | Baixo / sem sombra e AA | Médio / 1024² + 8 taps + FXAA | Alto / 2048² + 16 taps + MSAA 4× |
+|---|---:|---:|---:|
+| 1366×768 | 60,31 ms | 281,10 ms | 596,06 ms |
+| 1920×1080 | 233,81 ms | 459,61 ms | 933,50 ms |
+
+Alto é caro em software e usa 4× os texels do mapa Médio. Para menor custo,
+selecionar Econômicas (1024²/4 taps), Suaves, Desligadas ou perfil Baixo; MSAA
+continua configurável separadamente. Os valores incluem o perfil de material/AA,
+não apenas o passe de sombra. Não se afirma que Alto é adequado a hardware fraco.
+
+Limites explícitos: mapa único, alcance efetivo adaptativo de 36/48 até 64 unidades
+(abaixo do máximo de Lighting); regiões distantes podem ficar sem sombra. Mudanças
+grandes de câmera/volume/luz ainda podem causar atualização perceptível do fit;
+não há cascatas nem filtro temporal. Rigs/decals continuam com iluminação CPU como
+antes, embora o rig projete sombra em Parts. O arquivo original do usuário não foi
+alterado nem testado porque não foi identificado. WIPs originais preservados.
