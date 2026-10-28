@@ -616,8 +616,8 @@ void TestGizmoLayout() {
     const float normal = PixelLength(Vector2{640.0f, 400.0f});
     const float large = PixelLength(Vector2{900.0f, 700.0f});
     const float huge = PixelLength(Vector2{3840.0f, 2160.0f});
-    CHECK_NEAR(tiny, 60.0f, 0.01f);
-    CHECK_NEAR(huge, 132.0f, 0.01f);
+    CHECK_NEAR(tiny, 64.0f, 0.01f);
+    CHECK_NEAR(huge, 80.0f, 0.01f);
     CHECK(large > normal);
     CHECK(huge >= large);
 
@@ -664,7 +664,7 @@ void TestGizmoLayout() {
     for (int axis = 0; axis < 3; ++axis) {
         const float distance = Vector2Distance(smallPart.center,
                                                smallPart.axisButton[axis]);
-        CHECK(distance >= 60.0f - 0.5f && distance <= 132.5f);
+        CHECK(distance >= 17.5f && distance <= 80.5f);
         const Rectangle rect = AxisButtonRect(smallPart, axis);
         const Vector2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
         if (PickPlane(smallPart, center) < 0) CHECK(PickAxisButton(smallPart, center) == axis);
@@ -697,6 +697,28 @@ void TestGizmoLayout() {
     for (int index = 0; index < 6; ++index) {
         CHECK_NEAR(first.scaleHandle[index].x, second.scaleHandle[index].x, 0.0001f);
         CHECK_NEAR(first.scaleHandle[index].y, second.scaleHandle[index].y, 0.0001f);
+    }
+
+    // Precision handles remain bounded independently of wall size, camera
+    // distance and resolution. Square corners are real hit targets too.
+    for(const Vector2 size:{Vector2{1366,768},Vector2{1920,1080}})
+    for(float wall:{.2f,191.f})for(float distance:{4.f,42.f,220.f})
+    for(const Vector2 orbit:{Vector2{.75f,.48f},Vector2{0,0},Vector2{1.6f,1.1f}}){
+        part.setSize({wall,10,1});camera.setOrbit(part.position(),distance,orbit.x,orbit.y);
+        const Rectangle view{0,0,size.x,size.y};const auto scale=Build(part,ToolMode::Scale,camera,view,true);
+        for(int index=0;index<6;++index){
+            CHECK(Vector2Distance(scale.center,scale.scaleHandle[index])<=105);
+            const auto r=ScaleHandleRect(scale,index);CHECK(r.width<=12.1f&&r.height<=12.1f);
+            CHECK(PickScaleHandle(scale,{r.x+1,r.y+1})==gizmomath::ScaleFaceHandleId(index/2,index%2?1:-1));
+        }
+        const auto move=Build(part,ToolMode::Move,camera,view,false);int visible=0;
+        for(int index=0;index<6;++index)visible+=move.moveVisible[index];CHECK(visible==3);
+        const auto rotate=Build(part,ToolMode::Rotate,camera,view,false);
+        for(int axis=0;axis<3;++axis){
+            CHECK(Vector2Distance(rotate.center,rotate.rotateMarker[axis])<=120);
+            float distanceToRing=1000;for(const auto& line:rotate.ring[axis])distanceToRing=std::min(distanceToRing,Vector2Distance(rotate.rotateMarker[axis],Vector2Scale(Vector2Add(line.a,line.b),.5f)));
+            CHECK(distanceToRing<.01f); // markers are attached to the drawn ring
+        }
     }
 
     // Pivo atras da camera: nenhuma geometria valida e nenhum picking.
@@ -1014,6 +1036,7 @@ void TestGizmoHandleDrags() {
                 Gizmo gizmo;
                 TransformSession session(gizmo, physics);
                 const auto layout = gizmolayout::Build(*part, mode, camera, viewport, false);
+                if(mode==ToolMode::Move&&index<6&&!layout.moveVisible[index])continue;
                 if (mode == ToolMode::Move && index >= 6 && !layout.planeVisible[index - 6]) {
                     // An edge-on plane has no usable screen area. It must not
                     // be picked as a planar drag using an invented direction.

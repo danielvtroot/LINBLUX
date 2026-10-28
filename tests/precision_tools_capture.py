@@ -17,8 +17,12 @@ def prepare(root):
     for o in objects:
         if o['class']=='Lighting':o.update(skyEnabled=False,sunDirection=[-.45,-1,.55],sunIntensity=1,brightness=1,fogDensity=0)
     # Real shipped rig, also present while building; use its authored data.
-    rigs=world.get('game',{}).get('rigs',[])
+    character=json.loads((source.parent/'character.loblox.json').read_text())
+    world['game']['rigs']=copy.deepcopy(character['game']['rigs']);world['game']['defaultRig']=character['game']['defaultRig']
+    rigs=world['game']['rigs']
     if rigs:rigs[0]['root']['position']=[8,3,6]
+    objects.append(dict(id=next_id,parent=wall['id'],name='Decal de construção',**{'class':'Decal'},surface=dict(image=str(Path(__file__).resolve().parents[1]/'tests/fixtures/surface-test.png'),face=1)))
+    next_id+=1
     world['nextId']=next_id
     path=root/'construction.json';path.write_text(json.dumps(world,indent=2)+'\n')
     (root/'source.json').write_text(json.dumps(dict(source=str(source),source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),wall=wall['id'],rigs=len(rigs)),indent=2))
@@ -30,6 +34,8 @@ def capture(args):
     if not project.exists():project=prepare(root)
     before=project.read_bytes();output=root/args.stage;output.mkdir(exist_ok=True)
     env=dict(os.environ,HOME=str(output),XDG_DATA_HOME=str(output/'data'),XDG_CONFIG_HOME=str(output/'config'),XDG_STATE_HOME=str(output/'state'),LIBGL_ALWAYS_SOFTWARE='1',LP_NUM_THREADS='2')
+    def click(x,y):
+        xdo('mousemove',x,y);xdo('mousedown',1);time.sleep(.25);xdo('mouseup',1);time.sleep(.4)
     with (output/'studio.log').open('w') as log:
         proc=subprocess.Popen([str(args.binary.resolve()),'--project',str(project)],cwd=output,env=env,stdout=log,stderr=log)
         try:
@@ -39,12 +45,12 @@ def capture(args):
             window=wait_for(find_window,proc,25)
             for width,height in ((1366,768),(1920,1080)):
                 xdo('windowsize',window,width,height);xdo('windowmove',window,0,0);xdo('windowfocus','--sync',window);time.sleep(2)
-                xdo('mousemove',width-220,243);xdo('click',1);time.sleep(.5)
+                click(width-220,243)
                 for distance,zoom in [('close',0),('far',-4)]:
                     if zoom:
                         xdo('mousemove',int(width*.45),int(height*.5));xdo('click','--repeat',4,'--delay',120,5);time.sleep(.5)
                     for name,x in [('move',133 if width==1366 else 145),('scale',214 if width==1366 else 233),('rotate',295 if width==1366 else 320)]:
-                        xdo('mousemove',x,92);xdo('click',1);xdo('mousemove',5,5);time.sleep(.7)
+                        click(x,92);xdo('mousemove',5,5);time.sleep(.7)
                         subprocess.run(['scrot','-o','-u',str(output/f'{name}-{distance}-{width}.png')],check=True,timeout=5)
                 # Return to the same camera before resizing.
                 xdo('mousemove',int(width*.45),int(height*.5));xdo('click','--repeat',4,'--delay',120,4);time.sleep(.5)
