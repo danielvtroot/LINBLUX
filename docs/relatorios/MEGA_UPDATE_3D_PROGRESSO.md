@@ -152,8 +152,8 @@ compilação, diagnóstico das fixtures, capturas e validação. Sem medir GPU r
 ## Publicação e retomada
 
 Commit atômico: `fix(rendering): make editor guides opt-in and depth-correct`.
-Seu hash é o commit que adiciona este relatório (`git log -1 --format=%H --
-docs/relatorios/MEGA_UPDATE_3D_PROGRESSO.md`). Push normal para `origin/main`;
+Hash da primeira entrega: `044fc7b9e7ace88741e394c040f932b84fa154ec`.
+Push normal para `origin/main`;
 comparação `git rev-parse HEAD` / `git ls-remote origin refs/heads/main` registrada
 no encerramento em `.turbo/logs/mega3d-phase01/publication.json`.
 WIP e documentos anteriores continuam locais. Nenhum cache/build/imagem no Git.
