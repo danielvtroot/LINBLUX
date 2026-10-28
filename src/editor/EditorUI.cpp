@@ -777,7 +777,8 @@ void EditorUI::redoTransform() {
 }
 
 void EditorUI::drawTransformReadout(const EditorInput& input, Vector2 imagePosition) {
-    if (!readout_.visible) return;
+    if (!readout_.visible||tool_==ToolMode::Select) return;
+    if(!readout_.editing&&gizmo_.dragging())return;
     Part* part = scene_.findPart(readout_.partId);
     if (part == nullptr) {
         clearTransformReadout();
@@ -1723,6 +1724,11 @@ void EditorUI::drawViewport() {
     gizmoInput.windowFocused = context.windowFocused;
     gizmoInput.shiftDown = input.shift;
     gizmoInput.altDown = input.alt;
+    if(tool_==ToolMode::Scale&&selection&&!gizmo_.dragging()){
+        const auto ray=camera_.rayFromScreen({input.mouse.x-viewportRect.x,input.mouse.y-viewportRect.y},{viewportRect.width,viewportRect.height});
+        for(const auto* p:scene_.parts())if(p!=selection&&!selection->isAncestorOf(p)&&p->color().a>=250){
+            const auto hit=p->intersect(ray);if(hit.hit)gizmoInput.occlusionDistance=std::min(gizmoInput.occlusionDistance,hit.distance);}
+    }
     // Volumes reais dos filhos: o pivô deslocado de um Modelo não é seu centro geométrico.
     std::vector<gizmomath::SurfaceBox> snapMoving,snapTargets;
     if(tool_==ToolMode::Move&&(surfaceSnapEnabled_||ImGui::GetIO().KeyCtrl)&&selection) {

@@ -149,6 +149,11 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="rename") {if(c.value.empty()||c.value.size()>128)throw std::runtime_error("Name must contain 1..128 bytes");if(auto* node=e.scene_.find(c.instance))node->setName(c.value);else if(auto* rig=e.scene_.gameAssets().findRig(e.selectedRig_))rig->name=c.value;}
         else if(c.action=="reparent") {std::string error;if(!e.scene_.reparent(e.scene_.find(c.instance),e.scene_.find(std::stoull(c.value)),error))throw std::runtime_error(error);}
         else if(c.action=="snap") {e.endGizmoSession(true,"snap");e.cancelRigGizmo();e.snapEnabled_=c.value=="true";}
+        else if(c.action=="scale-origin") {
+            if(c.value!="face"&&c.value!="center")throw std::runtime_error("Origem da escala inválida");
+            e.endGizmoSession(true,"scale_origin");e.cancelRigGizmo();
+            e.gizmo_.setCenteredScaleOption(c.value=="center");e.rigGizmo_.setCenteredScaleOption(c.value=="center");
+        }
         else if(c.action=="grid-mode") {
             if(c.value!="relative"&&c.value!="absolute")throw std::runtime_error("Grade inválida");
             e.endGizmoSession(true,"grid_mode");e.gizmo_.setGridMode(c.value=="absolute"?

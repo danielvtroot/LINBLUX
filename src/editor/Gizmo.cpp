@@ -136,6 +136,7 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                                 const GizmoInput& input) {
     GizmoUpdateResult result;
     const auto settings=visualSettings();
+    const auto previousHover=hoveredHandle_;
     consumedLastInput_ = false;
     if (!dragging_) hoveredHandle_ = gizmomath::HandleId::None;
     const auto finish = [this](GizmoUpdateResult value) {
@@ -208,6 +209,8 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                                                         delta, snap);
                 part->setTransform(Transform{centeredScale_&&part->shape()==PartShape::Sphere?startTransform_.position:transformed.position, startTransform_.rotation,
                                              transformed.size});
+                const auto size=gizmolayout::MakeSnapshot(*part).size;
+                faceAnchorWorld_=Vector3Add(part->position(),Vector3RotateByQuaternion({faceAnchorLocal_.x*size.x,faceAnchorLocal_.y*size.y,faceAnchorLocal_.z*size.z},part->rotation()));
             }
             return finish(result);
         }
@@ -302,12 +305,19 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
             }
         }
     } else if (mode == ToolMode::Scale) {
-        facePick=gizmolayout::FaceUnderCursor(layout,localMouse);
+        // The one visible grip is interactive too, including its protruding
+        // tip outside the projected face. Its triangles are the drawn mesh.
+        if(gizmomath::IsScaleFace(previousHover)){
+            const int index=gizmomath::HandleAxis(previousHover)*2+(gizmomath::HandleSide(previousHover)>0);
+            std::array<gizmolayout::Mesh,3> controls{};controls[0]=gizmolayout::FaceGrip(*part,camera,viewport,faceAnchorWorld_,layout.faces[index].normal);
+            if(gizmolayout::PickMesh(controls,localMouse)==0)facePick={index,faceAnchorWorld_,Vector3Distance(camera.position(),faceAnchorWorld_)};
+        }
+        if(facePick.index<0)facePick=gizmolayout::FaceUnderCursor(layout,localMouse);
         if(facePick.distance>input.occlusionDistance+.002f)facePick.index=-1;
         const auto id=facePick.index<0?gizmomath::HandleId::None:gizmomath::ScaleFaceHandleId(facePick.index/2,facePick.index%2?1:-1);
         if (gizmomath::IsScaleFace(id)) {
             const auto& face=layout.faces[facePick.index];
-            faceAnchorWorld_=layout.sphere?facePick.point:face.anchor;
+            faceAnchorWorld_=layout.sphere||Vector2Distance(face.screen,localMouse)>150?facePick.point:face.anchor;
             auto offset=Vector3RotateByQuaternion(Vector3Subtract(faceAnchorWorld_,part->position()),QuaternionInvert(part->rotation()));
             const auto size=gizmolayout::MakeSnapshot(*part).size;
             faceAnchorLocal_={offset.x/size.x,offset.y/size.y,offset.z/size.z};faceGrab_=facePick.point;
@@ -478,7 +488,9 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
     // Painter order gives self-occlusion without allowing the selected solid
     // to hide its own transform tools. Face picking still obeys scene occlusion.
     std::stable_sort(paint.begin(),paint.end(),[](const Painted& a,const Painted& b){return a.triangle.depth>b.triangle.depth;});
-    BeginMode3D(camera.camera());rlDrawRenderBatchActive();rlDisableDepthTest();rlDisableDepthMask();rlDisableBackfaceCulling();
+    BeginMode3D(camera.camera());rlDrawRenderBatchActive();
+    if(mode==ToolMode::Scale)rlEnableDepthTest();else rlDisableDepthTest();
+    rlDisableDepthMask();rlDisableBackfaceCulling();
     for(const auto& p:paint){const auto& t=p.triangle.world;auto normal=Vector3Normalize(Vector3CrossProduct(Vector3Subtract(t[1],t[0]),Vector3Subtract(t[2],t[0])));
         const float shade=.65f+.35f*std::fabs(Vector3DotProduct(normal,Vector3Normalize({-.3f,.8f,.6f})));
         Color color{(unsigned char)(p.color.r*shade),(unsigned char)(p.color.g*shade),(unsigned char)(p.color.b*shade),p.color.a};
