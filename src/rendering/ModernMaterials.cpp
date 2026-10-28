@@ -98,15 +98,16 @@ bool ModernMaterials::initialize() {
     std::set<std::array<int,6>> seen;
     const auto vertexAt=[&](int i){const int index=sphere_.indices?sphere_.indices[i]:i;
         return Vector3{sphere_.vertices[index*3],sphere_.vertices[index*3+1],sphere_.vertices[index*3+2]};};
-    const auto meridian=[](Vector3 p){float angle=std::atan2(p.z,p.x);if(angle<0)angle+=2*PI;
-        return int(std::lround(angle/(2*PI)*48))%48;};
+    const auto uvAt=[&](int i){const int index=sphere_.indices?sphere_.indices[i]:i;
+        return Vector2{sphere_.texcoords[index*2],sphere_.texcoords[index*2+1]};};
     for(int t=0;t<sphere_.triangleCount;++t)for(int edge=0;edge<3;++edge) {
         auto a=vertexAt(t*3+edge),b=vertexAt(t*3+(edge+1)%3);
-        const bool pa=a.x*a.x+a.z*a.z<1e-8f,pb=b.x*b.x+b.z*b.z<1e-8f;
-        const int longitude=pa?meridian(b):meridian(a);
-        const int latitude=int(std::lround(std::acos(std::clamp(a.y,-1.f,1.f))/PI*32));
-        const bool ring=std::fabs(a.y-b.y)<1e-5f&&!pa&&!pb&&latitude%4==0;
-        const bool line=(pa||pb||meridian(a)==meridian(b))&&longitude%4==0;
+        const auto ua=uvAt(t*3+edge),ub=uvAt(t*3+(edge+1)%3);
+        // Select grid lines in the mesh's native UVs, independent of its pole
+        // axis. Guessing latitude from Y makes discontinuous zigzags on a
+        // sphere generated with a different parameterization.
+        const bool ring=std::fabs(ua.y-ub.y)<1e-5f&&int(std::lround(ua.y*32))%4==0;
+        const bool line=std::fabs(ua.x-ub.x)<1e-5f&&int(std::lround(ua.x*48))%4==0;
         if(!ring&&!line)continue;
         std::array<int,3> ka{int(std::lround(a.x*1e5)),int(std::lround(a.y*1e5)),int(std::lround(a.z*1e5))};
         std::array<int,3> kb{int(std::lround(b.x*1e5)),int(std::lround(b.y*1e5)),int(std::lround(b.z*1e5))};
