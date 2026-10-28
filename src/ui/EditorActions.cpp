@@ -2,6 +2,7 @@
 #include "ui/ImageSafety.h"
 #include "editor/EditorUI.h"
 #include "rendering/EditorCamera.h"
+#include "rendering/SceneRenderer.h"
 #include "scene/Scene.h"
 #include "objects/Lighting.h"
 #include "objects/Workspace.h"
@@ -374,7 +375,7 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                 }
                 else if(name.rfind("Material3D.",0)==0) {
                     auto m=p.material3D()?*p.material3D():LegacyMaterial3D(p.material(),p.color());
-                    if(name=="Material3D.BaseColor")m.baseColor=ReadColor(c.value);
+                    if(name=="Material3D.BaseColor"){const auto a=m.baseColor.a;m.baseColor=ReadColor(c.value);m.baseColor.a=a;}
                     else if(name=="Material3D.Emissive")m.emissive=ReadColor(c.value);
                     else if(name=="Material3D.BaseColorTexture")m.baseColorTexture=game::NormalizeImageReference(c.value);
                     else if(name=="Material3D.NormalTexture")m.normalTexture=game::NormalizeImageReference(c.value);

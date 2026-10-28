@@ -738,7 +738,23 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             for(int i=0;i<PartMaterialCount();++i) {
                 s+="<option value=\""+std::to_string(i)+"\" "+(i==int(p.material())?"selected=\"selected\"":"")+">"+PartMaterialName(PartMaterialFromIndex(i))+"</option>";
             }
-            s+="</select></div>";group("SOM DO OBJETO");soundSelect("Sound","Som ao tocar");soundSelect("SoundInteract","Som de interação");group("PHYSICS");check("Anchored",p.anchored());check("CanCollide",p.canCollide());
+            s+="</select></div>";
+            group("MATERIAL 3D");
+            const auto m=p.material3D()?*p.material3D():LegacyMaterial3D(p.material(),p.color());
+            const int preset=m.emissiveStrength>0?5:m.baseColor.a<255?4:m.metallic>.5f?3:m.finish==2?2:m.finish==1?1:0;
+            s+="<div class=\"property\"><label>Acabamento</label><select id=\"material3d-preset\" data-property=\"Material3D.Preset\" data-node=\""+id+"\"><option value=\"legacy\" "+(!p.material3D()?"selected=\"selected\"":"")+">Herdar material</option>";
+            for(int i=0;i<6;++i)s+="<option value=\""+std::to_string(i)+"\" "+(p.material3D()&&preset==i?"selected=\"selected\"":"")+">"+MaterialPresetName(i)+"</option>";
+            s+="</select></div>";
+            input("Material3D.BaseColor",Hex(m.baseColor),"Cor base");input("Material3D.Opacity",Num(m.baseColor.a/255.f),"Opacidade");
+            input("Material3D.Metallic",Num(m.metallic),"Metálico");input("Material3D.Roughness",Num(m.roughness),"Rugosidade");
+            input("Material3D.Emissive",Hex(m.emissive),"Cor emissiva");input("Material3D.EmissiveStrength",Num(m.emissiveStrength),"Emissão");
+            input("Material3D.NormalScale",Num(m.normalScale),"Força de normais");
+            input("Material3D.TileU",Num(m.studsPerTile.x),"Unidades por repetição U");input("Material3D.TileV",Num(m.studsPerTile.y),"Unidades por repetição V");
+            input("Material3D.OffsetU",Num(m.offset.x),"Deslocamento U");input("Material3D.OffsetV",Num(m.offset.y),"Deslocamento V");
+            input("Material3D.Rotation",Num(m.rotation),"Giro da textura °");
+            input("Material3D.BaseColorTexture",m.baseColorTexture,"Textura de cor");input("Material3D.NormalTexture",m.normalTexture,"Mapa de normais");
+            input("Material3D.MetallicRoughnessTexture",m.metallicRoughnessTexture,"Mapa metal/rugosidade");input("Material3D.OcclusionTexture",m.occlusionTexture,"Mapa de oclusão");
+            group("SOM DO OBJETO");soundSelect("Sound","Som ao tocar");soundSelect("SoundInteract","Som de interação");group("PHYSICS");check("Anchored",p.anchored());check("CanCollide",p.canCollide());
             const auto& body=p.bodyProperties();input("Density",Num(body.density));input("Friction",Num(body.friction));
             input("Restitution",Num(body.restitution));input("LinearDamping",Num(body.linearDamping),"Linear damping");input("AngularDamping",Num(body.angularDamping),"Angular damping");
             group("SPAWN");

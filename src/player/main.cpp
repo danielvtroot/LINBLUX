@@ -13,12 +13,15 @@
 #include <cstring>
 using namespace loblox;
 int main(int argc,char** argv) {
-    std::string project;bool validate=false,checkScripts=false;int frames=0;
+    std::string project;bool validate=false,checkScripts=false;int frames=0;RenderQuality quality=RenderQuality::Medium;bool qualitySpecified=false;
     for(int i=1;i<argc;++i) {
         const std::string argument=argv[i];
-        if(argument=="--help"||argument=="-h") {std::puts("LINBLUX Player\nUso: linblux_player --project CAMINHO [--frames N] [--check-scripts]\n     linblux_player --validate CAMINHO\nExecuta experiências locais. Multiplayer ainda não implementado.");return 0;}
+        if(argument=="--help"||argument=="-h") {std::puts("LINBLUX Player\nUso: linblux_player --project CAMINHO [--frames N] [--check-scripts] [--quality legacy|low|medium|high]\n     linblux_player --validate CAMINHO\nExecuta experiências locais. Multiplayer ainda não implementado.");return 0;}
         if(argument=="--check-scripts"){checkScripts=true;continue;}
         if((argument=="--project"||argument=="--validate")&&i+1<argc){validate=argument=="--validate";project=argv[++i];}
+        else if(argument=="--quality"&&i+1<argc) {const std::string q=argv[++i];
+            if(q!="legacy"&&q!="low"&&q!="medium"&&q!="high")return 2;
+            quality=q=="legacy"?RenderQuality::Legacy:q=="low"?RenderQuality::Low:q=="high"?RenderQuality::High:RenderQuality::Medium;qualitySpecified=true;}
         else if(argument=="--frames"&&i+1<argc){char* end=nullptr;const long value=std::strtol(argv[++i],&end,10);if(!end||*end||value<1||value>100000)return 2;frames=int(value);}
         else {std::fprintf(stderr,"Argumento inválido: %s\n",argument.c_str());return 2;}
     }
@@ -55,7 +58,7 @@ int main(int argc,char** argv) {
     Font font=GetFontDefault();bool customFont=false;
     for(const char* path:{"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"})if(FileExists(path)){font=LoadFontEx(path,24,nullptr,256);customFont=font.texture.id!=0;break;}
     {
-        SceneRenderer renderer;PlayerMenu menu;const auto logo=game::AssetTexture(game::BuiltinAssetPath("logo.png"));int rendered=0;
+        SceneRenderer renderer;if(qualitySpecified)renderer.setQuality(quality);PlayerMenu menu;const auto logo=game::AssetTexture(game::BuiltinAssetPath("logo.png"));int rendered=0;
         while(!WindowShouldClose()&&(!frames||rendered++<frames)) {
             const Rectangle menuButton{16,16,104,52};
             if(IsKeyPressed(KEY_ESCAPE)||(CheckCollisionPointRec(GetMousePosition(),menuButton)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))){menu.toggle();if(!menu.open())runtime.resume();EnableCursor();}
