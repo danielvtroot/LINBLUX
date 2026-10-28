@@ -253,6 +253,8 @@ private:
     bool gizmoLocalSpace_ = false;
     bool snapEnabled_ = true;
     bool surfaceSnapEnabled_ = false; // toggle visual; Ctrl ainda ativa temporariamente
+    bool alignSnapNormal_ = false;
+    gizmomath::SnapFeature snapFeature_=gizmomath::SnapFeature::Face;
     Rectangle snapControl_{};
     float moveSnap_ = 1.0f;
     float scaleSnap_ = 0.5f;

@@ -1,4 +1,5 @@
 #include "editor/GizmoMath.h"
+#include "core/Geometry.h"
 
 #include <algorithm>
 #include <cmath>

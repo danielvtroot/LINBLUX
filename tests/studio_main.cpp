@@ -140,6 +140,65 @@ void EditorSelectionAndNames() {
     CHECK(loaded.find(legacy->id())->name()==legacy->name());CHECK(loaded.find(b->id())->name()==b->name());
     CHECK(loaded.find(namedCopy->id())->name()==namedCopy->name());
 }
+void CursorConstruction() {
+    using namespace gizmomath;
+    const auto box=[](Vector3 p,Vector3 size,Vector3 e=Vector3{}) {return TransformSnapshot{p,QuatFromEulerDegrees(e),size};};
+    const auto origin=Vector3{.35f,.4f,.2f};
+    CHECK(NearlyEqual(SnapGrid({1.66f,.4f,.2f},origin,{1,0,0},{},1,GridMode::Absolute),{2,.4f,.2f}));
+    CHECK(NearlyEqual(SnapGrid({1.66f,.4f,.2f},origin,{1,0,0},{},1,GridMode::Relative),{1.35f,.4f,.2f}));
+    for(float angle:{0.f,15.f,30.f,45.f,90.f})for(float width:{.2f,4.f,192.f}) {
+        auto target=box({0,0,0},{width,6,4},{0,angle,0});
+        auto normal=Vector3RotateByQuaternion({0,0,1},target.rotation);
+        auto point=Vector3Scale(normal,2);
+        auto source=box({0,10,10},{2,2,2});
+        const Ray ray{Vector3Add(point,Vector3Scale(normal,20)),Vector3Negate(normal)};
+        const auto result=SnapUnderCursor({{source,1}},{{target,2}},source.position,ray,SnapFeature::Face,true);
+        CHECK(result.snapped&&result.target==2&&!result.blocked);
+        source.position=Vector3Add(source.position,result.correction);
+        source.rotation=QuaternionMultiply(result.rotationDelta,source.rotation);
+        CHECK(std::fabs(BoxSeparation(source,target))<.0002f);
+        CHECK(Vector3DotProduct(Vector3RotateByQuaternion({0,1,0},source.rotation),normal)>.9999f);
+    }
+    auto source=box({0,10,0},{2,2,2});auto floor=box({0,-.5f,0},{24,1,24});
+    const Ray ray{{3,20,4},{0,-1,0}};
+    auto face=SnapUnderCursor({{source,1}},{{floor,2},{box({0,-4,0},{30,1,30}),3}},source.position,ray,SnapFeature::Face);
+    CHECK(face.snapped&&face.target==2&&NearlyEqual(face.point,{3,0,4}));
+    auto edge=SnapUnderCursor({{source,1}},{{floor,2}},source.position,ray,SnapFeature::Edge);
+    auto vertex=SnapUnderCursor({{source,1}},{{floor,2}},source.position,ray,SnapFeature::Vertex);
+    CHECK(edge.snapped&&NearlyEqual(edge.point,{3,0,12}));
+    CHECK(vertex.snapped&&NearlyEqual(vertex.point,{12,0,12}));
+    auto obstacle=box({3,1,4},{4,2,4});
+    auto blocked=SnapUnderCursor({{source,1}},{{floor,2},{obstacle,4}},source.position,{{3,5,14},{0,-.2f,-1}},SnapFeature::Face);
+    // Explicit blocker: put another obstacle in the desired space beside the
+    // face hit, outside the cursor ray, so nearest-hit picking still sees floor.
+    blocked=SnapUnderCursor({{source,1}},{{floor,2},{box({4.4f,1,4},{1,2,2}),4}},source.position,ray,SnapFeature::Face);
+    CHECK(blocked.blocked&&!blocked.snapped&&blocked.blocker==4&&blocked.reason);
+    CHECK(!SnapUnderCursor({},{{floor,2}},source.position,ray,SnapFeature::Face).snapped);
+    auto offset=source;offset.position={50,10,0};
+    auto grouped=SnapUnderCursor({{source,1},{offset,5}},{{floor,2}}, {100,10,0},ray,SnapFeature::Face);
+    CHECK(grouped.snapped); // Support computed from children, never a proxy cube.
+    // Four walls on a floor, placed solely through cursor contact; persist it.
+    Scene room;std::string error;std::vector<SurfaceBox> targets{{floor,1000}};
+    auto* ground=room.createPart(PartShape::Block,floor.position,floor.size,"Floor");ground->setAnchored(true);
+    for(int i=0;i<4;++i) {
+        const Vector3 point=i==0?Vector3{0,0,-10}:i==1?Vector3{0,0,10}:i==2?Vector3{-10,0,0}:Vector3{10,0,0};
+        auto wall=box({40,12,30},i<2?Vector3{21,8,1}:Vector3{1,8,19});
+        auto placed=SnapUnderCursor({{wall,100+unsigned(i)}},targets,wall.position,{Vector3Add(point,{0,30,0}),{0,-1,0}},SnapFeature::Face);
+        CHECK(placed.snapped&&!placed.blocked);wall.position=Vector3Add(wall.position,placed.correction);
+        for(const auto& t:targets)CHECK(BoxSeparation(wall,t.pose)>=-.0001f);
+        targets.push_back({wall,100+unsigned(i)});
+        auto* part=room.createPart(PartShape::Block,wall.position,wall.size,"Wall");part->setAnchored(true);
+    }
+    Scene loaded;CHECK(projectio::fromJson(loaded,projectio::toJson(room),error));CHECK(loaded.parts().size()==5);
+    for(auto* p:room.parts())CHECK(NearlyEqual(loaded.findPart(p->id())->position(),p->position()));
+    for(int i=0;i<100;++i) {
+        auto result=SnapUnderCursor({{source,1}},{{floor,2}},source.position,ray,SnapFeature::Face,true,source.rotation);
+        CHECK(result.snapped);source.position=Vector3Add(source.position,result.correction);
+        source.rotation=QuaternionMultiply(result.rotationDelta,source.rotation);
+        CHECK(NearlyEqual(source.position,{3,1,4},.0001f));
+    }
+}
+
 void SurfaceSnapping() {
     using namespace gizmomath;
     const auto box=[](Vector3 p,Vector3 s,Vector3 e=Vector3{}) {return TransformSnapshot{p,QuatFromEulerDegrees(e),s};};
@@ -1806,6 +1865,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    SignificantFallPresentation();NpcHeadingRegression();EditorSelectionAndNames();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    SignificantFallPresentation();NpcHeadingRegression();EditorSelectionAndNames();CursorConstruction();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }
