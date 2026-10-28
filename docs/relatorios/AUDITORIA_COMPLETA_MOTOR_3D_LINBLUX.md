@@ -1250,3 +1250,405 @@ Ordenadas por risco:
 9. `Part::bounds`/`sphereRadius` — decisão de contrato para esferas não cúbicas.
 10. `ApplyFog`/`LitSurface` — monotonicidade e limites (nunca > 255, nunca NaN).
 
+---
+
+# 9. Gizmos, seleção e snap
+
+## 9.1 Arquitetura em cinco peças
+
+```mermaid
+graph LR
+  A["GizmoLayout<br/>(geometria de tela, pura)"] --> B["Gizmo::drawOverlay"]
+  A --> C["Gizmo::update (hit test)"]
+  D["GizmoMath<br/>(matemática pura)"] --> C
+  C --> E["TransformSession<br/>(física: suspende/retoma)"]
+  C --> F["ModelTransformSession<br/>(procuração + undo)"]
+  E --> G["Part::setTransform"]
+  F --> G
+```
+
+Contratos que o código cumpre e que devem ser preservados:
+
+1. **Desenho e clique usam o mesmo `Layout`** (`GizmoLayout.h`, comentário de
+   topo). Não existe ícone desenhado em um lugar e clicável em outro.
+2. **Toda função de `GizmoMath` é pura** (sem estado, sem I/O), o que a torna
+   testável sem GPU.
+3. **`HandleId` é identidade estável**: cada face de escala tem seu próprio id;
+   não existe fallback “se não achou a face, use o eixo”.
+4. **Uma sessão de arraste sempre termina** em commit, cancelamento ou
+   liberação (`TransformSession` é o dono único dessa transição).
+5. **Mudar de ferramenta, perder foco, redimensionar viewport ou trocar a
+   seleção cancela** o arraste e restaura o transform inicial.
+
+## 9.2 Geometria de tela (o que faz o gizmo “não pular”)
+
+| Parâmetro | Valor | Efeito |
+| --- | --- | --- |
+| `basePixelLength` | 90 px @ viewport de 600 px | tamanho constante na tela |
+| `min/maxPixelLength` | 60 / 132 px | limites em telas extremas |
+| `pixelScale_` | 0,75–1,75 (usuário) | acessibilidade / DPI |
+| `ringSegments` | 96 | anel de rotação suave |
+| `rotateMarkerSeparation` | 36 px | marcadores de 26×22 nunca se cobrem |
+| `scaleHandleSeparation` | 35 px | idem para as 6 alças de escala |
+| `scaleHandleOffsetPx` | 15 px | alça “flutua” fora da face |
+| `viewportMargin` | 8 px | alças trazidas para dentro |
+| `maxHandleRadiusFactor` | 0,46 do menor lado | limite do reposicionamento |
+| `axisLineTolerance` / `ringTolerance` | 8 px | folga de clique |
+
+O layout projeta o pivô com `projectChecked` (rejeita atrás do near plane) e,
+quando a direção de um eixo degenera em tela (eixo apontando para a câmera), usa
+fallbacks fixos `{0,94;0,34}`, `{0;−1}`, `{−0,94;0,34}` — determinístico, mas
+visualmente “gira” de forma estranha quando o eixo cruza a câmera.
+
+`SeparateScreenPoints` resolve sobreposição de alças por relaxamento
+determinístico (96 passes, desempate por ângulo áureo quando dois pontos
+coincidem). É O(n²) com n = 6.
+
+## 9.3 Prioridade de clique
+
+```
+Mover:   seta > plano > haste
+Escalar: alça de face (retângulo 34×34 px)
+Girar:   marcador > anel (8 px)
+```
+
+Um clique em qualquer handle consome a entrada: nunca chega ao raycast de
+seleção nem à câmera (contrato de `InputRouting`).
+
+## 9.4 Matemática do arraste
+
+| Ferramenta | Projeção normal | Fallback |
+| --- | --- | --- |
+| Mover eixo | ponto mais próximo entre raio e reta do eixo (`AxisParameter`) | projeção em tela quando o eixo é quase paralelo à visão |
+| Mover plano | interseção raio-plano | sistema 2×2 em tela |
+| Escalar face | mesma projeção do eixo | idem |
+| Girar | ângulo no plano do anel, **acumulado e sem wrap** | projeção em tela |
+
+Dois pontos de matemática que estão **corretos** e são frequentemente
+implementados errado:
+
+- **Giro local vs mundo.** `Rotate()` sempre faz `delta · start.rotation`, mas o
+  eixo passado em modo Local já é o eixo local rotacionado. Como
+  `R(n,θ)·R = R·R(e_i,θ)`, os dois modos coincidem geometricamente. Não há bug.
+- **Ângulo acumulado.** `accumulatedAngle_ += WrappedAngleDelta(...)` permite
+  giros de múltiplas voltas; é isso que alimenta `arcDegrees` na animação
+  (arcos > 180° preservados).
+
+Escala em modo World é o ponto historicamente frágil (`ScaleFaceAlongAxis`):
+existe um comentário no código explicando que **descartar o sinal da projeção**
+fazia metade das alças encolher ao arrastar para fora, e que **dividir** pela
+projeção amplificava o redimensionamento. A correção atual usa
+`delta * alignment` com `localSide = sign(alignment) * sign(side)`. É o lugar
+mais provável para regressões futuras.
+
+## 9.5 Encaixe de face — como realmente funciona
+
+**Ativação:** ferramenta Mover **e** (`surfaceSnapEnabled_` **ou** Ctrl), com o
+mouse tendo se movido ≥ 2 px desde o início do arraste.
+
+**Tolerância** (em unidades de mundo, calculada a cada frame):
+
+```
+tolerance = clamp(worldUnitsPerPixel(pivô, alturaViewport) * 10, 0.02, 2.0)
+worldUnitsPerPixel = 2 · profundidade · tan(fov/2) / alturaViewport
+```
+
+Com os padrões (`distância 42`, `fov 45°`, viewport 720 px):
+
+```
+2 · 42 · tan(22,5°) / 720 = 0,0483 u/px   →   tolerance = 0,483 u ≈ 0,5 stud ≈ 10 px
+```
+
+A 200 unidades de distância a tolerância satura em **2,0 unidades** (§8.6).
+
+**Algoritmo** (`gizmomath::SnapSurfaces`):
+
+1. Para cada par (caixa móvel, caixa alvo) próximo (rejeição por raio AABB com
+   margem = tolerância);
+2. para as **6 faces do alvo e as 6 faces da origem**, orienta a normal para
+   apontar uma contra a outra;
+3. `gap = dot(centros, n) − Radius(origem, n) − Radius(alvo, n)`;
+4. projeta a normal em `(axisA, axisB)` do gizmo; se a projeção é degenerada
+   (face paralela ao eixo permitido), **descarta**;
+5. correção = `−gap / |projeção|² · projeção`;
+6. aceita somente se, após a correção, `|BoxSeparation| ≤ ContactEpsilon`
+   (contato exato via SAT de 15 eixos);
+7. **veto de segurança**: rejeita se qualquer membro do conjunto passar a
+   penetrar qualquer obstáculo;
+8. escolhe a correção de **menor comprimento** entre todas as candidatas.
+
+O passo 4 é o que impede “snap lateral” ao arrastar em um eixo: faces com
+normal perpendicular ao eixo são ignoradas por construção. Isso está correto.
+
+## 9.6 Por que o encaixe **parece** impreciso (evidências)
+
+| # | Causa | Evidência | Efeito percebido |
+| --- | --- | --- | --- |
+| S1 | **Não há snap de rotação para a normal da face** | §9.5 só translada; relatório 35 lista “sem giro automático por normal” | peça girada 15° encosta pela aresta, parece atravessar |
+| S2 | **Escolha global pelo menor deslocamento**, não pela face sob o cursor | laço `for face in 0..11` com `if(length>distance)continue` | em paredes modulares, encaixa na peça vizinha “errada” |
+| S3 | **Tolerância de ~10 px (até 2 unidades)** | fórmula acima | o objeto “salta” até 2 studs no fim do arraste |
+| S4 | **Encaixe e grade competem** | `MoveAxis` arredonda para 1,0 e depois a correção desloca | peças deixam de ficar em coordenadas redondas |
+| S5 | **O veto de segurança pode rejeitar em silêncio** | passo 7 | o usuário vê “não encaixou” sem explicação |
+| S6 | **Só Mover encaixa** | `tool_==ToolMode::Move` em `EditorUI.cpp:1833` | escalar até tocar não funciona |
+| S7 | **Esferas usam caixa circunscrita** | `EditorUI.cpp:1837` | esfera encaixa “no ar” (a caixa é maior que a esfera) |
+| S8 | **Marcador só aparece após o encaixe** | `Gizmo.cpp:530` | não há pré-visualização de qual face será usada |
+| S9 | Tolerância de contato proporcional à coordenada | `ContactEpsilon = max(1e-5, escala·4ε)` | em coordenadas ~1000, ~5×10⁻⁴ de folga; rejeições raras mas possíveis |
+
+**Como testar S2 sem alterar código:** construir duas caixas encostadas e
+arrastar uma terceira lentamente sobre a junção — o marcador de contato indica
+qual alvo foi escolhido, e ele troca de alvo sem relação com o cursor.
+
+## 9.7 Como corrigir os gizmos matematicamente (proposta)
+
+Em ordem de impacto, **sem** reescrever a arquitetura:
+
+1. **Snap de rotação (S1).** Quando a correção escolhida vem de uma face com
+   normal `n`, oferecer (a) manter rotação, (b) alinhar o eixo local mais
+   próximo de `n` a `n` — via `QuaternionFromAxisAngle(eixo, ângulo)` onde
+   `ângulo = atan2(|a×n|, a·n)` e `eixo = normalize(a×n)`. Isso é puramente
+   matemático e não muda o estado do arraste.
+2. **Escolher a face pelo cursor (S2).** Ordenar candidatas por
+   `|correção|` **e** pela distância entre o ponto de contato projetado e o
+   cursor em tela; ou seja, mudar a chave de “menor deslocamento” para
+   “deslocamento + desalinhamento com o cursor”. Uma linha de código na
+   comparação.
+3. **Tolerância em pixels, não em mundo (S3).** Já é 10 px na prática; o
+   problema é o clamp de 2,0 unidades. Reduzir para `clamp(px*8, 0.02, 0.6)`.
+4. **Separar grade de encaixe (S4).** Aplicar grade **depois** do encaixe e
+   somente se não houve contato; ou expor “Encaixe” como modo exclusivo.
+5. **Feedback do veto (S5).** `SurfaceSnap` já tem `snapped=false`; propagar
+   `safe=false` para desenhar um marcador vermelho.
+6. **Prévia (S8).** Antes do contato, desenhar a face candidata em wireframe
+   translúcido com o mesmo `Layout`.
+
+Nenhum desses passos exige shader, física nova ou mudança de formato.
+
+## 9.8 Seleção
+
+- Raio da câmera → `Scene::pickParts` (esferas por `GetRayCollisionSphere`,
+  caixas por OBB local) → ordena por distância, desempata por `id`.
+- Alt+clique **percorre** as Parts sob o raio (lista ordenada, ciclo).
+- Shift+clique seleciona o **Modelo** ancestral mais próximo.
+- Alpha 0 nunca captura clique.
+- O gizmo tem prioridade absoluta sobre a seleção.
+- Corpos de rig têm picking próprio (`EditorUI`), separado de `pickParts`.
+
+Limitações comprovadas: sem seleção por retângulo, sem multisseleção com
+transformação conjunta (só via Modelo), sem seleção por hierarquia na árvore
+além do ancestral imediato, sem “selecionar iguais”.
+
+---
+
+# 10. Física Bullet
+
+## 10.1 Configuração efetiva
+
+| Item | Valor | Arquivo |
+| --- | --- | --- |
+| Mundo | `btDiscreteDynamicsWorld` | `PhysicsWorld.cpp` |
+| Passo fixo | 1/60 s | `fixedStep_` |
+| Subpassos máx. | 5 | `maxSubSteps_` |
+| `dt` máximo aceito | 0,1 s (clamp) | `simulate` |
+| Iterações do solver | **16** | `getSolverInfo().m_numIterations` |
+| Split impulse | ligado, limiar −0,02 | `m_splitImpulse` |
+| Broaphase | `btDbvtBroadphase` | `PhysicsWorld.cpp` |
+| Gravidade padrão | `(0, −98,1, 0)` | `setGravity` |
+| Sleep | limiares 0,2 / 0,25 | `setSleepingThresholds` |
+| CCD | ligado em corpos dinâmicos: `max(0,2; 0,5·menorLado)` | `createBody` |
+| Constraints | `btFixedConstraint` com **64** iterações próprias | `syncJoints` |
+| Corpo do jogador | `btCapsuleShape(r=0,9; altura=5,8)` massa 1, atrito 1,0 | `Runtime.cpp` |
+| Corpo do NPC | caixa da própria Part, rotação travada | `createBody` |
+
+**Um corpo por Part**, criado em `addPart` e destruído em `removePart`. Não se
+cria corpo por frame (§contrato do header). `applyChanges` só **redimensiona** o
+colisor existente.
+
+## 10.2 Margem de colisão — a parte mais delicada
+
+`updateShape` recalcula, **a cada redimensionamento**:
+
+```
+margin = min(0.04, 0.1 · menorHalfExtent)
+btBoxShape::setImplicitShapeDimensions(half − margin)   // preserva o tamanho real
+```
+
+Isso corrige o problema clássico de o `btBoxShape` somar a margem ao tamanho. Um
+teste dedicado a 50 redimensionamentos é recomendado (§8.8, item 8), porque
+qualquer regressão aqui muda a sensação de colisão de todas as peças.
+
+## 10.3 Fluxo por frame
+
+```mermaid
+graph TD
+  A["simulate(scene, dt)"] --> B["clamp dt ≤ 0.1"]
+  B --> C["syncScene: cria corpos faltantes + applyChanges(dirty)"]
+  C --> D["syncJoints: cria/atualiza/remove btFixedConstraint"]
+  D --> E["stepSimulation(dt, 5, 1/60)"]
+  E --> F["syncFromBodies: posição/rotação dos dinâmicos → Part"]
+  F --> G["Part::syncFromPhysics (não marca dirty de volta)"]
+```
+
+`syncFromBodies` **ignora** Parts `anchored` e Parts em edição
+(`editingParts_`). `setPartEditing(true)` põe o corpo em
+`DISABLE_SIMULATION` e zera velocidades; `false` devolve a `ACTIVE_TAG` e zera
+velocidades de novo. É por isso que soltar o gizmo não “arremessa” a peça.
+
+**Observação honesta:** não encontrei em `PhysicsWorld` nenhum buffer de
+interpolação entre passos; `syncFromBodies` copia o transform bruto do Bullet
+após o passo. Existe um comentário em `Runtime.cpp:189` afirmando que “a posição
+já foi interpolada entre ticks do Bullet”. **Fato:** a interpolação não está em
+`PhysicsWorld`. **Hipótese:** ela ocorre em outro ponto do runtime, ou o
+comentário está desatualizado. Precisa ser confirmado antes de mexer em
+suavização.
+
+## 10.4 Consequências numéricas para o “feel”
+
+Com 1/60 s fixo:
+
+| Grandeza | Valor por passo | Comentário |
+| --- | --- | --- |
+| Caminhada do jogador (16 u/s) | 0,27 u | 4,6% da altura do corpo |
+| Corrida do NPC (8 u/s) | 0,13 u | — |
+| Salto (37 u/s inicial) | 0,62 u | 10,7% da altura do corpo |
+| Queda após 1 s | ~1,6 u/passo | CCD atua |
+| Queda após 2 s | ~3,3 u/passo | acima do limiar de CCD (0,2–0,5) |
+
+Ou seja: **a física está no limite do aceitável para o salto**, que é a ação
+mais rápida do jogo. Aumentar `jumpHeight` sem aumentar a taxa de passo piora a
+qualidade do contato no pouso.
+
+## 10.5 O que a física **não** faz
+
+| Ausência | Consequência | Onde apareceria |
+| --- | --- | --- |
+| Character controller dedicado | jogador é cápsula rígida com velocidade escrita; sem *slope slide control*, sem *step offset* nativo | `Runtime.cpp` |
+| Step-up para o jogador | NPC tem degrau manual; o jogador não | `Npc.cpp` |
+| Materiais físicos por peça | atrito/restituição são `BodyProperties`; sem *combine* por par | `Part.h` |
+| Colisão composta (Part com furos) | 1 forma por Part (box ou sphere) | `createShape` |
+| Malha convexa / trimesh | não há `btConvexHullShape` nem `btBvhTriangleMeshShape` | idem |
+| Veículos, ragdoll, juntas articuladas | só `btFixedConstraint` | `syncJoints` |
+| Determinismo entre Editor e Play | duas instâncias independentes; ordem de inserção define o resultado | §8.7 |
+
+---
+
+# 11. NPCs e navegação
+
+## 11.1 O que um NPC é
+
+Uma **Part dinâmica** com `NpcProperties` (velocidade 8, `turnSpeed` 8 rad/s,
+vida, respawn, rig). O corpo tem **rotação travada** (`setAngularFactor(0,0,0)`)
+e `DISABLE_DEACTIVATION`. O controlador reescreve a velocidade horizontal a
+cada passo:
+
+```cpp
+desired = {direction.x * speed, velocity.y, direction.z * speed}   // Y preservado
+runtime.partMotion(part, desired, PartMotion::Velocity, error);
+```
+
+Yaw é aplicado por `setBodyYaw` (quaternion de yaw puro), com limite
+`turnSpeed·dt` por passo. A velocidade horizontal, porém, **muda de direção
+instantaneamente** — apenas o *visual* gira suavemente.
+
+## 11.2 Por que NPCs “se arrastam” / “deslizam” (evidência)
+
+| # | Fato | Número | Efeito |
+| --- | --- | --- | --- |
+| N1 | Velocidade padrão do NPC é **metade** da do jogador | 8 vs 16 u/s | parece lento por definição |
+| N2 | Não há aceleração: a velocidade é escrita direto | 0 → 8 u/s em 1 passo | início “seco”, sem peso |
+| N3 | Atrito de contato **zero** enquanto o controlador atua | política de `partMotion` (relatório 37) | desliza no gelo; para de forma abrupta |
+| N4 | Direção da velocidade muda antes do yaw | até `|Δθ| / (8 rad/s)` s de deslize lateral | “arrasta” de lado em curvas fechadas |
+| N5 | Passada fixa de 0,8 s contra velocidade variável | ver cálculo abaixo | **patinação dos pés** |
+| N6 | Degrau é **teleporte** de até 1,2 u | `part->setPosition` + `syncScene` | “pula” degraus sem animação |
+| N7 | Raio de chegada do waypoint 0,875 u | `max(0.75, cell·0.35)` | cantos arredondados/curtos |
+| N8 | Grade de 2,5 u reconstruída por mudança de contagem de Parts | `gridDirty_` | NPC pode recalcular caminho no meio do trajeto |
+| N9 | Sem desvio entre NPCs | `NavGrid` só estático | dois NPCs se empurram/atravessam |
+| N10 | Sem salto | path só em XZ | rotas impossíveis viram `Unreachable` |
+
+**Cálculo de N5 (patinação).** Com passo de animação de 0,8 s e perna de
+2 unidades pivotada no quadril, amplitude de 30°:
+
+```
+passo por meio-ciclo ≈ 2 · 2 · sin(30°) = 2,0 u
+estride por ciclo    ≈ 4,0 u  →  velocidade “natural” ≈ 5,0 u/s
+```
+
+Um NPC a 8 u/s precisa percorrer 6,4 u por ciclo (1,6× o passo natural); o
+jogador a 16 u/s, 12,8 u (3,2×). **É exatamente isso que se lê como “personagem
+patinando/arrastando”.** A correção clássica é `timeScale` do clipe
+proporcional à velocidade (`Animator::speed` já existe) ou reduzir a velocidade.
+
+## 11.3 Navegação
+
+- `NavGrid` amostra a **física real** por raycast descendente, célula de 2,5 u,
+  limite de 4096 células; exige superfície sólida, espaço livre de
+  `agentHeight = 4,5` e folga lateral `agentRadius = 1,0`, degrau máximo 1,2,
+  normal ≥ 0,7 (≈ 45°).
+- Busca A* 8-vizinhos, sem cortar cantos, com **string pulling**
+  (`lineClear` + âncora) — os caminhos não são “escadinha”.
+- Replanejamento: até 2 tentativas; depois `Unreachable` e `halt`.
+- A grade é **estática**: só Parts estáticas entram. Nada de navmesh, portais,
+  ligação entre ilhas ou desvio dinâmico (limitações declaradas no header).
+
+## 11.4 Rig visual do NPC
+
+`publishVisual` reconstrói `scene.npcVisuals()` a cada passo (pose + estado do
+clipe). O clipe é escolhido por velocidade (`≥ 12` → Run) e o `intensity` de
+`NpcPose` é `clamp(speed/8, 0.35, 1.2)` — ou seja, **abaixo de 2,8 u/s a
+animação satura no mínimo** e o NPC parece arrastar os pés mesmo andando.
+
+---
+
+# 12. Rigs e animações
+
+## 12.1 Estrutura
+
+- 6 corpos (`Torso, Head, LeftArm, RightArm, LeftLeg, RightLeg`) e 6 juntas.
+- Hierarquia por **âncoras** (`parentAnchor` no pai, `childAnchor` no filho) e
+  uma pose de repouso por junta. `evaluate()` compõe:
+  `world[child] = parent · parentAnchor · restPose · pose · childAnchor⁻¹`.
+  É o modelo correto (equivalente a *bind pose* + *delta*), e é o que permite
+  redimensionar um corpo preservando as conexões (`resizeBody` ajusta as
+  âncoras em proporção).
+- Nenhum membro é corpo rígido independente: o rig é **visual**. A colisão é a
+  cápsula do jogador ou a caixa do NPC.
+
+## 12.2 Dimensões reais do R6 (fato)
+
+| Corpo | Tamanho | Cor |
+| --- | --- | --- |
+| Torso | 2×2×1 | azul `55,120,205` |
+| Head | 2×1×1 | amarelo `245,201,91` |
+| Braços | 1×2×1 | amarelo |
+| Pernas | 1×2×1 | verde `83,150,85` |
+
+Com o root em `y = 3`: torso 2..4, cabeça 4..5, pernas 0..2. Portanto o rig tem
+**5,0 unidades de altura** e pisa em `y = 0`. A cápsula do jogador tem
+**5,8 unidades** (`collisionHeight`). Há **0,8 u de descompasso** (16% do
+corpo) — suficiente para o personagem flutuar ou afundar 0,4 u dependendo do
+offset usado para ancorar o rig na cápsula. **Vale medir antes de ajustar
+qualquer animação**, porque o erro se confunde com “passada errada”.
+
+`createR6()` posiciona novos rigs em `x = 8 + 5·n`, criando a fila de
+personagens vista no Editor (§5.9).
+
+## 12.3 Animação
+
+| Recurso | Situação |
+| --- | --- |
+| Amostragem | por trilha, entre keyframes, com `Linear`, `Smooth` (smoothstep) e `Constant` |
+| Rotação | `QuaternionSlerpShortest` com hemisfério contínuo |
+| Arcos > 180° | `Keyframe::arcDegrees` (até 36.000°), validado contra a orientação final |
+| Blend | `BlendPose(from, to, alpha)` por junta |
+| Prioridade | `Idle < Movement < Action` |
+| Player | `Animator` com `play/pause/seek/advance/speed` |
+| Fallback | sem clipe, pose nativa para ar/queda |
+| Foot IK | **ausente** |
+| Root motion | **ausente** (o deslocamento vem da física) |
+| Blend tree / layers | ausente (uma pose por vez, com blend explícito) |
+| Retargeting | ausente (R6 fixo, `rigType = "R6"`) |
+
+O ponto crítico para a percepção de qualidade: **sem foot IK e sem root motion,
+a única forma de evitar patinação é casar `Animator::speed` com a velocidade
+real**. O campo existe e não é usado para isso em todos os caminhos (o NPC usa
+`intensity` por velocidade, o jogador usa o clipe fixo).
+
