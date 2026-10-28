@@ -106,7 +106,7 @@ void cylinder(Mesh& mesh,Vector3 a,Vector3 b,float ra,float rb,const EditorCamer
     }
 }
 std::vector<Vector3> clipFace(std::vector<Vector3> points,const EditorCamera& camera,Vector2 size){
-    const auto view=camera.camera(),f=Vector3Normalize(Vector3Subtract(view.target,view.position));
+    const auto view=camera.camera();const auto f=Vector3Normalize(Vector3Subtract(view.target,view.position));
     const auto r=Vector3Normalize(Vector3CrossProduct(f,view.up)),u=Vector3CrossProduct(r,f);
     const float h=std::tan(view.fovy*DEG2RAD*.5f),w=h*size.x/size.y;
     const Vector3 normals[5]={f,Vector3Add(r,Vector3Scale(f,w)),Vector3Add(Vector3Negate(r),Vector3Scale(f,w)),Vector3Add(u,Vector3Scale(f,h)),Vector3Add(Vector3Negate(u),Vector3Scale(f,h))};

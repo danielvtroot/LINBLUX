@@ -19,6 +19,7 @@ struct GizmoInput {
     bool windowFocused = true;
     bool shiftDown = false;
     bool altDown = false;   // escala centrada (as duas faces)
+    float occlusionDistance=INFINITY;
     bool surfaceSnap = false; // Ctrl: encaixe geométrico durante Mover
     bool cursorSurface = false;
     Ray cursorRay{};
@@ -83,6 +84,9 @@ public:
     // Modo de escala fixado no inicio do arraste: mudar Alt no meio nao troca
     // a matematica debaixo do usuario.
     bool centeredScale() const { return centeredScale_; }
+    void setCenteredScaleOption(bool value){centerScaleOption_=value;}
+    bool centeredScaleOption() const {return centerScaleOption_;}
+    Vector3 faceAnchor() const {return faceAnchorWorld_;}
     void setPixelScale(float value) { if(std::isfinite(value))pixelScale_=std::clamp(value,.75f,1.75f); }
     float pixelScale() const { return pixelScale_; }
     gizmolayout::Settings visualSettings() const {
@@ -106,7 +110,8 @@ private:
     bool consumedLastInput_ = false;
     bool localSpace_ = false;
     gizmomath::GridMode gridMode_=gizmomath::GridMode::Relative;
-    bool centeredScale_ = false;
+    bool centeredScale_ = false,centerScaleOption_=false;
+    Vector3 faceAnchorLocal_{},faceAnchorWorld_{},faceGrab_{};
     float pixelScale_=1;
     bool dragLocalSpace_ = false;
     Vector3 dragOrigin_{},axisViewForward_{};
