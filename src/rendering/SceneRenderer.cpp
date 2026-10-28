@@ -972,6 +972,14 @@ void SceneRenderer::drawEditorGuides(const Scene& scene,Camera3D camera,const Ed
                                      InstanceId hovered) const {
     if(!options.edges&&!options.bounds&&!options.normals&&!hovered)return;
     BeginMode3D(camera);rlDrawRenderBatchActive();rlEnableDepthTest();rlDisableDepthMask();
+    // GL polygon offset does not affect GL_LINES. Bias only the guide pass
+    // in clip depth, leaving x/y and world bounds exact. The offset in NDC
+    // falls with view distance (clip.w), instead of pulling distant edges
+    // through walls with a large constant window-depth offset.
+    const Matrix projection=rlGetMatrixProjection();
+    Matrix guideProjection=projection;
+    guideProjection.m14-=0.0001f;
+    rlSetMatrixProjection(guideProjection);
     for(const auto* p:scene.parts()) {
         if(p->color().a==0)continue;
         if((options.edges||p->id()==hovered)&&!scene.selected(p->id())) {
@@ -981,9 +989,11 @@ void SceneRenderer::drawEditorGuides(const Scene& scene,Camera3D camera,const Ed
         }
         if(options.bounds) {
             Vector3 low{INFINITY,INFINITY,INFINITY},high{-INFINITY,-INFINITY,-INFINITY};
-            for(int bits=0;bits<8;++bits) {
-                const auto h=p->halfExtents();const auto v=Vector3Add(p->position(),Vector3RotateByQuaternion(
-                    {(bits&1)?h.x:-h.x,(bits&2)?h.y:-h.y,(bits&4)?h.z:-h.z},p->rotation()));
+            if(p->shape()==PartShape::Sphere) {
+                const float r=p->sphereRadius();
+                low=Vector3Subtract(p->position(),{r,r,r});
+                high=Vector3Add(p->position(),{r,r,r});
+            } else for(const auto v:p->bounds().corners()) {
                 low=Vector3Min(low,v);high=Vector3Max(high,v);
             }
             DrawBoundingBox({low,high},{195,112,224,160});
@@ -997,7 +1007,7 @@ void SceneRenderer::drawEditorGuides(const Scene& scene,Camera3D camera,const Ed
             }
         }
     }
-    rlDrawRenderBatchActive();rlEnableDepthMask();EndMode3D();
+    rlDrawRenderBatchActive();rlSetMatrixProjection(projection);rlEnableDepthMask();EndMode3D();
 }
 
 

@@ -567,6 +567,15 @@ void VerifySurfaceFeedback() {
             const auto a=GetImageColor(before,px,py),b=GetImageColor(after,px,py);
             if(std::abs(a.r-b.r)+std::abs(a.g-b.g)+std::abs(a.b-b.b)>15)++changed;
         }
+        CHECK(changed==0); // Normal Editor is the shared scene, no debug lines.
+        UnloadImage(after);
+        BeginTextureMode(texture);renderer.drawScene(scene,camera,int(size.x),int(size.y),moving->id());
+        renderer.drawEditorGuides(scene,camera.camera(),{true,false,false});EndTextureMode();
+        after=LoadImageFromTexture(texture.texture);ImageFlipVertical(&after);
+        changed=0;for(int py=0;py<int(size.y);++py)for(int px=0;px<int(size.x);++px) {
+            const auto a=GetImageColor(before,px,py),b=GetImageColor(after,px,py);
+            if(std::abs(a.r-b.r)+std::abs(a.g-b.g)+std::abs(a.b-b.b)>15)++changed;
+        }
         CHECK(changed>100&&changed<int(size.x*size.y*.05f));
         CHECK(ExportImage(before,(std::string(directory)+"/edges-before-"+std::to_string(int(size.x))+".png").c_str()));
         CHECK(ExportImage(after,(std::string(directory)+"/edges-after-"+std::to_string(int(size.x))+".png").c_str()));

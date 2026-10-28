@@ -29,7 +29,8 @@ def fixtures(root):
         objects = [dict(id=1, parent=0, name='Workspace', **{'class':'Workspace'}),
                    dict(id=2, parent=0, name='Fixed lighting', **{'class':'Lighting'},
                         skyEnabled=False, cloudSpeed=0, sunDirection=[-.45,-1,.55],
-                        sunIntensity=1, brightness=1, ambientColor=[150,150,160,255])]
+                        sunIntensity=1, brightness=1, skyColor=[120,180,240,255],
+                        ambientColor=[150,150,160,255])]
         def part(label, position, size, shape='Block', material='SmoothPlastic', alpha=255, rotation=None):
             i = len(objects)+1
             objects.append(dict(id=i,parent=1,name=label,**{'class':'Part'},shape=shape,
@@ -102,10 +103,10 @@ def capture(binary, root, stage):
                     summary.append(dict(fixture=name,resolution=[width,height],image=str(shot),
                                         rss_kib=int(rss[1]),timing=timing[-1] if timing else 'unavailable',
                                         project_sha256=hashlib.sha256(original).hexdigest()))
-                # Clean window close, preserving the fixture on disk.
-                xdo('keydown','alt'); xdo('keydown','F4'); time.sleep(.1)
-                xdo('keyup','F4'); xdo('keyup','alt')
-                process.wait(timeout=10)
+                # Xvfb has no window manager to implement Alt+F4.
+                from editor_restart import close_window
+                close_window(window)
+                assert process.wait(timeout=10) == 0
             finally:
                 if process.poll() is None:
                     process.terminate(); process.wait(timeout=5)

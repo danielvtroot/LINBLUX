@@ -636,6 +636,8 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         for(int i=0;i<4;++i)el("cmd-tool-"+std::to_string(i))->SetClass("active",i==int(ui.tool_));
         const bool active=ui.runtime_.active();
         el("show-collision-shapes")->SetClass("active",ui.showCollisionShapes_);
+        el("editor-edges")->SetClass("active",ui.editorGeometry_.edges);
+        el("editor-edges")->SetAttribute("aria-pressed",ui.editorGeometry_.edges?"true":"false");
         if(active&&!el("play")->HasAttribute("disabled"))el("play")->SetAttribute("disabled","");else if(!active)el("play")->RemoveAttribute("disabled");
         if(!active&&!el("stop")->HasAttribute("disabled"))el("stop")->SetAttribute("disabled","");else if(active)el("stop")->RemoveAttribute("disabled");
         for(const char* name:{"script","animation","rig","settings","output","assets","audio"})el(std::string("advanced-")+name)->SetClass("active",advanced==name);

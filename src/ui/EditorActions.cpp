@@ -47,6 +47,10 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="maximize-game")e.toggleGameMaximized();
         else if(c.action=="fullscreen-game")e.toggleGameFullscreen();
         else if(e.runtime_.active())return false;
+        else if(c.action=="editor-edges") {
+            e.editorGeometry_.edges=!e.editorGeometry_.edges;
+            e.setStatus(e.editorGeometry_.edges?"Arestas: ativadas · F8":"Arestas: desativadas · F8");
+        }
         else if(c.action=="editor-camera") {
             if(c.value!="fps"&&c.value!="focus")throw std::runtime_error("Unknown Studio camera mode");
             e.camera_.setNavigationMode(c.value=="fps"?EditorCamera::NavigationMode::FPS:EditorCamera::NavigationMode::Focus);
