@@ -132,9 +132,9 @@ construído sobre **raylib + OpenGL 3.3 + Bullet + Lua 5.4 + RmlUi + ImGui**:
 - **Causa das dificuldades de snap?** Snap relativo ao delta, encaixe só em
   Mover, tolerância ≤2 unidades, rejeição silenciosa por penetração, ausência de
   snap de aresta/vértice, e nenhuma correção automática de sobreposição. Ver §9.
-- **Como corrigir os gizmos matematicamente?** Proposta concreta com snap
-  absoluto, encaixe por face com histerese, seleção de plano por dominância,
-  escala com pivô e snap de rotação por arco — §9.9.
+- **Como corrigir os gizmos matematicamente?** Proposta concreta em §9.7: snap
+  absoluto, encaixe por face com escolha pelo cursor, snap de rotação por
+  normal, tolerância em pixels, e grade aplicada antes do encaixe.
 - **Texturas e iluminação?** Mipmaps + trilinear + anisotrópico 4x **já
   existem** (`game::AssetTexture`); faltam materiais com parâmetros, sombra
   direcional, AO e contato. Ver §7.
@@ -1403,6 +1403,7 @@ normal perpendicular ao eixo são ignoradas por construção. Isso está correto
 | S7 | **Esferas usam caixa circunscrita** | `EditorUI.cpp:1837` | esfera encaixa “no ar” (a caixa é maior que a esfera) |
 | S8 | **Marcador só aparece após o encaixe** | `Gizmo.cpp:530` | não há pré-visualização de qual face será usada |
 | S9 | Tolerância de contato proporcional à coordenada | `ContactEpsilon = max(1e-5, escala·4ε)` | em coordenadas ~1000, ~5×10⁻⁴ de folga; rejeições raras mas possíveis |
+| S10 | **Snap de grade é relativo ao delta**, não à posição absoluta | `SnapDelta` aplicado ao deslocamento em `MoveAxis`/`MovePlane` | peça que começa fora da grade nunca chega a coordenadas inteiras; cada arraste re-ancora |
 
 **Como testar S2 sem alterar código:** construir duas caixas encostadas e
 arrastar uma terceira lentamente sobre a junção — o marcador de contato indica
@@ -1424,8 +1425,9 @@ Em ordem de impacto, **sem** reescrever a arquitetura:
    comparação.
 3. **Tolerância em pixels, não em mundo (S3).** Já é 10 px na prática; o
    problema é o clamp de 2,0 unidades. Reduzir para `clamp(px*8, 0.02, 0.6)`.
-4. **Separar grade de encaixe (S4).** Aplicar grade **depois** do encaixe e
-   somente se não houve contato; ou expor “Encaixe” como modo exclusivo.
+4. **Separar grade de encaixe (S4/S10).** Fazer a grade arredondar a **posição
+   absoluta** (e não o delta) e aplicá-la **antes** do encaixe, somente se não
+   houve contato; ou expor “Encaixe” como modo exclusivo.
 5. **Feedback do veto (S5).** `SurfaceSnap` já tem `snapped=false`; propagar
    `safe=false` para desenhar um marcador vermelho.
 6. **Prévia (S8).** Antes do contato, desenhar a face candidata em wireframe
@@ -1637,6 +1639,19 @@ Com o root em `y = 3`: torso 2..4, cabeça 4..5, pernas 0..2. Portanto o rig tem
 corpo) — suficiente para o personagem flutuar ou afundar 0,4 u dependendo do
 offset usado para ancorar o rig na cápsula. **Vale medir antes de ajustar
 qualquer animação**, porque o erro se confunde com “passada errada”.
+
+Como o runtime resolve isso hoje (fato): `NpcSystem::publishVisual` (e o runtime
+do jogador usam a mesma ideia) fixa
+
+```
+root.y = part.y − part.size.y/2 + 3
+```
+
+ou seja, presume que a **sola está na base da Part/cápsula e o root 3 unidades
+acima**. Como o rig tem altura fixa de 5,0, o topo do rig fica sempre
+`part.size.y − 5,0` abaixo do topo do colisor: **0,8 u** com a cápsula de 5,8 e
+**1,0 u** com a Part de NPC de 6,0. O personagem é desenhado mais baixo que a
+caixa em que colide — e a cabeça pode entrar em tetos baixos sem “bater”.
 
 `createR6()` posiciona novos rigs em `x = 8 + 5·n`, criando a fila de
 personagens vista no Editor (§5.9).
@@ -2067,6 +2082,7 @@ ou *determinismo* entre plataformas.
 | F18 | Duas convenções de Euler convivem | `Math.h` + comentário |
 | F19 | Sem backface culling e sem frustum culling na cena | `rlDisableBackfaceCulling`; nenhum teste de visibilidade |
 | F20 | Sem ordenação de transparência | ordem de `scene.parts()` |
+| F21 | O rig (5,0 u) é sempre desenhado mais baixo que o colisor (5,8 u na cápsula, ~6 u na Part de NPC), porque `publishVisual` assume sola na base e root 3 acima | `Npc.cpp:400` + `MakeR6` |
 
 ## 20.2 Hipóteses (precisam de experimento)
 
