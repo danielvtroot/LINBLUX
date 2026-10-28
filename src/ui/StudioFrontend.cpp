@@ -1286,7 +1286,7 @@ void StudioFrontend::draw() {
         const auto q=p.ui.renderer_.quality();const std::string value=q==RenderQuality::Legacy?"legacy":q==RenderQuality::Low?"low":q==RenderQuality::High?"high":"medium";
         if(quality->GetValue()!=value)quality->SetValue(value);
     }
-    if(auto* shadow=dynamic_cast<Rml::ElementFormControl*>(p.el("shadow-quality"));shadow&&p.context->GetFocusElement()!=shadow){
+    if(auto* shadow=dynamic_cast<Rml::ElementFormControl*>(p.el("shadow-quality"));shadow&&p.formOwner(p.context->GetFocusElement())!=shadow){
         const auto q=p.ui.renderer_.shadowQuality();const std::string value=q==ShadowQuality::Off?"off":q==ShadowQuality::Economy?"economy":q==ShadowQuality::Soft?"soft":q==ShadowQuality::High?"high":"auto";
         if(shadow->GetValue()!=value)shadow->SetValue(value);
     }

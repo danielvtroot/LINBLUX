@@ -211,7 +211,7 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
         if(std::getenv("LINBLUX_SHADOW_CONTROLS_ONLY")) {
             EditorActions actions(ui);click("tab-View");
             CHECK(actions.dispatch({"shadow-quality","soft"}));CHECK(renderer.shadowQuality()==ShadowQuality::Soft);frames(2);
-            clickVisible("shadow-quality");key("Home");key("Down");key("Return");CHECK(renderer.shadowQuality()==ShadowQuality::Off);frames(2);CHECK(!renderer.shadowsActive());
+            clickVisible("shadow-quality");key("Up");key("Up");key("Return");CHECK(renderer.shadowQuality()==ShadowQuality::Off);frames(2);CHECK(!renderer.shadowsActive());click("tab-View");
             CHECK(actions.dispatch({"shadow-quality","economy"}));CHECK(renderer.shadowQuality()==ShadowQuality::Economy);frames(2);
             CHECK(actions.dispatch({"shadow-quality","high"}));CHECK(renderer.shadowQuality()==ShadowQuality::High);frames(2);capture("shadow-quality-controls");
             CHECK(actions.dispatch({"render-quality","low"}));frames(2);CHECK(!renderer.shadowsActive());
