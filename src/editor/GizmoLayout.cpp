@@ -160,7 +160,6 @@ Layout Build(const Part& part, ToolMode mode, const EditorCamera& camera, Rectan
             if(score>best){best=score;layout.rotateMarker[axisIndex]=point;}
         }
         if(best<0)layout.rotateMarker[axisIndex]=ClampInside(layout.center,size,settings.viewportMargin,settings.rotateMarkerHalfWidth,settings.rotateMarkerHalfHeight);
-        layout.rotateAnchor[axisIndex]=layout.rotateMarker[axisIndex];layout.rotateAnchorValid[axisIndex]=best>=0;
     }
     return layout;
 }

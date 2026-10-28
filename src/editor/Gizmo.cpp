@@ -474,7 +474,7 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
             const bool active=highlighted(gizmomath::ScaleFaceHandleId(axis,side));const auto color=active?kHighlight:kAxisColors[axis];
             DrawLineEx(Vector2Add(center,Vector2Scale(d,10)),Vector2Subtract(p,Vector2Scale(d,8)),1,{143,150,164,160});
             badge(gizmolayout::ScaleHandleRect(layout,index,settings),color);
-            DrawText(TextFormat("%s%s",axisName(axis),side>0?"+":"−"),int(p.x+9),int(p.y-6),12,color);
+            DrawText(TextFormat("%s%s",axisName(axis),side>0?"+":"-"),int(p.x+9),int(p.y-6),12,color);
         }
     }else if(mode==ToolMode::Rotate){
         for(int axis=0;axis<3;++axis){

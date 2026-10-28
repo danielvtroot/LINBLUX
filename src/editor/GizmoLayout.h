@@ -19,7 +19,7 @@ namespace loblox { class EditorCamera; }
 namespace loblox::gizmolayout {
 
 struct Settings {
-    // Tamanho visual: 90 px em uma viewport de referencia de 600 px, limitado
+    // Tamanho visual: 70 px na referência, limitado a 64–80 px antes da escala
     // para continuar utilizavel em resolucoes pequenas ou grandes.
     float basePixelLength = 70.0f;
     float minPixelLength = 64.0f;
@@ -33,19 +33,12 @@ struct Settings {
 
     float rotateMarkerHalfWidth = 7.0f;
     float rotateMarkerHalfHeight = 7.0f;
-    // > diagonal do retangulo (26x22) para que dois marcadores nunca se cubram.
-    float rotateMarkerSeparation = 22.0f;
 
     float scaleHandleHalfWidth = 6.0f;
     float scaleHandleHalfHeight = 6.0f;
-    // Distancia do icone ate a face, medida em pixels.
-    float scaleHandleOffsetPx = 15.0f;
     float scaleHandleSeparation = 24.0f;
 
     float viewportMargin = 8.0f;
-    // Raio maximo (fracao do menor lado da viewport) para icones que
-    // pertenceriam a uma face fora da tela.
-    float maxHandleRadiusFactor = 0.46f;
 
     float axisLineTolerance = 5.0f;
     float ringTolerance = 5.0f;
@@ -68,7 +61,7 @@ struct Layout {
     std::array<Vector2, 3> axisDirection{};
     std::array<bool, 3> axisDirectionFallback{};
     std::array<Vector2, 3> axisButton{};
-    // axis * 2 + (side > 0). Six arrows share one layout for draw/picking.
+    // Axis * 2 + side retained for handle IDs; only positive arrows are visible.
     std::array<Vector2, 6> moveHandle{};
     std::array<bool, 6> moveVisible{};
     std::array<Vector2, 3> planeCenter{};
@@ -77,15 +70,11 @@ struct Layout {
 
     // Scale: seis alças (axis * 2 + lado), nunca uma repetindo a outra.
     std::array<Vector2, 6> scaleHandle{};
-    std::array<Vector2, 6> scaleAnchor{};
-    std::array<bool, 6> scaleAnchorValid{};
 
     // Rotate: anel amostrado em tela (trocado em runs quando um ponto cai
     // atras da camera) e os tres marcadores com id por eixo.
     std::array<std::vector<Segment>, 3> ring{};
     std::array<Vector2, 3> rotateMarker{};
-    std::array<Vector2, 3> rotateAnchor{};
-    std::array<bool, 3> rotateAnchorValid{};
 };
 
 // Tamanho do gizmo em pixels para a viewport atual.
