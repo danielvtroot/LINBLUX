@@ -82,3 +82,49 @@ entre chamadas Studio/Player com mesma câmera sem overlays; perfis em duas
 resoluções. Fontes primárias consultadas para o contrato de matrizes/DrawMesh:
 [vertex shader raylib 5.5](https://github.com/raysan5/raylib/blob/5.5/examples/shaders/resources/shaders/glsl330/lighting.vs),
 [rmodels](https://github.com/raysan5/raylib/blob/5.5/src/rmodels.c).
+
+**Fase 4 / profundidade e qualidade (28/10/2026):** `DirectionalShadow` possui
+FBO/depth texture 1024², ajusta o frustum aos casters próximos da câmera e
+estabiliza seu centro em texels. PCF 3×3, normal bias e depth bias proporcional
+à inclinação/texel e profundidade do frustum; fade no limite de distância.
+Parts/solo recebem sombras; Parts opacas e corpos dos rigs projetam sombras.
+Rigs e marcadores SpawnLocation ainda recebem iluminação CPU, sem consultar
+shadow map. Vidro não projeta sombra opaca; textura alfa usa corte de 0.5 no
+passe de sombra (não há transmissão/colorização de sombras).
+
+Lighting expõe `shadowsEnabled`, `shadowDistance` (16–300, padrão 80) e
+`shadowStrength` (0–1). Campos JSON aditivos/opcionais, omitidos no padrão,
+validação antes de modificar a cena; sem aumento de versão do formato.
+Sombras em Médio/Alto, sem alocação/passe no Baixo/Compatível. Desligamento e
+falha de shader/FBO mantêm a renderização disponível. `LINBLUX_DISABLE_SHADOWS=1`
+permite testar a indisponibilidade. Contato vem da geometria real, sem quads
+escuros, SSAO ou outro passe de oclusão acrescentado.
+
+Passes: opacos e rigs → decals dos opacos → Parts translúcidas por distância
+(do longe para perto), com decals associados → seleção. Transparência/decals
+não gravam depth; transparência usa somente a superfície frontal para evitar
+alfa duplicado. Mapas de cor são tratados conservadoramente no passe alfa.
+Não há OIT: objetos translúcidos que se cruzam, grandes superfícies sobrepostas
+e transparência de corpos de rigs ainda têm limites; a ordenação é por objeto,
+não por triângulo. Decals mantêm o sombreamento CPU anterior.
+
+`SceneTarget` suaviza **somente a cena**, compartilhada por Studio/Player:
+Auto = Baixo/Compatível sem AA, Médio FXAA, Alto MSAA 4× real em renderbuffers
+multisample, com resolve de cor/profundidade. Fallback MSAA → FXAA → sem AA;
+indisponibilidade é memorizada, evitando recriação de MSAA a cada frame.
+Visualizar → Antialiasing ou `LINBLUX_ANTIALIASING=auto|off|fxaa|msaa4`.
+O FXAA antigo do Editor foi removido: UI/gizmos posteriores não recebem um
+segundo filtro, RmlUi mantém seu próprio caminho. Sem conversão de gama extra.
+O resolve copia depth entre FBOs compatíveis do Editor para preservar F8/hover;
+o framebuffer padrão do Player recebe cor via quad, sem depender de depth
+compatível com a janela. `FrameState` restaura FBOs de leitura/escrita,
+matrizes, viewport, depth mask/test, culling, scissor, sRGB e multisample.
+`LINBLUX_DISABLE_MSAA=1` / `LINBLUX_DISABLE_FXAA=1`: injeção de fallback.
+
+`linblux_depth_quality`: sombra de contato, direção/distância/intensidade,
+ausência de acne em piso vazio, custo desligado no Baixo, transparência
+independente da inserção, seleção, depth de guias após resolve, AA real,
+cores planas, fallback e redimensionamento nas duas resoluções. Teste gráfico
+sempre pelo TURBO; mini benchmark llvmpipe não representa GPU integrada.
+Contrato do depth FBO baseado na API pública e no
+[exemplo oficial raylib 5.5](https://github.com/raysan5/raylib/blob/5.5/examples/shaders/shaders_shadowmap.c).

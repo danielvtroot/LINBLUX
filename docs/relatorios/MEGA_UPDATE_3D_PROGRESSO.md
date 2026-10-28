@@ -1,7 +1,7 @@
-# Mega Update 3D — progresso das fases 0 a 3
+# Mega Update 3D — progresso das fases 0 a 4
 
-Estado atual: fases 0–3 entregues no escopo funcional; validação global parcial.
-A continuação das fases 2/3 e seus limites estão ao final deste relatório.
+Estado atual: fases 0–4 entregues no escopo funcional; validação global parcial.
+A execução da fase 4 e seus limites estão ao final deste relatório.
 
 Registro da primeira execução, encerrada em 28/10/2026 (America/Belem). Escopo: baseline,
 proteção e guias de geometria. **FASE 0: DONE. FASE 1: DONE no escopo visual
@@ -277,3 +277,95 @@ anteriores continua fora dos commits. Não se implementam fases 4–7.
 Tempo desta continuação: aproximadamente 37 minutos, incluindo duas fases, builds e revisão visual.
 Próxima execução: somente fase 4, mediante pedido separado; começar por
 `python3 tools/atlas/atlas.py update` e `python3 tools/atlas/atlas.py locate "Lighting shadow map"`.
+
+## Continuação — fase 4: profundidade, transparência e AA (28/10/2026)
+
+**FASE 4: DONE no escopo funcional/visual descrito abaixo.** Somente fase 4
+nesta execução, sobre `926f1a5` em `main`; fases 5–7 não iniciadas. Aprovação
+local de implementação, build, regressões e capturas; não é aprovação global,
+Release, medição de GPU integrada ou confirmação manual do usuário.
+Os quatro WIPs originais continuam preservados e fora do commit; hashes dos
+arquivos de UI coincidem com `.turbo/logs/mega3d-phase01/wip-preserved.json`.
+Não houve alteração em raylib/Bullet, experiências pessoais ou versão do projeto.
+
+### Implementação
+
+- Shadow map direcional **1024²**, PCF **3×3**, frustum ajustado aos casters
+  próximos e estabilizado em texels, alcance/fade, normal bias e depth bias
+  proporcionais ao texel, profundidade do frustum e inclinação da superfície.
+  Parts e corpos de rigs projetam sombras reais em Parts/solo; vidro não
+  projeta sombra opaca. Contato vem desse passe; nenhum SSAO/quad de escurecimento.
+- Médio/Alto têm sombras; Baixo/Compatível não alocam nem executam o passe.
+  Lighting expõe habilitação, alcance e intensidade. Persistência aditiva e
+  opcional, sem mudar a versão: padrão omitido, campos inválidos rejeitados
+  antes de modificar a cena. Projetos anteriores continuam carregando.
+- Passes separados: opacos/rigs, decals opacos, Parts translúcidas ordenadas
+  por distância da câmera com seus decals, seleção. Alfa/decals sem gravação
+  de depth; superfície frontal evita aplicar a transparência duas vezes.
+  F8 continua opcional e mantém a oclusão pela profundidade da cena.
+- Antialiasing compartilhado entre Studio e Player, só na cena: Auto usa
+  nenhum no Baixo/Compatível, FXAA no Médio e **MSAA 4× real** no Alto, com
+  fallback MSAA → FXAA → nenhum. Controles em Visualizar e variável
+  `LINBLUX_ANTIALIASING=auto|off|fxaa|msaa4`. Removido o FXAA separado do
+  Editor; RmlUi mantém seu passe próprio e não recebe AA duplicado.
+  Cor/gama de áreas planas permanece igual após o resolve.
+- FBOs de leitura/escrita, viewport, matrizes e estados de profundidade,
+  culling, scissor, sRGB e multisample restaurados em passes aninhados.
+  O desligamento libera recursos sem perder o FBO do chamador.
+
+### Validação focada e evidência
+
+- Build incremental real **PASSOU**: `cmake --build build-linblux -j2`, inclusive
+  `build-linblux/linblux` e Player. Log final `build-accepted.log`.
+- TURBO supervisionou sete regressões específicas (orçamento 200s, timeout
+  gráfico individual 60s): `linblux_tests`, `linblux_decal_render`,
+  `linblux_depth_quality`, `linblux_editor_precision_ui`, `linblux_gizmo_visual`,
+  `linblux_material_render`, `linblux_player_menu`.
+  A primeira execução detectou bugs novos de restauração de FBO; a regressão
+  também expôs acne e classificação alfa incorreta no fallback. Foram corrigidos
+  antes da aprovação. Logs iniciais mantidos em `validation/`.
+- Após as correções, os três afetados foram reexecutados no build final:
+  **3/3 PASSARAM**, sem timeout/pendência, em **54.61s**. Depth quality:
+  **152 verificações**; materiais **31**; Editor real **126**, todas sem falhas.
+  As quatro demais regressões passaram na bateria anterior (Player: 19.16s,
+  decals: 6.03s, gizmo: 13.30s, headless: 0.26s).
+  Relatórios: `final-validation.json`, `regression.json`, `validation.json`.
+- Teste novo verifica sombra de contato (soma RGB **634 → 354** no receptor),
+  mudança de direção/alcance/intensidade, piso vazio **0 pixels de acne**,
+  Baixo sem shadow map ativo, ordenação independente da inserção, seleção,
+  depth dos guias após FXAA/MSAA, cor plana, fallback forçado e redimensionamento.
+  Fallback do material comparado ao Compatível: **0 pixels diferentes**.
+- ATLAS atualizado, `verify` **OK** e `linblux_atlas` **PASSOU** (31.04s).
+  IMPACT `--plan` foi consultado, sem disparar a bateria estrutural inteira.
+  Ele reporta cobertura **partial**, headers/CMake sem mapeamento seguro e
+  testes fora da seleção. Isto **não equivale a FULL/global aprovado**.
+  O restart já falho antes destas fases permanece registrado no baseline;
+  não foi repetido sem evidência nova sobre esse problema.
+- Capturas antes/depois do executável real: três fixtures × **1366×768 e
+  1920×1080**, câmera/luz fixas, HOME/XDG isolados. F8 ligado também capturado
+  nas duas resoluções; fixtures validadas no Player, hashes iguais antes/depois.
+  Pasta `.turbo/logs/mega3d-phase4/{before,after}/`; supervisão nos logs
+  `before-supervisor.log` e `after-supervisor.log`. Inspeção visual confirma
+  sombras de paredes/objetos, piso limpo, vidro e decal preservados.
+
+### Custo e limites
+
+Mini benchmark de **3 frames aquecidos**, sete Parts, llvmpipe com 2 threads,
+sem UI; não é benchmark de hardware integrado nem estatística de produção:
+
+| Resolução | Baixo / sem AA e sombras | Médio / FXAA + sombras | Alto / MSAA 4× + sombras |
+|---|---:|---:|---:|
+| 1366×768 | 55.06 ms | 124.74 ms | 203.64 ms |
+| 1920×1080 | 102.17 ms | 171.03 ms | 335.24 ms |
+| retorno 1366×768 | 50.66 ms | 96.64 ms | 216.06 ms |
+
+Baixo conserva caminho mais barato, com zero shadow map/resolve no automático.
+Não há justificativa de orçamento para acrescentar SSAO nesta etapa.
+Limites explícitos: uma luz direcional, resolução fixa e sombras limitadas por
+alcance, sem cascatas/OIT/refração/transmissão. Interseções de transparências,
+superfícies grandes e rigs transparentes ainda têm limites de ordenação por
+objeto. Rigs/SpawnLocation e decals conservam iluminação CPU e não recebem
+shadow map, embora corpos opacos dos rigs projetem sombra em Parts. Mapas alfa
+usam cutoff 0.5 no passe de sombra. Custo/artefatos em GPU integrada real e
+aprovação manual do usuário permanecem não verificados. Nenhuma fase posterior
+foi iniciada para tentar cobrir essas limitações.
