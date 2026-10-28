@@ -35,7 +35,8 @@ def capture(args):
     before=project.read_bytes();output=root/args.stage;output.mkdir(exist_ok=True)
     env=dict(os.environ,HOME=str(output),XDG_DATA_HOME=str(output/'data'),XDG_CONFIG_HOME=str(output/'config'),XDG_STATE_HOME=str(output/'state'),LIBGL_ALWAYS_SOFTWARE='1',LP_NUM_THREADS='2')
     def click(x,y):
-        xdo('mousemove','--sync',x,y);time.sleep(.3);xdo('mousedown',1);time.sleep(.3);xdo('mouseup',1);time.sleep(.6)
+        delay=.3 if width==1366 else 1.0
+        xdo('mousemove','--sync',x,y);time.sleep(delay);xdo('mousedown',1);time.sleep(delay);xdo('mouseup',1);time.sleep(delay*2)
     with (output/'studio.log').open('w') as log:
         proc=subprocess.Popen([str(args.binary.resolve()),'--project',str(project)],cwd=output,env=env,stdout=log,stderr=log)
         try:
@@ -43,7 +44,7 @@ def capture(args):
                 r=subprocess.run(['xdotool','search','--onlyvisible','--pid',str(proc.pid),'--name','^LINBLUX Studio$'],text=True,capture_output=True,timeout=3)
                 return r.stdout.splitlines()[-1] if r.returncode==0 else None
             window=wait_for(find_window,proc,25)
-            for width,height in ((1366,768),(1920,1080)):
+            for width,height in ([(args.width,768 if args.width==1366 else 1080)] if args.width else [(1366,768),(1920,1080)]):
                 xdo('windowsize',window,width,height);xdo('windowmove',window,0,0);xdo('windowfocus','--sync',window);time.sleep(4)
                 click(width-220,243)
                 for distance,zoom in [('close',0),('far',-4)]:
@@ -61,4 +62,4 @@ def capture(args):
     (output/'manifest.json').write_text(json.dumps(dict(project_sha256=hashlib.sha256(before).hexdigest(),binary_sha256=hashlib.sha256(args.binary.read_bytes()).hexdigest(),images=sorted(p.name for p in output.glob('*.png'))),indent=2))
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--binary',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--stage',required=True);capture(p.parse_args())
+    p=argparse.ArgumentParser();p.add_argument('--binary',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--stage',required=True);p.add_argument('--width',type=int,choices=[1366,1920]);capture(p.parse_args())
