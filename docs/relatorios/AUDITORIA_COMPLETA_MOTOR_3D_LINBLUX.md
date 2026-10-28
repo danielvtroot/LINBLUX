@@ -683,6 +683,9 @@ humana lê como “plástico sem volume”.
   `DrawRectangleGradientV` — **fallback silencioso e testado** por
   `tests/sky_capture_main.cpp`.
 - O céu **não** escreve profundidade: geometria sempre o cobre corretamente.
+- O fonte do shader existe em duas formas: `src/rendering/ProceduralSkyShader.glsl`
+  (arquivo legível) e as strings embutidas em `SceneRenderer.cpp` (~linha 179).
+  Se as duas divergirem, o binário usa **as strings embutidas**.
 
 Observação técnica: o shader faz `pow(1/2.2)` na saída, mas o resto da cena
 **não** é linearizado. Ou seja, o céu é tratado como linear→sRGB e a geometria é
@@ -703,7 +706,8 @@ sombreada já em sRGB. Isso produz um descasamento de gama entre céu e cena
 
 **Não existe ordenação por distância.** Para `alpha < 255` a ordem é a de criação
 das Parts — artefatos de blending são possíveis e reprodutíveis. Decals usam
-offset fixo `outward = 0.02` (0,021 para `Surface`) em vez de depth bias.
+offset fixo `outward = 0.02` (parâmetro padrão de `DrawFaceQuad`/
+`DrawLayer`) em vez de depth bias.
 
 ## 5.8 Culling
 
@@ -1871,7 +1875,7 @@ para o viewport, em vez de repetir as constantes. É o padrão correto.
 | Player / CLI | `linblux_player_help`, `_validate`, `linblux_help`, `linblux_startup_no_display` | processo |
 | Gráficos (exigem Xvfb/GL) | `linblux_decal_render`, `linblux_rig_image`, `linblux_gizmo_visual`, `linblux_sky_capture`, `linblux_graphics_quality` (+1080), `linblux_visual_studio`, `linblux_health_hud`, `linblux_rifledemo_player`, `linblux_player_menu` | captura/inspeção |
 | Integração de UI (X11 + RmlUi) | `linblux_experience_ui`, `linblux_editor_precision_ui`, `linblux_audio_panel_ui`, `linblux_rml_ui`, `linblux_rig_decals_ui`, `linblux_mouse_lock`, `linblux_script_input_ui`, `linblux_item_controls_ui`, `linblux_models_ui`, `linblux_body_properties_ui`, `linblux_manipulation_ui`, `linblux_rig_input`, `linblux_studio_ui`, `linblux_game_ui`, `linblux_editor_input`, `linblux_player_menu_ui`, `linblux_player_window_ui`, `linblux_lua_ui_render` | automação de input |
-| Python (subprocesso) | `linblux_editor_restart`, `linblux_experience_startup`, `linblux_engine_default_restart`, `linblux_lua_player_validation`, `linblux_lua_ui_player`, `linblux_progress_player_ui`, `linblux_rifledemo_player`, `linblux_backup`, `linblux_video`, `linblux_home_video`, `linblux_lua_interface`, `linblux_experience_startup` | scripts |
+| Python (subprocesso) | `linblux_editor_restart`, `linblux_experience_startup`, `linblux_engine_default_restart`, `linblux_lua_player_validation`, `linblux_lua_ui_player`, `linblux_progress_player_ui`, `linblux_rifledemo_player`, `linblux_backup`, `linblux_video`, `linblux_home_video`, `linblux_lua_interface` | scripts |
 
 Densidade de asserções (por `CHECK`/`REQUIRE` no arquivo):
 
@@ -2494,3 +2498,22 @@ manter o caminho CPU como fallback do shader; tornar comportamento novo
       textual via ATLAS; nenhuma captura de tela foi produzida nesta auditoria;
       nenhum teste FULL executado.
 
+---
+
+# Apêndice C — Métricas de entrega
+
+| Métrica | Valor |
+| --- | --- |
+| Arquivo | `docs/relatorios/AUDITORIA_COMPLETA_MOTOR_3D_LINBLUX.md` |
+| Linhas | 2.500 |
+| Tamanho | 141.560 bytes (≈ 138 KiB) |
+| Seções principais | 25 + 3 apêndices |
+| Commit auditado | `2aebae4794c1749015082f062e5c2b411db1ecb1` |
+| `git status` na entrega | ` M assets/ui/documents/studio.rml`, ` M assets/ui/styles/studio.rcss`, `?? docs/relatorios/AUDITORIA_COMPLETA_MOTOR_3D_LINBLUX.md` |
+| `git diff --stat -- src CMakeLists.txt tests` | **vazio** (nenhum código alterado) |
+| Testes executados | **nenhum** (apenas `ctest -N` para listar) |
+| Builds executados | **nenhum** |
+| Capturas produzidas | **nenhuma** |
+
+Este documento não foi publicado (`git push`) nem commitado; fica disponível
+para revisão antes de compartilhamento externo.
