@@ -62,7 +62,7 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 .group-tools button.active { border-color: #5c97d0; background-color: #294b6f; }
 .group-tools img { display: block; width: 25px; height: 25px; margin: 0 auto 5px; }
 .group-name { flex: 0 0 16px; font-size: 10px; text-align: center; color: #aeb2bd; padding-top: 1px; }
-#snap-group { display: flex; flex-direction: column; flex: 0 0 auto; min-width: 208px; width: auto; height: 70px; padding: 4px 5px 2px; border-left: 1px #3a3f4a; margin-left: 2px; }
+#snap-group { position: absolute; right: 6px; top: 4px; display: flex; flex-direction: column; width: 210px; height: 70px; padding: 4px 5px 2px; background-color: #2e3035; border-left: 1px #3a3f4a; }
 #snap-group label { display: block; font-size: 11px; white-space: nowrap; margin-right: 6px; flex-shrink: 0; }
 #snap-group label input[type=checkbox] { width: 13px; height: 13px; margin: 0 3px 0 0; vertical-align: middle; }
 .snap-checks { display: flex; flex-direction: row; align-items: center; width: 100%; height: 26px; flex-shrink: 0; }
