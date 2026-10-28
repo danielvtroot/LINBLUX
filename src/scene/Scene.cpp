@@ -377,6 +377,7 @@ Part* Scene::duplicatePart(const Part& source) {
         copy->setTransform(source.transform());
         copy->setColor(source.color());
         copy->setMaterial(source.material());
+        if(source.material3D()){std::string error;copy->setMaterial3D(*source.material3D(),error);}
         copy->setAnchored(source.anchored());
         copy->setCanCollide(source.canCollide());
         std::string bodyError;copy->setBodyProperties(source.bodyProperties(),bodyError);

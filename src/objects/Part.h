@@ -1,4 +1,5 @@
 #pragma once
+#include "objects/Material3D.h"
 
 #include <cstdint>
 #include <optional>
@@ -108,6 +109,11 @@ public:
 
     PartMaterial material() const { return material_; }
     void setMaterial(PartMaterial material);
+    const std::optional<Material3D>& material3D() const {return material3D_;}
+    bool setMaterial3D(const Material3D& value,std::string& error) {
+        if(!value.validate(error))return false;material3D_=value;return true;
+    }
+    void clearMaterial3D() {material3D_.reset();}
 
     bool anchored() const { return anchored_; }
     void setAnchored(bool anchored);
@@ -137,6 +143,7 @@ private:
     Transform transform_;
     Color color_{163, 162, 165, 255};
     PartMaterial material_ = PartMaterial::SmoothPlastic;
+    std::optional<Material3D> material3D_;
     bool anchored_ = false;
     bool canCollide_ = true;
     BodyProperties bodyProperties_;

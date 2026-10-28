@@ -100,6 +100,7 @@ add_library(linblux_engine STATIC
   src/core/Diagnostics.cpp
   src/objects/Instance.cpp
   src/objects/Part.cpp
+  src/objects/Material3D.cpp
   src/objects/Workspace.cpp
   src/objects/Lighting.cpp
   src/objects/Baseplate.cpp
