@@ -57,3 +57,18 @@ Histórico limitado a 128 operações/32.768 poses. Regressão headless em
 `linblux_studio` (`ModelGizmoSession`); interação X11, propriedades, salvar/Play
 e undo composto em `linblux_models_ui` (TURBO obrigatório, timeout de 60 s).
 Agrupar/desagrupar não oferece undo estrutural; não cria soldas físicas.
+
+**Precision Tools (revisão visual das fases 2/4):** gizmo compacto no pivô,
+64–80 px antes do controle de tamanho, independente das dimensões da Part.
+Mover possui três setas positivas que aceitam arraste em ambos os sentidos e
+planos XY/XZ/YZ visíveis quando utilizáveis. Escalar usa seis quadrados 12×12,
+identificados por face local; nenhuma guia liga o controle à face distante.
+Girar usa arcos finos e marcadores quadrados pertencentes aos próprios anéis.
+Layout/picking compartilham triângulos de setas, quads dos planos, retângulos de
+escala e segmentos dos anéis. Tolerância de haste/anel é só de interação.
+A projeção de arraste parte do pivô; os cálculos de ScaleFace/CenteredFace,
+Move, Rotate, Snap e histórico permanecem existentes. Hover/arraste de escala
+tinge a face real; readout mostra distância, L/A/P ou graus. Acento ativo vermelho,
+bases neutras e eixos discretos. Não usar novamente âncoras de escala em faces
+fora da tela. Regressores incluem Parts .2 e 191 unidades, câmeras próximas,
+local/mundo e as duas resoluções; capturas reais por `precision_tools_capture.py`.

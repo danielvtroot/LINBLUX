@@ -1,6 +1,7 @@
 # Mega Update 3D — progresso das fases 0 a 4
 
-Estado atual: fases 0–4 entregues no escopo funcional; validação global parcial.
+Estado atual: implementações 0–4 presentes; visuais 2/4 reprovados pelo usuário.
+A revisão obrigatória está registrada ao final; não há aprovação visual do usuário.
 A execução da fase 4 e seus limites estão ao final deste relatório.
 
 Registro da primeira execução, encerrada em 28/10/2026 (America/Belem). Escopo: baseline,
