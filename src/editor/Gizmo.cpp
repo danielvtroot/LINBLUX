@@ -136,6 +136,7 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                                 const GizmoInput& input) {
     GizmoUpdateResult result;
     const auto settings=visualSettings();
+    const auto previousHover=hoveredHandle_;
     consumedLastInput_ = false;
     if (!dragging_) hoveredHandle_ = gizmomath::HandleId::None;
     const auto finish = [this](GizmoUpdateResult value) {
@@ -192,6 +193,10 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                     {startTransform_.position, startTransform_.rotation, startTransform_.size},
                     axis, delta, 0),axis,{},input,
                     std::clamp(camera.worldUnitsPerPixel(center,viewport.height)*10,.02f,2.f));
+                if(faceMove()) {
+                    const auto size=gizmolayout::MakeSnapshot(*part).size;
+                    faceAnchorWorld_=Vector3Add(part->position(),Vector3RotateByQuaternion({faceAnchorLocal_.x*size.x,faceAnchorLocal_.y*size.y,faceAnchorLocal_.z*size.z},part->rotation()));
+                }
             } else {
                 const auto snapshot = gizmomath::TransformSnapshot{
                     startTransform_.position, startTransform_.rotation, startTransform_.size};
@@ -208,6 +213,8 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                                                         delta, snap);
                 part->setTransform(Transform{centeredScale_&&part->shape()==PartShape::Sphere?startTransform_.position:transformed.position, startTransform_.rotation,
                                              transformed.size});
+                const auto size=gizmolayout::MakeSnapshot(*part).size;
+                faceAnchorWorld_=Vector3Add(part->position(),Vector3RotateByQuaternion({faceAnchorLocal_.x*size.x,faceAnchorLocal_.y*size.y,faceAnchorLocal_.z*size.z},part->rotation()));
             }
             return finish(result);
         }
@@ -272,15 +279,16 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
     hoveredHandle_ = gizmomath::HandleId::None;
     if (part == nullptr || !hovered || !allowInput) return finish(result);
     const gizmolayout::Layout layout =
-        gizmolayout::Build(*part, mode, camera, viewport, localSpace_,settings);
+        gizmolayout::Build(*part, mode==ToolMode::Move&&faceMove()?ToolMode::Scale:mode, camera, viewport, localSpace_,settings);
     if (!layout.valid) return finish(result);
 
+    gizmolayout::FacePick facePick;
     int pickedAxis = -1;
     int pickedSide = 1;
     int pickedPlane = -1;
     Handle pickedHandle = Handle::None;
 
-    if (mode == ToolMode::Move) {
+    if (mode == ToolMode::Move && !faceMove()) {
         // Arrowheads win over shafts; planar areas win over shafts too.
         auto id = gizmolayout::PickMoveArrow(layout, localMouse, settings);
         if (id != gizmomath::HandleId::None) {
@@ -300,12 +308,33 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                 }
             }
         }
-    } else if (mode == ToolMode::Scale) {
-        const gizmomath::HandleId id = gizmolayout::PickScaleHandle(layout, localMouse,settings);
+    } else if (mode == ToolMode::Scale || (mode==ToolMode::Move&&faceMove())) {
+        // The one visible grip is interactive too, including its protruding
+        // tip outside the projected face. Its triangles are the drawn mesh.
+        if(previousHover!=gizmomath::HandleId::None && faceIndex_>=0){
+            const int index=faceIndex_;
+            std::array<gizmolayout::Mesh,3> controls{};const auto normal=mode==ToolMode::Move?Vector3Scale(gizmomath::Axis(gizmomath::HandleAxis(previousHover),part->rotation(),localSpace_),float(gizmomath::HandleSide(previousHover)<0?-1:1)):layout.faces[index].normal;
+            controls[0]=gizmolayout::FaceGrip(*part,camera,viewport,faceAnchorWorld_,normal);
+            if(gizmolayout::PickMesh(controls,localMouse)==0)facePick={index,faceAnchorWorld_,Vector3Distance(camera.position(),faceAnchorWorld_)};
+        }
+        if(facePick.index<0)facePick=gizmolayout::FaceUnderCursor(layout,localMouse);
+        if(facePick.distance>input.occlusionDistance+.002f)facePick.index=-1;
+        const auto id=facePick.index<0?gizmomath::HandleId::None:gizmomath::ScaleFaceHandleId(facePick.index/2,facePick.index%2?1:-1);
         if (gizmomath::IsScaleFace(id)) {
+            const auto& face=layout.faces[facePick.index];
+            faceAnchorWorld_=layout.sphere||Vector2Distance(face.screen,localMouse)>150?facePick.point:face.anchor;
+            auto offset=Vector3RotateByQuaternion(Vector3Subtract(faceAnchorWorld_,part->position()),QuaternionInvert(part->rotation()));
+            const auto size=gizmolayout::MakeSnapshot(*part).size;
+            faceAnchorLocal_={offset.x/size.x,offset.y/size.y,offset.z/size.z};faceGrab_=facePick.point;
             pickedAxis = gizmomath::HandleAxis(id);
             pickedSide = gizmomath::HandleSide(id);
-            pickedHandle = Handle::ScaleFace;
+            faceIndex_=facePick.index;
+            pickedHandle = mode==ToolMode::Scale?Handle::ScaleFace:Handle::Axis;
+            if(mode==ToolMode::Move&&!localSpace_){
+                // World mode constrains to the world axis closest to this face.
+                pickedAxis=0;for(int a=1;a<3;++a)if(std::fabs((&face.normal.x)[a])>std::fabs((&face.normal.x)[pickedAxis]))pickedAxis=a;
+                pickedSide=(&face.normal.x)[pickedAxis]>=0?1:-1;
+            }
         }
     } else if (mode == ToolMode::Rotate) {
         pickedAxis = gizmolayout::PickRotateMarker(layout, localMouse,settings);
@@ -336,15 +365,14 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
     startMouse_ = localMouse;
     dragProjection_ = DragProjection::World;
     accumulatedAngle_ = 0;
-    centeredScale_ = input.altDown && mode == ToolMode::Scale;
+    centeredScale_ = (input.altDown||centerScaleOption_) && mode == ToolMode::Scale;
     dragging_ = true;
     surfaceContact_ = {};
 
     if (handle_ == Handle::Axis || handle_ == Handle::ScaleFace) {
         const Vector3 axis = gizmomath::Axis(activeAxis_, startTransform_.rotation, dragLocalSpace_);
-        // Compact face handles live at the pivot. Use that same projection
-        // reference; the world resize calculation still anchors the opposite face.
-        dragOrigin_=startTransform_.position;
+        // Direct face gestures use the clicked surface as their projection origin.
+        dragOrigin_=(handle_==Handle::ScaleFace||(mode==ToolMode::Move&&faceMove()))?faceGrab_:startTransform_.position;
         const Vector3 viewForward = Vector3Normalize(Vector3Subtract(dragOrigin_,camera.position()));
         axisViewForward_=viewForward;
         // Looking down an axis makes ray/axis intersection singular. The
@@ -353,9 +381,11 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
             !AxisParameter(ray, dragOrigin_, axis, viewForward, startParam_)) {
             dragProjection_ = DragProjection::Screen;
             screenDirection_ = layout.axisDirection[activeAxis_];
-            if(handle_==Handle::ScaleFace) {
-                const int index=activeAxis_*2+(pickedSide>0?1:0);
-                screenDirection_=Vector2Scale(Vector2Normalize(Vector2Subtract(layout.scaleHandle[index],layout.center)),float(pickedSide));
+            if(handle_==Handle::ScaleFace||(mode==ToolMode::Move&&faceMove())) {
+                Vector2 a,b;const Vector2 size{viewport.width,viewport.height};
+                if(camera.projectChecked(dragOrigin_,size,a)&&camera.projectChecked(Vector3Add(dragOrigin_,Vector3Scale(axis,camera.worldUnitsPerPixel(dragOrigin_,viewport.height)*64)),size,b)&&Vector2Distance(a,b)>4)
+                    screenDirection_=Vector2Normalize(Vector2Subtract(b,a));
+                else screenDirection_={0,float(-pickedSide)};
             }
             screenUnits_ = camera.worldUnitsPerPixel(dragOrigin_, viewport.height);
         }
@@ -404,13 +434,13 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
 }
 
 void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& camera,
-                       Rectangle viewport) const {
+                       Rectangle viewport,bool showMeasurement) const {
     if (mode == ToolMode::Select) return;
     // Layout puro: o desenho abaixo usa exatamente as mesmas posicoes que o
     // hit test de update() usa. Nenhuma coordenada invalida e gerada.
     const auto settings=visualSettings();
     const gizmolayout::Layout layout =
-        gizmolayout::Build(part, mode, camera, viewport, localSpace_,settings);
+        gizmolayout::Build(part, mode==ToolMode::Move&&faceMove()?ToolMode::Scale:mode, camera, viewport, localSpace_,settings);
     if (!layout.valid) return;
 
     if(surfaceContact_.snapped&&part.shape()==PartShape::Block) {
@@ -423,82 +453,75 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
     }
 
     const auto faceHandle=dragging_?activeHandle_:hoveredHandle_;
-    if(mode==ToolMode::Scale&&gizmomath::IsScaleFace(faceHandle)&&part.shape()==PartShape::Block){
-        const int axis=gizmomath::HandleAxis(faceHandle),side=gizmomath::HandleSide(faceHandle);
-        static const int faces[6][4]={{0,4,7,3},{1,2,6,5},{0,3,2,1},{4,5,6,7},{0,1,5,4},{3,7,6,2}};
-        const auto& f=faces[axis*2+(side>0)];const auto c=part.bounds().corners();
-        BeginMode3D(camera.camera());rlDrawRenderBatchActive();rlDisableDepthMask();rlDisableBackfaceCulling();
-        DrawTriangle3D(c[f[0]],c[f[1]],c[f[2]],{239,58,81,42});DrawTriangle3D(c[f[0]],c[f[2]],c[f[3]],{239,58,81,42});
-        rlDrawRenderBatchActive();rlEnableDepthMask();EndMode3D();
-    }
-    // Passe proprio do gizmo, independente da profundidade da cena:
-    //  1. descarrega o batch da cena (nenhum vertice antigo muda de estado);
-    //  2. isola depth test e depth write;
-    //  3. desenha os manipuladores;
-    //  4. descarrega o batch do gizmo AINDA com a profundidade isolada;
-    //  5. restaura o estado.
-    // O passo 4 e obrigatorio: rlgl acumula vertices e so aplica o estado de
-    // profundidade no flush. Restaurar antes do flush fazia a Part ocluir os
-    // controles (primitivas 2D ficam no far plane da projecao ortografica).
-    rlDrawRenderBatchActive();
-    rlDisableDepthTest();
-    rlDisableDepthMask();
-
-    const Vector2 center = layout.center;
-    const auto highlighted = [this](gizmomath::HandleId id) {
-        return dragging_ ? activeHandle_ == id : hoveredHandle_ == id;
-    };
-
-    const auto axisName=[](int axis){return axis==0?"X":axis==1?"Y":"Z";};
-    const auto badge=[&](Rectangle rect,Color color){
-        DrawRectangleRec(rect,{28,30,36,248});DrawRectangleLinesEx(rect,1,color);
-        DrawRectangleRec({rect.x+rect.width*.5f-2,rect.y+rect.height*.5f-2,4,4},color);
-    };
-    // All stems stop inside the compact layout. No link to the real face.
-    if(mode==ToolMode::Move){
+    const Color graphite{101,108,121,255},accent{237,53,76,255};
+    const auto isActive=[&](gizmomath::HandleId id){return dragging_?activeHandle_==id:hoveredHandle_==id;};
+    struct Painted {gizmolayout::Triangle triangle;Color color;};
+    std::vector<Painted> paint;
+    const auto mesh=[&](const gizmolayout::Mesh& value,Color color){for(const auto& t:value.triangles)paint.push_back({t,color});};
+    Vector2 readout=layout.center;
+    const bool directFace=mode==ToolMode::Scale||(mode==ToolMode::Move&&faceMove());
+    if(directFace){
+        if(faceHandle==gizmomath::HandleId::None||faceIndex_<0)return;
+        const int index=faceIndex_;const auto& face=layout.faces[index];
+        const auto size=gizmolayout::MakeSnapshot(part).size;
+        const auto anchor=Vector3Add(part.position(),Vector3RotateByQuaternion({faceAnchorLocal_.x*size.x,faceAnchorLocal_.y*size.y,faceAnchorLocal_.z*size.z},part.rotation()));
+        camera.projectChecked(anchor,{viewport.width,viewport.height},readout);
+        BeginMode3D(camera.camera());rlDrawRenderBatchActive();rlEnableDepthTest();rlDisableDepthMask();rlDisableBackfaceCulling();
+        if(!layout.sphere&&face.visible){
+            const auto offset=Vector3Scale(face.normal,camera.worldUnitsPerPixel(anchor,viewport.height)*.3f);
+            for(size_t i=1;i+1<face.polygon.size();++i)DrawTriangle3D(Vector3Add(face.polygon[0],offset),Vector3Add(face.polygon[i],offset),Vector3Add(face.polygon[i+1],offset),{237,53,76,14});
+            for(size_t i=0;i<face.polygon.size();++i)DrawLine3D(Vector3Add(face.polygon[i],offset),Vector3Add(face.polygon[(i+1)%face.polygon.size()],offset),{237,80,99,210});
+        }
+        rlDrawRenderBatchActive();EndMode3D();
+        const auto normal=mode==ToolMode::Move?Vector3Scale(gizmomath::Axis(gizmomath::HandleAxis(faceHandle),part.rotation(),dragging_?dragLocalSpace_:localSpace_),float(gizmomath::HandleSide(faceHandle)<0?-1:1)):face.normal;
+        mesh(gizmolayout::FaceGrip(part,camera,viewport,anchor,normal),accent);
+        // Preview only the original active face; never draw diagonal debug axes.
+        if(dragging_&&!layout.sphere){Part original(0,"preview",PartShape::Block);original.setTransform(startTransform_);
+            const auto before=gizmolayout::Build(original,ToolMode::Scale,camera,viewport,true,settings);const auto& old=before.faces[index];
+            rlDrawRenderBatchActive();rlDisableDepthTest();rlDisableDepthMask();
+            for(size_t i=0;i<old.projected.size();++i)DrawLineEx(old.projected[i],old.projected[(i+1)%old.projected.size()],1,{146,151,161,110});
+        }
+    }else if(mode==ToolMode::Move){
+        for(int axis=0;axis<3;++axis){const bool active=isActive(AxisHandleId(axis,1));
+            mesh(layout.shaft[axis],active?accent:graphite);
+            const Color tint[3]={{170,103,111,255},{104,149,130,255},{106,135,175,255}};
+            mesh(layout.arrow[axis],active?accent:tint[axis]);
+        }
+        rlDrawRenderBatchActive();rlDisableDepthTest();rlDisableDepthMask();
         for(int plane=0;plane<3;++plane)if(layout.planeVisible[plane]){
-            const auto& q=layout.planeCorners[plane];const auto color=highlighted(PlaneHandleId(plane))?kHighlight:Color{164,170,183,150};
-            Triangle2D(q[0],q[1],q[2],{28,30,36,205});Triangle2D(q[0],q[2],q[3],{28,30,36,205});
-            for(int i=0;i<4;++i)DrawLineEx(q[i],q[(i+1)%4],1,color);
-        }
-        for(int axis=0;axis<3;++axis){
-            const auto p=layout.moveHandle[axis*2+1],d=Vector2Normalize(Vector2Subtract(p,center));
-            const auto color=highlighted(AxisHandleId(axis,1))?kHighlight:kAxisColors[axis];
-            DrawLineEx(Vector2Add(center,Vector2Scale(d,9)),Vector2Subtract(p,Vector2Scale(d,4)),highlighted(AxisHandleId(axis,1))?2.5f:1.75f,color);
-            const auto corners=gizmolayout::MoveArrowCorners(layout,axis,settings);Triangle2D(corners[0],corners[1],corners[2],color);
-            DrawText(axisName(axis),int(p.x+9),int(p.y-7),12,color);
-        }
-    }else if(mode==ToolMode::Scale){
-        for(int axis=0;axis<3;++axis)for(int side:{-1,1}){
-            const int index=axis*2+(side>0);const auto p=layout.scaleHandle[index],d=Vector2Normalize(Vector2Subtract(p,center));
-            const bool active=highlighted(gizmomath::ScaleFaceHandleId(axis,side));const auto color=active?kHighlight:kAxisColors[axis];
-            DrawLineEx(Vector2Add(center,Vector2Scale(d,10)),Vector2Subtract(p,Vector2Scale(d,8)),1,{143,150,164,160});
-            badge(gizmolayout::ScaleHandleRect(layout,index,settings),color);
-            DrawText(TextFormat("%s%s",axisName(axis),side>0?"+":"-"),int(p.x+9),int(p.y-6),12,color);
+            const auto& q=layout.planeCorners[plane];const auto color=isActive(PlaneHandleId(plane))?accent:Color{125,131,144,180};
+            Triangle2D(q[0],q[1],q[2],{50,55,65,110});Triangle2D(q[0],q[2],q[3],{50,55,65,110});
+            for(int i=0;i<4;++i)DrawLineEx(q[i],q[(i+1)%4],1.25f,color);
         }
     }else if(mode==ToolMode::Rotate){
-        for(int axis=0;axis<3;++axis){
-            const auto color=highlighted(RotateHandleId(axis))?kHighlight:kAxisColors[axis];
-            for(const auto& segment:layout.ring[axis])DrawLineEx(segment.a,segment.b,highlighted(RotateHandleId(axis))?2.25f:1.25f,color);
-        }
-        for(int axis=0;axis<3;++axis){
-            const auto color=highlighted(RotateHandleId(axis))?kHighlight:kAxisColors[axis];
-            const auto rect=gizmolayout::RotateMarkerRect(layout,axis,settings);badge(rect,color);
-            DrawText(axisName(axis),int(rect.x+rect.width+3),int(rect.y+1),12,color);
-        }
+        for(int axis=0;axis<3;++axis)mesh(layout.rotation[axis],isActive(RotateHandleId(axis))?accent:graphite);
     }
-    DrawRectangleRec({center.x-2,center.y-2,4,4},{219,222,229,255});
-    if(dragging_){
+    // These are the same world-space triangles projected by the picker.
+    // Painter order gives self-occlusion without allowing the selected solid
+    // to hide its own transform tools. Face picking still obeys scene occlusion.
+    std::stable_sort(paint.begin(),paint.end(),[](const Painted& a,const Painted& b){return a.triangle.depth>b.triangle.depth;});
+    BeginMode3D(camera.camera());rlDrawRenderBatchActive();
+    if(directFace)rlEnableDepthTest();else rlDisableDepthTest();
+    rlDisableDepthMask();rlDisableBackfaceCulling();
+    for(const auto& p:paint){const auto& t=p.triangle.world;auto normal=Vector3Normalize(Vector3CrossProduct(Vector3Subtract(t[1],t[0]),Vector3Subtract(t[2],t[0])));
+        const auto view=Vector3Normalize(Vector3Subtract(camera.position(),t[0]));
+        const float facing=std::fabs(Vector3DotProduct(normal,view));
+        const float shade=.48f+.25f*std::fabs(Vector3DotProduct(normal,Vector3Normalize({-.3f,.8f,.6f})))+.8f*std::pow(facing,6.f);
+        Color color{(unsigned char)std::min(255.f,p.color.r*shade),(unsigned char)std::min(255.f,p.color.g*shade),(unsigned char)std::min(255.f,p.color.b*shade),p.color.a};
+        DrawTriangle3D(t[0],t[1],t[2],color);
+    }
+    if(mode==ToolMode::Move&&!directFace)DrawSphere(part.position(),camera.worldUnitsPerPixel(part.position(),viewport.height)*5,{215,218,223,255});
+    rlDrawRenderBatchActive();EndMode3D();rlDisableDepthTest();rlDisableDepthMask();
+    if(dragging_&&showMeasurement){
         const auto delta=Vector3Subtract(part.position(),startTransform_.position);
-        const char* text=mode==ToolMode::Scale?TextFormat("L %.2f   A %.2f   P %.2f",part.size().x,part.size().y,part.size().z):
-            mode==ToolMode::Rotate?TextFormat("%s  %.1f graus",axisName(activeAxis_),appliedRotation_*RAD2DEG):
-            TextFormat("Distancia %.3f u",Vector3Length(delta));
-        const float width=std::min(viewport.width-8,float(MeasureText(text,15)+24));
-        const float x=std::clamp(center.x+18,4.f,std::max(4.f,viewport.width-width-4));
-        const float y=std::clamp(center.y+layout.pixelLength+20,4.f,std::max(4.f,viewport.height-47));
-        DrawRectangleRounded({x,y,width,39},.15f,4,{24,26,31,244});DrawRectangle(int(x),int(y+5),2,29,kHighlight);
-        DrawText(mode==ToolMode::Scale?(centeredScale_?"ESCALA CENTRADA":"ESCALA POR FACE"):mode==ToolMode::Rotate?"GIRAR":"MOVER",int(x+10),int(y+4),10,{164,170,183,255});
-        DrawText(text,int(x+10),int(y+18),15,{235,238,243,255});
+        const char* text=mode==ToolMode::Scale?TextFormat("%.2f  x  %.2f  x  %.2f",part.size().x,part.size().y,part.size().z):
+            mode==ToolMode::Rotate?TextFormat("%.1f graus",appliedRotation_*RAD2DEG):TextFormat("%.3f unidades",Vector3Length(delta));
+        const float width=std::min(viewport.width-8,float(MeasureText(text,19)+26));
+        const float x=std::clamp(readout.x+40,4.f,std::max(4.f,viewport.width-width-4));
+        const float y=std::clamp(readout.y+36,4.f,std::max(4.f,viewport.height-54));
+        DrawRectangleRounded({x,y,width,48},.15f,4,{27,30,36,245});DrawRectangle(int(x),int(y+7),3,34,accent);
+        DrawText(mode==ToolMode::Scale?(centeredScale_?"Escala centrada":"Escala por face"):mode==ToolMode::Rotate?"Rotacao":"Deslocamento",int(x+12),int(y+5),12,{184,190,202,255});
+        DrawText(text,int(x+12),int(y+22),19,{244,245,248,255});
     }
     if(surfaceContact_.snapped) {
         Vector2 p,q;

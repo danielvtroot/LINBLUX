@@ -993,17 +993,23 @@ void SceneRenderer::drawBaseplate(const Part& baseplate, Vector3 lightDirection,
 }
 
 void SceneRenderer::drawSelection(const Part& part) const {
-    // Exact geometry, not a 2% inflated proxy. Overlay depth policy keeps
-    // coplanar outlines readable without changing their world-space bounds.
-    rlDrawRenderBatchActive();rlDisableDepthTest();rlDisableDepthMask();
-    const Color selection{255, 205, 60, 255};
-    if (part.shape() == PartShape::Sphere) {
-        DrawSphereWires(part.position(), part.sphereRadius(), 8, 12, selection);
-    } else {
-        DrawRotatedBoxWires(part.position(), part.size(), part.rotation(),
-                            selection);
+    // Selection is a silhouette, not a debug wireframe through the object.
+    rlDrawRenderBatchActive();rlEnableDepthTest();rlDisableDepthMask();
+    const auto saved=rlGetMatrixProjection();auto biased=saved;biased.m14-=.0001f;rlSetMatrixProjection(biased);
+    const Color color{202,209,219,215};
+    if(part.shape()==PartShape::Sphere){
+        const auto toEye=Vector3Subtract(gSurfaceLight.camera,part.position());const float distance=Vector3Length(toEye),r=part.sphereRadius();
+        if(distance>r){const auto n=Vector3Scale(toEye,1/distance);const auto helper=std::fabs(n.y)<.9f?Vector3{0,1,0}:Vector3{1,0,0};
+            const auto u=Vector3Normalize(Vector3CrossProduct(n,helper)),v=Vector3CrossProduct(n,u);const auto center=Vector3Add(part.position(),Vector3Scale(n,r*r/distance));
+            const float radius=r*std::sqrt(1-r*r/(distance*distance));
+            for(int i=0;i<64;++i){const auto point=[&](int k){const float angle=2*PI*k/64;return Vector3Add(center,Vector3Scale(Vector3Add(Vector3Scale(u,std::cos(angle)),Vector3Scale(v,std::sin(angle))),radius));};DrawLine3D(point(i),point(i+1),color);}}
+    }else{
+        const auto c=part.bounds().corners();const Vector3 normals[6]={{-1,0,0},{1,0,0},{0,-1,0},{0,1,0},{0,0,-1},{0,0,1}};bool front[6];
+        for(int i=0;i<6;++i)front[i]=Vector3DotProduct(Vector3RotateByQuaternion(normals[i],part.rotation()),Vector3Subtract(gSurfaceLight.camera,Vector3Add(part.position(),Vector3RotateByQuaternion({normals[i].x*part.size().x*.5f,normals[i].y*part.size().y*.5f,normals[i].z*part.size().z*.5f},part.rotation()))))>0;
+        const int edges[12][4]={{0,1,2,4},{1,2,2,1},{2,3,2,5},{3,0,2,0},{4,5,3,4},{5,6,3,1},{6,7,3,5},{7,4,3,0},{0,4,0,4},{1,5,1,4},{2,6,1,5},{3,7,0,5}};
+        for(const auto& e:edges)if(front[e[2]]!=front[e[3]])DrawLine3D(c[e[0]],c[e[1]],color);
     }
-    rlDrawRenderBatchActive();rlEnableDepthMask();rlEnableDepthTest();
+    rlDrawRenderBatchActive();rlSetMatrixProjection(saved);rlEnableDepthMask();
 }
 
 void SceneRenderer::drawEditorGuides(const Scene& scene,Camera3D camera,const EditorGeometryView& options,

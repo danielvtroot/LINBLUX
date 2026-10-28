@@ -488,3 +488,59 @@ grandes de câmera/volume/luz ainda podem causar atualização perceptível do f
 não há cascatas nem filtro temporal. Rigs/decals continuam com iluminação CPU como
 antes, embora o rig projete sombra em Parts. O arquivo original do usuário não foi
 alterado nem testado porque não foi identificado. WIPs originais preservados.
+
+
+## Correção de interação dos gizmos — 2026-10-28
+
+O usuário reprovou os controles pequenos agrupados no pivô. Depois de examinar
+esta revisão, aprovou o Scale por face e pediu que Move adotasse a mesma
+interação. Esta orientação substitui o pedido anterior de três setas no pivô
+como padrão do Studio. Nenhuma fase 5 foi iniciada.
+
+### Resultado implementado
+
+- **Selecionar:** silhueta discreta, sem gizmo, cruzes ou readout técnico.
+- **Escalar:** a face inteira é clicável; uma única seta 3D aparece na face em
+  hover/arraste. Parede de 191 unidades usa uma âncora na região visível, sem
+  exigir acesso ao centro da parede. Escala por face mantém o lado oposto;
+  opção Centrada/Alt mantém o centro. Prévia e dimensões em um único indicador.
+- **Mover:** mesma aquisição pela face e mesma alça 3D; desloca a Part inteira,
+  sem mudar suas dimensões. Local usa a normal local; Mundo escolhe o eixo
+  mundial mais próximo da normal. Planos de movimento opcionais restauram
+  eixos no pivô com XY/XZ/YZ; ferramentas de rig preservam seus eixos no pivô.
+- **Girar:** arcos 3D sem quadradinhos/letras, destaque e graus durante o gesto.
+  Iluminação dos controles no desenho CPU melhora contraste sobre peças cinza.
+- Desenho/picking compartilham triângulos; faces usam recorte de frustum e
+  interseção raio/plano. Oclusão por outra Part opaca impede iniciar o gesto.
+  Matemática de transformação, sessões, snap e undo/redo existentes preservados.
+  Nenhuma alteração de física, shaders, sombras, áudio ou Lua.
+
+### Evidências
+
+- Studio real recompilado: `build-linblux/linblux`.
+- ATLAS: locate/impact consultados; update/verify aprovados.
+- Headless focado: `linblux_tests`, `linblux_manipulation`, `linblux_studio`,
+  **3/3 PASS**. Inclui Move direto local/mundo em peças pequenas/191 unidades,
+  dimensão imutável, oclusão, cancelamento e opção de escala centrada.
+- TURBO FAST: **12/12 PASS**, sem cache; run `20261028T092803Z-10975`.
+  Build 90,9 s; testes 9,5 s. FULL não executado.
+- TURBO gráfico: **379 casos, 4882 verificações, zero falhas**;
+  `.turbo/logs/direct-face/graphic-final.log`. A regressão adicional comprova
+  que a alça do Move por face aparece também no sentido positivo do eixo.
+  A inspeção real detectou e corrigiu essa alça antes da publicação.
+- Capturas antes/depois: `.turbo/logs/direct-face/captures/index.html`,
+  PNGs de Selecionar/Mover/Escalar/Girar, hover, arraste, resultado, undo/redo
+  e ESC nas resoluções 1366×768 e 1920×1080. Baseline preservado de `752b3a4`.
+  O script `tests/direct_face_capture.py` usa cópia isolada da mesma cena/câmera,
+  verifica JSON salvo após gestos reais e preserva o arquivo-fonte.
+
+Limites: a experiência original do usuário não foi identificada; usamos cena
+isolada equivalente, com parede de 191 unidades, piso, parede adjacente e peça
+pequena girada com decal. Validação gráfica em llvmpipe, sem extrapolar para GPU
+física. FAST é cobertura parcial do produto; não se declara aprovação global.
+Os quatro WIPs anteriores foram preservados byte a byte e excluídos do commit.
+
+Validação final no Studio: **PASS, 124,6 s**, supervisionada pelo TURBO;
+`.turbo/logs/direct-face/after-final.log`. Move e Scale passaram nas duas
+resoluções com undo/redo/ESC. PNGs inspecionados em tamanho original. Manifests
+confirmam a mesma cena-fonte antes/depois e o hash do executável final capturado.

@@ -19,6 +19,7 @@ struct GizmoInput {
     bool windowFocused = true;
     bool shiftDown = false;
     bool altDown = false;   // escala centrada (as duas faces)
+    float occlusionDistance=INFINITY;
     bool surfaceSnap = false; // Ctrl: encaixe geométrico durante Mover
     bool cursorSurface = false;
     Ray cursorRay{};
@@ -46,7 +47,7 @@ public:
                              Rectangle viewport, bool hovered, bool allowInput,
                              const GizmoInput& input);
     void drawOverlay(const Part& part, ToolMode mode, const EditorCamera& camera,
-                     Rectangle viewport) const;
+                     Rectangle viewport,bool showMeasurement=true) const;
     bool dragging() const { return dragging_; }
     InstanceId sessionPartId() const { return draggedPartId_; }
     bool consumedLastInput() const { return consumedLastInput_; }
@@ -83,10 +84,18 @@ public:
     // Modo de escala fixado no inicio do arraste: mudar Alt no meio nao troca
     // a matematica debaixo do usuario.
     bool centeredScale() const { return centeredScale_; }
+    void setCenteredScaleOption(bool value){centerScaleOption_=value;}
+    bool centeredScaleOption() const {return centerScaleOption_;}
+    // Studio moves directly from a face; rig tools may retain pivot axes.
+    void setFaceMove(bool value){faceMove_=value;}
+    bool faceMove() const{return faceMove_&&!planarHandles_;}
+    void setPlanarHandles(bool value){planarHandles_=value;}
+    bool planarHandles() const{return planarHandles_;}
+    Vector3 faceAnchor() const {return faceAnchorWorld_;}
     void setPixelScale(float value) { if(std::isfinite(value))pixelScale_=std::clamp(value,.75f,1.75f); }
     float pixelScale() const { return pixelScale_; }
     gizmolayout::Settings visualSettings() const {
-        gizmolayout::Settings s;const float v=pixelScale_;
+        gizmolayout::Settings s;s.showPlanes=planarHandles_;const float v=pixelScale_;
         s.basePixelLength*=v;s.minPixelLength*=v;s.maxPixelLength*=v;
         s.axisButtonHalf*=v;s.planeButtonHalf*=v;s.scaleHandleHalfWidth*=v;s.scaleHandleHalfHeight*=v;
         s.scaleHandleSeparation*=v;s.rotateMarkerHalfWidth*=v;s.rotateMarkerHalfHeight*=v;
@@ -106,7 +115,10 @@ private:
     bool consumedLastInput_ = false;
     bool localSpace_ = false;
     gizmomath::GridMode gridMode_=gizmomath::GridMode::Relative;
-    bool centeredScale_ = false;
+    bool centeredScale_ = false,centerScaleOption_=false,planarHandles_=false;
+    bool faceMove_=false;
+    int faceIndex_=-1;
+    Vector3 faceAnchorLocal_{},faceAnchorWorld_{},faceGrab_{};
     float pixelScale_=1;
     bool dragLocalSpace_ = false;
     Vector3 dragOrigin_{},axisViewForward_{};

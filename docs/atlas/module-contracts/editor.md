@@ -58,17 +58,20 @@ Histórico limitado a 128 operações/32.768 poses. Regressão headless em
 e undo composto em `linblux_models_ui` (TURBO obrigatório, timeout de 60 s).
 Agrupar/desagrupar não oferece undo estrutural; não cria soldas físicas.
 
-**Precision Tools (revisão visual das fases 2/4):** gizmo compacto no pivô,
-64–80 px antes do controle de tamanho, independente das dimensões da Part.
-Mover possui três setas positivas que aceitam arraste em ambos os sentidos e
-planos XY/XZ/YZ visíveis quando utilizáveis. Escalar usa seis quadrados 12×12,
-identificados por face local; nenhuma guia liga o controle à face distante.
-Girar usa arcos finos e marcadores quadrados pertencentes aos próprios anéis.
-Layout/picking compartilham triângulos de setas, quads dos planos, retângulos de
-escala e segmentos dos anéis. Tolerância de haste/anel é só de interação.
-A projeção de arraste parte do pivô; os cálculos de ScaleFace/CenteredFace,
-Move, Rotate, Snap e histórico permanecem existentes. Hover/arraste de escala
-tinge a face real; readout mostra distância, L/A/P ou graus. Acento ativo vermelho,
-bases neutras e eixos discretos. Não usar novamente âncoras de escala em faces
-fora da tela. Regressores incluem Parts .2 e 191 unidades, câmeras próximas,
-local/mundo e as duas resoluções; capturas reais por `precision_tools_capture.py`.
+**Manipulação direta (correção visual, 2026-10-28):** o Studio usa a face
+visível como área clicável para Mover e Escalar. Apenas a face em hover/arraste
+recebe uma alça tridimensional; se o centro estiver fora da viewport, a âncora
+fica sobre a porção visível. Selecionar mostra somente a silhueta discreta.
+ScaleFace preserva a face oposta; a opção explícita Centrada (ou Alt) preserva o
+centro. Move desloca a Part inteira: normal local ou eixo mundial mais próximo
+da face, conforme Local/Mundo. A projeção do gesto parte do ponto clicado.
+Planos de movimento são opcionais e reativam eixos no pivô + XY/XZ/YZ;
+ferramentas de rig mantêm esse manipulador de eixos. Girar usa arcos 3D sem
+marcadores quadrados/letras. Triângulos projetados são compartilhados pelo
+desenho e hit-test; faces usam polígonos recortados pelo frustum e interseção
+raio/plano. Faces ocultas por outra Part opaca não iniciam o gesto.
+Matemática, snap e sessões de histórico continuam existentes. Um único readout
+mostra deslocamento, dimensões ou graus durante o arraste. Testes cobrem peças
+pequenas e paredes de 191 unidades, local/mundo, oclusão, cancelamento e escala
+centrada. `tests/direct_face_capture.py` exercita o Studio real em cópia isolada,
+nas duas resoluções, verificando salvar, undo/redo, ESC e face oposta fixa.

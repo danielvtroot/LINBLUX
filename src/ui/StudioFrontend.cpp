@@ -1294,6 +1294,10 @@ void StudioFrontend::draw() {
         const auto mode=p.ui.renderer_.antialiasing();const std::string value=mode==Antialiasing::None?"off":mode==Antialiasing::FXAA?"fxaa":mode==Antialiasing::MSAA4?"msaa4":"auto";
         if(aa->GetValue()!=value)aa->SetValue(value);
     }
+    if(auto* planes=p.el("move-planes")){if(p.ui.gizmo_.planarHandles())planes->SetAttribute("checked","");else planes->RemoveAttribute("checked");}
+    if(auto* scale=dynamic_cast<Rml::ElementFormControl*>(p.el("scale-origin"));scale&&p.formOwner(p.context->GetFocusElement())!=scale){
+        const std::string value=p.ui.gizmo_.centeredScaleOption()?"center":"face";if(scale->GetValue()!=value)scale->SetValue(value);
+    }
     p.ui.gizmo_.setSnap(p.ui.snapEnabled_?p.ui.moveSnap_:0,p.ui.snapEnabled_?p.ui.scaleSnap_:0,p.ui.snapEnabled_?p.ui.rotateSnapDegrees_:0);
     p.context->Update();p.syncing=false;rlImGuiSetExternalTextInput(p.editing());
     if(p.timing){p.presentationTime+=beforeScene-started;p.sceneTime+=afterScene-beforeScene;p.updateTime+=GetTime()-afterScene;p.frameTime+=GetFrameTime();}

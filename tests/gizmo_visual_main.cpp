@@ -125,144 +125,21 @@ struct CaseResult {
 
 // Verifica, para um layout: pixel do handle tem a cor do eixo e o picking no
 // mesmo ponto devolve o mesmo HandleId que o desenho representa.
-void VerifyMove(const gizmolayout::Layout& layout, const Image& image) {
-    for (int axis = 0; axis < 3; ++axis) for (int side : {1}) {
-        const Vector2 center = layout.moveHandle[axis * 2 + (side > 0)];
-        const Vector2 sample = center;
-        ++gChecks;
-        if (!Inside(image, sample) || !Nearly(PixelAt(image, sample), kAxis[axis])) {
-            ++gFailures; ++gCaseFailures;
-            const Color got = PixelAt(image, sample);
-            std::printf("  FAIL [%s] botao %c em (%.0f,%.0f) cor=(%d,%d,%d)\n",
-                        gCase.c_str(), kAxisName[axis], center.x, center.y, got.r, got.g,
-                        got.b);
-        }
-        ++gChecks;
-        if (gizmolayout::PickMoveArrow(layout, center) != gizmomath::MoveHandleId(axis, side)) {
-            ++gFailures; ++gCaseFailures;
-            std::printf("  FAIL [%s] botao %c nao e clicavel no centro desenhado\n",
-                        gCase.c_str(), kAxisName[axis]);
-        }
-        // Ponto no meio da linha do eixo: desenho e hit test coincidem.
-        const Vector2 middle{layout.center.x + (center.x - layout.center.x) * 0.55f,
-                             layout.center.y + (center.y - layout.center.y) * 0.55f};
-        if (gizmolayout::PickPlane(layout, middle) < 0) {
-            ++gChecks;
-            // Collinear shafts can overlap, but each arrowhead must have an
-            // independent hit area. Only demand a unique shaft where isolated.
-            const auto picked = gizmolayout::PickMoveShaft(layout, middle);
-            if (gizmomath::HandleAxis(picked) < 0) {
-                ++gFailures; ++gCaseFailures;
-                std::printf("  FAIL [%s] linha %c nao e clicavel no meio\n", gCase.c_str(),
-                            kAxisName[axis]);
-            }
-        }
-    }
-    for (int plane = 0; plane < 3; ++plane) {
-        if(!layout.planeVisible[plane])continue; // edge-on plane has no 2D drag area
-        const Rectangle rect = gizmolayout::PlaneButtonRect(layout, plane);
-        const Vector2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
-        ++gChecks;
-        if (gizmolayout::PickPlane(layout, center) != plane) {
-            ++gFailures; ++gCaseFailures;
-            std::printf("  FAIL [%s] plano %d nao e clicavel no centro\n", gCase.c_str(), plane);
-        }
-    }
+Image gSceneImage{};
+bool ControlAt(const Image& image,Vector2 p){
+    for(int dy=-2;dy<=2;++dy)for(int dx=-2;dx<=2;++dx){const Vector2 q{p.x+dx,p.y+dy};if(!Inside(image,q))continue;
+        const auto a=PixelAt(image,q),b=PixelAt(gSceneImage,q);if(std::abs(int(a.r)-b.r)+std::abs(int(a.g)-b.g)+std::abs(int(a.b)-b.b)>22)return true;}return false;
 }
-
-void VerifyScale(const gizmolayout::Layout& layout, const Image& image) {
-    for (int axis = 0; axis < 3; ++axis) {
-        for (int side : {-1, 1}) {
-            const int index = axis * 2 + (side > 0 ? 1 : 0);
-            const Rectangle rect = gizmolayout::ScaleHandleRect(layout, index);
-            const Vector2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
-            const Vector2 sample=center; // filled centre also identifies negative-face ring
-            ++gChecks;
-            if (!Inside(image, sample) || !Nearly(PixelAt(image, sample), kAxis[axis])) {
-                ++gFailures; ++gCaseFailures;
-                const Color got = PixelAt(image, sample);
-                std::printf("  FAIL [%s] alca %c%c em (%.0f,%.0f) cor=(%d,%d,%d)\n",
-                            gCase.c_str(), kAxisName[axis], side > 0 ? '+' : '-', center.x,
-                            center.y, got.r, got.g, got.b);
-            }
-            const gizmomath::HandleId expected =
-                gizmomath::ScaleFaceHandleId(axis, side);
-            ++gChecks;
-            const gizmomath::HandleId picked = gizmolayout::PickScaleHandle(layout, center);
-            if (picked != expected) {
-                ++gFailures; ++gCaseFailures;
-                std::printf("  FAIL [%s] alca %c%c nao e clicavel no centro desenhado\n",
-                            gCase.c_str(), kAxisName[axis], side > 0 ? '+' : '-');
-            }
-        }
-    }
+void VerifyMove(const gizmolayout::Layout& layout,const Image& image){
+    for(int axis=0;axis<3;++axis){CHECK(!layout.arrow[axis].triangles.empty());CHECK(gizmolayout::PickMoveArrow(layout,layout.moveHandle[axis*2+1])==gizmomath::MoveHandleId(axis,1));CHECK(ControlAt(image,layout.moveHandle[axis*2+1]));}
 }
-
-void VerifyRotate(const gizmolayout::Layout& layout, const Image& image) {
-    for (int axis = 0; axis < 3; ++axis) {
-        const Rectangle rect = gizmolayout::RotateMarkerRect(layout, axis);
-        const Vector2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
-        const Vector2 sample=center;
-        ++gChecks;
-        if (!Inside(image, sample) || !Nearly(PixelAt(image, sample), kAxis[axis])) {
-            ++gFailures; ++gCaseFailures;
-            const Color got = PixelAt(image, sample);
-            std::printf("  FAIL [%s] marcador %c em (%.0f,%.0f) cor=(%d,%d,%d)\n",
-                        gCase.c_str(), kAxisName[axis], center.x, center.y, got.r, got.g,
-                        got.b);
-        }
-        ++gChecks;
-        if (gizmolayout::PickRotateMarker(layout, center) != axis) {
-            ++gFailures; ++gCaseFailures;
-            std::printf("  FAIL [%s] marcador %c nao e clicavel no centro desenhado\n",
-                        gCase.c_str(), kAxisName[axis]);
-        }
-        // Um segmento do anel com folga dos outros aneis e marcadores: o
-        // ponto escolhido e o mesmo para desenho e hit test.
-        const auto& segments = layout.ring[static_cast<std::size_t>(axis)];
-        ++gChecks;
-        if (segments.empty()) {
-            ++gFailures; ++gCaseFailures;
-            std::printf("  FAIL [%s] anel %c sem segmentos\n", gCase.c_str(),
-                        kAxisName[axis]);
-            continue;
-        }
-        Vector2 middle{};
-        float bestClearance = -1.0f;
-        for (const gizmolayout::Segment& segment : segments) {
-            const Vector2 candidate{(segment.a.x + segment.b.x) * 0.5f,
-                                    (segment.a.y + segment.b.y) * 0.5f};
-            if (!Inside(image, candidate)) continue;
-            const float clearance = RingClearance(layout, axis, candidate);
-            if (clearance > bestClearance) {
-                bestClearance = clearance;
-                middle = candidate;
-            }
-        }
-        if (bestClearance >= 6.0f) {
-            ++gChecks;
-            bool strokeFound=false;
-            // Thin strokes can straddle pixel centres. Search only the 3x3
-            // footprint around the exact shared segment, not a distant icon.
-            for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx)
-                strokeFound|=Nearly(PixelAt(image,{middle.x+dx,middle.y+dy}),kAxis[axis],24);
-            if (!strokeFound) {
-                ++gFailures; ++gCaseFailures;
-                const Color got = PixelAt(image, middle);
-                std::printf("  FAIL [%s] anel %c meio=(%.0f,%.0f) cor=(%d,%d,%d)\n",
-                            gCase.c_str(), kAxisName[axis], middle.x, middle.y, got.r, got.g,
-                            got.b);
-            }
-            ++gChecks;
-            if (gizmolayout::PickRotateRing(layout, middle) != axis) {
-                ++gFailures; ++gCaseFailures;
-                std::printf("  FAIL [%s] anel %c nao e clicavel no mesmo ponto\n",
-                            gCase.c_str(), kAxisName[axis]);
-            }
-        }
-    }
+void VerifyScale(const gizmolayout::Layout& layout,const Image& image){
+    int visible=0;for(int i=0;i<6;++i)if(layout.faces[i].visible){++visible;CHECK(gizmolayout::FaceUnderCursor(layout,layout.faces[i].screen).index==i);}
+    if(visible){int red=0;for(int y=0;y<image.height;++y)for(int x=0;x<image.width;++x){const auto a=GetImageColor(image,x,y),b=GetImageColor(gSceneImage,x,y);red+=a.r>120&&a.r>a.g*1.8f&&std::abs(int(a.r)-b.r)+std::abs(int(a.g)-b.g)>25;}CHECK(red>10);}
 }
-
+void VerifyRotate(const gizmolayout::Layout& layout,const Image& image){
+    for(int axis=0;axis<3;++axis){CHECK(!layout.rotation[axis].triangles.empty());CHECK(gizmolayout::PickRotateRing(layout,layout.rotateMarker[axis])==axis);CHECK(ControlAt(image,layout.rotateMarker[axis]));}
+}
 gizmomath::HandleId PickLikeEditor(const gizmolayout::Layout& layout, ToolMode mode,
                                    Vector2 mouse) {
     if (mode == ToolMode::Move) {
@@ -306,6 +183,7 @@ void VerifyAgainstSceneObjects(const gizmolayout::Layout& layout, const Image& s
         for (int axis = 0; axis < 3; ++axis) {
             for (int side : {-1, 1}) {
                 const int index = axis * 2 + (side > 0 ? 1 : 0);
+                if(!layout.faces[index].visible)continue;
                 const Rectangle rect = gizmolayout::ScaleHandleRect(layout, index);
                 checkPoint(Vector2{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f},
                            gizmomath::ScaleFaceHandleId(axis, side));
@@ -342,9 +220,12 @@ Image RenderCase(RenderTexture2D target, SceneRenderer& renderer, Scene& scene, 
     camera.setOrbit(targetPoint, distance, yaw, pitch);
     BeginTextureMode(target);
     renderer.drawScene(scene, camera, target.texture.width, target.texture.height, part.id());
-    gizmo.drawOverlay(part, mode, camera,
-                      Rectangle{0.0f, 0.0f, static_cast<float>(target.texture.width),
-                                static_cast<float>(target.texture.height)});
+    EndTextureMode();if(gSceneImage.data)UnloadImage(gSceneImage);gSceneImage=LoadImageFromTexture(target.texture);ImageFlipVertical(&gSceneImage);
+    const Rectangle view{0,0,float(target.texture.width),float(target.texture.height)};
+    GizmoInput input;input.mousePosition={-100,-100};
+    if(mode==ToolMode::Scale||(mode==ToolMode::Move&&gizmo.faceMove())){const auto layout=gizmolayout::Build(part,ToolMode::Scale,camera,view,false);for(const auto& face:layout.faces)if(face.visible){input.mousePosition=face.screen;break;}}
+    gizmo.update(mode,&part,camera,view,true,true,input);
+    BeginTextureMode(target);gizmo.drawOverlay(part,mode,camera,view);
     EndTextureMode();
     Image image = LoadImageFromTexture(target.texture);
     ImageFlipVertical(&image);
@@ -467,6 +348,7 @@ void VerifyRotatedPartRendering(RenderTexture2D target, SceneRenderer& renderer,
     Scene scene;
     Part* part = scene.createPart(PartShape::Block, Vector3{0.0f, 5.0f, 0.0f},
                                   Vector3{8.0f, 2.0f, 4.0f}, "RotationRegression");
+    scene.lighting()->setSkyEnabled(false);scene.lighting()->setSkyColor({20,90,160,255});
     part->setAnchored(true);
     part->setColor(Color{8, 8, 8, 255});
 
@@ -507,7 +389,7 @@ void VerifyRotatedPartRendering(RenderTexture2D target, SceneRenderer& renderer,
 
         const PixelBounds selection =
             FindBounds(image, [](Color color) {
-                return color.a > 200 && color.r > 180 && color.g > 135 && color.b < 135;
+                return color.a > 200 && color.r > 130 && std::abs(int(color.r)-color.g)<35 && std::abs(int(color.g)-color.b)<35;
             });
         ++gChecks;
         if (!BoundsNear(selection, expected, 5)) {
@@ -707,6 +589,24 @@ int main() {
     VerifySurfaceFeedback();
     VerifyEditorGuideDepth();
 
+    // Move must expose the same visible mesh as Scale, including positive axes
+    // (legacy Move HandleSide returns zero for a positive axis).
+    gizmo.setFaceMove(true);
+    for(float width:{2.f,191.f})for(float yaw:{.75f,-2.4f}){
+        nearPart->setTransform({{0,5,0},QuaternionIdentity(),{width,10,1}});
+        gCase="DirectFaceMove/"+std::to_string(width)+"/"+std::to_string(yaw);
+        const Image image=RenderCase(target,renderer,scene,*nearPart,gizmo,ToolMode::Move,camera,nearPart->position(),20,yaw,.4f);
+        const Rectangle view{0,0,float(kWidth),float(kHeight)};
+        const int axis=gizmomath::HandleAxis(gizmo.hoveredHandle());CHECK(axis>=0);
+        if(axis>=0){const auto normal=Vector3Scale(gizmomath::Axis(axis,nearPart->rotation(),false),gizmomath::HandleSide(gizmo.hoveredHandle())<0?-1.f:1.f);
+            std::array<gizmolayout::Mesh,3> meshes{};meshes[0]=gizmolayout::FaceGrip(*nearPart,camera,view,gizmo.faceAnchor(),normal);
+            int colored=0;for(const auto& t:meshes[0].triangles){const auto q=Vector2Scale(Vector2Add(Vector2Add(t.screen[0],t.screen[1]),t.screen[2]),1.f/3);
+                if(!Inside(image,q))continue;const auto color=PixelAt(image,q);if(color.r>100&&color.r>color.g*1.8f&&ControlAt(image,q))++colored;}
+            CHECK(colored>10);
+        }
+        UnloadImage(image);++casesRun;
+    }
+    gizmo.setFaceMove(false);
     const ToolMode modes[3] = {ToolMode::Move, ToolMode::Scale, ToolMode::Rotate};
     const char* modeNames[3] = {"Move", "Scale", "Rotate"};
     const ViewConfig views[5] = {
@@ -744,7 +644,7 @@ int main() {
                         Rectangle{0, 0, static_cast<float>(kWidth), static_cast<float>(kHeight)},
                         false);
                     ++casesRun;
-                    CHECK(layout.valid);
+                    CHECK(layout.valid||modes[modeIndex]==ToolMode::Scale);
                     if (layout.valid) {
                         VerifyAgainstSceneObjects(layout, image, modes[modeIndex]);
                         if (modes[modeIndex] == ToolMode::Move) {
@@ -753,30 +653,6 @@ int main() {
                             VerifyScale(layout, image);
                         } else {
                             VerifyRotate(layout, image);
-                        }
-                        // Nenhum controle pode ser desenhado fora da viewport.
-                        for (int i = 0; i < 6; ++i) {
-                            if (modes[modeIndex] == ToolMode::Scale) {
-                                const Rectangle rect = gizmolayout::ScaleHandleRect(layout, i);
-                                ++gChecks;
-                                if (rect.x < 0.0f || rect.y < 0.0f ||
-                                    rect.x + rect.width > kWidth ||
-                                    rect.y + rect.height > kHeight) {
-                                    ++gFailures; ++gCaseFailures;
-                                    std::printf("  FAIL [%s] alca %d fora da viewport\n",
-                                                gCase.c_str(), i);
-                                }
-                            }
-                        }
-                        int visibleAxis = 0;
-                        for (int axis = 0; axis < 3; ++axis) {
-                            if (CountAxisPixels(image, axis) > 0) ++visibleAxis;
-                        }
-                        ++gChecks;
-                        if (visibleAxis < 3) {
-                            ++gFailures; ++gCaseFailures;
-                            std::printf("  FAIL [%s] eixos sem pixels visiveis (%d/3)\n",
-                                        gCase.c_str(), visibleAxis);
                         }
                     }
                     UnloadImage(image);
@@ -890,19 +766,7 @@ int main() {
         ImageFlipVertical(&image);
         const gizmolayout::Layout layout = gizmolayout::Build(
             *nearPart, ToolMode::Scale, camera, Rectangle{0, 0, 1280, 720}, false);
-        for (int axis = 0; axis < 3; ++axis) {
-            for (int side : {-1, 1}) {
-                const int index = axis * 2 + (side > 0 ? 1 : 0);
-                const Rectangle rect = gizmolayout::ScaleHandleRect(layout, index);
-                const Vector2 sample{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
-                ++gChecks;
-                if (!Nearly(PixelAt(image, sample), kAxis[axis])) {
-                    ++gFailures;
-                    std::printf("  FAIL [%s] alca %d x %c nao visivel\n", gCase.c_str(), index,
-                                kAxisName[axis]);
-                }
-            }
-        }
+        int visible=0;for(const auto& face:layout.faces)visible+=face.visible;CHECK(visible>0);
         UnloadImage(image);
         UnloadRenderTexture(big);
     }

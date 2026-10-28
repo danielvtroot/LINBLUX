@@ -553,6 +553,7 @@ EditorUI::EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera,
       modelTransform_(scene_,physics_,transform_,history_),
       projectPath_(config.defaultProjectPath) {
     std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
+    gizmo_.setFaceMove(true);
     cameraMoveSpeed_ = camera_.moveSpeed();
     cameraLookSensitivity_ = camera_.lookSensitivity();
     camera_.reset();
@@ -777,7 +778,8 @@ void EditorUI::redoTransform() {
 }
 
 void EditorUI::drawTransformReadout(const EditorInput& input, Vector2 imagePosition) {
-    if (!readout_.visible) return;
+    if (!readout_.visible||tool_==ToolMode::Select) return;
+    if(!readout_.editing&&gizmo_.dragging())return;
     Part* part = scene_.findPart(readout_.partId);
     if (part == nullptr) {
         clearTransformReadout();
@@ -1723,6 +1725,11 @@ void EditorUI::drawViewport() {
     gizmoInput.windowFocused = context.windowFocused;
     gizmoInput.shiftDown = input.shift;
     gizmoInput.altDown = input.alt;
+    if((tool_==ToolMode::Scale||(tool_==ToolMode::Move&&gizmo_.faceMove()))&&selection&&!gizmo_.dragging()){
+        const auto ray=camera_.rayFromScreen({input.mouse.x-viewportRect.x,input.mouse.y-viewportRect.y},{viewportRect.width,viewportRect.height});
+        for(const auto* p:scene_.parts())if(p!=selection&&!selection->isAncestorOf(p)&&p->color().a>=250){
+            const auto hit=p->intersect(ray);if(hit.hit)gizmoInput.occlusionDistance=std::min(gizmoInput.occlusionDistance,hit.distance);}
+    }
     // Volumes reais dos filhos: o pivô deslocado de um Modelo não é seu centro geométrico.
     std::vector<gizmomath::SurfaceBox> snapMoving,snapTargets;
     if(tool_==ToolMode::Move&&(surfaceSnapEnabled_||ImGui::GetIO().KeyCtrl)&&selection) {
@@ -1766,6 +1773,7 @@ void EditorUI::drawViewport() {
     const GizmoUpdateResult gizmoResult=selectedModel||modelTransform_.active()
         ?modelTransform_.update(tool_,selection,camera_,viewportRect,hovered,gizmoAllowed,gizmoInput)
         :transform_.update(tool_,selectedPart,camera_,viewportRect,hovered,gizmoAllowed,gizmoInput);
+    if(tool_==ToolMode::Scale&&gizmo_.hoveringHandle())ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
     if (gizmoResult.started && selectedPart != nullptr) {
         // A transformacao real do inicio (nao o snapshot de desenho) e o que
         // o Undo precisa restaurar.
@@ -1896,22 +1904,22 @@ void EditorUI::drawViewport() {
         (tool_!=ToolMode::Scale || rigContext_==RigContext::Edit))
         rigGizmo_.drawOverlay(jointProxy_, tool_, camera_, viewportRect);
     if (selectedPart != nullptr && tool_ != ToolMode::Select) {
-        gizmo_.drawOverlay(*selectedPart, tool_, camera_, viewportRect);
+        gizmo_.drawOverlay(*selectedPart, tool_, camera_, viewportRect,!readout_.editing);
     }
     if(selection&&selection->instanceClass()==InstanceClass::Model&&modelTransform_.proxy()&&tool_!=ToolMode::Select)
-        gizmo_.drawOverlay(*modelTransform_.proxy(),tool_,camera_,viewportRect);
+        gizmo_.drawOverlay(*modelTransform_.proxy(),tool_,camera_,viewportRect,!readout_.editing);
     EndTextureMode();
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
     if(selection&&tool_==ToolMode::Move&&!runtime_.active()) {
         const ImVec2 p{imagePosition.x+12,imagePosition.y+12};
-        const char* hint=surfaceSnapEnabled_?"Encaixe ativo | Ctrl: forçar | Shift: liberar grade | Alt+clique: atravessar | F8: contornos":"Ctrl: encaixar face | Shift: liberar grade | Alt+clique: atravessar | F8: contornos";
+        const char* hint=surfaceSnapEnabled_?"Arraste uma face para mover. Encaixe ativo.":"Arraste uma face para mover. Ctrl: encaixar.";
         const auto s=ImGui::CalcTextSize(hint);
         drawList->AddRectFilled({p.x-6,p.y-4},{p.x+s.x+6,p.y+s.y+4},IM_COL32(18,18,22,200),4);
         drawList->AddText(p,IM_COL32(235,220,220,255),hint);
     }
-    if(selectedPart&&selectedPart->shape()==PartShape::Block) {
+    if(gizmo_.dragging()&&selectedPart&&selectedPart->shape()==PartShape::Block) {
         const auto& pose=selectedPart->transform();
         for(const auto* other:scene_.parts()) {
             if(other==selectedPart||other->shape()!=PartShape::Block||other->color().a==0)continue;

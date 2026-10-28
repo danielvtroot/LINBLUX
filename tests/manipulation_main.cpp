@@ -61,8 +61,8 @@ int main(int argc,char** argv) {
         const loblox::Transform start{{20,10,0},QuatFromEulerDegrees({37,21,37}),{4,2,6}};
         part->setTransform(start);physics.applyChanges(part);
         EditorCamera camera;camera.setOrbit(start.position,22,.65f,.43f);
-        Gizmo gizmo;gizmo.setLocalSpace(local);gizmo.setSnap(snap,0,0);TransformSession session(gizmo,physics);
-        const auto layout=gizmolayout::Build(*part,ToolMode::Move,camera,view,local);
+        Gizmo gizmo;gizmo.setPlanarHandles(true);gizmo.setLocalSpace(local);gizmo.setSnap(snap,0,0);TransformSession session(gizmo,physics);
+        const auto layout=gizmolayout::Build(*part,ToolMode::Move,camera,view,local,gizmo.visualSettings());
         // An edge-on planar area is deliberately unavailable, never remapped
         // to a fabricated perpendicular axis.
         if(!layout.planeVisible[plane])continue;
@@ -87,7 +87,9 @@ int main(int argc,char** argv) {
         const loblox::Transform start{{20,10,0},QuatFromEulerDegrees(rotation),{4,2,6}};part->setTransform(start);physics.applyChanges(part);
         const auto localAxis=gizmomath::Axis(axis,start.rotation,true);
         const auto fixedBefore=Vector3Subtract(start.position,Vector3Scale(localAxis,side*(&start.size.x)[axis]*.5f));
-        EditorCamera camera;camera.setOrbit(start.position,22,.65f,.43f);
+        const auto normal=Vector3Scale(localAxis,float(side));const auto tangent=gizmomath::Axis((axis+1)%3,start.rotation,true);
+        const auto eye=Vector3Normalize(Vector3Add(normal,Vector3Scale(tangent,.65f)));
+        EditorCamera camera;camera.setOrbit(start.position,22,std::atan2(eye.x,eye.z),std::asin(eye.y));
         Gizmo gizmo;gizmo.setSnap(1,1,0);gizmo.setLocalSpace(false);TransformSession session(gizmo,physics);
         const auto layout=gizmolayout::Build(*part,ToolMode::Scale,camera,view,false);
         GizmoInput input;input.mousePosition=layout.scaleHandle[axis*2+(side>0)];input.leftPressed=input.leftDown=true;

@@ -583,155 +583,64 @@ void TestGizmoMath() {
 }
 
 void TestGizmoLayout() {
-    Section("Layout screen-space do gizmo (desenho == hit test)");
-    using namespace loblox;
-    using namespace loblox::gizmolayout;
-    Part part(1, "Part", PartShape::Block);
-    part.setTransform(loblox::Transform{V3(0, 4, 0), QuatFromEulerDegrees(V3(0, 0, 0)), V3(4, 4, 4)});
-    EditorCamera camera;
-    const Rectangle viewport{0.0f, 0.0f, 640.0f, 400.0f};
-
-    // Projecao valida a frente, invalida atras do near plane/camera.
-    camera.setOrbit(part.position(), 12.0f, 0.75f, 0.48f);
-    Vector2 checked{};
-    CHECK(camera.projectChecked(part.position(), Vector2{640.0f, 400.0f}, checked));
-    const Vector2 plain = camera.project(part.position(), Vector2{640.0f, 400.0f});
-    CHECK_NEAR(checked.x, plain.x, 0.5f);
-    CHECK_NEAR(checked.y, plain.y, 0.5f);
-    const Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target(), camera.position()));
-    Vector2 ignored{123.0f, 456.0f};
-    CHECK(!camera.projectChecked(
-        Vector3Add(camera.position(), Vector3Scale(forward, -3.0f)), Vector2{640.0f, 400.0f},
-        ignored));
-    CHECK_NEAR(ignored.x, 123.0f, 0.001f);
-    CHECK(!camera.projectChecked(
-        Vector3Add(camera.position(), Vector3Scale(forward, 0.01f)), Vector2{640.0f, 400.0f},
-        ignored));
-    CHECK(camera.projectChecked(
-        Vector3Add(camera.position(), Vector3Scale(forward, 0.5f)), Vector2{640.0f, 400.0f},
-        ignored));
-
-    // Tamanho em pixels: acompanha a resolucao e respeita limites.
-    const float tiny = PixelLength(Vector2{200.0f, 200.0f});
-    const float normal = PixelLength(Vector2{640.0f, 400.0f});
-    const float large = PixelLength(Vector2{900.0f, 700.0f});
-    const float huge = PixelLength(Vector2{3840.0f, 2160.0f});
-    CHECK_NEAR(tiny, 64.0f, 0.01f);
-    CHECK_NEAR(huge, 80.0f, 0.01f);
-    CHECK(large > normal);
-    CHECK(huge >= large);
-
-    // Os seis lados de Scale: posicoes distintas, separadas, na viewport e
-    // clicaveis no ponto exato em que sao desenhadas.
-    for (float distance : {2.0f, 4.0f, 12.0f, 42.0f, 200.0f}) {
-        camera.setOrbit(part.position(), distance, 0.75f, 0.48f);
-        const Layout scale = Build(part, ToolMode::Scale, camera, viewport, false);
-        CHECK(scale.valid);
-        for (int axis = 0; axis < 3; ++axis) {
-            for (int side : {-1, 1}) {
-                const int index = axis * 2 + (side > 0 ? 1 : 0);
-                const Rectangle rect = ScaleHandleRect(scale, index);
-                const Vector2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
-                CHECK(rect.x >= 0.0f && rect.y >= 0.0f && rect.x + rect.width <= 640.0f &&
-                      rect.y + rect.height <= 400.0f);
-                CHECK(PickScaleHandle(scale, center) ==
-                      gizmomath::ScaleFaceHandleId(axis, side));
-                for (int other = index + 1; other < 6; ++other) {
-                    const Vector2 otherCenter{scale.scaleHandle[other].x,
-                                              scale.scaleHandle[other].y};
-                    CHECK(Vector2Distance(center, otherCenter) >= 22.0f);
-                }
-            }
-        }
-    }
-
-    // Part enorme com camera muito proxima: as alças continuam na viewport.
-    part.setTransform(loblox::Transform{V3(0, 4, 0), Quaternion{0, 0, 0, 1}, V3(400, 400, 400)});
-    camera.setOrbit(part.position(), 2.0f, 0.75f, 0.48f);
-    const Layout hugePart = Build(part, ToolMode::Scale, camera, viewport, false);
-    CHECK(hugePart.valid);
-    for (int index = 0; index < 6; ++index) {
-        const Rectangle rect = ScaleHandleRect(hugePart, index);
-        CHECK(rect.x >= 0.0f && rect.y >= 0.0f && rect.x + rect.width <= 640.0f &&
-              rect.y + rect.height <= 400.0f);
-    }
-
-    // Part pequena: os controles de Move continuam com tamanho de tela.
-    part.setTransform(loblox::Transform{V3(0, 4, 0), Quaternion{0, 0, 0, 1}, V3(0.2f, 0.2f, 0.2f)});
-    camera.setOrbit(part.position(), 200.0f, 0.0f, 0.0f);
-    const Layout smallPart = Build(part, ToolMode::Move, camera, viewport, false);
-    CHECK(smallPart.valid);
-    for (int axis = 0; axis < 3; ++axis) {
-        const float distance = Vector2Distance(smallPart.center,
-                                               smallPart.axisButton[axis]);
-        CHECK(distance >= 17.5f && distance <= 80.5f);
-        const Rectangle rect = AxisButtonRect(smallPart, axis);
-        const Vector2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
-        if (PickPlane(smallPart, center) < 0) CHECK(PickAxisButton(smallPart, center) == axis);
-    }
-
-    // Rotacao: aneis existem, marcadores sao clicaveis e longe deles nao ha hit.
-    part.setTransform(loblox::Transform{V3(3, 5, -2), QuatFromEulerDegrees(V3(23, 37, -16)),
-                                V3(4, 6, 8)});
-    for (float distance : {2.0f, 12.0f, 200.0f}) {
-        for (float pitch : {-1.2f, 0.0f, 1.2f}) {
-            camera.setOrbit(part.position(), distance, 0.75f, pitch);
-            const Layout rotate = Build(part, ToolMode::Rotate, camera, viewport, true);
-            CHECK(rotate.valid);
-            for (int axis = 0; axis < 3; ++axis) {
-                CHECK(!rotate.ring[axis].empty());
-                const Rectangle rect = RotateMarkerRect(rotate, axis);
-                const Vector2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
-                CHECK(PickRotateMarker(rotate, center) == axis);
-            }
-        }
-    }
-    CHECK(PickRotateRing(smallPart, Vector2{-50.0f, -50.0f}) == -1);
-
-    // Build e puro: duas chamadas produzem exatamente o mesmo layout, premissa
-    // para desenho e picking usarem a mesma geometria.
-    camera.setOrbit(part.position(), 9.0f, 0.9f, 0.4f);
-    const Layout first = Build(part, ToolMode::Scale, camera, viewport, false);
-    const Layout second = Build(part, ToolMode::Scale, camera, viewport, false);
-    CHECK(first.valid && second.valid);
-    for (int index = 0; index < 6; ++index) {
-        CHECK_NEAR(first.scaleHandle[index].x, second.scaleHandle[index].x, 0.0001f);
-        CHECK_NEAR(first.scaleHandle[index].y, second.scaleHandle[index].y, 0.0001f);
-    }
-
-    // Precision handles remain bounded independently of wall size, camera
-    // distance and resolution. Square corners are real hit targets too.
+    Section("Direct faces and shared 3D handle geometry");using namespace loblox;using namespace loblox::gizmolayout;
+    Part part(1,"Part",PartShape::Block);EditorCamera camera;
     for(const Vector2 size:{Vector2{1366,768},Vector2{1920,1080}})
-    for(float wall:{.2f,191.f})for(float distance:{4.f,42.f,220.f})
-    for(const Vector2 orbit:{Vector2{.75f,.48f},Vector2{0,0},Vector2{1.6f,1.1f}}){
-        part.setSize({wall,10,1});camera.setOrbit(part.position(),distance,orbit.x,orbit.y);
-        const Rectangle view{0,0,size.x,size.y};const auto scale=Build(part,ToolMode::Scale,camera,view,true);
-        for(int index=0;index<6;++index){
-            CHECK(Vector2Distance(scale.center,scale.scaleHandle[index])<=105);
-            const auto r=ScaleHandleRect(scale,index);CHECK(r.width<=12.1f&&r.height<=12.1f);
-            CHECK(PickScaleHandle(scale,{r.x+1,r.y+1})==gizmomath::ScaleFaceHandleId(index/2,index%2?1:-1));
-        }
-        const auto move=Build(part,ToolMode::Move,camera,view,false);int visible=0;
-        for(int index=0;index<6;++index)visible+=move.moveVisible[index];CHECK(visible==3);
-        const auto rotate=Build(part,ToolMode::Rotate,camera,view,false);
-        for(int axis=0;axis<3;++axis){
-            CHECK(Vector2Distance(rotate.center,rotate.rotateMarker[axis])<=120);
-            float distanceToRing=1000;for(const auto& line:rotate.ring[axis])distanceToRing=std::min(distanceToRing,Vector2Distance(rotate.rotateMarker[axis],Vector2Scale(Vector2Add(line.a,line.b),.5f)));
-            CHECK(distanceToRing<.01f); // markers are attached to the drawn ring
-        }
+    for(const Vector3 dimensions:{Vector3{.2f,.2f,.2f},Vector3{4,6,2},Vector3{191,10,1}})
+    for(const Vector2 orbit:{Vector2{.75f,.48f},Vector2{0,0},Vector2{1.8f,1.1f}}){
+        part.setTransform({{0,5,0},QuatFromEulerDegrees({0,15,0}),dimensions});camera.setOrbit(part.position(),42,orbit.x,orbit.y);const Rectangle viewport{0,0,size.x,size.y};
+        const auto scale=Build(part,ToolMode::Scale,camera,viewport,false);int visible=0;
+        for(int i=0;i<6;++i){const auto& face=scale.faces[i];if(!face.visible)continue;++visible;
+            CHECK(face.projected.size()>=3);const auto picked=FaceUnderCursor(scale,face.screen);CHECK(picked.index==i);
+            CHECK(std::fabs(Vector3DotProduct(Vector3Subtract(face.center,picked.point),face.normal))<.002f);
+            CHECK(face.screen.x>=0&&face.screen.x<=size.x&&face.screen.y>=0&&face.screen.y<=size.y);
+        }CHECK(visible>0&&visible<=3);
+        const auto move=Build(part,ToolMode::Move,camera,viewport,false);int arrows=0;
+        for(int i=0;i<6;++i)arrows+=move.moveVisible[i];CHECK(arrows==3);
+        for(int axis=0;axis<3;++axis){CHECK(!move.arrow[axis].triangles.empty());CHECK(!move.shaft[axis].triangles.empty());
+            CHECK(PickMoveArrow(move,move.moveHandle[axis*2+1])==gizmomath::MoveHandleId(axis,1));}
+        const auto rotate=Build(part,ToolMode::Rotate,camera,viewport,true);
+        for(int axis=0;axis<3;++axis){CHECK(!rotate.rotation[axis].triangles.empty());CHECK(PickRotateRing(rotate,rotate.rotateMarker[axis])==axis);}
+        CHECK(!Build(part,ToolMode::Select,camera,viewport,false).valid);
     }
+    // The wall face remains directly usable with its centre outside the view.
+    part.setTransform({{80,5,0},QuaternionIdentity(),{191,10,1}});camera.setOrbit({0,5,0},12,.4f,.2f);
+    const Rectangle viewport{0,0,1366,768};const auto clipped=Build(part,ToolMode::Scale,camera,viewport,true);CHECK(clipped.valid);
+    const auto face=FaceUnderCursor(clipped,{683,384});CHECK(face.index>=0);CHECK(face.distance<100);
+    if(face.index>=0){CHECK(clipped.faces[face.index].visible);CHECK(std::fabs(face.point.z-.5f)<.005f);}
+    // Comfortable interaction across a whole face, not a 12-pixel button.
+    camera.setOrbit({0,5,0},20,0,0);part.setTransform({{0,5,0},QuaternionIdentity(),{191,10,1}});
+    const auto wide=Build(part,ToolMode::Scale,camera,viewport,true);
+    for(float x:{30.f,200.f,600.f,1000.f,1300.f})CHECK(FaceUnderCursor(wide,{x,384}).index==5);
+    Gizmo gizmo;GizmoInput input;input.mousePosition={600,384};input.occlusionDistance=1;
+    gizmo.update(ToolMode::Scale,&part,camera,viewport,true,true,input);CHECK(!gizmo.hoveringHandle());
+    input.occlusionDistance=INFINITY;gizmo.update(ToolMode::Scale,&part,camera,viewport,true,true,input);CHECK(gizmo.hoveringHandle());
+    CHECK(PickScaleHandle(wide,{-5,-5})==gizmomath::HandleId::None);
+    // Same direct-face acquisition moves the entire wall, never its size.
+    for(bool local:{false,true})for(float width:{2.f,191.f}){
+        part.setTransform({{0,5,0},QuatFromEulerDegrees({0,25,0}),{width,10,1}});
+        camera.setOrbit(part.position(),20,.95f,.2f);const auto initial=part.transform();
+        Gizmo move;move.setFaceMove(true);move.setLocalSpace(local);move.setSnap(1,.5f,15);
+        const auto surface=Build(part,ToolMode::Scale,camera,viewport,true);
+        const auto hit=FaceUnderCursor(surface,{683,384});CHECK(hit.index>=0);
+        GizmoInput press;press.mousePosition={683,384};press.leftPressed=press.leftDown=true;
+        press.occlusionDistance=1;CHECK(!move.update(ToolMode::Move,&part,camera,viewport,true,true,press).started);
+        press.occlusionDistance=INFINITY;CHECK(move.update(ToolMode::Move,&part,camera,viewport,true,true,press).started);
+        const auto axis=gizmomath::Axis(move.activeAxis(),initial.rotation,local);
+        const auto endpoint=Vector3Add(hit.point,Vector3Scale(axis,3));Vector2 mouse;
+        CHECK(camera.projectChecked(endpoint,{1366,768},mouse));press.mousePosition=mouse;press.leftPressed=false;
+        move.update(ToolMode::Move,&part,camera,viewport,true,true,press);
+        CHECK(Vector3Distance(part.size(),initial.size)<.001f);
+        CHECK(Vector3Distance(part.position(),Vector3Add(initial.position,Vector3Scale(axis,3)))<.01f);
+        move.cancel(&part,true);CHECK(Vector3Distance(part.position(),initial.position)<.001f);
+    }
+    part.setTransform({{0,5,0},QuaternionIdentity(),{191,10,1}});camera.setOrbit(part.position(),20,.4f,.2f);
+    Gizmo centered;centered.setCenteredScaleOption(true);GizmoInput scaleInput;scaleInput.mousePosition={683,384};scaleInput.leftPressed=scaleInput.leftDown=true;
+    CHECK(centered.update(ToolMode::Scale,&part,camera,viewport,true,true,scaleInput).started);
+    scaleInput.leftPressed=false;scaleInput.mousePosition={600,420};centered.update(ToolMode::Scale,&part,camera,viewport,true,true,scaleInput);
+    CHECK(Vector3Distance(part.position(),Vector3{0,5,0})<.001f);CHECK(std::fabs(part.size().z-1)>.25f);
+    centered.cancel(&part,true);CHECK(Vector3Distance(part.size(),Vector3{191,10,1})<.001f);
 
-    // Pivo atras da camera: nenhuma geometria valida e nenhum picking.
-    const float yaw = 0.4f;
-    const float pitch = 0.3f;
-    const Vector3 direction{std::cos(pitch) * std::sin(yaw), std::sin(pitch),
-                            std::cos(pitch) * std::cos(yaw)};
-    camera.setOrbit(Vector3Subtract(part.position(), Vector3Scale(direction, 2.5f)), 2.0f, yaw,
-                    pitch);
-    const Layout behind = Build(part, ToolMode::Move, camera, viewport, false);
-    CHECK(!behind.valid);
-    CHECK(PickAxisButton(behind, Vector2{320.0f, 200.0f}) == -1);
-    CHECK(PickScaleHandle(behind, Vector2{320.0f, 200.0f}) == gizmomath::HandleId::None);
     EndSection();
 }
 
@@ -1037,6 +946,7 @@ void TestGizmoHandleDrags() {
                 TransformSession session(gizmo, physics);
                 const auto layout = gizmolayout::Build(*part, mode, camera, viewport, false);
                 if(mode==ToolMode::Move&&index<6&&!layout.moveVisible[index])continue;
+                if(mode==ToolMode::Scale&&!layout.faces[index].visible)continue;
                 if (mode == ToolMode::Move && index >= 6 && !layout.planeVisible[index - 6]) {
                     // An edge-on plane has no usable screen area. It must not
                     // be picked as a planar drag using an invented direction.
