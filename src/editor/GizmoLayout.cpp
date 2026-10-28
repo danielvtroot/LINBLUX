@@ -206,6 +206,15 @@ Layout Build(const Part& part,ToolMode mode,const EditorCamera& camera,Rectangle
         const float low=unit*23,high=unit*37;const Vector3 world[4]={Vector3Add(part.position(),Vector3Add(Vector3Scale(a,low),Vector3Scale(b,low))),Vector3Add(part.position(),Vector3Add(Vector3Scale(a,high),Vector3Scale(b,low))),Vector3Add(part.position(),Vector3Add(Vector3Scale(a,high),Vector3Scale(b,high))),Vector3Add(part.position(),Vector3Add(Vector3Scale(a,low),Vector3Scale(b,high)))};
         layout.planeCenter[plane]={};for(int k=0;k<4;++k){if(!camera.projectChecked(world[k],layout.viewport,layout.planeCorners[plane][k]))layout.planeVisible[plane]=false;layout.planeCenter[plane]=Vector2Add(layout.planeCenter[plane],Vector2Scale(layout.planeCorners[plane][k],.25f));}
     }
+    if(mode==ToolMode::Rotate)for(int axis=0;axis<3;++axis){
+        const auto& triangles=layout.rotation[axis].triangles;float best=-1;
+        for(size_t i=0;i<triangles.size();i+=std::max(size_t(1),triangles.size()/60)){
+            const auto& t=triangles[i];const auto point=Vector2Scale(Vector2Add(Vector2Add(t.screen[0],t.screen[1]),t.screen[2]),1.f/3);
+            if(PickMesh(layout.rotation,point)!=axis)continue;
+            const auto a=Vector2Subtract(t.screen[1],t.screen[0]),b=Vector2Subtract(t.screen[2],t.screen[0]);const float area=std::fabs(a.x*b.y-a.y*b.x);
+            if(area>best){best=area;layout.rotateMarker[axis]=point;}
+        }
+    }
     return layout;
 }
 
