@@ -20,7 +20,7 @@ int main(){
     Scene scene;scene.lighting()->setSkyEnabled(false);
     scene.lighting()->setSunDirection({-.5f,-.8f,-.6f});std::string error;
     auto* sphere=scene.createPart(PartShape::Sphere,{0,0,0},{6,6,6},"Smooth sphere");sphere->setColor({160,160,160,255});
-    SceneRenderer renderer;Camera3D camera{{0,0,12},{0,0,0},{0,1,0},45,CAMERA_PERSPECTIVE};
+    SceneRenderer renderer;renderer.setAntialiasing(Antialiasing::None);Camera3D camera{{0,0,12},{0,0,0},{0,1,0},45,CAMERA_PERSPECTIVE};
     auto target=LoadRenderTexture(640,400);
     const auto render=[&](RenderQuality quality,bool authored=true){
         renderer.setQuality(quality);BeginTextureMode(target);renderer.drawScene(scene,camera,640,400,0,nullptr,authored);EndTextureMode();
@@ -81,7 +81,7 @@ int main(){
     target=LoadRenderTexture(640,400);renderer.setQuality(RenderQuality::Legacy);
     BeginTextureMode(target);renderer.drawScene(scene,camera,640,400,0);EndTextureMode();auto expected=LoadImageFromTexture(target.texture);
     setenv("LINBLUX_DISABLE_MATERIAL_SHADER","1",1);
-    {SceneRenderer fallback;fallback.setQuality(RenderQuality::High);BeginTextureMode(target);fallback.drawScene(scene,camera,640,400,0);EndTextureMode();
+    {SceneRenderer fallback;fallback.setAntialiasing(Antialiasing::None);fallback.setQuality(RenderQuality::High);BeginTextureMode(target);fallback.drawScene(scene,camera,640,400,0);EndTextureMode();
         auto actual=LoadImageFromTexture(target.texture);CHECK(!fallback.modernReady());CHECK(differences(expected,actual)==0);UnloadImage(actual);}
     unsetenv("LINBLUX_DISABLE_MATERIAL_SHADER");UnloadImage(expected);UnloadRenderTexture(target);
     }

@@ -1208,6 +1208,7 @@ void TestProjectRoundTrip() {
 
     scene.lighting()->setSkyColor(Color{30, 40, 90, 255});
     scene.lighting()->setSunIntensity(1.7f);
+    scene.lighting()->setShadowsEnabled(false);scene.lighting()->setShadowDistance(120);scene.lighting()->setShadowStrength(.65f);
     scene.lighting()->setBrightness(0.8f);
 
     const std::string path = "/tmp/loblox_test_project.json";
@@ -1282,6 +1283,7 @@ void TestProjectRoundTrip() {
     }
 
     CHECK_NEAR(static_cast<float>(loaded.lighting()->skyColor().b), 90.0f, 0.5f);
+    CHECK(!loaded.lighting()->shadowsEnabled());CHECK_NEAR(loaded.lighting()->shadowDistance(),120,.001f);CHECK_NEAR(loaded.lighting()->shadowStrength(),.65f,.001f);
     CHECK_NEAR(loaded.lighting()->sunIntensity(), 1.7f, 0.001f);
     CHECK_NEAR(loaded.lighting()->brightness(), 0.8f, 0.001f);
 

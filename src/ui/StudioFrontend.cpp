@@ -836,7 +836,9 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             input("Surface.TileU",Num(value.studsPerTileU),"Repetição U");input("Surface.TileV",Num(value.studsPerTileV),"Repetição V");
             s+=Button("delete","Remover componente","delete");
         } else if(node==ui.scene_.lighting()) {
-            const auto* l=ui.scene_.lighting();group("PROCEDURAL ATMOSPHERE");check("SkyEnabled",l->skyEnabled());input("Brightness",Num(l->brightness()));input("SunIntensity",Num(l->sunIntensity()));
+            const auto* l=ui.scene_.lighting();group("Sombras direcionais");
+            check("ShadowsEnabled",l->shadowsEnabled());input("ShadowDistance",Num(l->shadowDistance()),"Alcance (16–300)");input("ShadowStrength",Num(l->shadowStrength()),"Intensidade (0–1)");
+            group("PROCEDURAL ATMOSPHERE");check("SkyEnabled",l->skyEnabled());input("Brightness",Num(l->brightness()));input("SunIntensity",Num(l->sunIntensity()));
             input("CloudCoverage",Num(l->cloudDensity()));input("SkyRotation",Num(l->skyRotation()));input("FogDensity",Num(l->fogDensity()));
             input("SkyZenithColor",Hex(l->skyZenithColor()));input("SkyHorizonColor",Hex(l->skyHorizonColor()));input("SkyGroundColor",Hex(l->skyGroundColor()));
             input("SunColor",Hex(l->sunColor()));input("SunSize",Num(l->sunSize()));input("FogColor",Hex(l->fogColor()));
@@ -1283,6 +1285,10 @@ void StudioFrontend::draw() {
     if(auto* quality=dynamic_cast<Rml::ElementFormControl*>(p.el("render-quality"));quality&&p.context->GetFocusElement()!=quality) {
         const auto q=p.ui.renderer_.quality();const std::string value=q==RenderQuality::Legacy?"legacy":q==RenderQuality::Low?"low":q==RenderQuality::High?"high":"medium";
         if(quality->GetValue()!=value)quality->SetValue(value);
+    }
+    if(auto* aa=dynamic_cast<Rml::ElementFormControl*>(p.el("render-aa"));aa&&p.context->GetFocusElement()!=aa){
+        const auto mode=p.ui.renderer_.antialiasing();const std::string value=mode==Antialiasing::None?"off":mode==Antialiasing::FXAA?"fxaa":mode==Antialiasing::MSAA4?"msaa4":"auto";
+        if(aa->GetValue()!=value)aa->SetValue(value);
     }
     p.ui.gizmo_.setSnap(p.ui.snapEnabled_?p.ui.moveSnap_:0,p.ui.snapEnabled_?p.ui.scaleSnap_:0,p.ui.snapEnabled_?p.ui.rotateSnapDegrees_:0);
     p.context->Update();p.syncing=false;rlImGuiSetExternalTextInput(p.editing());

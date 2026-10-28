@@ -57,6 +57,10 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             e.renderer_.setQuality(c.value=="legacy"?RenderQuality::Legacy:c.value=="low"?RenderQuality::Low:
                 c.value=="high"?RenderQuality::High:RenderQuality::Medium);
         }
+        else if(c.action=="render-aa") {
+            if(c.value!="auto"&&c.value!="off"&&c.value!="fxaa"&&c.value!="msaa4")throw std::runtime_error("Antialiasing inválido");
+            e.renderer_.setAntialiasing(c.value=="off"?Antialiasing::None:c.value=="fxaa"?Antialiasing::FXAA:c.value=="msaa4"?Antialiasing::MSAA4:Antialiasing::Auto);
+        }
         else if(c.action=="editor-camera") {
             if(c.value!="fps"&&c.value!="focus")throw std::runtime_error("Unknown Studio camera mode");
             e.camera_.setNavigationMode(c.value=="fps"?EditorCamera::NavigationMode::FPS:EditorCamera::NavigationMode::Focus);
@@ -419,12 +423,15 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                 e.physics_.applyChanges(&p);
             } else if(node==e.scene_.lighting()) {
                 auto* l=e.scene_.lighting();
-                if(name=="SkyEnabled")l->setSkyEnabled(c.value=="true"||c.value=="1");
+                if(name=="ShadowsEnabled")l->setShadowsEnabled(c.value=="true"||c.value=="1");
+                else if(name=="SkyEnabled")l->setSkyEnabled(c.value=="true"||c.value=="1");
                 else if(name=="SkyZenithColor")l->setSkyZenithColor(ReadColor(c.value));else if(name=="SkyHorizonColor")l->setSkyHorizonColor(ReadColor(c.value));
                 else if(name=="SkyGroundColor")l->setSkyGroundColor(ReadColor(c.value));else if(name=="SunColor")l->setSunColor(ReadColor(c.value));else if(name=="FogColor")l->setFogColor(ReadColor(c.value));
                 else if(name.rfind("SunDirection.",0)==0) {const int axis=std::stoi(name.substr(13));if(axis<0||axis>2)throw std::runtime_error("Invalid axis");auto direction=l->sunDirection();(&direction.x)[axis]=Number(c.value);l->setSunDirection(direction);}
                 else {const float v=Number(c.value);
-                if(name=="SunIntensity")l->setSunIntensity(v);
+                if(name=="ShadowDistance")l->setShadowDistance(v);
+                else if(name=="ShadowStrength")l->setShadowStrength(v);
+                else if(name=="SunIntensity")l->setSunIntensity(v);
                 else if(name=="Brightness")l->setBrightness(v);else if(name=="FogDensity")l->setFogDensity(v);
                 else if(name=="CloudCoverage")l->setCloudDensity(v);else if(name=="SkyRotation")l->setSkyRotation(v);
                 else if(name=="CloudScale")l->setCloudScale(v);else if(name=="CloudSpeed")l->setCloudSpeed(v);else if(name=="CloudSoftness")l->setCloudSoftness(v);else if(name=="SunSize")l->setSunSize(v);

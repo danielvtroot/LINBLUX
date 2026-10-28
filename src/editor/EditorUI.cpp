@@ -2285,6 +2285,11 @@ void EditorUI::drawLightingProperties() {
         lighting->setName(name);
     }
 
+    bool shadows=lighting->shadowsEnabled();
+    if(ImGui::Checkbox("Sombras direcionais",&shadows))lighting->setShadowsEnabled(shadows);
+    float distance=lighting->shadowDistance(),strength=lighting->shadowStrength();
+    if(ImGui::SliderFloat("Alcance das sombras",&distance,16,300))lighting->setShadowDistance(distance);
+    if(ImGui::SliderFloat("Intensidade das sombras",&strength,0,1))lighting->setShadowStrength(strength);
     float sky[3] = {lighting->skyColor().r / 255.0f, lighting->skyColor().g / 255.0f,
                     lighting->skyColor().b / 255.0f};
     if (ImGui::ColorEdit3(i18n::Label("SkyColor"), sky)) {
