@@ -82,7 +82,7 @@ int main(){
     BeginTextureMode(target);renderer.drawScene(scene,camera,640,400,0);EndTextureMode();auto expected=LoadImageFromTexture(target.texture);
     setenv("LINBLUX_DISABLE_MATERIAL_SHADER","1",1);
     {SceneRenderer fallback;fallback.setAntialiasing(Antialiasing::None);fallback.setQuality(RenderQuality::High);BeginTextureMode(target);fallback.drawScene(scene,camera,640,400,0);EndTextureMode();
-        auto actual=LoadImageFromTexture(target.texture);CHECK(!fallback.modernReady());CHECK(differences(expected,actual)==0);UnloadImage(actual);}
+        auto actual=LoadImageFromTexture(target.texture);CHECK(!fallback.modernReady());ExportImage(expected,(out/"fallback-expected.png").c_str());ExportImage(actual,(out/"fallback-actual.png").c_str());std::printf("Fallback differences: %d\n",differences(expected,actual));CHECK(differences(expected,actual)==0);UnloadImage(actual);}
     unsetenv("LINBLUX_DISABLE_MATERIAL_SHADER");UnloadImage(expected);UnloadRenderTexture(target);
     }
     game::ClearImageTextures();CloseWindow();std::printf("Material render: %d checks, %d failures; artifacts: %s\n",checks,failures,out.c_str());return failures?1:0;

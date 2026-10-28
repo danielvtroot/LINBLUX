@@ -76,15 +76,20 @@ GLint depthFormat(unsigned fbo) {
 }
 }
 void SceneTarget::release() {
+    FrameState state;
+    if(state.read==GLint(multisample_)||state.read==GLint(resolved_.id))state.read=0;
+    if(state.draw==GLint(multisample_)||state.draw==GLint(resolved_.id))state.draw=0;
     if(multisample_)glDeleteFramebuffers(1,&multisample_);
     if(color_)glDeleteRenderbuffers(1,&color_);if(depth_)glDeleteRenderbuffers(1,&depth_);
     multisample_=color_=depth_=0;
     if(resolved_.id)UnloadRenderTexture(resolved_);resolved_={};
+    state.restore();
 }
 SceneTarget::~SceneTarget(){release();if(fxaa_.id)UnloadShader(fxaa_);}
 bool SceneTarget::allocate(int width,int height,bool msaa) {
     if(resolved_.id&&resolved_.texture.width==width&&resolved_.texture.height==height&&bool(multisample_)==msaa)return true;
     release();resolved_=LoadRenderTexture(width,height);if(!IsRenderTextureValid(resolved_)){release();return false;}
+    SetTextureFilter(resolved_.texture,TEXTURE_FILTER_BILINEAR);
     if(!msaa)return true;
     GLint samples=0,old=0;glGetIntegerv(GL_MAX_SAMPLES,&samples);glGetIntegerv(GL_RENDERBUFFER_BINDING,&old);
     if(samples<4||std::getenv("LINBLUX_DISABLE_MSAA")){msaaUnavailable_=true;release();return false;}

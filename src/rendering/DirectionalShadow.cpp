@@ -37,10 +37,14 @@ bool DirectionalShadow::initialize() {
     return valid;
 }
 void DirectionalShadow::release() {
+    FrameState state;
+    if(state.read==GLint(framebuffer_))state.read=0;
+    if(state.draw==GLint(framebuffer_))state.draw=0;
     if(framebuffer_)rlUnloadFramebuffer(framebuffer_); // attached depth is owned/deleted by rlgl
     framebuffer_=depth_=0;active_=false;
     if(material_.maps)MemFree(material_.maps);material_={};
     if(shader_.id)UnloadShader(shader_);shader_={};
+    state.restore();
 }
 DirectionalShadow::~DirectionalShadow(){release();}
 void DirectionalShadow::update(const std::vector<ShadowCaster>& casters,Camera3D camera,const Lighting* light,

@@ -41,7 +41,7 @@ int main(){
     light->setShadowStrength(0);auto zero=render();CHECK(!renderer.shadowsActive());CHECK(delta(unshadowed,zero)==0);UnloadImage(zero);light->setShadowStrength(1);
     light->setShadowDistance(16);auto distant=render();CHECK(!renderer.shadowsActive());UnloadImage(distant);light->setShadowDistance(80);
     renderer.setQuality(RenderQuality::Low);auto low=render();CHECK(!renderer.shadowsActive());UnloadImage(low);renderer.setQuality(RenderQuality::Medium);
-    block->setPosition({100,2,0});auto plane=render();light->setShadowsEnabled(false);auto planeOff=render();CHECK(delta(plane,planeOff)==0);UnloadImage(plane);UnloadImage(planeOff);block->setPosition({0,2,0});
+    block->setPosition({100,2,0});auto plane=render();light->setShadowsEnabled(false);auto planeOff=render();ExportImage(plane,(out/"plane-shadow.png").c_str());ExportImage(planeOff,(out/"plane-off.png").c_str());std::printf("Plane acne difference: %d pixels\n",delta(plane,planeOff));CHECK(delta(plane,planeOff)==0);UnloadImage(plane);UnloadImage(planeOff);block->setPosition({0,2,0});
     setenv("LINBLUX_DISABLE_SHADOWS","1",1);{SceneRenderer fallback;fallback.setAntialiasing(Antialiasing::None);light->setShadowsEnabled(true);BeginTextureMode(target);fallback.drawScene(scene,camera,640,400,0);EndTextureMode();CHECK(!fallback.shadowsActive());}unsetenv("LINBLUX_DISABLE_SHADOWS");
     UnloadImage(unshadowed);UnloadImage(shadowed);
     // Sorting must depend on camera distance, not authored insertion order.
@@ -51,7 +51,7 @@ int main(){
     auto selected=render(scene.parts().front()->id());CHECK(delta(b,selected)>100);UnloadImage(selected);
     ExportImage(b,(out/"transparent-sorted.png").c_str());UnloadImage(a);UnloadImage(b);
     // Nested target resolve preserves scene depth for a later F8 pass.
-    scene.clearObjects();floor=scene.createPart(PartShape::Block,{0,0,0},{7,7,1},"Occluder");floor->setColor({90,130,170,255});
+    scene.clearObjects();floor=scene.createPart(PartShape::Block,{0,0,0},{7,7,1},"Occluder");floor->setColor({90,130,170,255});floor->setRotationEulerDegrees({0,0,15});
     block=scene.createPart(PartShape::Block,{0,0,-4},{2,2,2},"Hidden");
     renderer.setAntialiasing(Antialiasing::None);auto native=render();auto nativeGuides=render(0,true);
     for(auto mode:{Antialiasing::FXAA,Antialiasing::MSAA4}){
