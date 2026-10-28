@@ -87,7 +87,7 @@ bool SceneTarget::allocate(int width,int height,bool msaa) {
     release();resolved_=LoadRenderTexture(width,height);if(!IsRenderTextureValid(resolved_)){release();return false;}
     if(!msaa)return true;
     GLint samples=0,old=0;glGetIntegerv(GL_MAX_SAMPLES,&samples);glGetIntegerv(GL_RENDERBUFFER_BINDING,&old);
-    if(samples<4||std::getenv("LINBLUX_DISABLE_MSAA")){release();return false;}
+    if(samples<4||std::getenv("LINBLUX_DISABLE_MSAA")){msaaUnavailable_=true;release();return false;}
     const auto format=depthFormat(resolved_.id);
     glGenFramebuffers(1,&multisample_);glBindFramebuffer(GL_FRAMEBUFFER,multisample_);
     glGenRenderbuffers(1,&color_);glBindRenderbuffer(GL_RENDERBUFFER,color_);
@@ -98,14 +98,14 @@ bool SceneTarget::allocate(int width,int height,bool msaa) {
     glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,depth_);
     const bool valid=format&&glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;
     glBindRenderbuffer(GL_RENDERBUFFER,old);
-    if(!valid)release();return valid;
+    if(!valid){msaaUnavailable_=true;release();}return valid;
 }
 bool SceneTarget::begin(int width,int height,Antialiasing requested,RenderQuality quality) {
     actual_=requested==Antialiasing::Auto?(quality==RenderQuality::High?Antialiasing::MSAA4:
         quality==RenderQuality::Medium?Antialiasing::FXAA:Antialiasing::None):requested;
     if(actual_==Antialiasing::None){release();return false;}
     saved_=std::make_unique<FrameState>();
-    if(actual_==Antialiasing::MSAA4&&!allocate(width,height,true))actual_=Antialiasing::FXAA;
+    if(actual_==Antialiasing::MSAA4&&(msaaUnavailable_||!allocate(width,height,true)))actual_=Antialiasing::FXAA;
     if(actual_==Antialiasing::FXAA){
         if(!shaderTried_){shaderTried_=true;
             if(!std::getenv("LINBLUX_DISABLE_FXAA"))fxaa_=LoadShaderFromMemory(kFxaaVertexShader,kFxaaFragmentShader);
@@ -114,6 +114,7 @@ bool SceneTarget::begin(int width,int height,Antialiasing requested,RenderQualit
     }
     if(actual_==Antialiasing::None){release();saved_->restore();saved_.reset();return false;}
     glBindFramebuffer(GL_FRAMEBUFFER,multisample_?multisample_:resolved_.id);
+    if(multisample_)glEnable(GL_MULTISAMPLE);
     rlViewport(0,0,width,height);glDisable(GL_SCISSOR_TEST);glDisable(GL_FRAMEBUFFER_SRGB);
     return true;
 }

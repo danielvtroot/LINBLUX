@@ -1369,6 +1369,14 @@ void TestProjectValidation() {
                                       error));
     CHECK(error.find("Lighting") != std::string::npos);
 
+    // Optional shadow fields reject malformed data before mutating the scene.
+    const auto shadowBaseline=loblox::projectio::toJson(scene);
+    for(const std::string field:{"\"shadowDistance\":0,","\"shadowStrength\":2,","\"shadowsEnabled\":1,"}){
+        auto invalid=shadowBaseline;const auto at=invalid.find("\"sunIntensity\"");CHECK(at!=std::string::npos);
+        invalid.insert(at,field);CHECK(!loblox::projectio::fromJson(scene,invalid,error));CHECK(loblox::projectio::toJson(scene)==shadowBaseline);
+    }
+    CHECK(scene.lighting()->shadowsEnabled());CHECK_NEAR(scene.lighting()->shadowDistance(),80,.001f);
+
     // Duas Parts com o mesmo id.
     const std::string duplicateId =
         R"({"format":"loblox-project","version":1,"objects":[

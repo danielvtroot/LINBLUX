@@ -16,7 +16,7 @@ private:
     RenderTexture2D resolved_{};
     unsigned multisample_=0,color_=0,depth_=0;
     Shader fxaa_{};
-    bool shaderTried_=false;
+    bool shaderTried_=false,msaaUnavailable_=false;
     Antialiasing actual_=Antialiasing::None;
     std::unique_ptr<FrameState> saved_;
 };

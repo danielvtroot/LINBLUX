@@ -11,12 +11,13 @@ namespace loblox {
 struct FrameState {
     GLint read=0,draw=0,viewport[4]{};
     GLboolean depthMask=GL_TRUE;
-    bool depth=false,cull=false,scissor=false,srgb=false;
+    bool depth=false,cull=false,scissor=false,srgb=false,multisample=false;
     Matrix projection{},modelview{};
     FrameState() {
         rlDrawRenderBatchActive();glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING,&read);glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING,&draw);
         glGetIntegerv(GL_VIEWPORT,viewport);glGetBooleanv(GL_DEPTH_WRITEMASK,&depthMask);
         depth=glIsEnabled(GL_DEPTH_TEST);cull=glIsEnabled(GL_CULL_FACE);scissor=glIsEnabled(GL_SCISSOR_TEST);srgb=glIsEnabled(GL_FRAMEBUFFER_SRGB);
+        multisample=glIsEnabled(GL_MULTISAMPLE);
         projection=rlGetMatrixProjection();modelview=rlGetMatrixModelview();
     }
     void restore() const {
@@ -27,6 +28,7 @@ struct FrameState {
         if(cull)rlEnableBackfaceCulling();else rlDisableBackfaceCulling();
         if(scissor)glEnable(GL_SCISSOR_TEST);else glDisable(GL_SCISSOR_TEST);
         if(srgb)glEnable(GL_FRAMEBUFFER_SRGB);else glDisable(GL_FRAMEBUFFER_SRGB);
+        if(multisample)glEnable(GL_MULTISAMPLE);else glDisable(GL_MULTISAMPLE);
     }
 };
 }

@@ -244,6 +244,10 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             CHECK(actions.dispatch({"render-quality","high"}));CHECK(renderer.quality()==RenderQuality::High);
             CHECK(actions.dispatch({"render-aa","msaa4"}));CHECK(renderer.antialiasing()==Antialiasing::MSAA4);
             CHECK(actions.dispatch({"render-aa","auto"}));CHECK(renderer.antialiasing()==Antialiasing::Auto);
+            CHECK(actions.dispatch({"property:ShadowsEnabled","false",scene.lighting()->id()}));CHECK(!scene.lighting()->shadowsEnabled());
+            CHECK(actions.dispatch({"property:ShadowDistance","96",scene.lighting()->id()}));CHECK(scene.lighting()->shadowDistance()==96);
+            CHECK(actions.dispatch({"property:ShadowStrength","0.8",scene.lighting()->id()}));CHECK(std::fabs(scene.lighting()->shadowStrength()-.8f)<.001f);
+            CHECK(actions.dispatch({"property:ShadowsEnabled","true",scene.lighting()->id()}));
             frames(3);clickVisible("prop-Material3D.Roughness");key("ctrl+a");event("type --clearmodifiers --delay 40 '0.45'");key("Return");
             CHECK(std::fabs(part->material3D()->roughness-.45f)<.001f);capture("material3d-properties");
             click("tab-View");capture("material-quality");
