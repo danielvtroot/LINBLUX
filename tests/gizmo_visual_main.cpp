@@ -637,7 +637,7 @@ int main() {
                         }
                         // Nenhum controle pode ser desenhado fora da viewport.
                         for (int i = 0; i < 6; ++i) {
-    
+
 
                     }
                     UnloadImage(image);

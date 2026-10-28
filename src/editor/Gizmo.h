@@ -47,7 +47,7 @@ public:
                              Rectangle viewport, bool hovered, bool allowInput,
                              const GizmoInput& input);
     void drawOverlay(const Part& part, ToolMode mode, const EditorCamera& camera,
-                     Rectangle viewport) const;
+                     Rectangle viewport,bool showMeasurement=true) const;
     bool dragging() const { return dragging_; }
     InstanceId sessionPartId() const { return draggedPartId_; }
     bool consumedLastInput() const { return consumedLastInput_; }
@@ -86,11 +86,13 @@ public:
     bool centeredScale() const { return centeredScale_; }
     void setCenteredScaleOption(bool value){centerScaleOption_=value;}
     bool centeredScaleOption() const {return centerScaleOption_;}
+    void setPlanarHandles(bool value){planarHandles_=value;}
+    bool planarHandles() const{return planarHandles_;}
     Vector3 faceAnchor() const {return faceAnchorWorld_;}
     void setPixelScale(float value) { if(std::isfinite(value))pixelScale_=std::clamp(value,.75f,1.75f); }
     float pixelScale() const { return pixelScale_; }
     gizmolayout::Settings visualSettings() const {
-        gizmolayout::Settings s;const float v=pixelScale_;
+        gizmolayout::Settings s;s.showPlanes=planarHandles_;const float v=pixelScale_;
         s.basePixelLength*=v;s.minPixelLength*=v;s.maxPixelLength*=v;
         s.axisButtonHalf*=v;s.planeButtonHalf*=v;s.scaleHandleHalfWidth*=v;s.scaleHandleHalfHeight*=v;
         s.scaleHandleSeparation*=v;s.rotateMarkerHalfWidth*=v;s.rotateMarkerHalfHeight*=v;
@@ -110,7 +112,7 @@ private:
     bool consumedLastInput_ = false;
     bool localSpace_ = false;
     gizmomath::GridMode gridMode_=gizmomath::GridMode::Relative;
-    bool centeredScale_ = false,centerScaleOption_=false;
+    bool centeredScale_ = false,centerScaleOption_=false,planarHandles_=false;
     Vector3 faceAnchorLocal_{},faceAnchorWorld_{},faceGrab_{};
     float pixelScale_=1;
     bool dragLocalSpace_ = false;

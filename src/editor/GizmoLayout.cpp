@@ -172,7 +172,12 @@ Layout Build(const Part& part,ToolMode mode,const EditorCamera& camera,Rectangle
         face.anchor=std::fabs(den)>1e-6f?Vector3Add(ray.position,Vector3Scale(ray.direction,Vector3DotProduct(Vector3Subtract(face.center,ray.position),face.normal)/den)):face.center;
         face.screen=anchor;layout.scaleHandle[index]=anchor;
     }
-    if(mode==ToolMode::Scale)return layout;
+    if(mode==ToolMode::Scale){
+        Vector3 reference=part.position();if(!pivotValid)for(const auto& face:layout.faces)if(face.visible){reference=face.anchor;break;}
+        const Vector2 fallbacks[3]={{.94f,.34f},{0,-1},{-.94f,.34f}};const float unit=camera.worldUnitsPerPixel(reference,layout.viewport.y);
+        for(int axis=0;axis<3;++axis)layout.axisDirection[axis]=AxisDirectionOnScreen(camera,layout.viewport,reference,gizmomath::Axis(axis,part.rotation(),true),unit*layout.pixelLength,fallbacks[axis],layout.axisDirectionFallback[axis]);
+        return layout;
+    }
     layout.valid=pivotValid;if(!layout.valid)return layout;
     const float unit=camera.worldUnitsPerPixel(part.position(),layout.viewport.y);
     const Vector2 fallbacks[3]={{.94f,.34f},{0,-1},{-.94f,.34f}};
@@ -197,7 +202,7 @@ Layout Build(const Part& part,ToolMode mode,const EditorCamera& camera,Rectangle
     }
     const int axes[3][2]={{0,1},{0,2},{1,2}};
     for(int plane=0;plane<3;++plane){const auto a=gizmomath::Axis(axes[plane][0],part.rotation(),localSpace),b=gizmomath::Axis(axes[plane][1],part.rotation(),localSpace);const auto n=Vector3CrossProduct(a,b);
-        layout.planeVisible[plane]=std::fabs(Vector3DotProduct(Vector3Normalize(Vector3Subtract(camera.position(),part.position())),n))>.32f;
+        layout.planeVisible[plane]=settings.showPlanes&&std::fabs(Vector3DotProduct(Vector3Normalize(Vector3Subtract(camera.position(),part.position())),n))>.32f;
         const float low=unit*23,high=unit*37;const Vector3 world[4]={Vector3Add(part.position(),Vector3Add(Vector3Scale(a,low),Vector3Scale(b,low))),Vector3Add(part.position(),Vector3Add(Vector3Scale(a,high),Vector3Scale(b,low))),Vector3Add(part.position(),Vector3Add(Vector3Scale(a,high),Vector3Scale(b,high))),Vector3Add(part.position(),Vector3Add(Vector3Scale(a,low),Vector3Scale(b,high)))};
         layout.planeCenter[plane]={};for(int k=0;k<4;++k){if(!camera.projectChecked(world[k],layout.viewport,layout.planeCorners[plane][k]))layout.planeVisible[plane]=false;layout.planeCenter[plane]=Vector2Add(layout.planeCenter[plane],Vector2Scale(layout.planeCorners[plane][k],.25f));}
     }

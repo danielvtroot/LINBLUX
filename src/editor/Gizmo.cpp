@@ -424,7 +424,7 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
 }
 
 void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& camera,
-                       Rectangle viewport) const {
+                       Rectangle viewport,bool showMeasurement) const {
     if (mode == ToolMode::Select) return;
     // Layout puro: o desenho abaixo usa exatamente as mesmas posicoes que o
     // hit test de update() usa. Nenhuma coordenada invalida e gerada.
@@ -498,7 +498,7 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
     }
     if(mode==ToolMode::Move)DrawSphere(part.position(),camera.worldUnitsPerPixel(part.position(),viewport.height)*5,{215,218,223,255});
     rlDrawRenderBatchActive();EndMode3D();rlDisableDepthTest();rlDisableDepthMask();
-    if(dragging_){
+    if(dragging_&&showMeasurement){
         const auto delta=Vector3Subtract(part.position(),startTransform_.position);
         const char* text=mode==ToolMode::Scale?TextFormat("%.2f  x  %.2f  x  %.2f",part.size().x,part.size().y,part.size().z):
             mode==ToolMode::Rotate?TextFormat("%.1f graus",appliedRotation_*RAD2DEG):TextFormat("%.3f unidades",Vector3Length(delta));

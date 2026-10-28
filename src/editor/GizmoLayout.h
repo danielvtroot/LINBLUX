@@ -19,6 +19,7 @@ namespace loblox { class EditorCamera; }
 namespace loblox::gizmolayout {
 
 struct Settings {
+    bool showPlanes=false;
     // Tamanho visual: 70 px na referência, limitado a 64–80 px antes da escala
     // para continuar utilizavel em resolucoes pequenas ou grandes.
     float basePixelLength = 108.0f;

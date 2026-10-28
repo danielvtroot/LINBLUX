@@ -61,8 +61,8 @@ int main(int argc,char** argv) {
         const loblox::Transform start{{20,10,0},QuatFromEulerDegrees({37,21,37}),{4,2,6}};
         part->setTransform(start);physics.applyChanges(part);
         EditorCamera camera;camera.setOrbit(start.position,22,.65f,.43f);
-        Gizmo gizmo;gizmo.setLocalSpace(local);gizmo.setSnap(snap,0,0);TransformSession session(gizmo,physics);
-        const auto layout=gizmolayout::Build(*part,ToolMode::Move,camera,view,local);
+        Gizmo gizmo;gizmo.setPlanarHandles(true);gizmo.setLocalSpace(local);gizmo.setSnap(snap,0,0);TransformSession session(gizmo,physics);
+        const auto layout=gizmolayout::Build(*part,ToolMode::Move,camera,view,local,gizmo.visualSettings());
         // An edge-on planar area is deliberately unavailable, never remapped
         // to a fabricated perpendicular axis.
         if(!layout.planeVisible[plane])continue;

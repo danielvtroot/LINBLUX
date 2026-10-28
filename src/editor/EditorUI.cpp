@@ -1903,22 +1903,22 @@ void EditorUI::drawViewport() {
         (tool_!=ToolMode::Scale || rigContext_==RigContext::Edit))
         rigGizmo_.drawOverlay(jointProxy_, tool_, camera_, viewportRect);
     if (selectedPart != nullptr && tool_ != ToolMode::Select) {
-        gizmo_.drawOverlay(*selectedPart, tool_, camera_, viewportRect);
+        gizmo_.drawOverlay(*selectedPart, tool_, camera_, viewportRect,!readout_.editing);
     }
     if(selection&&selection->instanceClass()==InstanceClass::Model&&modelTransform_.proxy()&&tool_!=ToolMode::Select)
-        gizmo_.drawOverlay(*modelTransform_.proxy(),tool_,camera_,viewportRect);
+        gizmo_.drawOverlay(*modelTransform_.proxy(),tool_,camera_,viewportRect,!readout_.editing);
     EndTextureMode();
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
     if(selection&&tool_==ToolMode::Move&&!runtime_.active()) {
         const ImVec2 p{imagePosition.x+12,imagePosition.y+12};
-        const char* hint=surfaceSnapEnabled_?"Encaixe ativo | Ctrl: forçar | Shift: liberar grade | Alt+clique: atravessar | F8: contornos":"Ctrl: encaixar face | Shift: liberar grade | Alt+clique: atravessar | F8: contornos";
+        const char* hint=surfaceSnapEnabled_?"Arraste uma seta para mover. Encaixe ativo.":"Arraste uma seta para mover. Ctrl: encaixar.";
         const auto s=ImGui::CalcTextSize(hint);
         drawList->AddRectFilled({p.x-6,p.y-4},{p.x+s.x+6,p.y+s.y+4},IM_COL32(18,18,22,200),4);
         drawList->AddText(p,IM_COL32(235,220,220,255),hint);
     }
-    if(tool_!=ToolMode::Select&&selectedPart&&selectedPart->shape()==PartShape::Block) {
+    if(gizmo_.dragging()&&selectedPart&&selectedPart->shape()==PartShape::Block) {
         const auto& pose=selectedPart->transform();
         for(const auto* other:scene_.parts()) {
             if(other==selectedPart||other->shape()!=PartShape::Block||other->color().a==0)continue;
