@@ -314,7 +314,6 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     DrawExperienceOverlay(runtime_,viewportWidth_,viewportHeight_);
     DrawLuaUi(runtime_,viewportWidth_,viewportHeight_);
     EndTextureMode();
-    resolveViewport();
     if(runtime_.state()==game::RuntimeState::Playing&&runtime_.healthHud().visible) {
         const float scale=std::clamp(viewportHeight_/720.f,.75f,1.5f);
         healthHud_={image.x+viewportWidth_-93*scale,image.y+17*scale,82*scale,82*scale};

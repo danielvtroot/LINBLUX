@@ -154,7 +154,6 @@ private:
 
     void resizeViewport(int width, int height);
     void unloadViewport();
-    void resolveViewport();
 
     Scene& scene_;
     PhysicsWorld& physics_;
@@ -263,11 +262,7 @@ private:
     float cameraLookSensitivity_ = 0.0065f;
 
     RenderTexture2D viewport_{};
-    RenderTexture2D resolvedViewport_{};
-    Shader fxaa_{};
-    int fxaaResolutionLoc_ = -1;
     bool viewportReady_ = false;
-    bool resolvedViewportReady_ = false;
     int viewportWidth_ = 0;
     int viewportHeight_ = 0;
 

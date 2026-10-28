@@ -25,7 +25,10 @@ const char* fragment=R"GLSL(#version 330
 in vec3 worldPosition,worldNormal,localPosition,localNormal;
 in vec2 meshUV;
 out vec4 finalColor;
-uniform sampler2D texture0,normalMap,mrMap,aoMap;
+uniform sampler2D texture0,normalMap,mrMap,aoMap,shadowMap;
+uniform mat4 lightVP;
+uniform int shadowEnabled;
+uniform float normalBias,shadowDistance,shadowStrength;
 uniform vec4 baseColor,mapFlags;
 uniform vec3 cameraPosition,sunDirection,sunColor,ambientColor,emissiveColor,objectSize,fogColor;
 uniform vec2 tile,uvOffset;
@@ -36,6 +39,17 @@ vec3 linear(vec3 c){return mix(pow((c+.055)/1.055,vec3(2.4)),c/12.92,lessThanEqu
 vec3 srgb(vec3 c){return mix(1.055*pow(max(c,vec3(0)),vec3(1./2.4))-.055,12.92*c,lessThanEqual(c,vec3(.0031308)));}
 vec3 straight(vec4 c){return c.a>.0001?c.rgb/c.a:vec3(0);}
 vec3 tonemap(vec3 x){return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);}
+float visibility(vec3 geometricNormal,float nl){
+    if(shadowEnabled==0)return 1.;
+    vec4 clip=lightVP*vec4(worldPosition+geometricNormal*normalBias,1.);
+    vec3 p=clip.xyz/clip.w*.5+.5;
+    if(any(lessThanEqual(p,vec3(0)))||any(greaterThanEqual(p,vec3(1))))return 1.;
+    float bias=.00015+.00065*(1.-nl),lit=0.;
+    for(int x=-1;x<=1;++x)for(int y=-1;y<=1;++y)
+        lit+=p.z-bias<=texture(shadowMap,p.xy+vec2(x,y)/1024.).r?1.:0.;
+    float fade=1.-smoothstep(shadowDistance*.8,shadowDistance,length(cameraPosition-worldPosition));
+    return 1.-(1.-lit/9.)*shadowStrength*fade;
+}
 void main(){
     vec3 n=normalize(worldNormal);vec3 ln=abs(localNormal);vec3 p=localPosition*objectSize;
     vec2 uv=spherical!=0?meshUV*objectSize.x/tile:(ln.x>ln.y&&ln.x>ln.z?p.zy/tile:ln.y>ln.z?p.xz/tile:p.xy/tile);
@@ -56,7 +70,7 @@ void main(){
     if(!gl_FrontFacing)n=-n;
     vec3 l=normalize(sunDirection),v=normalize(cameraPosition-worldPosition),h=normalize(l+v);
     float nl=max(dot(n,l),0.),nv=max(dot(n,v),.001),nh=max(dot(n,h),0.),vh=max(dot(v,h),0.);
-    vec3 light=linear(sunColor)*sunIntensity*2.;
+    vec3 light=linear(sunColor)*sunIntensity*2.*visibility(normalize(worldNormal),max(dot(normalize(worldNormal),l),0.));
     vec3 hemi=mix(vec3(.16,.18,.23),linear(ambientColor)*.6+vec3(.18),n.y*.5+.5);
     vec3 result=albedo*hemi*ao;
     if(quality<3){
@@ -91,6 +105,7 @@ bool ModernMaterials::initialize() {
     shader_.locs[SHADER_LOC_MAP_ALBEDO]=GetShaderLocation(shader_,"texture0");
     shader_.locs[SHADER_LOC_MAP_NORMAL]=GetShaderLocation(shader_,"normalMap");
     shader_.locs[SHADER_LOC_MAP_METALNESS]=GetShaderLocation(shader_,"mrMap");
+    shader_.locs[SHADER_LOC_MAP_HEIGHT]=GetShaderLocation(shader_,"shadowMap");
     shader_.locs[SHADER_LOC_MAP_OCCLUSION]=GetShaderLocation(shader_,"aoMap");
     cube_=GenMeshCube(1,1,1);sphere_=GenMeshSphere(1,32,48);
     // Sparse guides composed of the actual mesh edges, not long chords or
@@ -123,7 +138,7 @@ ModernMaterials::~ModernMaterials() {
     if(material_.maps)MemFree(material_.maps); // textures belong to ImageAssets
     if(shader_.id)UnloadShader(shader_);
 }
-bool ModernMaterials::draw(const Part& part,Camera3D camera,const Lighting* light,RenderQuality quality) {
+bool ModernMaterials::draw(const Part& part,Camera3D camera,const Lighting* light,RenderQuality quality,bool transparent) {
     if(!initialize())return false;
     const auto m=part.material3D()?*part.material3D():LegacyMaterial3D(part.material(),part.color());
     const auto f=[&](const char* name,float v){SetShaderValue(shader_,GetShaderLocation(shader_,name),&v,SHADER_UNIFORM_FLOAT);};
@@ -132,6 +147,10 @@ bool ModernMaterials::draw(const Part& part,Camera3D camera,const Lighting* ligh
     const auto color=[](Color c){return Vector3{c.r/255.f,c.g/255.f,c.b/255.f};};
     const auto c=color(m.baseColor);const Vector4 base{c.x,c.y,c.z,m.baseColor.a/255.f};
     SetShaderValue(shader_,GetShaderLocation(shader_,"baseColor"),&base.x,SHADER_UNIFORM_VEC4);
+    i("shadowEnabled",shadow_.active());f("normalBias",shadow_.normalBias());
+    f("shadowDistance",light?light->shadowDistance():80);f("shadowStrength",light?light->shadowStrength():1);
+    if(shadow_.active())SetShaderValueMatrix(shader_,GetShaderLocation(shader_,"lightVP"),shadow_.matrix());
+    material_.maps[MATERIAL_MAP_HEIGHT].texture={shadow_.active()?shadow_.texture():0,1024,1024,1,19};
     f("metallic",m.metallic);f("roughness",m.roughness);f("normalScale",m.normalScale);f("emissiveStrength",m.emissiveStrength);
     f("uvRotation",m.rotation*DEG2RAD);f("sunIntensity",light?light->sunIntensity():1);f("brightness",light?light->brightness():1);
     f("fogDensity",light?light->fogDensity():0);v3("fogColor",color(light?light->fogColor():Color{120,180,240,255}));
@@ -155,9 +174,14 @@ bool ModernMaterials::draw(const Part& part,Camera3D camera,const Lighting* ligh
     const auto matrix=MatrixMultiply(MatrixMultiply(MatrixScale(scale.x,scale.y,scale.z),QuaternionToMatrix(part.rotation())),
                                      MatrixTranslate(part.position().x,part.position().y,part.position().z));
     rlDrawRenderBatchActive();
+    if(transparent)rlEnableBackfaceCulling();
     DrawMesh(part.shape()==PartShape::Sphere?sphere_:cube_,material_,matrix);
     // DrawMesh cleans its own texture/VAO/shader state. Scene remains uncullled.
     rlDisableBackfaceCulling();return true;
+}
+void ModernMaterials::prepareShadows(const std::vector<ShadowCaster>& casters,Camera3D camera,const Lighting* light,RenderQuality quality) {
+    const bool enabled=(quality==RenderQuality::Medium||quality==RenderQuality::High)&&initialize();
+    shadow_.update(casters,camera,light,enabled,cube_,sphere_);
 }
 bool ModernMaterials::wireSphere(Vector3 center,float radius,Quaternion rotation,Color color) {
     if(!initialize())return false;

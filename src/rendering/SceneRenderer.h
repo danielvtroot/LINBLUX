@@ -15,6 +15,7 @@ class Scene;
 class EditorCamera;
 class PhysicsWorld;
 class ModernMaterials;
+class SceneTarget;
 struct RigRenderState {
     const game::Rig* rig = nullptr;
     game::Pose pose{};
@@ -28,7 +29,7 @@ struct EditorGeometryView {
     bool normals=false;
 };
 
-// Desenha a cena com recursos minimos (sem sombras/post-processamento).
+// Cena compartilhada pelo Editor/Player, com qualidade escalonável.
 // Recursos graficos compartilhados sao liberados com o ultimo renderer.
 class SceneRenderer {
 public:
@@ -40,6 +41,10 @@ public:
     void setQuality(RenderQuality quality) {quality_=quality;}
     RenderQuality quality() const {return quality_;}
     bool modernReady() const;
+    bool shadowsActive() const;
+    void setAntialiasing(Antialiasing value) {antialiasing_=value;}
+    Antialiasing antialiasing() const {return antialiasing_;}
+    Antialiasing actualAntialiasing() const;
 
     void drawScene(const Scene& scene, const EditorCamera& camera, int width, int height,
                    InstanceId selectedId, const RigRenderState* rig = nullptr);
@@ -60,6 +65,9 @@ public:
                              Camera3D camera,InstanceId selection) const;
 
 private:
+    void drawScenePass(const Scene&,Camera3D,int,int,InstanceId,const RigRenderState*,bool);
+    Antialiasing antialiasing_=Antialiasing::Auto;
+    std::unique_ptr<SceneTarget> target_;
     RenderQuality quality_=RenderQuality::Medium;
     std::unique_ptr<ModernMaterials> modern_;
     void drawBaseplate(const Part& baseplate, Vector3 lightDirection, float sunIntensity,

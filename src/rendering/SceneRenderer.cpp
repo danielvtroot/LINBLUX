@@ -2,6 +2,7 @@
 #include "game/Inventory.h"
 #include "rendering/SceneRenderer.h"
 #include "rendering/ModernMaterials.h"
+#include "rendering/SceneTarget.h"
 #include <cstdlib>
 #include "physics/PhysicsWorld.h"
 
@@ -528,6 +529,7 @@ void DrawShadedBox(Vector3 center, Vector3 size, Quaternion rotation, Color colo
         const Vector3& c = corners[face.indices[2]];
         const Vector3& d = corners[face.indices[3]];
         const Vector3 faceCenter = Vector3Scale(Vector3Add(Vector3Add(a, b), Vector3Add(c, d)), 0.25f);
+        if(color.a<255&&Vector3DotProduct(normal,Vector3Subtract(gSurfaceLight.camera,faceCenter))<=0)continue;
         SetColor4(ApplyFog(LitSurface(color, normal, faceCenter, lightDirection, sunIntensity,
                                       brightness, gloss, unlit),
                            faceCenter));
@@ -597,6 +599,7 @@ void DrawShadedSphere(Vector3 center, float radius, Color color, Vector3 lightDi
                 Vector3Normalize(Vector3Subtract(Vector3Add(Vector3Add(a, b), Vector3Add(c, d)),
                                                  Vector3Scale(center, 4.0f)));
             const Vector3 quadCenter = Vector3Scale(Vector3Add(Vector3Add(a, b), Vector3Add(c, d)), 0.25f);
+            if(color.a<255&&Vector3DotProduct(normal,Vector3Subtract(gSurfaceLight.camera,quadCenter))<=0)continue;
             SetColor4(ApplyFog(LitSurface(color, normal, quadCenter, lightDirection, sunIntensity,
                                           brightness, gloss, unlit),
                                quadCenter));
@@ -842,7 +845,6 @@ void DrawPartSkins(const Part& part, const std::string& assetsDir,
                      nullptr, nullptr, "texture_repeat_u", "texture_repeat_v",
                      "texture_offset_u", "texture_offset_v", assetsDir,
                      lightDirection, sunIntensity, brightness);
-    rlDrawRenderBatchActive();rlDisableDepthMask();
     for(const auto* child:part.children())if(IsSurfaceClass(child->instanceClass())) {
         const auto& surface=static_cast<const Surface&>(*child);const auto& value=surface.properties();
         if(!value.valid()||value.image.empty())continue;
@@ -859,7 +861,7 @@ void DrawPartSkins(const Part& part, const std::string& assetsDir,
             [&](){const auto it=surface.attributes().find("flip_u");
                 return it!=surface.attributes().end()&&std::holds_alternative<bool>(it->second)&&std::get<bool>(it->second);}());
     }
-    rlDrawRenderBatchActive();rlEnableDepthMask();
+    rlDrawRenderBatchActive();
 }
 
 Texture2D& FaceTexture() {
@@ -921,13 +923,18 @@ static int rendererCount = 0;
 
 SceneRenderer::SceneRenderer() {
     ++rendererCount;
-    modern_=std::make_unique<ModernMaterials>();
+    modern_=std::make_unique<ModernMaterials>();target_=std::make_unique<SceneTarget>();
+    if(const char* value=std::getenv("LINBLUX_ANTIALIASING")){
+        const std::string aa=value;antialiasing_=aa=="off"?Antialiasing::None:aa=="fxaa"?Antialiasing::FXAA:aa=="msaa4"?Antialiasing::MSAA4:Antialiasing::Auto;
+    }
     if(const char* value=std::getenv("LINBLUX_RENDER_QUALITY")) {
         const std::string q=value;
         quality_=q=="legacy"?RenderQuality::Legacy:q=="low"?RenderQuality::Low:
             q=="high"?RenderQuality::High:RenderQuality::Medium;
     }
 }
+bool SceneRenderer::shadowsActive() const {return modern_->shadowActive();}
+Antialiasing SceneRenderer::actualAntialiasing() const {return target_->actual();}
 bool SceneRenderer::modernReady() const {return modern_->ready();}
 
 SceneRenderer::~SceneRenderer() {
@@ -1093,7 +1100,13 @@ void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float in
     }
 }
 
-void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
+void SceneRenderer::drawScene(const Scene& scene,Camera3D camera,int width,int height,InstanceId selectedId,const RigRenderState* rig,bool authoredRigs) {
+    const bool resolve=target_->begin(width,height,antialiasing_,quality_);
+    drawScenePass(scene,camera,width,height,selectedId,rig,authoredRigs);
+    if(resolve)target_->finish();
+}
+
+void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width,
                               int height, InstanceId selectedId, const RigRenderState* rig,
                               bool authoredRigs) {
     const Lighting* lighting = scene.lighting();
@@ -1115,6 +1128,29 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
     gSurfaceLight.sky = lighting != nullptr ? lighting->skyHorizonColor() : Color{180, 200, 230, 255};
     gSurfaceLight.camera = camera.position;
 
+    const auto& npcVisuals=scene.npcVisuals();
+    const auto hasRigVisual=[&](InstanceId id){for(const auto& visual:npcVisuals)if(visual.part==id)return true;return false;};
+    std::vector<Part*> opaque,transparent;
+    std::vector<ShadowCaster> casters;
+    for(auto* part:scene.parts()) {
+        if(!part||game::InventoryHidden(*part)||hasRigVisual(part->id()))continue;
+        const auto* m=quality_!=RenderQuality::Legacy&&part->material3D()?&*part->material3D():nullptr;
+        const auto alpha=m?m->baseColor.a:part->color().a;if(!alpha)continue;
+        const bool textured=m&&!m->baseColorTexture.empty();
+        (alpha<255||textured?transparent:opaque).push_back(part);
+        if(alpha==255){const float d=part->sphereRadius()*2;
+            casters.push_back({part->position(),part->shape()==PartShape::Sphere?Vector3{d,d,d}:part->size(),part->rotation(),part->shape()==PartShape::Sphere,part});}
+    }
+    std::vector<RigRenderState> rigStates;
+    if(authoredRigs)for(const auto& asset:scene.gameAssets().rigs)
+        if(!rig||!rig->rig||rig->rig->id!=asset.id)rigStates.push_back({&asset,{},asset.root});
+    if(rig)rigStates.push_back(*rig);
+    for(const auto& visual:npcVisuals)if(const auto* asset=scene.gameAssets().findRig(visual.rigId))rigStates.push_back({asset,visual.pose,visual.root});
+    for(const auto& state:rigStates)if(state.rig){const auto world=state.rig->evaluate(state.pose,state.root);
+        for(int i=0;i<game::kBodyCount;++i)if(state.rig->bodies[i].color.a==255)
+            casters.push_back({world[i].position,state.rig->bodies[i].size,world[i].rotation,false,nullptr});}
+    modern_->prepareShadows(casters,camera,lighting,quality_);
+
     ClearBackground(sky);
     
     // Desenha o céu procedural (sempre, se habilitado)
@@ -1127,23 +1163,9 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
     BeginMode3D(camera);
     rlEnableDepthTest();
     rlDisableBackfaceCulling();
-    // NPCs com rig ocultam a caixa da Part e aparecem como personagem animado.
-    const auto& npcVisuals = scene.npcVisuals();
-    const auto hasRigVisual = [&](InstanceId id) {
-        for (const auto& visual : npcVisuals) if (visual.part == id) return true;
-        return false;
-    };
-    for (Part* part : scene.parts()) {
-        if (part == nullptr) {
-            continue;
-        }
-        if(game::InventoryHidden(*part))continue;
-        if (hasRigVisual(part->id())) {
-            if (part->id() == selectedId) drawSelection(*part);
-            continue;
-        }
+    const auto drawPart=[&](Part* part,bool translucent) {
         if(quality_!=RenderQuality::Legacy&&part->instanceClass()!=InstanceClass::SpawnLocation&&
-           modern_->draw(*part,camera,lighting,quality_)) {
+           modern_->draw(*part,camera,lighting,quality_,translucent)) {
             // Materials and decals are independent passes; skins below use
             // their existing premultiplied compositing and asset references.
         } else if (part->instanceClass() == InstanceClass::Baseplate) {
@@ -1176,23 +1198,16 @@ void SceneRenderer::drawScene(const Scene& scene, Camera3D camera, int width,
                           MaterialGloss(part->material()),
                           part->material() == PartMaterial::Neon);
         }
-        // Decal/Texture da Part (atributos persistidos); assets são relativos
-        // ao executável (`assets/`), conforme ImageAssets.
-        DrawPartSkins(*part, game::AssetsDir(), lightDirection, sunIntensity, brightness);
-
-        if (part->id() == selectedId) {
-            drawSelection(*part);
-        }
-    }
-    if (authoredRigs) for (const auto& asset : scene.gameAssets().rigs) {
-        if (rig && rig->rig && rig->rig->id == asset.id) continue;
-        drawRig({&asset, {}, asset.root}, lightDirection, sunIntensity, brightness);
-    }
-    if (rig) drawRig(*rig, lightDirection, sunIntensity, brightness);
-    for (const auto& visual : npcVisuals) {
-        if (const auto* asset = scene.gameAssets().findRig(visual.rigId))
-            drawRig({asset, visual.pose, visual.root}, lightDirection, sunIntensity, brightness);
-    }
+    };
+    for(auto* part:opaque)drawPart(part,false);
+    for(const auto& state:rigStates)drawRig(state,lightDirection,sunIntensity,brightness);
+    rlDrawRenderBatchActive();rlDisableDepthMask();
+    for(auto* part:opaque)DrawPartSkins(*part,game::AssetsDir(),lightDirection,sunIntensity,brightness);
+    std::stable_sort(transparent.begin(),transparent.end(),[&](const Part* a,const Part* b){
+        return Vector3DistanceSqr(a->position(),camera.position)>Vector3DistanceSqr(b->position(),camera.position);});
+    for(auto* part:transparent){drawPart(part,true);DrawPartSkins(*part,game::AssetsDir(),lightDirection,sunIntensity,brightness);}
+    rlDrawRenderBatchActive();rlEnableDepthMask();
+    if(auto* selected=scene.findPart(selectedId))drawSelection(*selected);
     EndMode3D();
 }
 
