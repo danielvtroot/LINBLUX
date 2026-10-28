@@ -86,6 +86,9 @@ public:
     bool centeredScale() const { return centeredScale_; }
     void setCenteredScaleOption(bool value){centerScaleOption_=value;}
     bool centeredScaleOption() const {return centerScaleOption_;}
+    // Studio moves directly from a face; rig tools may retain pivot axes.
+    void setFaceMove(bool value){faceMove_=value;}
+    bool faceMove() const{return faceMove_&&!planarHandles_;}
     void setPlanarHandles(bool value){planarHandles_=value;}
     bool planarHandles() const{return planarHandles_;}
     Vector3 faceAnchor() const {return faceAnchorWorld_;}
@@ -113,6 +116,8 @@ private:
     bool localSpace_ = false;
     gizmomath::GridMode gridMode_=gizmomath::GridMode::Relative;
     bool centeredScale_ = false,centerScaleOption_=false,planarHandles_=false;
+    bool faceMove_=false;
+    int faceIndex_=-1;
     Vector3 faceAnchorLocal_{},faceAnchorWorld_{},faceGrab_{};
     float pixelScale_=1;
     bool dragLocalSpace_ = false;

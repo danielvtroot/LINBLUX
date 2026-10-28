@@ -553,6 +553,7 @@ EditorUI::EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera,
       modelTransform_(scene_,physics_,transform_,history_),
       projectPath_(config.defaultProjectPath) {
     std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
+    gizmo_.setFaceMove(true);
     cameraMoveSpeed_ = camera_.moveSpeed();
     cameraLookSensitivity_ = camera_.lookSensitivity();
     camera_.reset();
@@ -1724,7 +1725,7 @@ void EditorUI::drawViewport() {
     gizmoInput.windowFocused = context.windowFocused;
     gizmoInput.shiftDown = input.shift;
     gizmoInput.altDown = input.alt;
-    if(tool_==ToolMode::Scale&&selection&&!gizmo_.dragging()){
+    if((tool_==ToolMode::Scale||(tool_==ToolMode::Move&&gizmo_.faceMove()))&&selection&&!gizmo_.dragging()){
         const auto ray=camera_.rayFromScreen({input.mouse.x-viewportRect.x,input.mouse.y-viewportRect.y},{viewportRect.width,viewportRect.height});
         for(const auto* p:scene_.parts())if(p!=selection&&!selection->isAncestorOf(p)&&p->color().a>=250){
             const auto hit=p->intersect(ray);if(hit.hit)gizmoInput.occlusionDistance=std::min(gizmoInput.occlusionDistance,hit.distance);}
@@ -1913,7 +1914,7 @@ void EditorUI::drawViewport() {
 
     if(selection&&tool_==ToolMode::Move&&!runtime_.active()) {
         const ImVec2 p{imagePosition.x+12,imagePosition.y+12};
-        const char* hint=surfaceSnapEnabled_?"Arraste uma seta para mover. Encaixe ativo.":"Arraste uma seta para mover. Ctrl: encaixar.";
+        const char* hint=surfaceSnapEnabled_?"Arraste uma face para mover. Encaixe ativo.":"Arraste uma face para mover. Ctrl: encaixar.";
         const auto s=ImGui::CalcTextSize(hint);
         drawList->AddRectFilled({p.x-6,p.y-4},{p.x+s.x+6,p.y+s.y+4},IM_COL32(18,18,22,200),4);
         drawList->AddText(p,IM_COL32(235,220,220,255),hint);
