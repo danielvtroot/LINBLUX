@@ -50,7 +50,7 @@ def capture(args):
                     if zoom:
                         xdo('mousemove',int(width*.45),int(height*.5));xdo('click','--repeat',4,'--delay',120,5);time.sleep(.5)
                     for name,x in [('move',133 if width==1366 else 145),('scale',214 if width==1366 else 233),('rotate',295 if width==1366 else 320)]:
-                        xdo('keydown',{'move':'2','scale':'3','rotate':'4'}[name]);time.sleep(.25);xdo('keyup',{'move':'2','scale':'3','rotate':'4'}[name]);xdo('mousemove',5,5);time.sleep(.7)
+                        click(x,92);xdo('mousemove',5,5);time.sleep(.7)
                         subprocess.run(['scrot','-o','-u',str(output/f'{name}-{distance}-{width}.png')],check=True,timeout=5)
                 # Return to the same camera before resizing.
                 xdo('mousemove',int(width*.45),int(height*.5));xdo('click','--repeat',4,'--delay',120,4);time.sleep(.5)

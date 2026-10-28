@@ -241,7 +241,12 @@ void VerifyRotate(const gizmolayout::Layout& layout, const Image& image) {
         }
         if (bestClearance >= 6.0f) {
             ++gChecks;
-            if (!Nearly(PixelAt(image, middle), kAxis[axis], 24)) {
+            bool strokeFound=false;
+            // Thin strokes can straddle pixel centres. Search only the 3x3
+            // footprint around the exact shared segment, not a distant icon.
+            for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx)
+                strokeFound|=Nearly(PixelAt(image,{middle.x+dx,middle.y+dy}),kAxis[axis],24);
+            if (!strokeFound) {
                 ++gFailures; ++gCaseFailures;
                 const Color got = PixelAt(image, middle);
                 std::printf("  FAIL [%s] anel %c meio=(%.0f,%.0f) cor=(%d,%d,%d)\n",
