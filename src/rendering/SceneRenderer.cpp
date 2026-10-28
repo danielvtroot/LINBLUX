@@ -924,6 +924,9 @@ static int rendererCount = 0;
 SceneRenderer::SceneRenderer() {
     ++rendererCount;
     modern_=std::make_unique<ModernMaterials>();target_=std::make_unique<SceneTarget>();
+    if(const char* value=std::getenv("LINBLUX_SHADOW_QUALITY")){
+        const std::string q=value;shadowQuality_=q=="off"?ShadowQuality::Off:q=="economy"?ShadowQuality::Economy:q=="soft"?ShadowQuality::Soft:q=="high"?ShadowQuality::High:ShadowQuality::Auto;
+    }
     if(const char* value=std::getenv("LINBLUX_ANTIALIASING")){
         const std::string aa=value;antialiasing_=aa=="off"?Antialiasing::None:aa=="fxaa"?Antialiasing::FXAA:aa=="msaa4"?Antialiasing::MSAA4:Antialiasing::Auto;
     }
@@ -1131,7 +1134,7 @@ void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width
     const auto& npcVisuals=scene.npcVisuals();
     const auto hasRigVisual=[&](InstanceId id){for(const auto& visual:npcVisuals)if(visual.part==id)return true;return false;};
     const bool modernAvailable=quality_!=RenderQuality::Legacy&&modern_->available();
-    const bool wantsShadow=(quality_==RenderQuality::Medium||quality_==RenderQuality::High)&&lighting&&lighting->shadowsEnabled()&&lighting->sunIntensity()>0&&lighting->shadowStrength()>0;
+    const bool wantsShadow=shadowQuality_!=ShadowQuality::Off&&(quality_==RenderQuality::Medium||quality_==RenderQuality::High)&&lighting&&lighting->shadowsEnabled()&&lighting->sunIntensity()>0&&lighting->shadowStrength()>0;
     std::vector<Part*> opaque,transparent;
     std::vector<ShadowCaster> casters;
     for(auto* part:scene.parts()) {
@@ -1151,7 +1154,7 @@ void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width
     if(wantsShadow)for(const auto& state:rigStates)if(state.rig){const auto world=state.rig->evaluate(state.pose,state.root);
         for(int i=0;i<game::kBodyCount;++i)if(state.rig->bodies[i].color.a==255)
             casters.push_back({world[i].position,state.rig->bodies[i].size,world[i].rotation,false,nullptr});}
-    modern_->prepareShadows(casters,camera,lighting,quality_);
+    modern_->prepareShadows(casters,camera,lighting,quality_,float(width)/std::max(1,height),shadowQuality_);
 
     ClearBackground(sky);
     

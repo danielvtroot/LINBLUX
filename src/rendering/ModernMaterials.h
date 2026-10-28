@@ -10,7 +10,7 @@ class ModernMaterials {
 public:
     ~ModernMaterials();
     bool draw(const Part& part,Camera3D camera,const Lighting* lighting,RenderQuality quality,bool transparent=false);
-    void prepareShadows(const std::vector<ShadowCaster>& casters,Camera3D camera,const Lighting* light,RenderQuality quality);
+    void prepareShadows(const std::vector<ShadowCaster>& casters,Camera3D camera,const Lighting* light,RenderQuality quality,float aspect,ShadowQuality shadowQuality);
     bool shadowActive() const {return shadow_.active();}
     bool wireSphere(Vector3 center,float radius,Quaternion rotation,Color color);
     bool ready() const {return ready_;}

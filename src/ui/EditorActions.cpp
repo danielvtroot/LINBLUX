@@ -57,6 +57,10 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             e.renderer_.setQuality(c.value=="legacy"?RenderQuality::Legacy:c.value=="low"?RenderQuality::Low:
                 c.value=="high"?RenderQuality::High:RenderQuality::Medium);
         }
+        else if(c.action=="shadow-quality") {
+            if(c.value!="auto"&&c.value!="off"&&c.value!="economy"&&c.value!="soft"&&c.value!="high")throw std::runtime_error("Qualidade de sombras inválida");
+            e.renderer_.setShadowQuality(c.value=="off"?ShadowQuality::Off:c.value=="economy"?ShadowQuality::Economy:c.value=="soft"?ShadowQuality::Soft:c.value=="high"?ShadowQuality::High:ShadowQuality::Auto);
+        }
         else if(c.action=="render-aa") {
             if(c.value!="auto"&&c.value!="off"&&c.value!="fxaa"&&c.value!="msaa4")throw std::runtime_error("Antialiasing inválido");
             e.renderer_.setAntialiasing(c.value=="off"?Antialiasing::None:c.value=="fxaa"?Antialiasing::FXAA:c.value=="msaa4"?Antialiasing::MSAA4:Antialiasing::Auto);
