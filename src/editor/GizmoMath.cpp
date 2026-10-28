@@ -1,4 +1,5 @@
 #include "editor/GizmoMath.h"
+#include "core/Geometry.h"
 
 #include <algorithm>
 #include <cmath>
@@ -95,6 +96,102 @@ SurfaceSnap SnapSurfaces(const std::vector<SurfaceBox>& moving,const std::vector
         }
     }
     return best;
+}
+
+Vector3 SnapGrid(Vector3 position,Vector3 origin,Vector3 a,Vector3 b,float step,GridMode mode) {
+    if(!(step>0)||!std::isfinite(step))return position;
+    const Vector3 base=mode==GridMode::Absolute?Vector3{}:origin;
+    auto delta=Vector3Subtract(position,base);
+    // Quantize only the active world/local basis, preserving inactive axes.
+    for(auto axis:{a,b})if(Vector3LengthSqr(axis)>1e-8f) {
+        axis=Vector3Normalize(axis);const float d=Vector3DotProduct(delta,axis);
+        position=Vector3Add(position,Vector3Scale(axis,SnapDelta(d,step)-d));
+    }
+    return position;
+}
+
+SurfaceSnap SnapUnderCursor(const std::vector<SurfaceBox>& moving,
+    const std::vector<SurfaceBox>& targets,Vector3 reference,Ray ray,SnapFeature feature,
+    bool alignNormal,Quaternion orientation,std::uint64_t previous) {
+    SurfaceSnap out;if(moving.empty()) {out.reason="Esferas: encaixe de caixa indisponível";return out;}
+    for(const auto& member:moving)if(!ValidBox(member.pose))return out;
+    for(float value:{reference.x,reference.y,reference.z,ray.position.x,ray.position.y,ray.position.z,
+        ray.direction.x,ray.direction.y,ray.direction.z})if(!std::isfinite(value))return out;
+    if(Vector3LengthSqr(ray.direction)<1e-8f)return out;
+    ray.direction=Vector3Normalize(ray.direction);
+    const SurfaceBox* target=nullptr;RayCollision closest{};closest.distance=INFINITY;
+    for(const auto& box:targets) {
+        if(!ValidBox(box.pose))continue;
+        bool own=false;for(const auto& member:moving)own|=member.id==box.id;if(own)continue;
+        const auto hit=OrientedBox{box.pose.position,box.pose.rotation,HalfExtents(box.pose.size)}.intersect(ray);
+        // Stable ties: retain previous target only within a tiny depth band.
+        if(hit.hit&&(hit.distance<closest.distance-.001f ||
+            (std::fabs(hit.distance-closest.distance)<=.001f&&(!target||box.id==previous||
+             (target->id!=previous&&box.id<target->id))))) {target=&box;closest=hit;}
+    }
+    if(!target)return out;
+    out.target=target->id;out.point=closest.point;out.normal=Vector3Normalize(closest.normal);
+    if(alignNormal) {
+        const auto up=Vector3RotateByQuaternion({0,1,0},orientation);
+        out.rotationDelta=Vector3DotProduct(up,out.normal)<-.99999f?
+            QuaternionFromAxisAngle(Vector3RotateByQuaternion({1,0,0},orientation),PI):
+            QuaternionFromVector3ToVector3(up,out.normal);
+    }
+    const auto axes=BoxAxes(target->pose);const auto half=HalfExtents(target->pose.size);
+    auto local=Vector3RotateByQuaternion(Vector3Subtract(closest.point,target->pose.position),QuaternionInvert(target->pose.rotation));
+    int face=0;for(int i=1;i<3;++i)if(std::fabs(Vector3DotProduct(out.normal,axes[i]))>
+        std::fabs(Vector3DotProduct(out.normal,axes[face])))face=i;
+    if(feature!=SnapFeature::Face) {
+        int edge=-1;float distance=INFINITY;
+        for(int i=0;i<3;++i)if(i!=face) {
+            const float d=(&half.x)[i]-std::fabs((&local.x)[i]);
+            if(d<distance){distance=d;edge=i;}
+        }
+        for(int i=0;i<3;++i)if(i!=face&&(feature==SnapFeature::Vertex||i==edge))
+            (&local.x)[i]=std::copysign((&half.x)[i],(&local.x)[i]);
+        out.point=Vector3Add(target->pose.position,Vector3RotateByQuaternion(local,target->pose.rotation));
+    }
+    std::vector<SurfaceBox> poses=moving;
+    float support=-INFINITY;
+    for(auto& member:poses) {
+        member.pose.position=Vector3Add(reference,Vector3RotateByQuaternion(Vector3Subtract(member.pose.position,reference),out.rotationDelta));
+        member.pose.rotation=UnitQuaternion(QuaternionMultiply(out.rotationDelta,member.pose.rotation));
+        support=std::max(support,Radius(member.pose,out.normal)-Vector3DotProduct(Vector3Subtract(member.pose.position,reference),out.normal));
+    }
+    Vector3 desired=Vector3Add(out.point,Vector3Scale(out.normal,support));
+    if(feature==SnapFeature::Face) {
+        float nearest=INFINITY;Vector3 anchor{};
+        for(const auto& member:poses) {
+            Vector3 sum{};int count=0;
+            for(const auto corner:OrientedBox{member.pose.position,member.pose.rotation,HalfExtents(member.pose.size)}.corners())
+                if(std::fabs(Vector3DotProduct(Vector3Subtract(corner,reference),out.normal)+support)<=.001f) {
+                    sum=Vector3Add(sum,corner);++count;
+                }
+            if(count) {const auto point=Vector3Scale(sum,1.f/count);
+                const float distance=Vector3DistanceSqr(point,out.point);
+                if(distance<nearest){nearest=distance;anchor=point;}}
+        }
+        if(std::isfinite(nearest))desired=Vector3Add(reference,Vector3Subtract(out.point,anchor));
+    }
+    if(feature!=SnapFeature::Face) {
+        // Align the nearest support vertex/edge of the moving selection with
+        // the requested target feature, without ever entering the target.
+        float nearest=INFINITY;Vector3 anchor{};
+        for(const auto& member:poses)for(const auto corner:OrientedBox{member.pose.position,member.pose.rotation,HalfExtents(member.pose.size)}.corners()) {
+            if(std::fabs(Vector3DotProduct(Vector3Subtract(corner,reference),out.normal)+support)>.001f)continue;
+            const float d=Vector3DistanceSqr(corner,out.point);if(d<nearest){nearest=d;anchor=corner;}
+        }
+        if(std::isfinite(nearest))desired=Vector3Add(reference,Vector3Subtract(out.point,anchor));
+    }
+    out.correction=Vector3Subtract(desired,reference);
+    for(auto& member:poses) {
+        member.pose.position=Vector3Add(member.pose.position,out.correction);
+        for(const auto& obstacle:targets)if(member.id!=obstacle.id&&ValidBox(obstacle.pose)&&
+            NearBoxes(member.pose,obstacle.pose,0)&&BoxSeparation(member.pose,obstacle.pose)<-ContactEpsilon(member.pose,obstacle.pose)) {
+            out.blocked=true;out.blocker=obstacle.id;out.reason="Interseção: afaste o cursor ou desative o encaixe";return out;
+        }
+    }
+    out.snapped=true;return out;
 }
 
 int HandleAxis(HandleId id) {

@@ -72,7 +72,8 @@ GizmoUpdateResult ModelTransformSession::update(ToolMode mode,Instance* model,co
         if(result.cancelled){applyEdit(edit_,false,error);release();return result;}
         const auto pose=proxy_->transform();
         if(SameTransform(pose,startProxy_)){applyEdit(edit_,false,error);if(result.ended)release();return result;}
-        ModelFrame target=startFrame_;target.position=pose.position;if(mode==ToolMode::Rotate)target.rotation=pose.rotation;
+        ModelFrame target=startFrame_;target.position=pose.position;
+        if(mode==ToolMode::Rotate||mode==ToolMode::Move)target.rotation=pose.rotation;
         if(mode==ToolMode::Scale){float ratio=1,change=0;for(int i=0;i<3;++i){const float value=(&pose.size.x)[i]/(&startProxy_.size.x)[i];if(std::fabs(value-1)>change){change=std::fabs(value-1);ratio=value;}}target.scale*=ratio;}
         if(!applyEdit(edit_,false,error)||!scene_.transformModel(edit_.id,target,error)){
             end(true,"model_transform_rejected");result.ended=true;result.cancelled=true;result.consumed=true;return result;}

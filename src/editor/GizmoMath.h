@@ -43,7 +43,20 @@ struct SurfaceSnap {
     bool snapped = false;
     Vector3 correction{}, point{}, normal{};
     std::uint64_t target = 0;
+    Quaternion rotationDelta{0,0,0,1};
+    bool blocked = false;
+    std::uint64_t blocker = 0;
+    const char* reason = nullptr;
 };
+enum class GridMode { Relative, Absolute };
+enum class SnapFeature { Face, Edge, Vertex };
+Vector3 SnapGrid(Vector3 position,Vector3 origin,Vector3 axisA,Vector3 axisB,
+                 float increment,GridMode mode);
+// Cursor placement is explicit: raycast real OBB faces, never a global nearest
+// correction. reference is the real Part/model pivot, even outside its bounds.
+SurfaceSnap SnapUnderCursor(const std::vector<SurfaceBox>& moving,
+    const std::vector<SurfaceBox>& targets,Vector3 reference,Ray ray,SnapFeature feature,
+    bool alignNormal=false,Quaternion orientation={0,0,0,1},std::uint64_t previous=0);
 // Maior separação nos 15 eixos SAT. Negativo = interseção; zero = contato.
 float BoxSeparation(const TransformSnapshot& a, const TransformSnapshot& b);
 // moving já contém a posição candidata. Correção restrita ao eixo/plano ativo.

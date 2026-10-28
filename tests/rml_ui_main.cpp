@@ -227,7 +227,10 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             const auto drag=[&](){event("mousemove "+std::to_string(int(view.x+h.x))+" "+std::to_string(int(view.y+h.y)));event("mousedown 1");
                 CHECK(gizmo.dragging());event("mousemove "+std::to_string(int(view.x+h.x+d.x*30))+" "+std::to_string(int(view.y+h.y+d.y*30)));};
             drag();const auto raw=part->position();event("mouseup 1");key("ctrl+z");CHECK(NearlyEqual(part->position(),original));
-            auto* target=scene.createPart(PartShape::Block,{raw.x-2.12f,5,0},{2,2,2},"Alvo de encaixe");target->setAnchored(true);frames(2);
+            const auto cursorRay=camera.rayFromScreen({h.x+d.x*30,h.y+d.y*30},{view.width,view.height});
+            auto* target=scene.createPart(PartShape::Block,Vector3Add(cursorRay.position,Vector3Scale(cursorRay.direction,35)),{4,4,2},"Alvo sob o cursor");target->setAnchored(true);frames(2);
+            EditorActions actions(ui);CHECK(actions.dispatch({"grid-mode","absolute"}));CHECK(gizmo.gridMode()==gizmomath::GridMode::Absolute);
+            CHECK(actions.dispatch({"grid-mode","relative"}));click("tab-Model");capture("construction-controls");click("tab-Home");
             event("keydown ctrl");drag();CHECK(gizmo.surfaceContact().snapped);capture("precision-contact");
             CHECK(std::fabs(gizmomath::BoxSeparation({part->position(),part->rotation(),part->size()},
                 {target->position(),target->rotation(),target->size()}))<.0001f);

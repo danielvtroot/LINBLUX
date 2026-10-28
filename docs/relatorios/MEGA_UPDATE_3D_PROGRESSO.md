@@ -158,3 +158,42 @@ WIP e documentos anteriores continuam locais. Nenhum cache/build/imagem no Git.
 Próxima execução: **somente FASE 2**, mediante pedido separado. Começar com
 `python3 tools/atlas/atlas.py update` e `python3 tools/atlas/atlas.py locate
 'SnapSurfaces GizmoMath'`, lendo a fase 2 do plano. Nenhuma continuação automática.
+
+
+## Continuação autorizada — fases 1, 2 e 3 (28/10/2026)
+
+O pedido posterior "fazer a 1, 2, 3" amplia o escopo anterior. Fase 1 mantida
+em `044fc7b`, sem reimplementação. WIP de studio.rml/studio.rcss e documentos
+anteriores continua fora dos commits. Não se implementam fases 4–7.
+
+### FASE 2 — DONE
+
+- Grade absoluta e incremento relativo explícitos em Modelo → Construção;
+  incremento é o padrão compatível. Shift continua liberando a grade.
+- Face/borda/vértice por raycast OBB sob o cursor, com desempate estável e
+  alvo anterior em empates de profundidade. Ctrl/Encaixe é colocação livre 3D;
+  fora desse modo o eixo/plano permanece restrito.
+- Alinhar Y à normal opt-in, prévia translúcida, veto SAT com peça/motivo/ação
+  no status. Bloqueio mantém a última pose aceita. Sem caixa fictícia de esfera:
+  seleção/alvo esférico exibe indisponibilidade. Histórico/cancelamento composto
+  de Model inclui rotação durante Move e respeita pivôs distantes.
+- Seis setas mantidas, eixos identificados, readout numérico; layout e picking
+  continuam compartilhados com tamanho em pixels/fallback existentes.
+- `CursorConstruction`: 0/15/30/45/90°, .2/4/192 unidades, concorrência, bloqueio,
+  face/borda/vértice, pivô distante, 100 reposicionamentos; recinto com quatro
+  paredes e piso montado por contato sem preencher XYZ, sem penetração, JSON
+  reaberto. Model/undo/cancel/zoom também cobertos pelas regressões existentes.
+- Build real `build-linblux/linblux` aprovado. TURBO FAST **11/11 PASSED**, sem
+  cache, run `20261028T032533Z-8671`, 78.4s (4.9s de testes).
+- TURBO focado **4/4 PASSED**, 66s/180s: studio (3.891 checks), gizmo_visual
+  (300 casos/8.981 checks), editor_precision_ui (93 checks), models_ui (168
+  checks). Logs: `.turbo/logs/mega3d-phase2/focused/tests.log`.
+- Capturas reais antes/depois das três fixtures em 1366×768 e 1920×1080:
+  `.turbo/logs/mega3d-phase2/{before,after}/`; controles e contato reais:
+  `/tmp/loblox-rml-ui-kbRWVv/{construction-controls,precision-contact}.png`.
+- `docs/EDITOR_PRECISAO.md` e contrato editor atualizados; ATLAS atualizado.
+  O corte anterior do botão Imagens no ribbon estreito continua sendo fase 7;
+  os controles de construção aparecem e são acessíveis em 1366×768.
+- Commit: `feat(editor): add cursor surface placement and absolute grid`.
+  Hash/push/HEAD remoto registrados no encerramento da sessão. A falha histórica
+  de engine_default_restart continua registrada; não é aprovação global.

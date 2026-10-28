@@ -104,7 +104,13 @@ void Gizmo::cancel(Part* part, bool restoreTransform) {
 
 void Gizmo::snapPosition(Part& part,Vector3 candidate,Vector3 a,Vector3 b,
                          const GizmoInput& input,float tolerance) {
+    const auto previous=surfaceContact_.target;
     surfaceContact_={};
+    candidate=gizmomath::SnapGrid(candidate,startTransform_.position,a,b,
+        input.shiftDown?0:moveSnap_,gridMode_);
+    if(input.surfaceSnap&&input.surfaceIssue) {
+        surfaceContact_.reason=input.surfaceIssue;part.setPosition(candidate);return;
+    }
     // Um clique sem movimento não desloca o objeto para uma face próxima.
     if(input.surfaceSnap&&input.targetBoxes&&Vector2Distance(input.mousePosition,
         Vector2Add(startMouse_,{dragViewport_.x,dragViewport_.y}))>=2) {
@@ -113,8 +119,14 @@ void Gizmo::snapPosition(Part& part,Vector3 candidate,Vector3 a,Vector3 b,
         else if(part.shape()==PartShape::Block)moving.push_back({{part.position(),part.rotation(),part.size()},part.id()});
         const auto delta=Vector3Subtract(candidate,part.position());
         for(auto& box:moving)box.pose.position=Vector3Add(box.pose.position,delta);
-        surfaceContact_=gizmomath::SnapSurfaces(moving,*input.targetBoxes,a,b,tolerance);
-        if(surfaceContact_.snapped)candidate=Vector3Add(candidate,surfaceContact_.correction);
+        surfaceContact_=input.cursorSurface?gizmomath::SnapUnderCursor(moving,*input.targetBoxes,candidate,
+            input.cursorRay,input.feature,input.alignToNormal,part.rotation(),previous):
+            gizmomath::SnapSurfaces(moving,*input.targetBoxes,a,b,tolerance);
+        if(surfaceContact_.blocked)return; // Retain last accepted pose, with visible reason.
+        if(surfaceContact_.snapped) {
+            candidate=Vector3Add(candidate,surfaceContact_.correction);
+            part.setRotation(QuaternionMultiply(surfaceContact_.rotationDelta,part.rotation()));
+        }
     }
     part.setPosition(candidate);
 }
@@ -178,7 +190,7 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
             if (handle_ == Handle::Axis) {
                 snapPosition(*part,gizmomath::MoveAxis(
                     {startTransform_.position, startTransform_.rotation, startTransform_.size},
-                    axis, delta, input.shiftDown ? 0.0f : moveSnap_),axis,{},input,
+                    axis, delta, 0),axis,{},input,
                     std::clamp(camera.worldUnitsPerPixel(center,viewport.height)*10,.02f,2.f));
             } else {
                 const auto snapshot = gizmomath::TransformSnapshot{
@@ -223,7 +235,7 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
             }
             snapPosition(*part,gizmomath::MovePlane(
                 {startTransform_.position, startTransform_.rotation, startTransform_.size}, a, b,
-                delta, input.shiftDown ? 0.0f : moveSnap_),a,b,input,
+                delta, 0),a,b,input,
                 std::clamp(camera.worldUnitsPerPixel(center,viewport.height)*10,.02f,2.f));
             return finish(result);
         }
@@ -400,6 +412,15 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
         gizmolayout::Build(part, mode, camera, viewport, localSpace_,settings);
     if (!layout.valid) return;
 
+    if(surfaceContact_.snapped&&part.shape()==PartShape::Block) {
+        BeginMode3D(camera.camera());rlDrawRenderBatchActive();rlDisableDepthMask();
+        const auto corners=part.bounds().corners();
+        const int faces[6][4]={{0,1,2,3},{4,7,6,5},{0,4,5,1},{3,2,6,7},{0,3,7,4},{1,5,6,2}};
+        for(const auto& f:faces){DrawTriangle3D(corners[f[0]],corners[f[1]],corners[f[2]],{60,215,170,45});
+            DrawTriangle3D(corners[f[0]],corners[f[2]],corners[f[3]],{60,215,170,45});}
+        rlDrawRenderBatchActive();rlEnableDepthMask();EndMode3D();
+    }
+
     // Passe proprio do gizmo, independente da profundidade da cena:
     //  1. descarrega o batch da cena (nenhum vertice antigo muda de estado);
     //  2. isola depth test e depth write;
@@ -467,6 +488,7 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
                 const auto base = Vector2Subtract(p, Vector2Scale(d, 10 * pixelScale_));
                 Triangle2D(tip, Vector2Add(base, Vector2Scale(n, 11 * pixelScale_)),
                            Vector2Subtract(base, Vector2Scale(n, 11 * pixelScale_)), color);
+                if(side>0)DrawText(axisIndex==0?"X":axisIndex==1?"Y":"Z",int(tip.x+5),int(tip.y-8),14,color);
             }
         }
     } else if (mode == ToolMode::Rotate) {
@@ -523,6 +545,11 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
         }
     }
 
+    if(dragging_) {
+        const auto delta=Vector3Subtract(part.position(),startTransform_.position);
+        DrawText(TextFormat("%s  X %.3f  Y %.3f  Z %.3f",gridMode_==gizmomath::GridMode::Absolute?"Grade absoluta":"Incremento",
+            delta.x,delta.y,delta.z),12,int(viewport.height)-28,16,{235,240,248,255});
+    }
     if(surfaceContact_.snapped) {
         Vector2 p,q;
         const Vector2 size{viewport.width,viewport.height};

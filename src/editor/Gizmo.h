@@ -20,6 +20,11 @@ struct GizmoInput {
     bool shiftDown = false;
     bool altDown = false;   // escala centrada (as duas faces)
     bool surfaceSnap = false; // Ctrl: encaixe geométrico durante Mover
+    bool cursorSurface = false;
+    Ray cursorRay{};
+    bool alignToNormal = false;
+    const char* surfaceIssue = nullptr;
+    gizmomath::SnapFeature feature = gizmomath::SnapFeature::Face;
     const std::vector<gizmomath::SurfaceBox>* movingBoxes = nullptr;
     const std::vector<gizmomath::SurfaceBox>* targetBoxes = nullptr;
 };
@@ -67,6 +72,8 @@ public:
 
     void setLocalSpace(bool local) { localSpace_ = local; }
     bool localSpace() const { return localSpace_; }
+    void setGridMode(gizmomath::GridMode mode) {gridMode_=mode;}
+    gizmomath::GridMode gridMode() const {return gridMode_;}
     void setSnap(float move, float scale, float rotateDegrees) {
         moveSnap_ = move; scaleSnap_ = scale; rotateSnapDegrees_ = rotateDegrees;
     }
@@ -98,6 +105,7 @@ private:
     bool dragging_ = false;
     bool consumedLastInput_ = false;
     bool localSpace_ = false;
+    gizmomath::GridMode gridMode_=gizmomath::GridMode::Relative;
     bool centeredScale_ = false;
     float pixelScale_=1;
     bool dragLocalSpace_ = false;

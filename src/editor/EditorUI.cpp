@@ -1838,12 +1838,31 @@ void EditorUI::drawViewport() {
     if(tool_==ToolMode::Move&&(surfaceSnapEnabled_||ImGui::GetIO().KeyCtrl)&&selection) {
         for(const auto* p:scene_.parts()) {
             if(p->color().a==0)continue;
-            // Esferas participam com uma caixa circunscrita (cubo de lado 2r)
-            const Vector3 sz=p->shape()==PartShape::Sphere?Vector3{p->sphereRadius()*2,p->sphereRadius()*2,p->sphereRadius()*2}:p->size();
+            // A sphere is never an invisible box. These authoring features
+            // explicitly support boxes only; sphere picking remains exact.
+            if(p->shape()!=PartShape::Block)continue;
+            const Vector3 sz=p->size();
             auto& boxes=p==selection||selection->isAncestorOf(p)?snapMoving:snapTargets;
             boxes.push_back({{p->position(),p->rotation(),sz},p->id()});
         }
         gizmoInput.surfaceSnap=true;gizmoInput.movingBoxes=&snapMoving;gizmoInput.targetBoxes=&snapTargets;
+        gizmoInput.cursorSurface=true;gizmoInput.alignToNormal=alignSnapNormal_;gizmoInput.feature=snapFeature_;
+        gizmoInput.cursorRay=camera_.rayFromScreen({input.mouse.x-viewportRect.x,input.mouse.y-viewportRect.y},
+                                                  {viewportRect.width,viewportRect.height});
+        float nearest=INFINITY;bool containsSphere=false,nearestSphere=false;
+        for(const auto* p:scene_.parts()) {
+            if(p->color().a==0)continue;
+            if(p==selection||selection->isAncestorOf(p)) {
+                containsSphere|=p->shape()==PartShape::Sphere;
+                continue;
+            }
+            const auto hit=p->intersect(gizmoInput.cursorRay);
+            if(hit.hit&&hit.distance<nearest) {
+                nearest=hit.distance;
+                nearestSphere=p->shape()==PartShape::Sphere;
+            }
+        }
+        if(containsSphere||nearestSphere)gizmoInput.surfaceIssue="Encaixe de face/borda/vértice disponível para caixas; esfera: use movimento livre";
     }
 
     // Prioridade unica: o gizmo processa a entrada antes da camera e da
@@ -1881,6 +1900,11 @@ void EditorUI::drawViewport() {
     }
     if (gizmoResult.ended) {
         checkInvariants(gizmoResult.cancelled ? "transform_cancel" : "transform_commit");
+    }
+    if(gizmo_.dragging()&&gizmo_.surfaceContact().reason) {
+        const auto& contact=gizmo_.surfaceContact();
+        const auto* blocker=scene_.find(contact.blocker);
+        setStatus((blocker?blocker->name()+": ":std::string())+contact.reason);
     }
     if (traceInput_ && previousHover != gizmo_.hoveredHandle()) {
         diag::Event event;
