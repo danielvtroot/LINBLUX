@@ -1,5 +1,8 @@
 # Mega Update 3D — progresso das fases 0 a 3
 
+Estado atual: fases 0–3 entregues no escopo funcional; validação global parcial.
+A continuação das fases 2/3 e seus limites estão ao final deste relatório.
+
 Registro da primeira execução, encerrada em 28/10/2026 (America/Belem). Escopo: baseline,
 proteção e guias de geometria. **FASE 0: DONE. FASE 1: DONE no escopo visual
 validado abaixo.** Aprovação global/Release não concedida: há falha anterior de
@@ -194,7 +197,7 @@ anteriores continua fora dos commits. Não se implementam fases 4–7.
 - `docs/EDITOR_PRECISAO.md` e contrato editor atualizados; ATLAS atualizado.
   O corte anterior do botão Imagens no ribbon estreito continua sendo fase 7;
   os controles de construção aparecem e são acessíveis em 1366×768.
-- Commit: `feat(editor): add cursor surface placement and absolute grid`.
+- Commit: `79703f2` — `feat(editor): add cursor surface placement and absolute grid`.
   Hash/push/HEAD remoto registrados no encerramento da sessão. A falha histórica
   de engine_default_restart continua registrada; não é aprovação global.
 
@@ -236,7 +239,7 @@ anteriores continua fora dos commits. Não se implementam fases 4–7.
   edição real de rugosidade/preset/qualidade) e `linblux_player_menu` real.
 - `linblux_material_render`: **31 checks**, shader ativo, esfera com **88 cores
   distintas em 160 amostras**, quatro mapas, alfa (meia opacidade confere com
-  a composição), mesmas pixels Studio/Player sem overlays com câmera idêntica,
+  a composição), pixels idênticos Studio/Player sem overlays com câmera idêntica,
   retorno exato a Legacy e fallback forçado. Cobre ainda esfera girada com guias
   e restauração do estado. Capturas dos quatro perfis nas duas resoluções em
   `.turbo/logs/mega3d-phase3/materials/`. Log final:
@@ -270,3 +273,7 @@ anteriores continua fora dos commits. Não se implementam fases 4–7.
   Fases 1, 2 e 3 atendidas nesta sequência; nenhuma continuação para fase 4.
   Commit desta fase: `feat(rendering): add GL33 materials and per-pixel lighting`;
   hash/push/HEAD remoto em `.turbo/logs/mega3d-phase3/publication.json` e na entrega.
+
+Tempo desta continuação: aproximadamente 37 minutos, incluindo duas fases, builds e revisão visual.
+Próxima execução: somente fase 4, mediante pedido separado; começar por
+`python3 tools/atlas/atlas.py update` e `python3 tools/atlas/atlas.py locate "Lighting shadow map"`.
