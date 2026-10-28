@@ -31,9 +31,34 @@ como caixas invisíveis. Movimento livre, picking esférico e escala uniforme
 continuam disponíveis. Para transformar um conjunto, agrupe como Model.
 Fora do modo de encaixe não há bloqueio global de sobreposições.
 
-Testes: `linblux_studio` cobre contato, restrições, rotações, dimensões, pivô,
-filhos e histórico. `linblux_gizmo_visual` verifica o marcador renderizado e os
-gizmos existentes; gera capturas em 1280×720 e 1920×1080 em diretório temporário.
+## Colocação e montagem por prévia
+
+Em **Modelo → Posicionar → Encaixar à superfície**, a Part ou Model selecionado
+fica como proposta: mova o cursor para uma face e confirme com clique. A prévia
+verde indica contato aceito; vermelho identifica uma interseção. Antes do clique,
+a cena, a física e o arquivo salvo permanecem intactos. **Esc** cancela sem
+alterar a seleção; **Ctrl+Z** desfaz a confirmação como uma operação. Models usam
+as caixas dos filhos e preservam seu pivô.
+
+**Afastamento** define a distância normal entre superfícies (0 = contato).
+**Grade → Incremento/Absoluta** controla o passo tangencial da proposta; desligar
+Ajuste à grade desativa esse arredondamento. Face, Borda e Vértice continuam
+escolhendo a característica de destino, e Alinhar à normal é opcional. A
+colocação é somente para caixas: esferas não viram caixas aproximadas.
+
+O grupo **Montagem** duplica a seleção ao lado ou acima usando sua extensão real
+(eixo local do objeto), sem alterar dimensões. **Repetir deslocamento** reaplica
+o último deslocamento confirmado. Os botões não ajustam nem apagam as peças
+originais.
+
+Testes: `linblux_construction_ui` exercita prévia, cancelamento, salvamento antes
+da confirmação, histórico, montagem de quatro paredes e piso e reabertura do
+projeto em 1366×768 e 1920×1080. `linblux_studio` cobre contato, restrições,
+rotações, dimensões, pivô, filhos e histórico. Testes com Xvfb são supervisionados
+pelo TURBO.
+
+Testes: `linblux_gizmo_visual` verifica o marcador renderizado e os gizmos
+existentes; gera capturas em 1280×720 e 1920×1080 em diretório temporário.
 
 ## Leitura da construção e seleção
 

@@ -23,8 +23,20 @@ Model usa filhos reais e permite pivô distante; giro durante Move participa do
 histórico composto. Esferas são explicitamente indisponíveis neste encaixe.
 `SnapSurfaces` permanece como API de proximidade para consumidores anteriores.
 `GridMode::Relative` preserva o incremento; `Absolute` quantiza posição no eixo
-ativo. Guia: `docs/EDITOR_PRECISAO.md`. Testes: CursorConstruction/studio,
-editor_precision_ui, models_ui e gizmo_visual, todos via TURBO quando gráficos.
+ativo. `ConstructionPlacement` mantém snapshots e uma prévia sem mutar cena,
+Bullet ou histórico; commit valida que a origem não mudou, registra undo
+(composto para Model), sincroniza a física e só então encerra. Esc/cancelamento,
+seleção diferente, Play e alterações concorrentes invalidam a proposta.
+`SnapUnderCursor` também oferece `closestFace` para manter Model/partes extensas
+centradas tangencialmente e calcula offset e grade em coordenadas do alvo. Ações
+de montagem duplicam o subgrafo selecionado preservando tamanho/pivô, com passos
+por extensão OBB ou repetição do último deslocamento confirmado.
+
+Guia: `docs/EDITOR_PRECISAO.md`. Testes: CursorConstruction e
+ConstructionPreviewWorkflow em `linblux_studio`, `linblux_construction_ui`
+(prévia, save imutado, cancelamento, quatro paredes/piso, undo/redo, persistência
+nas resoluções 1366×768 e 1920×1080), `editor_precision_ui`, `models_ui` e
+gizmo_visual. Testes com Xvfb sempre via TURBO supervisionado.
 
 **Invariantes:** transformações preservam hierarquia e IDs; undo/redo restaura
 estado anterior; edição não cria corpos físicos nem executa scripts; a câmera

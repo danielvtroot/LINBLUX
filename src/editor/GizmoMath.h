@@ -56,7 +56,8 @@ Vector3 SnapGrid(Vector3 position,Vector3 origin,Vector3 axisA,Vector3 axisB,
 // correction. reference is the real Part/model pivot, even outside its bounds.
 SurfaceSnap SnapUnderCursor(const std::vector<SurfaceBox>& moving,
     const std::vector<SurfaceBox>& targets,Vector3 reference,Ray ray,SnapFeature feature,
-    bool alignNormal=false,Quaternion orientation={0,0,0,1},std::uint64_t previous=0);
+    bool alignNormal=false,Quaternion orientation={0,0,0,1},std::uint64_t previous=0,
+    float offset=0,float grid=0,bool closestFace=false);
 // Maior separação nos 15 eixos SAT. Negativo = interseção; zero = contato.
 float BoxSeparation(const TransformSnapshot& a, const TransformSnapshot& b);
 // moving já contém a posição candidata. Correção restrita ao eixo/plano ativo.

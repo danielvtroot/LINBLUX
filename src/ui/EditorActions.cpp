@@ -166,6 +166,9 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                 c.value=="vertex"?gizmomath::SnapFeature::Vertex:gizmomath::SnapFeature::Face;
         }
         else if(c.action=="snap-align") {e.endGizmoSession(true,"snap_align");e.alignSnapNormal_=c.value=="true";}
+        else if(c.action=="place-surface") {if(e.placement_.active())e.placement_.cancel();else e.beginSurfacePlacement();}
+        else if(c.action=="placement-offset") {const float value=Number(c.value);if(value<0||value>10000)throw std::runtime_error("Afastamento deve ser de 0 a 10000 unidades.");e.placementOffset_=value;}
+        else if(c.action=="assembly") {if(c.value!="none")e.assemblyAction(c.value);}
         else if(c.action=="surface-snap") {e.endGizmoSession(true,"surface_snap");e.cancelRigGizmo();e.surfaceSnapEnabled_=c.value=="true";e.setStatus(e.surfaceSnapEnabled_?"Encaixe de face ativado — arraste Mover para encaixar peças.":"Encaixe de face desativado.");}
         else if(c.action=="move-snap"||c.action=="scale-snap"||c.action=="rotate-snap") {float v=Number(c.value);if(v<=0||v>180)throw std::runtime_error("Snap increment must be 0..180");e.endGizmoSession(true,"snap");e.cancelRigGizmo();(c.action=="move-snap"?e.moveSnap_:c.action=="scale-snap"?e.scaleSnap_:e.rotateSnapDegrees_)=v;}
         else if(c.action=="anchor") {if(auto* node=e.scene_.selection();node&&node->isPart())static_cast<Part*>(node)->setAnchored(!static_cast<Part*>(node)->anchored());}

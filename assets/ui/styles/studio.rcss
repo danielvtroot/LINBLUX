@@ -52,8 +52,9 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 #tabs button:hover { background-color: #3c4048; }
 #tabs button.active { background-color: #41464e; border-bottom: 2px #6da9e5; }
 .tab-spacer { flex: 1; }
-#ribbon { position: absolute; left: 0; right: 0; top: 62px; height: 82px; padding: 4px 8px 0; background-color: #2e3035; border-bottom: 1px #17191e; display: flex; align-items: flex-start; overflow: auto; }
-#ribbon-tools { display: flex; flex-grow: 0; flex-shrink: 0; height: 76px; }
+#ribbon { position: absolute; left: 0; right: 0; top: 62px; height: 82px; padding: 4px 216px 0 8px; background-color: #2e3035; border-bottom: 1px #17191e; display: flex; align-items: flex-start; overflow: hidden; }
+#ribbon-tools { display: flex; flex-grow: 0; flex-shrink: 1; height: 76px; overflow: hidden; min-width: 0; }
+#ribbon-spacer { flex: 1 1 auto; height: 76px; min-width: 4px; }
 .ribbon-page { display: flex; flex-grow: 0; flex-shrink: 0; height: 76px; }
 .ribbon-group { height: 74px; display: flex; flex-direction: column; padding: 0 6px; margin-right: 5px; border-right: 1px #4a4d55; flex-grow: 0; flex-shrink: 0; }
 .group-tools { display: flex; flex-grow: 0; flex-shrink: 0; height: 57px; align-items: center; }
@@ -62,16 +63,19 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 .group-tools button.active { border-color: #5c97d0; background-color: #294b6f; }
 .group-tools img { display: block; width: 25px; height: 25px; margin: 0 auto 5px; }
 .group-name { flex: 0 0 16px; font-size: 10px; text-align: center; color: #aeb2bd; padding-top: 1px; }
-#snap-group { display: flex; flex-wrap: wrap; flex: 0 0 170px; width: 170px; height: 70px; padding: 3px 5px; }
-#snap-group label { display: block; width: 100%; margin-bottom: 4px; font-size: 11px; }
+#snap-group { position: absolute; right: 6px; top: 4px; display: flex; flex-direction: column; width: 210px; height: 70px; padding: 4px 5px 2px; background-color: #2e3035; border-left: 1px #3a3f4a; z-index: 10; }
+#snap-group label { display: block; font-size: 11px; white-space: nowrap; margin-right: 6px; flex-shrink: 0; }
+#snap-group label input[type=checkbox] { width: 13px; height: 13px; margin: 0 3px 0 0; vertical-align: middle; }
+.snap-checks { display: flex; flex-direction: row; align-items: center; width: 100%; height: 26px; flex-shrink: 0; }
+.snap-row { display: flex; flex-direction: row; align-items: flex-end; width: 100%; height: 38px; }
 .snap-heading { display: flex; width: 100%; height: 24px; align-items: center; }
 .snap-heading label { width: 72px; margin-bottom: 0; }
-#transform-space { width: 82px; height: 20px; padding: 1px 4px; font-size: 11px; }
+#transform-space { width: 54px; height: 22px; padding: 1px 2px; font-size: 10px; flex: 0 0 54px; margin-right: 4px; align-self: flex-end; margin-bottom: 1px; }
 .handle-size { display: flex; flex-direction: column; width: 108px; height: 54px; padding: 3px 4px; font-size: 11px; }
 .handle-size select { width: 100px; height: 24px; margin-top: 5px; font-size: 11px; }
-.snap-field { width: 50px; margin-right: 3px; }
+.snap-field { width: 43px; margin-right: 3px; flex: 0 0 43px; }
 .snap-field span { display: block; font-size: 10px; color: #b0b8c5; margin-bottom: 2px; }
-.snap-field input { width: 48px; height: 22px; padding: 2px 4px; font-size: 11px; }
+.snap-field input { width: 41px; height: 22px; padding: 2px 3px; font-size: 11px; }
 .panel { position: absolute; background-color: #27292f; border: 1px #17191e; overflow: hidden; }
 .panel-heading { height: 27px; padding: 5px 7px; background-color: #35383f; border-bottom: 1px #17191e; font-size: 12px; font-weight: bold; }
 .panel-heading img { width: 15px; height: 15px; margin-right: 5px; vertical-align: middle; }

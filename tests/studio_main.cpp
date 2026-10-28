@@ -13,6 +13,7 @@
 #include "core/Diagnostics.h"
 #include "core/NumberFormat.h"
 #include "editor/EditHistory.h"
+#include "editor/ConstructionPlacement.h"
 #include "editor/ModelTransformSession.h"
 #include "editor/GizmoLayout.h"
 #include "rendering/EditorCamera.h"
@@ -197,6 +198,47 @@ void CursorConstruction() {
         source.rotation=QuaternionMultiply(result.rotationDelta,source.rotation);
         CHECK(NearlyEqual(source.position,{3,1,4},.0001f));
     }
+}
+
+void ConstructionPreviewWorkflow() {
+    using namespace gizmomath;
+    for(float width:{2.f,191.f})for(float thickness:{.1f,1.f})for(float angle:{0.f,30.f}) {
+        Scene scene;PhysicsWorld physics;physics.attach(scene);Gizmo gizmo;TransformSession transform(gizmo,physics);EditHistory history;ModelTransformSession models(scene,physics,transform,history);
+        auto* floor=scene.createPart(PartShape::Block,{0,-thickness*.5f,0},{240,thickness,40},"Floor");floor->setAnchored(true);
+        floor->setRotation(QuatFromEulerDegrees({0,angle,0}));
+        auto* wall=scene.createPart(PartShape::Block,{0,20,50},{width,8,1},"Wall");wall->setAnchored(false);
+        ConstructionPlacement proposal;std::string error;const auto original=projectio::toJson(scene);const auto before=wall->transform();
+        CHECK(proposal.begin(scene,wall->id(),error));
+        proposal.update(scene,{{0,30,0},{0,-1,0}},SnapFeature::Face,0,1,true);
+        CHECK(proposal.contact().snapped&&!proposal.contact().blocked);CHECK(projectio::toJson(scene)==original);
+        CHECK(proposal.preview().size()==1);CHECK(std::fabs(BoxSeparation(proposal.preview()[0].pose,{floor->position(),floor->rotation(),floor->size()}))<.001f);
+        proposal.cancel();CHECK(projectio::toJson(scene)==original);
+        CHECK(proposal.begin(scene,wall->id(),error));proposal.update(scene,{{0,30,0},{0,-1,0}},SnapFeature::Face,.25f,1,true);
+        CHECK(proposal.commit(scene,physics,models,history,error));CHECK(!wall->anchored());CHECK(std::fabs(wall->position().y-(floor->position().y+floor->size().y*.5f+4.25f))<.001f);
+        TransformEdit edit;CHECK(history.undo(edit));wall->setTransform(edit.before);CHECK(SameTransform(before,wall->transform()));
+        CHECK(history.redo(edit));wall->setTransform(edit.after);Scene loaded;CHECK(projectio::fromJson(loaded,projectio::toJson(scene),error));CHECK(SameTransform(loaded.findPart(wall->id())->transform(),wall->transform()));CHECK(!loaded.findPart(wall->id())->anchored());
+    }
+    // At an edge, a long wall stays centred tangentially and its outer face
+    // is flush with the floor boundary; no jump to its 191-unit end corner.
+    const TransformSnapshot wide{{0,30,40},QuaternionIdentity(),{191,8,1}},platform{{0,-.1f,0},QuaternionIdentity(),{200,.2f,20}};
+    const auto edge=SnapUnderCursor({{wide,1}},{{platform,2}},wide.position,{{0,30,9},{0,-1,0}},SnapFeature::Edge,false,wide.rotation,0,0,1,true);
+    CHECK(edge.snapped);CHECK(NearlyEqual(Vector3Add(wide.position,edge.correction),{0,4,9.5f},.001f));
+    Scene scene;PhysicsWorld physics;physics.attach(scene);Gizmo gizmo;TransformSession transform(gizmo,physics);EditHistory history;ModelTransformSession models(scene,physics,transform,history);std::string error;
+    auto* floor=scene.createPart(PartShape::Block,{0,-.5f,0},{40,1,40},"Floor");floor->setAnchored(true);
+    auto* wall=scene.createPart(PartShape::Block,{0,10,30},{12,8,1},"Wall");
+    auto* other=scene.createPart(PartShape::Block,{3,10,30},{1,2,5},"Child");
+    auto* model=scene.group({wall->id(),other->id()},"Building",error);CHECK(model);ModelFrame frame;CHECK(scene.modelFrame(model->id(),frame,error));frame.position={80,12,30};CHECK(scene.setModelPivot(model->id(),frame,error));
+    ConstructionPlacement proposal;CHECK(proposal.begin(scene,model->id(),error));const auto original=projectio::toJson(scene);
+    CHECK(std::fabs(Vector3Length(proposal.duplicateStep(0,.5f))-12.5f)<.001f);
+    proposal.update(scene,{{0,40,0},{0,-1,0}},SnapFeature::Face,0,1,false);CHECK(proposal.contact().snapped);CHECK(projectio::toJson(scene)==original);
+    CHECK(proposal.commit(scene,physics,models,history,error));TransformEdit edit;CHECK(history.undo(edit));CHECK(models.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==original);CHECK(history.redo(edit));CHECK(models.applyEdit(edit,true,error));
+    // Collision candidate stays a red proposal; even saving cannot mutate it.
+    auto* obstacle=scene.createPart(PartShape::Block,{3,1,8},{3,2,3},"Conflict");
+    CHECK(proposal.begin(scene,model->id(),error));const auto saved=projectio::toJson(scene);
+    proposal.update(scene,{{0,30,8},{0,-1,0}},SnapFeature::Face,0,1,false);
+    CHECK(proposal.contact().blocked&&proposal.contact().blocker==obstacle->id());CHECK(!proposal.commit(scene,physics,models,history,error));CHECK(projectio::toJson(scene)==saved);
+    // A mutation during preview invalidates it instead of overwriting newer work.
+    wall->setPosition({0,20,30});proposal.update(scene,{{0,30,8},{0,-1,0}},SnapFeature::Face,0,1,false);CHECK(!proposal.active());
 }
 
 void SurfaceSnapping() {
@@ -1865,6 +1907,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    SignificantFallPresentation();NpcHeadingRegression();EditorSelectionAndNames();CursorConstruction();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    SignificantFallPresentation();NpcHeadingRegression();EditorSelectionAndNames();CursorConstruction();ConstructionPreviewWorkflow();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

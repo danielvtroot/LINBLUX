@@ -582,6 +582,7 @@ bool EditorUI::enableModernFrontend(std::string& error) {
 void EditorUI::renderModernFrontend(){if(frontend_)frontend_->render();}
 
 void EditorUI::endGizmoSession(bool restoreTransform, const char* reason) {
+    placement_.cancel();
     if(modelTransform_.active()){modelTransform_.end(restoreTransform,reason);return;}
     Part* part = scene_.findPart(transform_.partId());
     if (restoreTransform) transform_.cancel(part, true, reason);
@@ -590,6 +591,7 @@ void EditorUI::endGizmoSession(bool restoreTransform, const char* reason) {
 
 void EditorUI::setTool(ToolMode tool, const char* source) {
     if (tool_ == tool) return;
+    placement_.cancel();
     cancelRigGizmo();
     if (transform_.active()) {
         endGizmoSession(true, "tool_change");
@@ -1742,6 +1744,7 @@ void EditorUI::drawViewport() {
             auto& boxes=p==selection||selection->isAncestorOf(p)?snapMoving:snapTargets;
             boxes.push_back({{p->position(),p->rotation(),sz},p->id()});
         }
+        gizmoInput.surfaceOffset=placementOffset_;
         gizmoInput.surfaceSnap=true;gizmoInput.movingBoxes=&snapMoving;gizmoInput.targetBoxes=&snapTargets;
         gizmoInput.cursorSurface=true;gizmoInput.alignToNormal=alignSnapNormal_;gizmoInput.feature=snapFeature_;
         gizmoInput.cursorRay=camera_.rayFromScreen({input.mouse.x-viewportRect.x,input.mouse.y-viewportRect.y},
@@ -1769,7 +1772,8 @@ void EditorUI::drawViewport() {
     const bool sessionOwns = route.owner == InputOwner::Transform;
     const auto previousHover = gizmo_.hoveredHandle();
     const bool selectedModel=selection&&selection->instanceClass()==InstanceClass::Model;
-    const bool gizmoAllowed=(viewportOwns||sessionOwns)&&!rigConsumed&&!readout_.editing&&!readoutHovered;
+    const bool placementConsumed=updateSurfacePlacement(input,viewportRect,viewportOwns&&!rigConsumed&&!readoutHovered);
+    const bool gizmoAllowed=!placementConsumed&&(viewportOwns||sessionOwns)&&!rigConsumed&&!readout_.editing&&!readoutHovered;
     const GizmoUpdateResult gizmoResult=selectedModel||modelTransform_.active()
         ?modelTransform_.update(tool_,selection,camera_,viewportRect,hovered,gizmoAllowed,gizmoInput)
         :transform_.update(tool_,selectedPart,camera_,viewportRect,hovered,gizmoAllowed,gizmoInput);
@@ -1819,7 +1823,7 @@ void EditorUI::drawViewport() {
             (cameraOwns || (route.editorKeys && !sessionOwns)),
         viewportOwns && !gizmoResult.consumed && !rigConsumed && !readoutHovered, GetFrameTime());
 
-    if (viewportOwns && !gizmoResult.consumed && !rigConsumed && !readoutHovered &&
+    if (viewportOwns && !placementConsumed && !gizmoResult.consumed && !rigConsumed && !readoutHovered &&
         input.leftPressed) {
         const Vector2 mouse = input.mouse;
         if (mouse.x >= viewportRect.x && mouse.y >= viewportRect.y &&
@@ -1896,6 +1900,7 @@ void EditorUI::drawViewport() {
         if(const auto* p=scene_.pickPart(ray,5000))hover=p->id();
     }
     renderer_.drawEditorGuides(scene_,camera_.camera(),editorGeometry_,hover);
+    drawSurfacePlacement(viewportRect);
     if(showCollisionShapes_) {
         physics_.syncScene(scene_);
         renderer_.drawCollisionShapes(scene_,physics_,camera_,selection?selection->id():0);
@@ -1903,16 +1908,16 @@ void EditorUI::drawViewport() {
     if (rigState.rig && (showJointPivots_||selectedRigBody_<0) && tool_!=ToolMode::Select &&
         (tool_!=ToolMode::Scale || rigContext_==RigContext::Edit))
         rigGizmo_.drawOverlay(jointProxy_, tool_, camera_, viewportRect);
-    if (selectedPart != nullptr && tool_ != ToolMode::Select) {
+    if (!placement_.active() && selectedPart != nullptr && tool_ != ToolMode::Select) {
         gizmo_.drawOverlay(*selectedPart, tool_, camera_, viewportRect,!readout_.editing);
     }
-    if(selection&&selection->instanceClass()==InstanceClass::Model&&modelTransform_.proxy()&&tool_!=ToolMode::Select)
+    if(!placement_.active()&&selection&&selection->instanceClass()==InstanceClass::Model&&modelTransform_.proxy()&&tool_!=ToolMode::Select)
         gizmo_.drawOverlay(*modelTransform_.proxy(),tool_,camera_,viewportRect,!readout_.editing);
     EndTextureMode();
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-    if(selection&&tool_==ToolMode::Move&&!runtime_.active()) {
+    if(!placement_.active()&&selection&&tool_==ToolMode::Move&&!runtime_.active()) {
         const ImVec2 p{imagePosition.x+12,imagePosition.y+12};
         const char* hint=surfaceSnapEnabled_?"Arraste uma face para mover. Encaixe ativo.":"Arraste uma face para mover. Ctrl: encaixar.";
         const auto s=ImGui::CalcTextSize(hint);
@@ -2647,6 +2652,7 @@ void EditorUI::insertPart(PartShape shape) {
     scene_.select(part);
     setStatus(shape == PartShape::Sphere ? "Esfera criada e ancorada."
                                          : "Peça criada e ancorada.");
+    if(shape==PartShape::Block&&surfaceSnapEnabled_)beginSurfacePlacement();
 }
 
 void EditorUI::insertSpawnLocation() {
@@ -2702,6 +2708,7 @@ void EditorUI::duplicateSelection() {
     scene_.select(copy);
     checkInvariants("duplicate");
     setStatus("Duplicado: " + copy->name());
+    if(surfaceSnapEnabled_)beginSurfacePlacement();
 }
 
 void EditorUI::renameSelection() {

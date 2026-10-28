@@ -20,6 +20,7 @@ struct GizmoInput {
     bool shiftDown = false;
     bool altDown = false;   // escala centrada (as duas faces)
     float occlusionDistance=INFINITY;
+    float surfaceOffset = 0;
     bool surfaceSnap = false; // Ctrl: encaixe geométrico durante Mover
     bool cursorSurface = false;
     Ray cursorRay{};

@@ -46,6 +46,7 @@ struct EditorUITestAccess {
     static const Part* modelProxy(EditorUI& ui){return ui.modelTransform_.proxy();}
     static size_t undoCount(EditorUI& ui){return ui.history_.undoCount();}
     static bool partDragging(EditorUI& ui){return ui.transform_.active();}
+    static ConstructionPlacement& placement(EditorUI& ui){return ui.placement_;}
     static bool editorEdges(EditorUI& ui){return ui.editorGeometry_.edges;}
 };
 }
@@ -219,6 +220,38 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             std::printf("Shadow controls UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
             rlImGuiShutdown();CloseWindow();return failures?1:0;
         }
+        if(std::getenv("LINBLUX_CONSTRUCTION_ONLY")) {
+            EditorActions actions(ui);
+            auto parts=scene.parts();for(auto* p:parts)if(p!=part)scene.remove(p);
+            auto* floor=scene.createPart(PartShape::Block,{0,-.1f,0},{22,.2f,22},"Piso fino");floor->setAnchored(true);
+            Part* walls[4]={part};for(int i=1;i<4;++i)walls[i]=scene.createPart(PartShape::Block,{40.f+i*8,15,30},{2,8,18},"Parede "+std::to_string(i));
+            for(int i=0;i<4;++i){walls[i]->setTransform({{40.f+i*8,15,30},QuaternionIdentity(),i==0||i==3?Vector3{22,8,2}:Vector3{2,8,18}});walls[i]->setAnchored(true);}
+            physics.syncScene(scene);
+            for(int width:{1366,1920}){
+                resizeWindow(width,width==1366?768:1080);camera.setOrbit({0,2,0},48,.75f,.85f);frames(3);
+                for(int i=0;i<4;++i){walls[i]->setPosition({40.f+i*8,15,30});}physics.syncScene(scene);
+                const Vector3 points[4]={{0,0,-10},{-10,0,0},{10,0,0},{0,0,10}};
+                for(int i=0;i<4;++i){
+                    scene.select(walls[i]);frames(2);click("tab-Model");click("place-surface");CHECK(EditorUITestAccess::placement(ui).active());
+                    const auto view=ui.frontend()->viewport();Vector2 local;CHECK(camera.projectChecked(points[i],{view.width,view.height},local));
+                    const Vector2 point{local.x+view.x,local.y+view.y};const auto original=projectio::toJson(scene);
+                    event("mousemove "+std::to_string(int(point.x))+" "+std::to_string(int(point.y)));frames(2);
+                    CHECK(EditorUITestAccess::placement(ui).contact().snapped);CHECK(SameProjectValue(projectio::toJson(scene),original));
+                    if(i==0){capture("construction-preview-"+std::to_string(width));
+                        CHECK(actions.dispatch({"save"}));Scene saved;CHECK(projectio::load(saved,config.defaultProjectPath,error));CHECK(SameProjectValue(projectio::toJson(saved),original));
+                        key("Escape");CHECK(!EditorUITestAccess::placement(ui).active());CHECK(SameProjectValue(projectio::toJson(scene),original));
+                        click("place-surface");event("mousemove "+std::to_string(int(point.x))+" "+std::to_string(int(point.y)));}
+                    clickAt(point);CHECK(!EditorUITestAccess::placement(ui).active());CHECK(std::fabs(walls[i]->position().y-4)<.001f);
+                    CHECK(std::fabs(gizmomath::BoxSeparation({walls[i]->position(),walls[i]->rotation(),walls[i]->size()},{floor->position(),floor->rotation(),floor->size()}))<.001f);
+                    if(i==0){const auto placed=walls[i]->transform();key("ctrl+z");CHECK(SameProjectValue(projectio::toJson(scene),original));key("ctrl+y");CHECK(SameTransform(walls[i]->transform(),placed));}
+                }
+                capture("construction-room-"+std::to_string(width));CHECK(actions.dispatch({"save"}));Scene loaded;CHECK(projectio::load(loaded,config.defaultProjectPath,error));CHECK(SameProjectValue(projectio::toJson(loaded),projectio::toJson(scene)));
+                for(int i=0;i<4;++i)for(int j=i+1;j<4;++j)CHECK(gizmomath::BoxSeparation({walls[i]->position(),walls[i]->rotation(),walls[i]->size()},{walls[j]->position(),walls[j]->rotation(),walls[j]->size()})>=-.001f);
+                scene.select(walls[0]);CHECK(actions.dispatch({"assembly","above"}));auto* copy=static_cast<Part*>(scene.selection());CHECK(std::fabs(copy->position().y-12)<.001f);scene.remove(copy);
+            }
+            std::printf("Construction UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
         if(std::getenv("LINBLUX_EDITOR_PRECISION_ONLY")) {
             part->setTransform({{14,5,0},QuaternionIdentity(),{2,2,2}});
             auto* behind=scene.createPart(PartShape::Block,{14,5,-5},{2,2,2},"Peça atrás");behind->setAnchored(true);
@@ -242,6 +275,7 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             auto* target=scene.createPart(PartShape::Block,Vector3Add(cursorRay.position,Vector3Scale(cursorRay.direction,35)),{4,4,2},"Alvo sob o cursor");target->setAnchored(true);frames(2);
             EditorActions actions(ui);CHECK(actions.dispatch({"grid-mode","absolute"}));CHECK(gizmo.gridMode()==gizmomath::GridMode::Absolute);
             CHECK(actions.dispatch({"grid-mode","relative"}));click("tab-Model");capture("construction-controls");click("tab-Home");
+
             event("keydown ctrl");drag();CHECK(gizmo.surfaceContact().snapped);capture("precision-contact");
             CHECK(std::fabs(gizmomath::BoxSeparation({part->position(),part->rotation(),part->size()},
                 {target->position(),target->rotation(),target->size()}))<.0001f);
@@ -274,16 +308,35 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             auto* model=scene.selection();CHECK(model&&model->instanceClass()==InstanceClass::Model);
             if(!model||model->instanceClass()!=InstanceClass::Model){capture("model-group-failure");rlImGuiShutdown();CloseWindow();return 1;}
             const auto id=model->id();CHECK(part->parent()==model&&second->parent()==model);
-            // Same visible gizmo, two real parts, one compound undo entry.
             click("cmd-tool-1");frames(2);const auto* proxy=EditorUITestAccess::modelProxy(ui);CHECK(proxy);
-            const auto beforeDrag=projectio::toJson(scene);const auto undoBefore=EditorUITestAccess::undoCount(ui);
-            if(proxy){const auto viewport=ui.frontend()->viewport();auto& gizmo=EditorUITestAccess::partGizmo(ui);
-                const auto layout=gizmolayout::Build(*proxy,ToolMode::Move,camera,viewport,false,gizmo.visualSettings());
-                const auto point=layout.moveHandle[1],direction=layout.axisDirection[0];
-                event("mousemove "+std::to_string(int(point.x+viewport.x))+" "+std::to_string(int(point.y+viewport.y)));event("mousedown 1");
-                CHECK(gizmo.dragging());event("mousemove "+std::to_string(int(point.x+viewport.x+direction.x*26))+" "+std::to_string(int(point.y+viewport.y+direction.y*26)));event("mouseup 1");
-                CHECK(EditorUITestAccess::undoCount(ui)==undoBefore+1);CHECK(part->parent()==model);key("ctrl+z");
-                CHECK(SameProjectValue(nlohmann::json::parse(projectio::toJson(scene)),nlohmann::json::parse(beforeDrag)));
+            const auto beforeDrag=projectio::toJson(scene);
+            const auto undoBefore=EditorUITestAccess::undoCount(ui);
+            if(proxy){
+                const auto startProxy=proxy->transform(),startPart=part->transform();
+                const auto viewport=ui.frontend()->viewport();auto& gizmo=EditorUITestAccess::partGizmo(ui);
+                gizmo.setLocalSpace(false);
+                const auto layout=gizmolayout::Build(*proxy,ToolMode::Scale,camera,viewport,gizmo.localSpace(),gizmo.visualSettings());
+                std::size_t faceIndex=layout.faces.size();
+                for(std::size_t i=0;i<layout.faces.size();++i)if(layout.faces[i].visible&&int(i/2)==1&&
+                    gizmolayout::FaceUnderCursor(layout,layout.faces[i].screen).index==int(i)){faceIndex=i;break;}
+                CHECK(faceIndex<layout.faces.size());
+                if(faceIndex<layout.faces.size()){
+                    const auto point=layout.faces[faceIndex].screen;const auto normal=layout.faces[faceIndex].normal;
+                    const auto sign=(&normal.x)[1]<0?-1.f:1.f;
+                    const Vector3 moveAxis=gizmomath::Axis(1,proxy->rotation(),gizmo.localSpace());
+                    const float worldPerPixel=camera.worldUnitsPerPixel(layout.faces[faceIndex].anchor,viewport.height);
+                    Vector2 a{},b{};
+                    CHECK(camera.projectChecked(layout.faces[faceIndex].anchor,{viewport.width,viewport.height},a));
+                    CHECK(camera.projectChecked(Vector3Add(layout.faces[faceIndex].anchor,Vector3Scale(moveAxis,worldPerPixel*40*sign)),{viewport.width,viewport.height},b));
+                    const auto direction=Vector2Normalize(Vector2Subtract(b,a));
+                    event("mousemove "+std::to_string(int(point.x+viewport.x))+" "+std::to_string(int(point.y+viewport.y)));event("mousedown 1");
+                    CHECK(gizmo.dragging());CHECK(gizmo.activeAxis()==1);
+                    event("mousemove "+std::to_string(int(point.x+viewport.x+direction.x*26))+" "+std::to_string(int(point.y+viewport.y+direction.y*26)));event("mouseup 1");
+                    CHECK(!SameTransform(proxy->transform(),startProxy));CHECK(!SameTransform(part->transform(),startPart));
+                    CHECK(EditorUITestAccess::undoCount(ui)==undoBefore+1);CHECK(part->parent()==model);key("ctrl+z");
+                    CHECK(SameTransform(part->transform(),startPart));
+                    CHECK(SameProjectValue(nlohmann::json::parse(projectio::toJson(scene)),nlohmann::json::parse(beforeDrag)));
+                }
             }
 
             clickVisible("prop-Model.Position.0");key("ctrl+a");event("type --clearmodifiers 20");key("Return");
@@ -294,6 +347,7 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             clickVisible("prop-Model.Scale");key("ctrl+a");event("type --clearmodifiers 2");key("Return");CHECK(NearlyEqual(part->size().x,8));
             clickVisible("prop-Model.Rotation.1");key("ctrl+a");event("type --clearmodifiers 90");key("Return");CHECK(NearlyEqual(part->position().z,8,.01f));
             const auto original=part->position();clickVisible("prop-Pivot.Position.0");key("ctrl+a");event("type --clearmodifiers 30");key("Return");CHECK(NearlyEqual(part->position(),original));
+
             clickVisible("node-"+std::to_string(part->id()));clickVisible("property-attachment-");
             auto* anchor=scene.selection();CHECK(anchor&&anchor->instanceClass()==InstanceClass::Attachment);
             if(!anchor||anchor->instanceClass()!=InstanceClass::Attachment){capture("attachment-create-failure");rlImGuiShutdown();CloseWindow();return 1;}

@@ -112,8 +112,9 @@ Vector3 SnapGrid(Vector3 position,Vector3 origin,Vector3 a,Vector3 b,float step,
 
 SurfaceSnap SnapUnderCursor(const std::vector<SurfaceBox>& moving,
     const std::vector<SurfaceBox>& targets,Vector3 reference,Ray ray,SnapFeature feature,
-    bool alignNormal,Quaternion orientation,std::uint64_t previous) {
-    SurfaceSnap out;if(moving.empty()) {out.reason="Esferas: encaixe de caixa indisponível";return out;}
+    bool alignNormal,Quaternion orientation,std::uint64_t previous,float offset,float grid,bool closestFace) {
+    SurfaceSnap out;if(!std::isfinite(offset)||!std::isfinite(grid))return out;
+    if(moving.empty()) {out.reason="Esferas: encaixe de caixa indisponível";return out;}
     for(const auto& member:moving)if(!ValidBox(member.pose))return out;
     for(float value:{reference.x,reference.y,reference.z,ray.position.x,ray.position.y,ray.position.z,
         ray.direction.x,ray.direction.y,ray.direction.z})if(!std::isfinite(value))return out;
@@ -132,7 +133,9 @@ SurfaceSnap SnapUnderCursor(const std::vector<SurfaceBox>& moving,
     if(!target)return out;
     out.target=target->id;out.point=closest.point;out.normal=Vector3Normalize(closest.normal);
     if(alignNormal) {
-        const auto up=Vector3RotateByQuaternion({0,1,0},orientation);
+        auto up=Vector3RotateByQuaternion({0,1,0},orientation);
+        if(closestFace){float best=-1;for(int i=0;i<3;++i){const auto axis=Axis(i,orientation,true);const float dot=Vector3DotProduct(axis,out.normal);
+            if(std::fabs(dot)>best){best=std::fabs(dot);up=Vector3Scale(axis,dot<0?-1.f:1.f);}}}
         out.rotationDelta=Vector3DotProduct(up,out.normal)<-.99999f?
             QuaternionFromAxisAngle(Vector3RotateByQuaternion({1,0,0},orientation),PI):
             QuaternionFromVector3ToVector3(up,out.normal);
@@ -141,12 +144,16 @@ SurfaceSnap SnapUnderCursor(const std::vector<SurfaceBox>& moving,
     auto local=Vector3RotateByQuaternion(Vector3Subtract(closest.point,target->pose.position),QuaternionInvert(target->pose.rotation));
     int face=0;for(int i=1;i<3;++i)if(std::fabs(Vector3DotProduct(out.normal,axes[i]))>
         std::fabs(Vector3DotProduct(out.normal,axes[face])))face=i;
+    if(grid>0){for(int i=0;i<3;++i)if(i!=face)(&local.x)[i]=std::clamp(SnapDelta((&local.x)[i],grid),-(&half.x)[i],(&half.x)[i]);
+        out.point=Vector3Add(target->pose.position,Vector3RotateByQuaternion(local,target->pose.rotation));}
+    int targetEdge=-1;
     if(feature!=SnapFeature::Face) {
         int edge=-1;float distance=INFINITY;
         for(int i=0;i<3;++i)if(i!=face) {
             const float d=(&half.x)[i]-std::fabs((&local.x)[i]);
             if(d<distance){distance=d;edge=i;}
         }
+        targetEdge=edge;
         for(int i=0;i<3;++i)if(i!=face&&(feature==SnapFeature::Vertex||i==edge))
             (&local.x)[i]=std::copysign((&half.x)[i],(&local.x)[i]);
         out.point=Vector3Add(target->pose.position,Vector3RotateByQuaternion(local,target->pose.rotation));
@@ -159,7 +166,7 @@ SurfaceSnap SnapUnderCursor(const std::vector<SurfaceBox>& moving,
         support=std::max(support,Radius(member.pose,out.normal)-Vector3DotProduct(Vector3Subtract(member.pose.position,reference),out.normal));
     }
     Vector3 desired=Vector3Add(out.point,Vector3Scale(out.normal,support));
-    if(feature==SnapFeature::Face) {
+    if(feature==SnapFeature::Face||closestFace) {
         float nearest=INFINITY;Vector3 anchor{};
         for(const auto& member:poses) {
             Vector3 sum{};int count=0;
@@ -173,7 +180,7 @@ SurfaceSnap SnapUnderCursor(const std::vector<SurfaceBox>& moving,
         }
         if(std::isfinite(nearest))desired=Vector3Add(reference,Vector3Subtract(out.point,anchor));
     }
-    if(feature!=SnapFeature::Face) {
+    if(feature!=SnapFeature::Face&&!closestFace) {
         // Align the nearest support vertex/edge of the moving selection with
         // the requested target feature, without ever entering the target.
         float nearest=INFINITY;Vector3 anchor{};
@@ -183,6 +190,17 @@ SurfaceSnap SnapUnderCursor(const std::vector<SurfaceBox>& moving,
         }
         if(std::isfinite(nearest))desired=Vector3Add(reference,Vector3Subtract(out.point,anchor));
     }
+    if(closestFace&&feature!=SnapFeature::Face){
+        // Construction edges align outer support planes, keeping the wall
+        // inside the floor boundary instead of jumping to a distant corner.
+        for(int i=0;i<3;++i)if(i!=face&&(feature==SnapFeature::Vertex||i==targetEdge)){
+            const auto outward=Vector3Scale(axes[i],std::copysign(1.f,(&local.x)[i]));float extent=-INFINITY;
+            for(const auto& member:poses)extent=std::max(extent,Vector3DotProduct(member.pose.position,outward)+Radius(member.pose,outward));
+            const float correction=Vector3DotProduct(out.point,outward)-extent-Vector3DotProduct(Vector3Subtract(desired,reference),outward);
+            desired=Vector3Add(desired,Vector3Scale(outward,correction));
+        }
+    }
+    desired=Vector3Add(desired,Vector3Scale(out.normal,offset));
     out.correction=Vector3Subtract(desired,reference);
     for(auto& member:poses) {
         member.pose.position=Vector3Add(member.pose.position,out.correction);

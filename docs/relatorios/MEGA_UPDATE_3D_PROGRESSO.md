@@ -544,3 +544,36 @@ Validação final no Studio: **PASS, 124,6 s**, supervisionada pelo TURBO;
 `.turbo/logs/direct-face/after-final.log`. Move e Scale passaram nas duas
 resoluções com undo/redo/ESC. PNGs inspecionados em tamanho original. Manifests
 confirmam a mesma cena-fonte antes/depois e o hash do executável final capturado.
+
+## Continuação — encaixe de construção por prévia (28/10/2026)
+
+Incremento seguinte à correção visual de Move/Scale; não altera os commits
+publicados anteriores. **Encaixar à superfície** no ribbon Modelo cria uma
+proposta de colocação com Face/Borda/Vértice, alinhamento à normal, afastamento
+e grade opcional. Enquanto o cursor apenas propõe uma pose, cena, física,
+histórico e arquivo salvo não mudam. Clique confirma como undo único; Esc
+cancela. Mudança concorrente invalida a proposta. Models usam caixas reais dos
+filhos, inclusive com pivô distante. A montagem duplica ao lado/acima pela
+extensão OBB e permite repetir o último deslocamento confirmado.
+
+### Validação registrada
+
+- Build TURBO incremental compilou `linblux`, Studio e os alvos FAST selecionados
+  (run `20261028T214817Z-23523`, `build.log`).
+- `linblux_construction_ui` supervisionado: **216 checks, 0 falhas**, com preview,
+  cancelamento, salvar antes do commit, recinto de quatro paredes/piso, undo/redo
+  e reabertura em **1366×768 e 1920×1080** (`.turbo/logs/construction-final-focused/`).
+- `linblux_studio` passou com `ConstructionPreviewWorkflow`; `linblux_models_ui`
+  passou na repetição final com **175 checks** (`.turbo/logs/model-face-retest5/`).
+  Uma tentativa intermediária de Models falhou/time-out na interação antiga de
+  eixo; o teste foi adaptado à aquisição atual Move por face e depois aprovado.
+- TURBO FAST executou **11/11** selecionados sem falhas, mas marcou
+  `PASSED_PARTIAL / coverage unknown`; não é aprovação global. Não se repetiu
+  IMPACT/FULL após esta etapa nem o restart histórico sem relação.
+- ATLAS atualizado/verificado OK após mudanças de código. Capturas/testes usam
+  llvmpipe/Xvfb; não houve confirmação manual do usuário, teste no arquivo
+  original ou benchmark em GPU física.
+- Documentação do Editor e contrato atualizado. O ramo `main` e `origin/main`
+  coincidiam em `2386f8f`; este incremento ainda é WIP local e **não publicado**.
+  A grade visual de construção segue como incremento separado; fases 5–7 não
+  iniciadas nesta etapa.

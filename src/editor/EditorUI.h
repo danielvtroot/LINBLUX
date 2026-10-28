@@ -10,6 +10,7 @@
 #include "core/Config.h"
 #include "core/Math.h"
 #include "editor/EditHistory.h"
+#include "editor/ConstructionPlacement.h"
 #include "editor/Gizmo.h"
 #include "editor/InputRouting.h"
 #include "editor/Tool.h"
@@ -150,6 +151,13 @@ private:
     void applyMaterialToSelection(int materialIndex);
     void deleteSelection();
     void duplicateSelection();
+    void beginSurfacePlacement();
+    void assemblyAction(const std::string& action);
+    bool updateSurfacePlacement(const EditorInput& input,Rectangle viewport,bool allow);
+    void drawSurfacePlacement(Rectangle viewport);
+    ConstructionPlacement placement_;
+    float placementOffset_=0;
+    Vector3 assemblyStep_{};
     void focusSelection();
 
     void resizeViewport(int width, int height);

@@ -1294,6 +1294,8 @@ void StudioFrontend::draw() {
         const auto mode=p.ui.renderer_.antialiasing();const std::string value=mode==Antialiasing::None?"off":mode==Antialiasing::FXAA?"fxaa":mode==Antialiasing::MSAA4?"msaa4":"auto";
         if(aa->GetValue()!=value)aa->SetValue(value);
     }
+    if(auto* place=p.el("place-surface"))place->SetClass("active",p.ui.placement_.active());
+    if(auto* assembly=dynamic_cast<Rml::ElementFormControl*>(p.el("assembly"));assembly&&p.formOwner(p.context->GetFocusElement())!=assembly)assembly->SetValue("none");
     if(auto* planes=p.el("move-planes")){if(p.ui.gizmo_.planarHandles())planes->SetAttribute("checked","");else planes->RemoveAttribute("checked");}
     if(auto* scale=dynamic_cast<Rml::ElementFormControl*>(p.el("scale-origin"));scale&&p.formOwner(p.context->GetFocusElement())!=scale){
         const std::string value=p.ui.gizmo_.centeredScaleOption()?"center":"face";if(scale->GetValue()!=value)scale->SetValue(value);

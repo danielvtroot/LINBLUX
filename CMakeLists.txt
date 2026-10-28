@@ -126,6 +126,7 @@ endif()
 
 # Editor support has no ownership over runtime scene/physics/Lua.
 add_library(linblux_editing STATIC
+  src/editor/ConstructionPlacement.cpp
   src/editor/EditHistory.cpp
   src/editor/GizmoMath.cpp
   src/editor/GizmoLayout.cpp
@@ -167,6 +168,7 @@ add_library(linblux_studio STATIC
   src/ui/EditorActions.cpp
   src/ui/RmlFrontendSupport.cpp
   src/editor/EditorUI.cpp
+  src/editor/ConstructionUI.cpp
   src/editor/GamePanels.cpp
   src/editor/StudioPanels.cpp
 )
@@ -297,6 +299,8 @@ if(XVFB_RUN_EXECUTABLE)
     add_executable(linblux_rml_ui_tests tests/rml_ui_main.cpp tests/x11_focus.cpp)
     target_link_libraries(linblux_rml_ui_tests PRIVATE linblux_editor X11::X11)
     add_dependencies(linblux_rml_ui_tests linblux_ui_assets linblux_example_assets)
+    add_test(NAME linblux_construction_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
+    set_tests_properties(linblux_construction_ui PROPERTIES TIMEOUT 120 ENVIRONMENT "LINBLUX_CONSTRUCTION_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;editor;scene;ui")
     add_test(NAME linblux_editor_precision_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
     set_tests_properties(linblux_editor_precision_ui PROPERTIES TIMEOUT 60 ENVIRONMENT "LINBLUX_EDITOR_PRECISION_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;editor;scene;ui")
     add_test(NAME linblux_audio_panel_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)

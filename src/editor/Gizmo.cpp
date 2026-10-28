@@ -120,7 +120,7 @@ void Gizmo::snapPosition(Part& part,Vector3 candidate,Vector3 a,Vector3 b,
         const auto delta=Vector3Subtract(candidate,part.position());
         for(auto& box:moving)box.pose.position=Vector3Add(box.pose.position,delta);
         surfaceContact_=input.cursorSurface?gizmomath::SnapUnderCursor(moving,*input.targetBoxes,candidate,
-            input.cursorRay,input.feature,input.alignToNormal,part.rotation(),previous):
+            input.cursorRay,input.feature,input.alignToNormal,part.rotation(),previous,input.surfaceOffset):
             gizmomath::SnapSurfaces(moving,*input.targetBoxes,a,b,tolerance);
         if(surfaceContact_.blocked)return; // Retain last accepted pose, with visible reason.
         if(surfaceContact_.snapped) {
