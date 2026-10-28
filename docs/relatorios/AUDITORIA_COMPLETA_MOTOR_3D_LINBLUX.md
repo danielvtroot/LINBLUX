@@ -517,3 +517,736 @@ Convenção das tabelas: **Arquivo — símbolo principal — entrada — respon
 
 ---
 
+# 5. Renderização 3D — auditoria profunda
+
+## 5.1 Visão de conjunto
+
+O motor tem **um único caminho de desenho** para Editor e Player:
+`SceneRenderer::drawScene(const Scene&, Camera3D, int w, int h, InstanceId
+selected, const RigRenderState*, bool authoredRigs)`. Não existe render graph,
+nem passes nomeados, nem framebuffer próprio do 3D (fora o `RenderTexture2D` do
+Editor). A ordem é fixa em C++ e vale para os dois hosts.
+
+```mermaid
+graph TD
+  A["Lighting (céu, sol, ambiente, névoa)"] --> B["ClearBackground(sky)"]
+  B --> C{"skyEnabled?"}
+  C -- sim --> D["DrawProceduralSky: quad full-screen + GLSL 330"]
+  C -- não/falhou --> E["DrawRectangleGradientV (fallback)"]
+  D --> F["BeginMode3D(camera)"]
+  E --> F
+  F --> G["rlEnableDepthTest + rlDisableBackfaceCulling"]
+  G --> H["por Part: box/sphere com cor por face (CPU)"]
+  H --> I["DrawPartSkins: decal/texture/Surface (quad texturado)"]
+  I --> J["drawSelection se selecionada"]
+  J --> K["rigs de GameAssets (somente Editor)"]
+  K --> L["rig do avatar / rigs de NPC"]
+  L --> M["EndMode3D"]
+  M --> N["drawEditorGuides (somente Editor)"]
+  N --> O["drawCollisionShapes (opcional)"]
+  O --> P["Gizmo::drawOverlay (2D, ImGui drawlist)"]
+```
+
+## 5.2 Estado por frame
+
+`drawScene` publica três estados globais de arquivo (não membros):
+
+| Estado | Tipo | Onde é escrito | Consumido por |
+| --- | --- | --- | --- |
+| `gFog` | `FogState{camera,color,density,enabled}` | `drawScene` | `ApplyFog` em cada face/quad |
+| `gSurfaceLight` | `SurfaceLightState{ambient,sun,sky,camera}` | `drawScene` | `LitSurface` |
+| `SkyData()` | `ProceduralSky` (singleton) | `InitProceduralSky` / `DrawProceduralSky` | céu |
+
+Isso é **estado global mutável** consumido por funções livres do mesmo
+`translation unit`. Funciona porque há exatamente um renderer ativo por janela;
+**não** é seguro desenhar duas cenas no mesmo frame com luzes diferentes, nem
+desenhar em threads.
+
+## 5.3 Geometria: como uma Part vira triângulos
+
+| Forma | Função | Triângulos | Normais |
+| --- | --- | --- | --- |
+| `Block` | `DrawShadedBox` | 12 (6 faces × 2) | 6 normais de face rotacionadas pelo quaternion |
+| `Sphere` | `DrawShadedSphere` (7 anéis × 12 fatias) | 168 | 1 normal por quad (achatada, facetada) |
+| cabeça de rig | `DrawShadedRoundedBlocky` | 108 (6 faces × 9 quads × 2) | normais suaves nas bordas (ancoradas ao core) |
+
+Ponto central: **não há malha persistida.** Cada caixa é reemitida a cada frame
+via `rlBegin(RL_TRIANGLES)` / `rlVertex3f`. Um mapa com 500 Parts emite
+500 × 36 = 18.000 vértices por frame apenas de geometria, sem *instancing* e sem
+buffer de vértices próprio. Isso é aceitável na escala atual, mas é o limite
+estrutural para cenas grandes.
+
+Os cantos vêm de `OrientedBox{center, rotation, half}.corners()`
+(`src/core/Geometry.h`) — **a mesma função** usada pela seleção e pelos
+contornos. É por isso que aresta desenhada e aresta da face são **exatamente
+coincidentes** (§6).
+
+## 5.4 Câmera, projeção e recorte
+
+- A câmera é `Camera3D` da raylib; `BeginMode3D` usa a matriz interna do rlgl.
+- **Near = 0,05** e **far = 4000,0** (padrões do rlgl instalado:
+  `RL_CULL_DISTANCE_NEAR 0.05`, `RL_CULL_DISTANCE_FAR 4000.0`, confirmados em
+  `/usr/local/include/rlgl.h`). `EditorCamera::kNearClipDistance = 0.05f`
+  documenta o mesmo valor para `projectChecked`.
+- `EditorCamera` guarda **alvo + distância + yaw + pitch** e deriva a posição;
+  não há matriz própria de view/projeção (exceto a conversão manual em
+  `rayFromScreen`/`projectChecked`, que replica a fórmula perspectiva).
+- `PlayerCamera` (no runtime) é outra implementação, com colisão por *sweep* de
+  esfera (`RuntimeSession::cameraClearance`), primeira pessoa e ombro.
+
+### Consequência de precisão
+
+Com n = 0,05 e f = 4000, a resolução do z-buffer de 24 bits é
+aproximadamente `Δz ≈ z² · (1/n − 1/f) / 2²⁴ ≈ 1,19×10⁻⁶ · z²`
+(cálculo a partir da derivada da projeção perspectiva; **não é medição**):
+
+| Distância | Δz (24 bits) | Δz (16 bits) |
+| --- | --- | --- |
+| 10 | 0,00012 | 0,030 |
+| 42 (câmera padrão) | 0,0021 | 0,53 |
+| 100 | 0,012 | 3,0 |
+| 300 | 0,107 | 27,4 |
+| 1000 | 1,19 | 305 |
+
+Leitura: até ~100 unidades a precisão é confortável para geometria de 1–4
+unidades; a partir de ~300 unidades, superfícies a menos de 0,1 unidade uma da
+outra começam a competir. **O mapa típico do usuário (160×160 de baseplate,
+câmera a 42 unidades) está na faixa segura** — o que reforça que as linhas
+tracejadas **não** são z-fighting de escala de mundo.
+
+## 5.5 Modelo de iluminação (CPU, por face)
+
+`LitSurface(color, normal, point, lightDirection, sunIntensity, brightness,
+gloss, unlit)`:
+
+```
+exposure = clamp(brightness, 0.2, 2.0)
+se unlit: return Shade(color, clamp(exposure*1.12, 0.9, 1.35))
+up       = clamp(0.5 + 0.5*normal.y, 0, 1)
+skyAmb   = blend(ambient, skyHorizon, 0.45)
+ambTint  = blend(branco, skyAmb, 0.36)
+sunTint  = blend(branco, sunColor, 0.45)
+ambient  = (0.58 + 0.20*up) * exposure
+lambert  = max(0, dot(normal, lightDirection))
+sun      = 0.38 * lambert * clamp(sunIntensity,0,3) * exposure
+sheen    = gloss * max(0,dot(normal, halfVector))^40 * clamp(sunIntensity,0,2) * exposure
+canal    = color * (ambient*ambTint/255 + sun*sunTint/255) + sheen*255*sunTint/255
+```
+
+Direção de luz: `Lighting::sunDirection()` padrão `{-0.45,-1,0.55}`, negada e
+normalizada em `drawScene` → **`(0,367; 0,815; −0,448)`** (luz vindo de cima,
+levemente à direita e da frente).
+
+Avaliando com valores padrão (`ambient = {150,150,160}`, `sun = {255,240,200}`,
+`skyHorizon = {180,200,230}`, `sunIntensity = 1`, `brightness = 1`,
+`gloss = 0,10` para `SmoothPlastic`), obtém-se o **fator multiplicativo de
+albedo** por orientação de face:
+
+| Face | `up` | ambiente | `lambert` | sol | **total** |
+| --- | --- | --- | --- | --- | --- |
+| Topo (+Y, piso) | 1,00 | 0,780 | 0,815 | 0,310 | **1,090** |
+| Fundo (−Y, teto) | 0,00 | 0,580 | 0,000 | 0,000 | **0,580** |
+| −Z (parede de frente) | 0,50 | 0,680 | 0,448 | 0,170 | **0,850** |
+| +X (parede lateral) | 0,50 | 0,680 | 0,367 | 0,139 | **0,819** |
+| +Z (parede de fundo) | 0,50 | 0,680 | 0,000 | 0,000 | **0,680** |
+
+Ou seja: **piso 1,09 vs parede de fundo 0,68 = 1,60×**; parede de frente 0,85 vs
+parede de fundo 0,68 = 1,25×. Este número é essencial para §6.5: o modelo de luz
+**já separa** piso e paredes. A “aparência plana” tem outras causas.
+
+O termo hemisférico é **constante por face** (`up` é constante), portanto uma
+parede grande é desenhada com **uma única cor chapada** — não há gradiente. O
+único gradiente possível vem do `sheen` (que depende da posição), mas ele é
+avaliado **por face**, com o centro da face como amostra → também constante.
+Resultado: superfícies grandes são perfeitamente uniformes, o que a percepção
+humana lê como “plástico sem volume”.
+
+## 5.6 Céu procedural
+
+- Quad em *clip space* (4 vértices, sem VBO), `gl_Position = vec4(xy,0,1)`.
+- Fragment shader 330: gradiente zênite/horizonte/chão, disco solar com
+  `smoothstep`, glow, nuvens por `fbm` de 3 oitavas com hash inteiro (evita
+  transcendental por pixel), névoa por ângulo, e `pow(color, 1/2.2)` no final.
+- Desenha **antes** de `BeginMode3D`, com `rlDisableDepthTest`,
+  `rlDisableDepthMask`, `rlDisableBackfaceCulling`; restaura tudo depois.
+- Se a compilação falhar, `DrawProceduralSky` retorna `false` e o renderer cai em
+  `DrawRectangleGradientV` — **fallback silencioso e testado** por
+  `tests/sky_capture_main.cpp`.
+- O céu **não** escreve profundidade: geometria sempre o cobre corretamente.
+
+Observação técnica: o shader faz `pow(1/2.2)` na saída, mas o resto da cena
+**não** é linearizado. Ou seja, o céu é tratado como linear→sRGB e a geometria é
+sombreada já em sRGB. Isso produz um descasamento de gama entre céu e cena
+(hipótese de contribuição para “aspecto lavado”; não medido).
+
+## 5.7 Transparência, blending e ordem
+
+| Situação | Mecanismo | Ordem |
+| --- | --- | --- |
+| Corpo opaco (`alpha == 255`) | batch normal, depth write ligado | ordem de `scene.parts()` |
+| Corpo com `alpha < 255` | **não há caso especial**: a cor é emitida com alpha e o blend padrão atua | ordem de `scene.parts()` |
+| Decal/texture/Surface | `BeginBlendMode(BLEND_ALPHA_PREMULTIPLY)` + textura pré-multiplicada, `rlDisableDepthMask()` | após o corpo da Part, na ordem dos filhos |
+| Face do rig | idem decal | após todos os corpos do rig |
+| Seleção | `rlDisableDepthTest` + `rlDisableDepthMask` | imediatamente após a Part |
+| Contornos (Editor) | `rlEnableDepthTest` + `rlDisableDepthMask` | passe separado, após toda a cena |
+| Gizmo | `rlDisableDepthTest` + `rlDisableDepthMask` | overlay 2D, após o 3D |
+
+**Não existe ordenação por distância.** Para `alpha < 255` a ordem é a de criação
+das Parts — artefatos de blending são possíveis e reprodutíveis. Decals usam
+offset fixo `outward = 0.02` (0,021 para `Surface`) em vez de depth bias.
+
+## 5.8 Culling
+
+`rlDisableBackfaceCulling()` é chamado em `drawScene` e **nunca** é reabilitado
+durante a cena; o `drawEditorGuides` também não o altera. Consequências:
+
+- Toda face é desenhada, inclusive as traseiras (custo ~2× em caixas fechadas).
+- Não há *frustum culling*: todas as Parts são emitidas, mesmo fora do quadro.
+- Não há *occlusion culling*.
+- Benefício acidental: geometria com enrolamento (winding) invertido aparece, o
+  que mascara erros de construção.
+
+Para o alvo declarado (notebook de 3 GB, GPU integrada) e cenas pequenas, isso é
+aceitável; para mapas grandes é a primeira otimização estrutural.
+
+## 5.9 Editor vs Player: o que difere de fato
+
+| Aspecto | Editor (`EditorUI::drawViewport`) | Player (`src/player/main.cpp`) |
+| --- | --- | --- |
+| Cena | autoral (`scene_`) | runtime (`runtime.scene()`) |
+| Câmera | `EditorCamera` | `PlayerCamera` (runtime) |
+| Contornos (`drawEditorGuides`) | **sim** | **nunca** |
+| Caixas de colisor | opcional (`showCollisionShapes_`) | nunca |
+| Rigs de `GameAssets` | **todos** desenhados (`authoredRigs = true`) | não |
+| Avatar | rig selecionado para preview (`selectedRig_`) | `runtime.rig()` + pose |
+| NPCs com rig | não (só autoria) | sim (`scene.npcVisuals()`) |
+| Gizmo | sim (2D) | não |
+| Alvo | `RenderTexture2D` + FXAA | framebuffer da janela, sem FXAA |
+| MSAA | só na camada RmlUi | idem |
+| HUD/menu | RmlUi (game layer) | RmlUi + `PlayerMenu` + `DrawLuaUi` |
+
+**Fato importante:** o Editor desenha **todos os rigs do projeto** em
+`asset.root` (R6 padrão em `{8,3,0}`), mesmo sem nenhum NPC e sem nenhum rig
+selecionado. Isso cria um “personagem solto” na cena de autoria. Não há como
+escondê-lo pela UI (não há toggle de “mostrar rigs”).
+
+## 5.10 O que o renderizador **não** tem
+
+| Recurso | Situação | Onde estaria |
+| --- | --- | --- |
+| Sombras (direcionais, contato, cascatas) | ausente | — |
+| Ambient occlusion (SSAO/HBAO/baked) | ausente | — |
+| Materiais PBR (roughness/metalness/normal) | ausente | `PartMaterial` é só albedo+gloss |
+| Iluminação por pixel | ausente | `LitSurface` por face |
+| Luzes pontuais/spots (além do sol) | ausente | `Lighting` só tem sol |
+| Transparência ordenada | ausente | — |
+| Backface culling | desligado | — |
+| Instancing / VBO de geometria | ausente | — |
+| Outline real (stencil/jump-flood) | ausente | `drawSelection` é wireframe |
+| MSAA na cena 3D | ausente | só FXAA |
+| HDR / tonemapping | ausente | — |
+| SSAO/decals projetados | ausente (decals são quads por face) | — |
+| Oclusão/portais | ausente | — |
+
+---
+
+# 6. Linhas tracejadas e percepção de profundidade
+
+> Esta é a seção mais importante para o problema visual relatado. Ela separa o
+> que está **provado pelo código** do que é **hipótese a confirmar**.
+
+## 6.1 Quem desenha linhas no LINBLUX
+
+Existem **quatro** sistemas independentes de linha. Confundi-los é a origem de
+diagnósticos errados:
+
+| Sistema | Função | Cor | Depth test | Quando aparece |
+| --- | --- | --- | --- | --- |
+| **Contornos de autoria** | `SceneRenderer::drawEditorGuides` (`SceneRenderer.cpp:971`) | `{42,46,54,165}` (escuro, translúcido) | **ligado**, depth write desligado | **sempre**, em toda Part não selecionada |
+| Hover | mesmo função (`hovered`) | `{240,230,225,230}` (claro) | idem | Part sob o cursor |
+| Seleção | `SceneRenderer::drawSelection` | `{255,205,60,255}` dourado | **desligado** | Part selecionada |
+| Colisores | `drawCollisionShapes` | ciano/magenta | desligado | toggle “Mostrar colisores” |
+| AABB de depuração | `drawEditorGuides` (`options.bounds`) | `{195,112,224,160}` roxo | ligado, sem write | Shift+F8 |
+| Normais | `drawEditorGuides` (`options.normals`) | `{245,110,95,230}` | ligado, sem write | Ctrl+F8 em caixa selecionada |
+| Gizmo | `Gizmo::drawOverlay` | RGB por eixo | desligado | ferramenta ≠ Selecionar |
+
+O passe relevante é o primeiro. Código (resumido do arquivo real):
+
+```cpp
+void SceneRenderer::drawEditorGuides(const Scene& scene, Camera3D camera,
+                                     const EditorGeometryView& options,
+                                     InstanceId hovered) const {
+    if (!options.edges && !options.bounds && !options.normals && !hovered) return;
+    BeginMode3D(camera);
+    rlDrawRenderBatchActive();
+    rlEnableDepthTest();      // <-- o teste de profundidade está LIGADO
+    rlDisableDepthMask();     // <-- mas a linha não escreve profundidade
+    for (const auto* p : scene.parts()) {
+        if (p->color().a == 0) continue;
+        if ((options.edges || p->id() == hovered) && !scene.selected(p->id())) {
+            const Color color = p->id() == hovered ? Color{240,230,225,230}
+                                                  : Color{42,46,54,165};
+            if (p->shape() == PartShape::Block)
+                DrawRotatedBoxWires(p->position(), p->size(), p->rotation(), color);
+            else if (p->shape() == PartShape::Sphere)
+                DrawSphereWires(...);   // 6x8 quando não é hover, 8x12 quando é
+        }
+        // ... bounds e normals ...
+    }
+    rlDrawRenderBatchActive();
+    rlEnableDepthMask();
+    EndMode3D();
+}
+```
+
+E `DrawRotatedBoxWires` usa **os mesmos cantos** da face:
+
+```cpp
+void DrawRotatedBoxWires(Vector3 center, Vector3 size, Quaternion rotation, Color color) {
+    const auto world = OrientedBox{center, rotation, Vector3Scale(size,.5f)}.corners();
+    static const int edges[12][2] = {{0,1},{1,2},{2,3},{3,0},{4,5},{5,6},
+                                     {6,7},{7,4},{0,4},{1,5},{2,6},{3,7}};
+    for (const auto& edge : edges) DrawLine3D(world[edge[0]], world[edge[1]], color);
+}
+```
+
+Enquanto `DrawShadedBox` usa **exatamente o mesmo** `OrientedBox{...}.corners()`.
+
+## 6.2 Por que o resultado é tracejado — hipóteses ordenadas por evidência
+
+### H1 — Empate de profundidade entre linha e triângulo (evidência forte)
+
+**Fatos:**
+
+1. A linha passa exatamente pelos vértices/arestas dos triângulos das faces
+   (mesma função `corners()`, mesmos valores float).
+2. O depth test está **ligado** e não há **nenhum** depth bias no projeto
+   (`grep PolygonOffset|rlSetLineWidth|glPolygonOffset` em `src/` → 0
+   resultados).
+3. `rgDisableDepthMask` desliga apenas a **escrita**, não o teste.
+4. A linha tem **1 pixel** de largura (nenhum `rlSetLineWidth`), e a cor tem
+   **alpha 165** — ela é *blendada*, não opaca.
+5. A rasterização de `GL_LINES` e a de triângulos não produzem,
+   necessariamente, o mesmo valor de profundidade no mesmo pixel; na aresta
+   compartilhada os dois concorrem. Com `GL_LESS`, empates exatos **falham**.
+6. O pixel onde a linha falha mostra a **face** (cinza), não a linha (escura).
+
+**Resultado esperado:** a aresta aparece como uma sequência de pixels escuros
+intercalados com pixels da face — visualmente **tracejada/pontilhada**, com
+padrão dependente do ângulo e da distância.
+
+**Predições testáveis (discriminantes):**
+
+| Experimento | Se H1 for verdadeira | Se for outra causa |
+| --- | --- | --- |
+| Selecionar a parede | as linhas daquela peça **desaparecem** (o passe exclui `scene.selected(id)`) e aparece o wireframe dourado | as linhas continuam |
+| F8 (desliga `edges`) | **todas** as linhas somem, sem mudar nada na geometria | as linhas permanecem |
+| Abrir a mesma cena no Player | **nenhuma** linha (o Player não chama o passe) | linhas aparecem |
+| Aproximar muito a câmera | o tracejado muda de padrão e fica mais contínuo (mais pixels por aresta) | indiferente |
+| Passar o mouse sobre a peça | a cor muda para claro (`240,230,225`) — o tracejado é o mesmo, mas agora claro | — |
+| Renderizar com antialiasing do driver/MSAA na cena | o tracejado fica **mais aparente**, não menos (mais amostras → mais empates) | — |
+
+**Nível de evidência: alto para “o efeito vem deste passe”; médio para “o
+mecanismo exato é empate de profundidade”** — porque não foi feita captura com
+bias aplicado. O experimento decisivo é aplicar `glPolygonOffset` (ou desenhar
+as arestas com `depth test` desligado) e comparar capturas.
+
+### H2 — Largura de linha de 1 px + FXAA (evidência média)
+
+O viewport 3D passa por FXAA (`EditorUI::resolveViewport`, shader embutido em
+`EditorUI.cpp:60`). O FXAA detecta contraste de luma e mistura vizinhos; uma
+linha escura de 1 px sobre cinza médio tem contraste alto, então ela é
+**erodida** e redistribuída. Em arestas quase horizontais/verticais, o resultado
+é uma linha serrilhada com “buracos”. Isso **agrava** H1, não o substitui.
+
+Além disso, o shader tem um early-out (`if (lumaMax-lumaMin < max(0.0312,
+lumaMax*0.125)) return`), então regiões de baixo contraste (parede vs piso com
+pouca luz) **não** são suavizadas — produzindo serrilhado em uma superfície e
+linha fina na outra. É um comportamento assimétrico e visível.
+
+### H3 — Z-fighting entre geometria duplicada do usuário (evidência fraca para o caso geral)
+
+Se o usuário construiu paredes com faces **coplanares sobrepostas** (por exemplo
+duas Parts encostadas dividindo a mesma face), há competição de profundidade
+entre **dois triângulos**. Isso produz **manchas e cintilação em área**, não
+linhas finas acompanhando arestas. O diagnóstico existente
+(`EditorUI.cpp:1996-2010`) já detecta e **avisa** (“Sobreposição: nome” /
+“Geometria coincidente: nome”) usando `gizmomath::BoxSeparation` — mas apenas
+para a Part selecionada contra caixas, e **não corrige**.
+
+### H4 — Contorno “sempre ligado” semântico (evidência forte para a queixa)
+
+Independentemente do mecanismo de rasterização, o fato de o contorno estar
+**ligado por padrão** (`EditorGeometryView{edges=true}`,
+`EditorUI.h:191` + `SceneRenderer.h:22`) e valer para **todas** as Parts
+(apenas as selecionadas são excluídas) explica por que o usuário vê linhas
+“mesmo sem nada selecionado”. O atalho F8 existe (`EditorUI.cpp:1106-1110`),
+mas não há botão no ribbon nem indicação visual do estado.
+
+## 6.3 Por que a percepção de profundidade é fraca (com números)
+
+A hipótese intuitiva (“a iluminação não distingue piso de parede”) **não se
+sustenta** com os números de §5.5: piso 1,09 vs parede de fundo 0,68 é 1,60×.
+O que realmente achata a leitura:
+
+| Causa | Evidência | Efeito perceptual |
+| --- | --- | --- |
+| **Albedo idêntico** para toda Part nova (`163,162,165`) | `Part.h` | nenhuma pista de material/objeto; o cérebro não separa “parede” de “piso” por cor |
+| **Material idêntico** (`SmoothPlastic`, gloss 0,10) | `Part.h`, `MaterialGloss` | nenhuma variação especular entre superfícies |
+| **Sombra ausente** | não há passe de sombra | o encontro parede/piso não tem linha escura de contato; as duas superfícies se tocam “no vácuo” |
+| **AO ausente** | idem | cantos internos não escurecem; o canto vira uma descontinuidade limpa de duas cores chapadas |
+| **Cor chapada por face** | `LitSurface` por face | superfícies grandes não têm gradiente; parede inteira = 1 valor |
+| **Contorno escuro em toda aresta** | §6.1 | a aresta deixa de ser informação (sombra/oclusão) e vira ruído uniforme; como ela quebra (H1), o usuário não consegue nem usá-la como referência |
+| **FXAA** | `resolveViewport` | apaga/borra a aresta fina, reduzindo a pista de silhueta |
+| **Sem textura** | `decal_image`/`texture_image` são opt-in por atributo | nenhuma pista de escala |
+
+Uma consequência importante: como **piso e parede são o mesmo objeto com a mesma
+cor**, a única diferença é o sombreamento por orientação. Em uma parede de fundo
+(+Z) o sol não incide (`lambert = 0`), então ela fica em 0,68 — mas o **piso visto
+de frente** também tem componentes de 0,85/0,82 nas faces laterais. Numa
+perspectiva de canto, é possível que a parede de fundo (0,68) fique **mais escura
+que o piso** e a +X (0,82) fique quase igual ao piso — o que embaralha a leitura
+em vez de ordená-la.
+
+## 6.4 O que fazer (proposta, **não implementada**)
+
+Três correções independentes, em ordem de custo/benefício:
+
+**(a) Tornar o contorno opcional e “de verdade” (baixo custo).**
+- Padrão: **desligado**; ligar por F8 ou botão no ribbon com estado visível.
+- Quando ligado: desenhar com `device depth` deslocado
+  (`glPolygonOffset`/`rlEnablePolygonOffset`) **ou** com depth test desligado e
+  alpha baixa (mais barato e determinístico), **ou** desenhar as arestas como
+  quads finos em vez de `GL_LINES` (elimina o problema de largura de 1 px).
+- Custo: 1 função (`drawEditorGuides`), 1 default (`EditorGeometryView`), 1
+  botão no ribbon, 1 atualização de `docs/EDITOR_PRECISAO.md`.
+- Risco: baixo. Não altera geometria, física, serialização nem Player.
+
+**(b) Seleção por *outline* real (custo médio).**
+- Alternativa A: passe de stencil — desenhar a Part em stencil, depois um quad
+  expandido em vermelho/âmbar com stencil test (2 passes extras).
+- Alternativa B (mais barata): desenhar a Part com escala de 1,02 e cor chapada
+  **atrás** (front-face culling) — resolve silhueta sem stencil, mas conflita com
+  a geometria de mundo (Part não é malha centrada).
+- Alternativa C: manter wireframe atual, mas **só** ele, sem o passe global de
+  arestas. É o menor passo e já melhora muito a leitura.
+
+**(c) Dar pistas de profundidade sem shader novo (custo baixo-médio).**
+- **Contato**: desenhar um quad escuro com gradiente (ou 4 quads) na base de cada
+  caixa apoiada — “sombra de contato” falsa, sem luz.
+- **AO por face**: escurecer faces cujo apoio inferior toca outra caixa
+  (heurística: separação SAT ≈ 0 e normal para baixo) — usa dados que já
+  existem (`gizmomath::BoxSeparation`).
+- **Variação sutil de albedo por material**: já existe em `MaterialColor`; basta
+  o default deixar de ser sempre `SmoothPlastic` com a mesma cor.
+- Custo real: ~1 passe em `SceneRenderer::drawScene` + 1 função nova.
+- Risco: médio (pode introduzir overdraw e alterar capturas de teste).
+
+## 6.5 Respostas diretas
+
+- **Qual função desenha as linhas?** `SceneRenderer::drawEditorGuides`
+  (`src/rendering/SceneRenderer.cpp:971`), chamada **somente** em
+  `EditorUI::drawViewport` (`EditorUI.cpp:1971`).
+- **São wireframe, edges, debug bounds ou outline?** Arestas de caixa
+  (`DrawRotatedBoxWires`) e wireframe de esfera (`DrawSphereWires`) — **não** é
+  outline de silhueta nem AABB (AABB é o passe `bounds`, roxo, desligado).
+- **Sempre ou só no editor?** **Só no editor**, mas **sempre**, para toda Part
+  visível não selecionada.
+- **Usam depth test?** **Sim** (`rlEnableDepthTest`), com depth write desligado.
+- **Usam depth bias?** **Não.** Não há polygon offset no projeto.
+- **Sofrem z-fighting?** Não no sentido clássico de superfícies coplanares. O
+  mecanismo provável é **empate de profundidade linha-vs-triângulo** (H1). O
+  usuário **pode** ter z-fighting adicional se construiu faces duplicadas — o
+  editor detecta e avisa, mas não corrige.
+- **O usuário consegue desativá-las?** Sim, com **F8** (não descoberto por ele),
+  e não há controle visível no ribbon.
+- **Por que aparecem sem seleção?** Porque `edges` é `true` por padrão e o passe
+  percorre **todas** as Parts, excluindo apenas as selecionadas.
+- **Como remover do modo normal sem perder depuração?** Trocar o default para
+  `false`, manter F8 e adicionar um botão “Arestas” com estado; opcionalmente
+  separar “arestas de hover” de “arestas de todas as peças”.
+
+---
+
+# 7. Materiais e texturas
+
+## 7.1 O modelo de material atual
+
+`PartMaterial` tem 6 valores (`src/objects/Part.h`), e `SceneRenderer` os traduz
+em duas coisas: **cor final** (`MaterialColor`) e **gloss** (`MaterialGloss`).
+
+| Material | Transformação de cor (`MaterialColor`) | Gloss | Brilho |
+| --- | --- | --- | --- |
+| `SmoothPlastic` | identidade | 0,18 | `pow(...,40)` |
+| `Plastic` | ×1,06 | 0,10 | idem |
+| `Wood` | (R×1,08, G×0,94, B×0,80) | 0,05 | idem |
+| `Metal` | cinza = 0,45 + 0,55·média(RGB), depois ×1,05 | 0,28 | idem |
+| `Concrete` | canal = (c×0,6 + 0,25), depois ×0,95 | 0,02 | idem |
+| `Neon` | ×1,22 **e** `unlit = true` | 0,0 | nenhum |
+
+Observações comprovadas:
+
+- Não há **rugosidade**, **metalicidade**, **normal map**, **emissivo** (exceto
+  `Neon` que apenas ignora a luz), **opacidade por material** ou **textura
+  padrão**.
+- `Metal` **descarta a cor** do usuário e devolve um cinza — comportamento
+  surpreendente e não documentado na UI.
+- `Concrete` **clareia** cores escuras (offset 0,25): uma peça preta em concreto
+  fica cinza-escura.
+- O `unlit` de `Neon` aplica ganho 1,12 com clamp em [0,9; 1,35], então “neon
+  escuro” continua escuro — não há bloom.
+
+## 7.2 O que existe de textura
+
+Dois caminhos coexistem:
+
+**(1) Atributos na Part** (`Part::attributes()`, persistidos como `variant`):
+
+| Atributo | Tipo | Uso |
+| --- | --- | --- |
+| `decal_image` | string | referência de imagem |
+| `decal_face` | string (`Front/Back/Left/Right/Top/Bottom`) | face |
+| `decal_transparency` | double 0..1 | alpha |
+| `decal_rotation` | double (graus) | rotação do UV |
+| `decal_tint` | string hex | cor |
+| `decal_flip_u` | bool | espelha U |
+| `texture_image` | string | textura |
+| `texture_face`, `texture_transparency` | idem | |
+| `texture_repeat_u`, `texture_repeat_v` | double 0,05..64 | repetição |
+| `texture_offset_u`, `texture_offset_v` | double −16..16 | deslocamento |
+| `texture_flip_u` | bool | espelha U |
+
+**(2) Filhos `Decal`/`Texture`** (`InstanceClass::Decal`/`Texture`,
+`Surface` + `SurfaceProperties`), que suportam `studsPerTileU/V` (tiling por
+studs), `face`, `transparency`, `rotation`, `tint`, `offsetU/V` e atributo
+`flip_u`. O renderizador calcula a repetição real a partir da extensão da face:
+
+```
+extent(axis) = |axis.x|·size.x + |axis.y|·size.y + |axis.z|·size.z
+repeatU = extent(face.uAxis) / studsPerTileU
+repeatV = extent(face.vAxis) / studsPerTileV
+```
+
+Isso é o que permite uma textura “por metro” independente do tamanho da peça —
+e é a base correta para construção modular.
+
+## 7.3 Pipeline de textura (já implementado, ao contrário do senso comum)
+
+`game::AssetTexture` (`src/game/ImageAssets.cpp:499`):
+
+1. resolve o caminho relativo ao projeto;
+2. valida dimensões/tamanho (`ReadSafeImageInfo`) antes de decodificar;
+3. carrega e força `PIXELFORMAT_UNCOMPRESSED_R8G8B8A8`;
+4. **pré-multiplica alpha** (`ImageAlphaPremultiply`) — porque o desenho usa
+   `BLEND_ALPHA_PREMULTIPLY`;
+5. reduz se exceder `GL_MAX_TEXTURE_SIZE`;
+6. `LoadTextureFromImage`, **`GenTextureMipmaps`**,
+   **`TEXTURE_FILTER_TRILINEAR`**, e **`TEXTURE_FILTER_ANISOTROPIC_4X`** quando
+   suportado;
+7. cacheia em `textureCache` por caminho absoluto.
+
+Ou seja: **mipmaps, filtragem trilinear e anisotrópica já existem**. Se uma
+textura parece “pouco nítida”, as causas prováveis são outras:
+
+- o quad de decal é iluminado em sRGB (§5.5) e sofre `ApplyFog`;
+- o FXAA atua sobre a imagem final;
+- o `outward` fixo de 0,02 pode causar *swimming* em ângulos rasantes;
+- a textura pode estar sendo repetida muitas vezes (`repeat_u/v` altos) em uma
+  peça pequena, o que reduz a densidade efetiva de texels;
+- não há **sRGB texture format** (`GL_SRGB8_ALPHA8`): a decodificação acontece
+  como linear, então a filtragem é feita em espaço não linear.
+
+## 7.4 Limitações que realmente importam
+
+| Limitação | Impacto | Correção possível |
+| --- | --- | --- |
+| Sem `GL_SRGB8_ALPHA8` | filtragem e mistura em gamma | baixa (raylib permite `rlTextureParameters`/formato interno via custom upload) |
+| Decal por face, não projetado | não é possível “adesivo” atravessando arestas | média (precisa de projected decal ou clipping) |
+| `outward` fixo 0,02 | *swimming*/descolamento em superfícies grandes | baixa (usar polygon offset) |
+| Sem ordenação de transparência | blending incorreto em camadas | média |
+| Textura só em `Block` (Surface exige `Block`) | esfera não recebe decal | baixa (mapear esfera) |
+| `repeat` limitado a 64 | tiling fino em peças enormes satura | baixa (aumentar clamp) |
+| Sem atlas / sem compressão | memória por textura | média (fora do Alpha) |
+
+---
+
+# 8. Matemática 3D e precisão
+
+## 8.1 Tipos e unidades
+
+| Tipo | Definição | Onde |
+| --- | --- | --- |
+| `Vector3` | `raymath.h` (float32) | em todo o projeto |
+| `Quaternion` | `raymath.h` (float32, x,y,z,w) | rotação de Part, rig, câmera |
+| `Matrix` | `raymath.h` | usado só na conversão câmera↔quaternion (`MatrixLookAt`/`MatrixInvert`) |
+| `Transform` | `Part.h` = {position, rotation(quat), size} | Part |
+| `RigidTransform` | `Rig.h` = {position, rotation(quat)} | rig, câmera, attachment |
+| `ModelFrame` | `Instance.h` = {position, rotation, scale(float)} | Model/Attachment |
+| `OrientedBox` | `Geometry.h` = {center, rotation, half} | render, seleção, SAT |
+| `RayCollision` | raylib | picking |
+
+**Unidades:** `src/core/Config.h` documenta “1 unidade de mundo ~ 10 cm;
+gravidade realista (−9,81 m/s²) em unidades” → `gravity = -98.1`.
+`PlayerSettings::gravity = 98.1f` e `PhysicsWorld` inicia com
+`btVector3(0,-98.1,0)`.
+
+Há uma **inconsistência de escala** que precisa ser resolvida antes de qualquer
+trabalho de “feel”:
+
+| Grandeza | Valor | Implicação com 1 u = 10 cm |
+| --- | --- | --- |
+| Altura da cápsula do jogador | 5,8 u | personagem de **0,58 m** |
+| Rig R6 (sola a topo) | ~6 u | personagem de **0,6 m** |
+| `walkSpeed` | 16 u/s | **1,6 m/s** (plausível) |
+| `jumpHeight` | 7 u | salto de **0,70 m** (1,2× a altura do corpo) |
+| Velocidade inicial do salto | `sqrt(2·98,1·7)` = **37,06 u/s** | — |
+| Tempo até o ápice | 0,378 s | — |
+| Tempo total no ar | **0,756 s** | salto “flutuante” |
+
+Conclusão factual: o salto é **mais alto que o corpo** e dura 0,76 s. Isso é
+coerente com a sensação “flutuante” relatada, mas **não** é bug — é escolha de
+constantes. Se a intenção era um personagem de ~1,7 m, a escala do rig está
+errada em ~3×, e todas as constantes de física/velocidade estão calibradas para
+o personagem pequeno.
+
+## 8.2 Duas convenções de Euler convivem (risco real)
+
+`src/core/Math.h` oferece **dois pares**:
+
+| Par | Ordem | Inverso? | Usado por |
+| --- | --- | --- | --- |
+| `QuaternionFromEuler` / `QuaternionToEuler` (raylib) | ordem interna da raymath | **não garantidamente** | `Part::setRotationEulerDegrees`, `EulerDegreesFromQuat`, Lua `Rotation` moderno |
+| `QuatFromEulerDegreesZYX` / `EulerDegreesZYXFromQuat` | R = Rz·Ry·Rx | **sim** (documentado no código) | Attachment (Lua), Model (Lua), `overlap` |
+
+O próprio comentário do código diz: *“As duas funções são inversas uma da outra,
+ao contrário do par QuaternionFromEuler/QuaternionToEuler da raylib, que usa
+ordens diferentes e altera a orientação quando um valor é redigitado.”*
+
+Isso significa que:
+
+- Uma rotação definida em **graus** na UI de propriedades pode, ao ser lida de
+  volta, apresentar valores diferentes (especialmente com componentes em dois ou
+  três eixos).
+- Lua tem **três** formas de rotação: `Rotation` (Euler raylib, para Part),
+  `rotation` de Attachment/Model (ZYX), e `rotation` de rig (ZYX). Um script que
+  mistura as duas produz orientação divergente.
+- `NpcSystem::setBodyYaw` substitui a rotação inteira por um yaw puro
+  (`btQuaternion(0,1,0, yaw)`), descartando qualquer inclinação — proposital,
+  mas relevante.
+
+**Teste recomendado:** propriedade de ida-e-volta para 27 combinações de
+Euler (−90, 0, 90 em cada eixo) nas três APIs, comparando a matriz de rotação
+(produto escalar dos eixos), não os ângulos.
+
+## 8.3 Quaternions: canonicalização, normalização e SLERP
+
+- `CanonicalQuaternion(q)` força `w >= 0`. `Part::setTransform/setRotation`
+  normalizam e canonicalizam.
+- `Scene::validate` exige `| |q|² − 1 | ≤ 0,002`.
+- `QuaternionSlerpShortest` alinha o hemisfério e trata `cos > 0,9995` por
+  nlerp; `alpha` inválido → 0.
+- `Keyframe::arcDegrees` permite arcos > 180° (até 36.000°), com validação de que
+  o arco termina na orientação armazenada.
+
+Isso é **mais rigoroso** do que a média dos editores e deve ser preservado em
+qualquer refatoração.
+
+## 8.4 Interseção e SAT
+
+**Picking (CPU):** `Part::intersect(ray)` → esfera usa
+`GetRayCollisionSphere(ray, position, sphereRadius)`; caixa usa
+`OrientedBox::intersect`, que leva o raio para o espaço local
+(`QuaternionInvert`), chama `GetRayCollisionBox` e devolve ponto/normal
+rotacionados. `Scene::pickParts` normaliza a direção, descarta `alpha == 0`,
+ordena por distância e desempata por `id`.
+
+**SAT:** `gizmomath::BoxSeparation(a,b)` testa 15 eixos (3 de A, 3 de B, 9
+produtos vetoriais), retornando o **maior gap**:
+
+- `> 0` separados;
+- `≈ 0` contato;
+- `< 0` interseção (penetração = |gap|).
+
+`ContactEpsilon` usa `max(1e-5, escala·4·ε_float)` — tolerância **proporcional**
+à magnitude das coordenadas, o que é a decisão correta para float32.
+
+**Onde é usado:** `SnapSurfaces` (encaixe) e o diagnóstico de sobreposição no
+viewport (`EditorUI.cpp:1996`). **Não** é usado pela física (Bullet tem o
+próprio).
+
+## 8.5 AABB vs OBB — onde cada um aparece
+
+| Uso | Forma | Código |
+| --- | --- | --- |
+| Render de caixa | OBB (12 triângulos) | `DrawShadedBox` |
+| Contorno de caixa | OBB | `DrawRotatedBoxWires` |
+| Seleção por raio (caixa) | OBB | `OrientedBox::intersect` |
+| Colisor Bullet (caixa) | OBB (`btBoxShape` + transform) | `createShape`/`createBody` |
+| AABB de depuração | **AABB** (8 cantos rotacionados, min/max) | `drawEditorGuides` (`options.bounds`) |
+| AABB de Model | AABB no frame do pivô | `Scene::modelFrame`, `ModelTransformSession` |
+| Navegação | AABB por Part estática | `NavGrid::build` |
+| Encaixe de face | **OBB** (SAT) | `SnapSurfaces` |
+| Diagnóstico de sobreposição | **OBB** (SAT) | `EditorUI.cpp:1996` |
+
+**Inconsistência documentada (A11):** `Part::bounds()` para esfera devolve
+`{r,r,r}` com `r = min(size)/2`, mas:
+- `drawEditorGuides` (bounds) usa `halfExtents()` = `size/2`;
+- `NavGrid::build` usa `size/2`;
+- o desenho usa `sphereRadius()`.
+
+Logo, para uma esfera com `size = (4,2,4)` (raio 1), a AABB de depuração é
+4×2×4 e a esfera desenhada tem diâmetro 2. **O diagnóstico não representa o
+objeto.**
+
+## 8.6 Precisão e erro acumulado
+
+| Ponto | Situação | Risco |
+| --- | --- | --- |
+| `Part` em espaço de mundo | posições até 1e6 (validação) | em 1e5+, `float` tem ~0,008 de resolução — geometria de 0,2 já é imprecisa |
+| `Scene::transformModel` repetido | aplica `rotation` e `size·factor` a cada filho a cada operação | **erro acumulado** em escalas repetidas; sem renormalização global |
+| `Attachment` | `local.scale` uniforme, calculado por divisão `1/owner.scale` | escala 0 ou muito pequena pode gerar instabilidade (validada) |
+| `NavGrid` | alturas por raycast, células em float | quantização por célula (2,5 u) domina |
+| `EditorCamera` | posição derivada de alvo+distância | sem deriva (não integra) |
+| `PlayerCamera` | `Vector3Lerp` com `Response()` exponencial | estável, mas dependente de `dt` |
+| `gFog`/`gSurfaceLight` | globais, reescritos por frame | sem risco de acúmulo |
+
+## 8.7 Divergências Editor × Runtime (mapa)
+
+| Área | Editor | Runtime | Divergência |
+| --- | --- | --- | --- |
+| Transform de Part | mundo | mundo (cópia) | nenhuma |
+| Hierarquia | pai organizacional | idem | nenhuma |
+| `Model` | `transformModel` assa | idem | nenhuma |
+| Física | `PhysicsWorld` autoral, simula sempre | `PhysicsWorld` do runtime | **duas simulações independentes** |
+| Corpo estático/dinâmico | idem | idem | nenhuma |
+| Rotação de NPC | — | `setBodyYaw` (yaw puro) | só runtime |
+| Rig padrão | desenhado em `GameAssets` | `rig_` copiado + `recenterAuthoringRoot` | **o runtime pode alterar a raiz do rig** |
+| Animação | preview (`previewPose_`) | máquina de estados | códigos diferentes |
+| Névoa | sim | sim | mesma função |
+| Contornos | sim | não | **diferença visual garantida** |
+
+## 8.8 Funções que precisam de teste matemático adicional
+
+Ordenadas por risco:
+
+1. `gizmomath::SnapSurfaces` — contato com rotações compostas (45° em dois
+   eixos), caixas finas (0,2) e muito grandes (2000), e o caso “correção
+   rejeitada por penetração”.
+2. `gizmomath::ScaleFaceAlongAxis` / `ScaleCenteredFace` — sinal em espaço de
+   mundo com rotação de 90°/180° (há correção histórica documentada no próprio
+   código).
+3. `QuatFromEulerDegreesZYX` / `EulerDegreesZYXFromQuat` — ida-e-volta em 27
+   combinações e caso de gimbal lock (`|r20| ≥ 0,99999`).
+4. `QuaternionSlerpShortest` — `q` vs `−q`, `alpha` fora de [0,1], vetores não
+   normalizados.
+5. `Scene::transformModel` — 100 aplicações de escala 1,01 e verificação de
+   deriva em `size` e `position`.
+6. `EditorCamera::rayFromScreen` / `projectChecked` — consistência com
+   `GetWorldToScreenEx` em 4 resoluções e aspect ratios extremos.
+7. `NavGrid::findPath` — corredores de 1 célula, diagonais bloqueadas, degraus
+   de exatamente `maxStep`.
+8. `PhysicsWorld::collisionGeometry` — margem após 50 redimensionamentos
+   (existe comentário específico sobre isso; teste dedicado recomendado).
+9. `Part::bounds`/`sphereRadius` — decisão de contrato para esferas não cúbicas.
+10. `ApplyFog`/`LitSurface` — monotonicidade e limites (nunca > 255, nunca NaN).
+
