@@ -53,7 +53,8 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 #tabs button.active { background-color: #41464e; border-bottom: 2px #6da9e5; }
 .tab-spacer { flex: 1; }
 #ribbon { position: absolute; left: 0; right: 0; top: 62px; height: 82px; padding: 4px 8px 0; background-color: #2e3035; border-bottom: 1px #17191e; display: flex; align-items: flex-start; overflow: hidden; }
-#ribbon-tools { display: flex; flex-grow: 0; flex-shrink: 0; height: 76px; }
+#ribbon-tools { display: flex; flex-grow: 0; flex-shrink: 1; height: 76px; overflow: hidden; }
+#ribbon-spacer { flex: 1 1 auto; height: 76px; min-width: 4px; }
 .ribbon-page { display: flex; flex-grow: 0; flex-shrink: 0; height: 76px; }
 .ribbon-group { height: 74px; display: flex; flex-direction: column; padding: 0 6px; margin-right: 5px; border-right: 1px #4a4d55; flex-grow: 0; flex-shrink: 0; }
 .group-tools { display: flex; flex-grow: 0; flex-shrink: 0; height: 57px; align-items: center; }
