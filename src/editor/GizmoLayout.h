@@ -21,13 +21,13 @@ namespace loblox::gizmolayout {
 struct Settings {
     // Tamanho visual: 70 px na referência, limitado a 64–80 px antes da escala
     // para continuar utilizavel em resolucoes pequenas ou grandes.
-    float basePixelLength = 70.0f;
-    float minPixelLength = 64.0f;
-    float maxPixelLength = 80.0f;
+    float basePixelLength = 108.0f;
+    float minPixelLength = 94.0f;
+    float maxPixelLength = 118.0f;
     float referenceViewportMin = 600.0f;
 
     float axisButtonHalf = 10.0f;
-    float planeButtonHalf = 6.0f;
+    float planeButtonHalf = 9.0f;
     float ringRadiusFactor = 0.96f;
     float planeOffsetFactor = 0.32f;
 
@@ -45,6 +45,14 @@ struct Settings {
     int ringSegments = 96;
 };
 
+struct Triangle {std::array<Vector3,3> world{};std::array<Vector2,3> screen{};float depth=0;};
+struct Mesh {std::vector<Triangle> triangles;};
+struct Face {
+    bool visible=false;Vector3 center{},normal{},anchor{};Vector2 screen{};std::vector<Vector3> polygon;
+    std::vector<Vector2> projected;
+};
+struct FacePick {int index=-1;Vector3 point{};float distance=INFINITY;};
+
 struct Segment {
     Vector2 a{};
     Vector2 b{};
@@ -57,6 +65,9 @@ struct Layout {
     float pixelLength = 0.0f;
     float ringRadiusPx = 0.0f;
 
+    Camera3D camera{};Vector2 viewport{};Vector3 pivot{};bool sphere=false;float sphereRadius=0;
+    std::array<Mesh,3> arrow{},shaft{},rotation{};
+    std::array<Face,6> faces{};
     // Move
     std::array<Vector2, 3> axisDirection{};
     std::array<bool, 3> axisDirectionFallback{};
@@ -68,7 +79,7 @@ struct Layout {
     std::array<std::array<Vector2,4>,3> planeCorners{};
     std::array<bool,3> planeVisible{};
 
-    // Scale: seis alças (axis * 2 + lado), nunca uma repetindo a outra.
+    // Face anchors, not six pivot controls. Only the hovered/active face is drawn.
     std::array<Vector2, 6> scaleHandle{};
 
     // Rotate: anel amostrado em tela (trocado em runs quando um ponto cai
@@ -90,6 +101,10 @@ Rectangle AxisButtonRect(const Layout& layout, int axis, const Settings& setting
 Rectangle PlaneButtonRect(const Layout& layout, int plane, const Settings& settings = {});
 Rectangle RotateMarkerRect(const Layout& layout, int axis, const Settings& settings = {});
 Rectangle ScaleHandleRect(const Layout& layout, int index, const Settings& settings = {});
+
+FacePick FaceUnderCursor(const Layout& layout,Vector2 mouse);
+Mesh FaceGrip(const Part& part,const EditorCamera& camera,Rectangle viewport,Vector3 point,Vector3 normal);
+int PickMesh(const std::array<Mesh,3>& meshes,Vector2 mouse);
 
 std::array<Vector2,3> MoveArrowCorners(const Layout& layout,int axis,const Settings& settings = {});
 
