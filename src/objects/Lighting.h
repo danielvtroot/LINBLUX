@@ -36,6 +36,12 @@ public:
 
     float brightness() const { return brightness_; }
     void setBrightness(float brightness);
+    bool shadowsEnabled() const {return shadowsEnabled_;}
+    void setShadowsEnabled(bool value) {shadowsEnabled_=value;}
+    float shadowDistance() const {return shadowDistance_;}
+    void setShadowDistance(float value) {if(std::isfinite(value))shadowDistance_=std::clamp(value,16.f,300.f);}
+    float shadowStrength() const {return shadowStrength_;}
+    void setShadowStrength(float value) {if(std::isfinite(value))shadowStrength_=std::clamp(value,0.f,1.f);}
 
     // Céu procedural: ligado por padrão, desligável por projeto.
     bool skyEnabled() const { return skyEnabled_; }
@@ -104,6 +110,8 @@ private:
     Vector3 sunDirection_{-0.45f, -1.0f, 0.55f};
     float sunIntensity_ = 1.0f;
     float brightness_ = 1.0f;
+    bool shadowsEnabled_=true;
+    float shadowDistance_=80,shadowStrength_=1;
     Color fogColor_{120, 180, 240, 255};
     float fogDensity_ = 0.0f;
     bool skyEnabled_ = true;
