@@ -15,12 +15,16 @@ desfazer/refazer, câmera e estado de UI. Não possui física runtime nem Lua.
 **APIs principais:** `EditHistory`, `TransformSession`, `ModelTransformSession`, `Gizmo`,
 `GizmoLayout`, `TransformMetrics`, `EditorCamera`, `EditorUI`.
 
-**Encaixe de construção:** `gizmomath::SnapSurfaces` usa caixas orientadas e SAT;
-Ctrl durante Mover fornece os volumes reais da seleção/filhos e dos alvos.
-Correções respeitam eixo/plano, rejeitam interseções adicionais e participam do
-histórico existente. Shift libera a grade. Limites em `docs/EDITOR_PRECISAO.md`;
-sem rotação automática, malhas ou encaixe dedicado de vértices. Testes numéricos
-em `linblux_studio`, marcador e gizmos em `linblux_gizmo_visual`.
+**Encaixe de construção:** `SnapUnderCursor` escolhe a primeira face OBB sob o
+cursor (desempate estável por ID/alvo anterior), com Face/Borda/Vértice e rotação
+à normal opt-in. É colocação livre durante Ctrl/Encaixe; fora dela o eixo/plano
+continua restrito. Interseções SAT vetam a pose inteira com peça/motivo no status.
+Model usa filhos reais e permite pivô distante; giro durante Move participa do
+histórico composto. Esferas são explicitamente indisponíveis neste encaixe.
+`SnapSurfaces` permanece como API de proximidade para consumidores anteriores.
+`GridMode::Relative` preserva o incremento; `Absolute` quantiza posição no eixo
+ativo. Guia: `docs/EDITOR_PRECISAO.md`. Testes: CursorConstruction/studio,
+editor_precision_ui, models_ui e gizmo_visual, todos via TURBO quando gráficos.
 
 **Invariantes:** transformações preservam hierarquia e IDs; undo/redo restaura
 estado anterior; edição não cria corpos físicos nem executa scripts; a câmera
