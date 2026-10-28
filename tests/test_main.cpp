@@ -1208,6 +1208,7 @@ void TestProjectRoundTrip() {
 
     scene.lighting()->setSkyColor(Color{30, 40, 90, 255});
     scene.lighting()->setSunIntensity(1.7f);
+    scene.lighting()->setShadowsEnabled(false);scene.lighting()->setShadowDistance(120);scene.lighting()->setShadowStrength(.65f);
     scene.lighting()->setBrightness(0.8f);
 
     const std::string path = "/tmp/loblox_test_project.json";
@@ -1282,6 +1283,7 @@ void TestProjectRoundTrip() {
     }
 
     CHECK_NEAR(static_cast<float>(loaded.lighting()->skyColor().b), 90.0f, 0.5f);
+    CHECK(!loaded.lighting()->shadowsEnabled());CHECK_NEAR(loaded.lighting()->shadowDistance(),120,.001f);CHECK_NEAR(loaded.lighting()->shadowStrength(),.65f,.001f);
     CHECK_NEAR(loaded.lighting()->sunIntensity(), 1.7f, 0.001f);
     CHECK_NEAR(loaded.lighting()->brightness(), 0.8f, 0.001f);
 
@@ -1366,6 +1368,14 @@ void TestProjectValidation() {
                                       "\"name\":\"Workspace\",\"parent\":0}]}",
                                       error));
     CHECK(error.find("Lighting") != std::string::npos);
+
+    // Optional shadow fields reject malformed data before mutating the scene.
+    const auto shadowBaseline=loblox::projectio::toJson(scene);
+    for(const std::string field:{"\"shadowDistance\":0,","\"shadowStrength\":2,","\"shadowsEnabled\":1,"}){
+        auto invalid=shadowBaseline;const auto at=invalid.find("\"sunIntensity\"");CHECK(at!=std::string::npos);
+        invalid.insert(at,field);CHECK(!loblox::projectio::fromJson(scene,invalid,error));CHECK(loblox::projectio::toJson(scene)==shadowBaseline);
+    }
+    CHECK(scene.lighting()->shadowsEnabled());CHECK_NEAR(scene.lighting()->shadowDistance(),80,.001f);
 
     // Duas Parts com o mesmo id.
     const std::string duplicateId =

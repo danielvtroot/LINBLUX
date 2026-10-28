@@ -53,6 +53,8 @@ struct ParsedObject {
 };
 
 struct ParsedLighting {
+    bool shadowsEnabled=true;
+    float shadowDistance=80,shadowStrength=1;
     Color skyColor{120, 180, 240, 255};
     Color ambientColor{150, 150, 160, 255};
     Vector3 sunDirection{-0.45f, -1.0f, 0.55f};
@@ -267,6 +269,14 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
             return false;
         }
         // Campos novos são opcionais: projetos v1/v2 carregam sem fog.
+        if(value.contains("shadowsEnabled")) {
+            if(!value["shadowsEnabled"].is_boolean()){error=prefix+"shadowsEnabled deve ser booleano";return false;}
+            lighting.shadowsEnabled=value["shadowsEnabled"].get<bool>();
+        }
+        if(value.contains("shadowDistance")&&(!ReadFloat(value["shadowDistance"],"shadowDistance",lighting.shadowDistance,error)||
+            lighting.shadowDistance<16||lighting.shadowDistance>300)){error=prefix+"shadowDistance: 16–300";return false;}
+        if(value.contains("shadowStrength")&&(!ReadFloat(value["shadowStrength"],"shadowStrength",lighting.shadowStrength,error)||
+            lighting.shadowStrength<0||lighting.shadowStrength>1)){error=prefix+"shadowStrength: 0–1";return false;}
         std::string ignored;
         if (const json* fog = FindField(value, "fogColor", ignored); fog != nullptr)
             if (!ReadColor(*fog, "fogColor", lighting.fogColor, error)) {
@@ -561,6 +571,10 @@ std::string toJson(const Scene& scene) {
                            {"cloudSpeed", lighting.cloudSpeed()},
                            {"cloudSoftness", lighting.cloudSoftness()},
                            {"skyRotation", lighting.skyRotation()}});
+        // Additive optional settings; old scenes keep their serialized fields.
+        if(!lighting.shadowsEnabled())objects.back()["shadowsEnabled"]=false;
+        if(lighting.shadowDistance()!=80)objects.back()["shadowDistance"]=lighting.shadowDistance();
+        if(lighting.shadowStrength()!=1)objects.back()["shadowStrength"]=lighting.shadowStrength();
     }
 
     std::function<void(const Instance*)> append = [&](const Instance* node) {
@@ -801,6 +815,9 @@ bool fromJson(Scene& scene, const std::string& text, std::string& error) {
         }
         return std::string("Lighting");
     }());
+    staged.lighting()->setShadowsEnabled(lighting.shadowsEnabled);
+    staged.lighting()->setShadowDistance(lighting.shadowDistance);
+    staged.lighting()->setShadowStrength(lighting.shadowStrength);
     staged.lighting()->setSkyColor(lighting.skyColor);
     staged.lighting()->setAmbientColor(lighting.ambientColor);
     staged.lighting()->setSunDirection(lighting.sunDirection);
