@@ -1,6 +1,6 @@
-# Mega Update 3D — progresso das fases 0 e 1
+# Mega Update 3D — progresso das fases 0 a 3
 
-Execução encerrada em 28/10/2026 (America/Belem). Escopo exclusivo: baseline,
+Registro da primeira execução, encerrada em 28/10/2026 (America/Belem). Escopo: baseline,
 proteção e guias de geometria. **FASE 0: DONE. FASE 1: DONE no escopo visual
 validado abaixo.** Aprovação global/Release não concedida: há falha anterior de
 restart registrada. Fases 2–7 não implementadas.
@@ -197,3 +197,76 @@ anteriores continua fora dos commits. Não se implementam fases 4–7.
 - Commit: `feat(editor): add cursor surface placement and absolute grid`.
   Hash/push/HEAD remoto registrados no encerramento da sessão. A falha histórica
   de engine_default_restart continua registrada; não é aprovação global.
+
+
+### FASE 3 — implementação e aprovação técnica focada
+
+- `ModernMaterials`/`RenderSettings`: shaders GLSL 330, iluminação por pixel,
+  normal por inversa transposta, especular e esfera suave, compartilhados entre
+  Studio e Player. Compatível preserva o renderer anterior; falha de shader
+  retorna ao caminho CPU. Baixo simplifica a luz, Médio é o padrão e Alto usa
+  GGX/Schlick/ambiente aproximado: **PBR leve, sem IBL/BRDF LUT/PBR completo**.
+- Material3D opcional em Part: baseColor, metallic, roughness, emissive e força,
+  normalScale, textura de cor/normal/metallic-roughness/occlusion e UV com
+  unidades por repetição, deslocamento e rotação. Presets Plástico, Concreto,
+  Madeira, Metal, Vidro simples e Emissivo. Cor do albedo é decodificada de sRGB;
+  mapas de dados ficam lineares; tonemap/saída sRGB uma vez. Céu e decals mantêm
+  seus próprios passes sem dupla conversão. Texturas premultiplicadas são
+  recuperadas antes da iluminação, com composição alfa testada.
+- Material não substitui decal: o teste de Decal/Texture continua aprovado.
+  F8 permanece opcional: guias modernas esparsas seguem subsegmentos das
+  arestas/UVs nativas da própria malha, incluindo rotação, com depth test/bias.
+- Propriedades expõem presets/parâmetros/quatro mapas; Visualizar oferece
+  Qualidade 3D. Player aceita `--quality legacy|low|medium|high`; variável
+  `LINBLUX_RENDER_QUALITY` tem os mesmos valores. Perfil por sessão, sem
+  acrescentar configuração global obrigatória ao projeto.
+- JSON **v7 somente quando houver Material3D**; cenas sem ele continuam usando a
+  versão mínima v1–v6. Dados antigos e PartMaterial permanecem para Compatível.
+  Validação transacional, duplicação e referências de imagens foram integradas.
+  Exportação/importação `.lo` reloca os quatro mapas e foi testada em outro HOME.
+  Nenhuma experiência do usuário foi convertida nem regravada.
+- Build real Studio/Player aprovado; logs de compilação incremental em
+  `.turbo/logs/mega3d-phase3/build*.log`. Não foram trocados raylib/Bullet,
+  adicionadas dependências, tags, Releases ou alterada a versão CMake 0.3.0.
+- Regressões focadas aprovadas: `linblux_tests` (inclui presets, JSON v7 e
+  transação, remoção/renomeio de mapa e retorno ao formato antigo),
+  `linblux_experiences` (181 checks, inclui quatro mapas no .lo),
+  `linblux_decal_render` (9 checks), `linblux_gizmo_visual` (300 casos/8.981
+  checks no contrato Compatível), `linblux_editor_precision_ui` (115 checks,
+  edição real de rugosidade/preset/qualidade) e `linblux_player_menu` real.
+- `linblux_material_render`: **31 checks**, shader ativo, esfera com **88 cores
+  distintas em 160 amostras**, quatro mapas, alfa (meia opacidade confere com
+  a composição), mesmas pixels Studio/Player sem overlays com câmera idêntica,
+  retorno exato a Legacy e fallback forçado. Cobre ainda esfera girada com guias
+  e restauração do estado. Capturas dos quatro perfis nas duas resoluções em
+  `.turbo/logs/mega3d-phase3/materials/`. Log final:
+  `.turbo/logs/mega3d-phase3/native-uv-final/tests.log`.
+- Logs complementares em `material-focused/`, `material-final/`, `guides-final/`
+  e `ui-focused/` sob `.turbo/logs/mega3d-phase3/`. A primeira amostragem de
+  gradiente estava no hemisfério sem luz direta; a calibração foi corrigida para
+  luz frontal fixa, com todos os demais checks mantidos. A revisão F8 motivou
+  guias esparsas por UV nativo em vez de mostrar todos os triângulos.
+- Capturas reais das três fixtures em 1366×768 e 1920×1080, câmera/luz/JSON iguais:
+  `.turbo/logs/mega3d-phase3/after/`. O `before/` reutiliza os arquivos de `phase2/after/`,
+  mantendo os mesmos hashes das cenas; não há reconstrução de baseline nesta fase.
+  O capturador agora aguarda o primeiro frame, pois duas imagens iniciais ficaram
+  pretas ao competir com compilação. Capturas definitivas foram inspecionadas.
+  UI de material: `/tmp/loblox-rml-ui-EVTM8T/material3d-properties.png`;
+  Player: `/tmp/linblux-player-menu-5e42ie08/`.
+- FAST final executado: `20261028T034840Z-25052`, **19/19 executados sem falhas**,
+  build 28.6s + testes 8.1s, total 37.7s. O estado do TURBO é
+  **PASSED_PARTIAL / coverage unknown**, porque CMake e cabeçalhos públicos
+  mudaram. Isso **não é aprovação plena/global**. Os novos módulos foram
+  cobertos explicitamente pelas regressões focadas acima; o último ajuste
+  privado das guias foi compilado e validado no teste gráfico e capturas finais.
+  Não se executou FULL decorativo nem se repetiu o restart já vermelho antes
+  desta implementação. A falha histórica de restart continua pendente.
+- Medição: apenas llvmpipe/Xvfb, RSS/tempos observacionais em `measurements.json`;
+  alguns intervalos são `unavailable`. Sem benchmark de GPU integrada, sem
+  promessa de desempenho em hardware real. Sombras, SSAO, IBL, ordenação de
+  transparência e otimizações de mapas grandes ficam para fases 4/5. Rigs e
+  marcador decorativo de SpawnLocation ainda usam o passe legado compartilhado.
+- Estado: **DONE no escopo funcional da fase 3; regressão global PARTIAL**.
+  Fases 1, 2 e 3 atendidas nesta sequência; nenhuma continuação para fase 4.
+  Commit desta fase: `feat(rendering): add GL33 materials and per-pixel lighting`;
+  hash/push/HEAD remoto em `.turbo/logs/mega3d-phase3/publication.json` e na entrega.
