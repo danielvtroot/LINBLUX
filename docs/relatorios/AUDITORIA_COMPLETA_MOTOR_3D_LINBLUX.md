@@ -107,7 +107,7 @@ construído sobre **raylib + OpenGL 3.3 + Bullet + Lua 5.4 + RmlUi + ImGui**:
 | A3 | O encaixe de face só vale para **Mover**, só para caixas (esferas viram caixa circunscrita), só dentro de **0,02–2 unidades**, e **rejeita silenciosamente** a correção se qualquer peça do conjunto penetrar qualquer obstáculo | `Gizmo::snapPosition` (`Gizmo.cpp:109`); `SnapSurfaces`/`BoxSeparation` (`GizmoMath.cpp`); tolerância em `EditorUI.cpp:1833-1841` | **Alta** |
 | A4 | O gizmo é **overlay 2D em espaço de tela**, não geometria 3D: direções de eixo são projetadas e, quando degeneradas, substituídas por direções fixas de fallback | `gizmolayout::Layout`, `AxisDirectionOnScreen` com `fallbacks = {{0.94,0.34},{0,-1},{-0.94,0.34}}` (`GizmoLayout.cpp`); `Gizmo::drawOverlay` usa `DrawLineEx`/`DrawCircleV` | **Média-alta** (explica “gizmos confusos”) |
 | A5 | Todas as Parts nascem com a **mesma cor e o mesmo material** (`163,162,165`, `SmoothPlastic`); não há textura por material, sombra, AO nem contato escurecido | `Part.h` (`color_{163,162,165,255}`, `material_ = SmoothPlastic`); `LitSurface` (`SceneRenderer.cpp`) | **Alta** (contraste) |
-| A6 | O passe de contorno é o **único** elemento que separa superfícies; ao contrário do que se supõe, o modelo de luz **já produz** contraste mensurável (teto 0,58 / parede +Z 0,68 / piso 1,09 de albedo) | cálculo a partir de `LitSurface` + `Lighting` (§6.4) | **Alta** (corrige hipótese errada) |
+| A6 | O passe de contorno não é o único elemento que separa superfícies: o modelo de luz **já produz** contraste mensurável (teto 0,52 / parede +Z 0,60 / piso 0,99 de albedo) | cálculo a partir de `LitSurface` + `Lighting` (§5.5) | **Alta** (corrige hipótese errada) |
 | A7 | O rig R6 padrão é desenhado **no Editor** em `root{8,3,0}` mesmo sem NPC, porque `drawScene(..., authoredRigs=true)` desenha todos os rigs de `gameAssets` | `SceneRenderer::drawScene` (`for (const auto& asset : scene.gameAssets().rigs)`); `EditorUI.cpp:1959-1976` | Média |
 | A8 | `ServerStorage`/`ReplicatedStorage` **não podem conter Parts**: `Scene::accepts` exige ancestralidade no `Workspace` para qualquer Part, e `canParent` recusa reparentar subárvores com Parts para fora do Workspace | `Scene::accepts`, `Scene::canParent` (`src/scene/Scene.cpp`) | **Alta** (bloqueia templates/rigs/itens iniciais “reais”) |
 | A9 | O estado de queda é `Freefall` já durante a descida de um pulo normal; o clipe de queda só troca após `vy < −8`, `tempo no ar > 0,3 s` e `queda > 4,5 unidades` — um pulo padrão (7 unidades, ~0,76 s) **não** satisfaz | `RuntimeSession::step`/`animate` (`src/game/Runtime.cpp`) | Média (o “bug do pulo” tem causa mais estreita que o relatado) |
@@ -637,22 +637,32 @@ Direção de luz: `Lighting::sunDirection()` padrão `{-0.45,-1,0.55}`, negada e
 normalizada em `drawScene` → **`(0,367; 0,815; −0,448)`** (luz vindo de cima,
 levemente à direita e da frente).
 
-Avaliando com valores padrão (`ambient = {150,150,160}`, `sun = {255,240,200}`,
-`skyHorizon = {180,200,230}`, `sunIntensity = 1`, `brightness = 1`,
-`gloss = 0,10` para `SmoothPlastic`), obtém-se o **fator multiplicativo de
-albedo** por orientação de face:
+Avaliando com os valores padrão (`ambient = {150,150,160}`, `sun = {255,240,200}`,
+`skyHorizon = {180,200,230}`, `sunIntensity = 1`, `brightness = 1`), o **fator
+final de albedo** por orientação de face é:
 
-| Face | `up` | ambiente | `lambert` | sol | **total** |
+```
+fator = ambScalar · média(ambTint) + sunScalar · média(sunTint)
+média(ambTint) = 0,888      média(sunTint) = 0,959
+```
+
+| Face | `up` | `ambScalar` | `lambert` | `sunScalar` | **fator de albedo** |
 | --- | --- | --- | --- | --- | --- |
-| Topo (+Y, piso) | 1,00 | 0,780 | 0,815 | 0,310 | **1,090** |
-| Fundo (−Y, teto) | 0,00 | 0,580 | 0,000 | 0,000 | **0,580** |
-| −Z (parede de frente) | 0,50 | 0,680 | 0,448 | 0,170 | **0,850** |
-| +X (parede lateral) | 0,50 | 0,680 | 0,367 | 0,139 | **0,819** |
-| +Z (parede de fundo) | 0,50 | 0,680 | 0,000 | 0,000 | **0,680** |
+| Topo (+Y, piso) | 1,00 | 0,780 | 0,815 | 0,310 | **0,990** |
+| −Z (parede de frente) | 0,50 | 0,680 | 0,448 | 0,170 | **0,767** |
+| +X (parede lateral) | 0,50 | 0,680 | 0,367 | 0,140 | **0,738** |
+| −X (parede lateral oposta) | 0,50 | 0,680 | 0,000 | 0,000 | **0,604** |
+| +Z (parede de fundo) | 0,50 | 0,680 | 0,000 | 0,000 | **0,604** |
+| Fundo (−Y, teto) | 0,00 | 0,580 | 0,000 | 0,000 | **0,515** |
 
-Ou seja: **piso 1,09 vs parede de fundo 0,68 = 1,60×**; parede de frente 0,85 vs
-parede de fundo 0,68 = 1,25×. Este número é essencial para §6.5: o modelo de luz
-**já separa** piso e paredes. A “aparência plana” tem outras causas.
+O `sheen` (gloss 0,18 para `SmoothPlastic`) só é relevante quando a normal está
+alinhada com o meio-vetor entre luz e câmera; para estas normais ele contribui
+menos de 0,003 e não altera a tabela.
+
+Ou seja: **piso 0,99 vs parede de fundo 0,60 = 1,64×**; parede de frente 0,77 vs
+parede de fundo 0,60 = 1,27×; topo vs fundo = 1,92×. Este número é essencial para
+§6.3: o modelo de luz **já separa** piso e paredes. A “aparência plana” tem
+outras causas.
 
 O termo hemisférico é **constante por face** (`up` é constante), portanto uma
 parede grande é desenhada com **uma única cor chapada** — não há gradiente. O
@@ -886,7 +896,7 @@ mas não há botão no ribbon nem indicação visual do estado.
 ## 6.3 Por que a percepção de profundidade é fraca (com números)
 
 A hipótese intuitiva (“a iluminação não distingue piso de parede”) **não se
-sustenta** com os números de §5.5: piso 1,09 vs parede de fundo 0,68 é 1,60×.
+sustenta** com os números de §5.5: piso 0,99 vs parede de fundo 0,60 é 1,64×.
 O que realmente achata a leitura:
 
 | Causa | Evidência | Efeito perceptual |
@@ -902,11 +912,11 @@ O que realmente achata a leitura:
 
 Uma consequência importante: como **piso e parede são o mesmo objeto com a mesma
 cor**, a única diferença é o sombreamento por orientação. Em uma parede de fundo
-(+Z) o sol não incide (`lambert = 0`), então ela fica em 0,68 — mas o **piso visto
-de frente** também tem componentes de 0,85/0,82 nas faces laterais. Numa
-perspectiva de canto, é possível que a parede de fundo (0,68) fique **mais escura
-que o piso** e a +X (0,82) fique quase igual ao piso — o que embaralha a leitura
-em vez de ordená-la.
+(+Z) o sol não incide (`lambert = 0`), então ela fica em 0,60 — mas o **piso visto
+de frente** também tem faces laterais em 0,74/0,77. Numa perspectiva de canto, a
+parede de fundo (0,60) fica mais escura que qualquer face do piso (0,74–0,99), e
+a +X (0,74) fica quase igual à −Z (0,77) — o que embaralha a leitura entre
+paredes em vez de ordená-la.
 
 ## 6.4 O que fazer (proposta, **não implementada**)
 
@@ -2042,7 +2052,7 @@ ou *determinismo* entre plataformas.
 | F3 | O contorno **não existe no Player** | só `EditorUI::drawViewport` chama o passe |
 | F4 | Não há **sombra** nem **AO** de nenhum tipo | nenhum passe/função no renderer |
 | F5 | A luz é **por face**, com cor constante em toda a superfície | `LitSurface` avaliado por face; `up` constante |
-| F6 | Piso 1,09 vs parede de fundo 0,68 (1,60×) — a luz **separa** orientações | cálculo de §5.5 com valores padrão |
+| F6 | Piso 0,99 vs parede de fundo 0,60 (1,64×) — a luz **separa** orientações | cálculo de §5.5 com valores padrão |
 | F7 | Toda Part nova é `SmoothPlastic` cinza `163,162,165` | `Part.h` |
 | F8 | Encaixe só translada; **sem snap de rotação** | `SnapSurfaces` só altera `position` |
 | F9 | Encaixe escolhe pelo **menor deslocamento**, não pela face sob o cursor | `if(length>distance)continue` |
@@ -2287,7 +2297,7 @@ com a exceção do OpenAL Soft (LGPL, exige link dinâmico).
    padrão, desenhado com depth test e sem bias, em toda Part não selecionada.
    Desligá-lo por padrão resolve a queixa principal em uma linha.
 2. **A “falta de profundidade” não é falta de luz** — a luz já separa piso de
-   parede em 1,60×. É falta de **contraste de material** e de **contato/sombra**.
+   parede em 1,64×. É falta de **contraste de material** e de **contato/sombra**.
    Duas correções de custo baixo (B1, B2) mudam mais a leitura que qualquer
    shader novo.
 3. **O encaixe não é matematicamente errado, é semanticamente incompleto**: não
@@ -2400,8 +2410,8 @@ sombras, AO, PBR, culling de face traseira nem ordenação de transparência.
 **Por que as paredes parecem iguais?**
 Porque têm a **mesma cor** (`163,162,165`), o **mesmo material**
 (`SmoothPlastic`, gloss 0,10) e a luz é **constante por face**: a parede inteira
-recebe um único valor. A luz *separa* orientações (piso 1,09 / parede de fundo
-0,68), mas sem gradiente, sem sombra e sem AO o olho não lê o encontro entre
+recebe um único valor. A luz *separa* orientações (piso 0,99 / parede de fundo
+0,60), mas sem gradiente, sem sombra e sem AO o olho não lê o encontro entre
 superfícies.
 
 **Qual é a causa das dificuldades de snap?**
