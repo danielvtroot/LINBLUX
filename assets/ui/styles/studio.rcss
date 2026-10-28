@@ -72,9 +72,9 @@ scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 
 #transform-space { width: 54px; height: 22px; padding: 1px 2px; font-size: 10px; flex: 0 0 54px; margin-right: 4px; align-self: flex-end; margin-bottom: 1px; }
 .handle-size { display: flex; flex-direction: column; width: 108px; height: 54px; padding: 3px 4px; font-size: 11px; }
 .handle-size select { width: 100px; height: 24px; margin-top: 5px; font-size: 11px; }
-.snap-field { width: 46px; margin-right: 3px; flex: 0 0 46px; }
+.snap-field { width: 43px; margin-right: 3px; flex: 0 0 43px; }
 .snap-field span { display: block; font-size: 10px; color: #b0b8c5; margin-bottom: 2px; }
-.snap-field input { width: 44px; height: 22px; padding: 2px 3px; font-size: 11px; }
+.snap-field input { width: 41px; height: 22px; padding: 2px 3px; font-size: 11px; }
 .panel { position: absolute; background-color: #27292f; border: 1px #17191e; overflow: hidden; }
 .panel-heading { height: 27px; padding: 5px 7px; background-color: #35383f; border-bottom: 1px #17191e; font-size: 12px; font-weight: bold; }
 .panel-heading img { width: 15px; height: 15px; margin-right: 5px; vertical-align: middle; }
