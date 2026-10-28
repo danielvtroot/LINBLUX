@@ -89,8 +89,8 @@ public:
         gizmolayout::Settings s;const float v=pixelScale_;
         s.basePixelLength*=v;s.minPixelLength*=v;s.maxPixelLength*=v;
         s.axisButtonHalf*=v;s.planeButtonHalf*=v;s.scaleHandleHalfWidth*=v;s.scaleHandleHalfHeight*=v;
-        s.scaleHandleOffsetPx*=v;s.scaleHandleSeparation*=v;s.rotateMarkerHalfWidth*=v;s.rotateMarkerHalfHeight*=v;
-        s.rotateMarkerSeparation*=v;s.axisLineTolerance*=v;s.ringTolerance*=v;
+        s.scaleHandleSeparation*=v;s.rotateMarkerHalfWidth*=v;s.rotateMarkerHalfHeight*=v;
+        s.axisLineTolerance*=v;s.ringTolerance*=v;
         return s;
     }
 

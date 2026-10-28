@@ -23,7 +23,7 @@ int main(int argc,char** argv) {
     for(auto* p:scene.parts())maxError=std::max(maxError,CheckCorners(*p,physics));
     auto* part=scene.createPart(PartShape::Block,{20,10,0},{4,2,6},"ScaleProbe");physics.syncScene(scene);
     const Rectangle view{0,0,1000,700};
-    // Both signs of each arrow are real drags, in World and Local. Compare
+    // Each compact arrow supports positive/negative drags, in World and Local. Compare
     // absolute deltas, not just "something moved", at snap-on and free values.
     for (bool local : {false, true}) for (float snap : {0.f, 1.f})
     for (int axis = 0; axis < 3; ++axis) for (int side : {-1, 1}) {
@@ -33,8 +33,8 @@ int main(int argc,char** argv) {
         const auto eye=camera.position();
         Gizmo gizmo;gizmo.setLocalSpace(local);gizmo.setSnap(snap,0,0);TransformSession session(gizmo,physics);
         const auto layout=gizmolayout::Build(*part,ToolMode::Move,camera,view,local);
-        const auto handle=gizmomath::MoveHandleId(axis,side);
-        const auto point=layout.moveHandle[axis*2+(side>0)];
+        const auto handle=gizmomath::MoveHandleId(axis,1);
+        const auto point=layout.moveHandle[axis*2+1];
         CHECK(gizmolayout::PickMoveArrow(layout,point)==handle);
         GizmoInput input;input.mousePosition=point;input.leftPressed=input.leftDown=true;
         CHECK(session.update(ToolMode::Move,part,camera,view,true,true,input).started);

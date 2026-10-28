@@ -1,6 +1,7 @@
 # Mega Update 3D — progresso das fases 0 a 4
 
-Estado atual: fases 0–4 entregues no escopo funcional; validação global parcial.
+Estado atual: implementações 0–4 presentes; visuais 2/4 reprovados pelo usuário.
+A revisão obrigatória está registrada ao final; não há aprovação visual do usuário.
 A execução da fase 4 e seus limites estão ao final deste relatório.
 
 Registro da primeira execução, encerrada em 28/10/2026 (America/Belem). Escopo: baseline,
@@ -369,3 +370,38 @@ shadow map, embora corpos opacos dos rigs projetem sombra em Parts. Mapas alfa
 usam cutoff 0.5 no passe de sombra. Custo/artefatos em GPU integrada real e
 aprovação manual do usuário permanecem não verificados. Nenhuma fase posterior
 foi iniciada para tentar cobrir essas limitações.
+
+## Revisão visual obrigatória — gizmos (28/10/2026)
+
+O usuário reprovou os visuais anteriores das fases 2 e 4. Os registros de DONE
+acima são históricos e **não constituem aprovação visual do usuário**.
+Esta primeira correção trata só dos gizmos; sombras seguem para commit separado.
+
+- Precision Tools substitui os círculos de escala por seis quadrados de 12 px
+  próximos ao pivô. Extensão base 64–80 px, independente de Part .2/191 unidades;
+  linhas-guia até faces distantes removidas. Escala por face/Alt centrada mantidas.
+- Mover usa três hastes curtas e setas, arrastáveis nos dois sentidos, mais
+  pequenos planos quando apropriados. Girar usa arcos finos com marcadores
+  pertencentes ao anel, sem botões circulares desconectados. Acento ativo vermelho,
+  base escura e eixos discretos. Face de escala destacada; distância/L-A-P/graus
+  apresentados durante arraste. Layout único para desenho e picking.
+- GizmoMath não foi alterado. A projeção do arraste da escala passa pelo pivô
+  compacto, conservando os cálculos existentes de face oposta/escala centrada.
+- Studio e Player reais compilados. Regressões focadas aprovadas: `linblux_tests`,
+  `linblux_manipulation` (1.123 checks), `linblux_studio` (3.891),
+  `linblux_gizmo_visual` (375 casos/9.336 checks) e `linblux_editor_precision_ui`
+  (126). Cobrem local/mundo, snap, cancelamento, histórico, Models e seleção.
+  A leitura de traços finos considera apenas a vizinhança 3×3 do segmento real.
+- TURBO FAST **9/9 PASSED**, sem timeout/pendência, 8.5s de testes/87.3s total;
+  run `20261028T073043Z-13365`. Sem FULL. Build incremental final também aprovado
+  após ajuste de rótulos e remoção das antigas âncoras do layout.
+- Capturas do Studio real em `.turbo/logs/visual-correction/tools/{before,after}`:
+  Mover/Escalar/Girar, perto/longe, 1366×768 e 1920×1080, mesmos dados/câmera/luz.
+  Antes preservado do executável `0b88cd5`; depois no binário recompilado.
+  Inspeção visual mostra substituição substancial do layout, não só mudança de cor.
+- Cena construída sobre cópia do mundo **e rig reais distribuídos** com a engine,
+  com parede 191, parede adjacente, peça girada e decal. A cena original da captura
+  do usuário não foi fornecida/localizada: não se alega comparação com esse arquivo
+  original. Originais não foram alterados; manifests e hashes ficam nos artefatos.
+- WIPs anteriores preservados. Fase 5 não iniciada. Aceitação final do usuário
+  permanece aberta; sombras ainda não aprovadas nesta revisão.
