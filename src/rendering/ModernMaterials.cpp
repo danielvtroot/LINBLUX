@@ -47,8 +47,8 @@ void main(){
     if(mapFlags.w>.5)ao=straight(texture(aoMap,uv)).r;
     if(quality>1&&mapFlags.y>.5){
         vec3 dp1=dFdx(worldPosition),dp2=dFdy(worldPosition);vec2 d1=dFdx(uv),d2=dFdy(uv);
-        vec3 t=dp1*d2.y-dp2*d1.y;float len=length(t);
-        if(len>.00001){t=normalize(t-n*dot(n,t));vec3 b=normalize(cross(n,t))*sign(d1.x*d2.y-d1.y*d2.x);
+        vec3 t=dp1*d2.y-dp2*d1.y;t-=n*dot(n,t);float len=length(t);
+        if(len>.00001&&abs(d1.x*d2.y-d1.y*d2.x)>.000001){t/=len;vec3 b=normalize(cross(n,t))*sign(d1.x*d2.y-d1.y*d2.x);
             vec3 map=straight(texture(normalMap,uv))*2.-1.;map.xy*=normalScale;n=normalize(mat3(t,b,n)*map);}
     }
     if(!gl_FrontFacing)n=-n;

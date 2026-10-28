@@ -237,6 +237,16 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             event("mouseup 1");event("keyup ctrl");key("ctrl+z");CHECK(NearlyEqual(part->position(),original));
             click("cmd-tool-0");auto* model=scene.group({part->id(),behind->id()},"Modelo selecionável",error);CHECK(model);scene.select(nullptr);frames(2);
             event("keydown shift");clickAt(point);event("keyup shift");CHECK(scene.selection()==model);capture("precision-model-selection");
+            scene.select(part);frames(2);
+            CHECK(actions.dispatch({"property:Material3D.Preset","3",part->id()}));
+            CHECK(part->material3D()&&part->material3D()->metallic==1);
+            CHECK(actions.dispatch({"property:Material3D.Roughness","0.3",part->id()}));
+            CHECK(actions.dispatch({"render-quality","high"}));CHECK(renderer.quality()==RenderQuality::High);
+            frames(3);clickVisible("prop-Material3D.Roughness");key("ctrl+a");event("type --clearmodifiers --delay 40 '0.45'");key("Return");
+            CHECK(std::fabs(part->material3D()->roughness-.45f)<.001f);capture("material3d-properties");
+            click("tab-View");capture("material-quality");
+            CHECK(actions.dispatch({"property:Material3D.Preset","legacy",part->id()}));CHECK(!part->material3D());
+            CHECK(actions.dispatch({"render-quality","medium"}));
             std::printf("Editor precision UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
             rlImGuiShutdown();CloseWindow();return failures?1:0;
         }
