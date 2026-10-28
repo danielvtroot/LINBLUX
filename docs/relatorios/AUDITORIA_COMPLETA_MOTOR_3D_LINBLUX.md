@@ -2505,8 +2505,8 @@ manter o caminho CPU como fallback do shader; tornar comportamento novo
 | Métrica | Valor |
 | --- | --- |
 | Arquivo | `docs/relatorios/AUDITORIA_COMPLETA_MOTOR_3D_LINBLUX.md` |
-| Linhas | 2.500 |
-| Tamanho | 141.560 bytes (≈ 138 KiB) |
+| Linhas | 2.519 |
+| Tamanho | 142.400 bytes (≈ 139 KiB) |
 | Seções principais | 25 + 3 apêndices |
 | Commit auditado | `2aebae4794c1749015082f062e5c2b411db1ecb1` |
 | `git status` na entrega | ` M assets/ui/documents/studio.rml`, ` M assets/ui/styles/studio.rcss`, `?? docs/relatorios/AUDITORIA_COMPLETA_MOTOR_3D_LINBLUX.md` |
