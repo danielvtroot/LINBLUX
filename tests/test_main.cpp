@@ -616,6 +616,31 @@ void TestGizmoLayout() {
     gizmo.update(ToolMode::Scale,&part,camera,viewport,true,true,input);CHECK(!gizmo.hoveringHandle());
     input.occlusionDistance=INFINITY;gizmo.update(ToolMode::Scale,&part,camera,viewport,true,true,input);CHECK(gizmo.hoveringHandle());
     CHECK(PickScaleHandle(wide,{-5,-5})==gizmomath::HandleId::None);
+    // Same direct-face acquisition moves the entire wall, never its size.
+    for(bool local:{false,true})for(float width:{2.f,191.f}){
+        part.setTransform({{0,5,0},QuatFromEulerDegrees({0,25,0}),{width,10,1}});
+        camera.setOrbit(part.position(),20,.4f,.2f);const auto initial=part.transform();
+        Gizmo move;move.setFaceMove(true);move.setLocalSpace(local);move.setSnap(1,.5f,15);
+        const auto surface=Build(part,ToolMode::Scale,camera,viewport,true);
+        const auto hit=FaceUnderCursor(surface,{683,384});CHECK(hit.index>=0);
+        GizmoInput press;press.mousePosition={683,384};press.leftPressed=press.leftDown=true;
+        press.occlusionDistance=1;CHECK(!move.update(ToolMode::Move,&part,camera,viewport,true,true,press).started);
+        press.occlusionDistance=INFINITY;CHECK(move.update(ToolMode::Move,&part,camera,viewport,true,true,press).started);
+        const auto axis=gizmomath::Axis(move.activeAxis(),initial.rotation,local);
+        const auto endpoint=Vector3Add(hit.point,Vector3Scale(axis,3));Vector2 mouse;
+        CHECK(camera.projectChecked(endpoint,{1366,768},mouse));press.mousePosition=mouse;press.leftPressed=false;
+        move.update(ToolMode::Move,&part,camera,viewport,true,true,press);
+        CHECK(Vector3Distance(part.size(),initial.size)<.001f);
+        CHECK(Vector3Distance(part.position(),Vector3Add(initial.position,Vector3Scale(axis,3)))<.01f);
+        move.cancel(&part,true);CHECK(Vector3Distance(part.position(),initial.position)<.001f);
+    }
+    part.setTransform({{0,5,0},QuaternionIdentity(),{191,10,1}});camera.setOrbit(part.position(),20,.4f,.2f);
+    Gizmo centered;centered.setCenteredScaleOption(true);GizmoInput scaleInput;scaleInput.mousePosition={683,384};scaleInput.leftPressed=scaleInput.leftDown=true;
+    CHECK(centered.update(ToolMode::Scale,&part,camera,viewport,true,true,scaleInput).started);
+    scaleInput.leftPressed=false;scaleInput.mousePosition={600,420};centered.update(ToolMode::Scale,&part,camera,viewport,true,true,scaleInput);
+    CHECK(Vector3Distance(part.position(),Vector3{0,5,0})<.001f);CHECK(std::fabs(part.size().z-1)>.25f);
+    centered.cancel(&part,true);CHECK(Vector3Distance(part.size(),Vector3{191,10,1})<.001f);
+
     EndSection();
 }
 

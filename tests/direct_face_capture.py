@@ -50,6 +50,18 @@ def capture(args):
                 xdo('windowsize',wid,width,height);xdo('windowmove',wid,0,0);xdo('windowfocus','--sync',wid);time.sleep(4)
                 click(width-210,243);click(50 if width==1366 else 60,92);xdo('mousemove',5,5);shot('select')
                 click(133 if width==1366 else 145,92);xdo('mousemove',5,5);shot('move')
+                if args.stage=='after':
+                    hx=int(210+(width-510)*.46);hy=int(171+(height-195)*.40)
+                    xdo('mousemove',hx,hy);time.sleep(1);shot('move-hover')
+                    start_move=wall();xdo('mousedown',1);time.sleep(delay);xdo('mousemove',hx-45,hy+25);time.sleep(1);shot('move-drag');xdo('mouseup',1);time.sleep(.8)
+                    moved=save();assert moved['size']==start_move['size'],'Move resized Part'
+                    assert abs(moved['position'][2]-start_move['position'][2])>=1,'Move did not move wall'
+                    shot('move-result');key('ctrl+z');assert same(save(),start_move),'Move undo failed'
+                    key('ctrl+y');assert same(save(),moved),'Move redo failed'
+                    xdo('mousemove',hx,hy);time.sleep(.8);xdo('mousedown',1);time.sleep(delay);xdo('mousemove',hx-30,hy+20);time.sleep(.5);key('Escape');xdo('mouseup',1);time.sleep(.5)
+                    assert same(save(),moved),'Move escape failed'
+                    key('ctrl+z');assert same(save(),start_move),'Move restore failed'
+                    records.append(dict(resolution=[width,height],tool='Move',whole_part=True,undo=True,redo=True,escape=True))
                 click(214 if width==1366 else 233,92);xdo('mousemove',5,5);shot('scale-idle')
                 hx=int(210+(width-510)*.46);hy=int(171+(height-195)*.40)
                 xdo('mousemove',hx,hy);time.sleep(1);shot('scale-hover')

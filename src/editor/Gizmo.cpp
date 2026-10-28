@@ -193,6 +193,10 @@ GizmoUpdateResult Gizmo::update(ToolMode mode, Part* part, const EditorCamera& c
                     {startTransform_.position, startTransform_.rotation, startTransform_.size},
                     axis, delta, 0),axis,{},input,
                     std::clamp(camera.worldUnitsPerPixel(center,viewport.height)*10,.02f,2.f));
+                if(faceMove()) {
+                    const auto size=gizmolayout::MakeSnapshot(*part).size;
+                    faceAnchorWorld_=Vector3Add(part->position(),Vector3RotateByQuaternion({faceAnchorLocal_.x*size.x,faceAnchorLocal_.y*size.y,faceAnchorLocal_.z*size.z},part->rotation()));
+                }
             } else {
                 const auto snapshot = gizmomath::TransformSnapshot{
                     startTransform_.position, startTransform_.rotation, startTransform_.size};
