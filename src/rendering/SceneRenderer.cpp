@@ -544,12 +544,33 @@ void DrawRotatedBoxWires(Vector3 center, Vector3 size, Quaternion rotation, Colo
     }
 }
 
+constexpr int kSphereRings=7;
+constexpr int kSphereSlices=12;
+Vector3 SpherePoint(Vector3 center,float radius,float theta,float phi) {
+    return Vector3Add(center,{radius*std::cos(phi)*std::cos(theta),
+                             radius*std::sin(phi),radius*std::cos(phi)*std::sin(theta)});
+}
+
+void DrawSphereGuideWires(Vector3 center,float radius,Color color) {
+    // Use the rendered mesh's exact quad edges. raylib's generic wire sphere
+    // uses different latitudes/chords, some inside this faceted surface.
+    for(int ring=0;ring<kSphereRings;++ring)for(int slice=0;slice<kSphereSlices;++slice) {
+        const float phi=(float(ring)/kSphereRings-.5f)*PI;
+        const float nextPhi=(float(ring+1)/kSphereRings-.5f)*PI;
+        const float theta=float(slice)/kSphereSlices*2*PI;
+        const float nextTheta=float(slice+1)/kSphereSlices*2*PI;
+        const auto a=SpherePoint(center,radius,theta,phi);
+        if(ring)DrawLine3D(a,SpherePoint(center,radius,nextTheta,phi),color);
+        DrawLine3D(a,SpherePoint(center,radius,theta,nextPhi),color);
+    }
+}
+
 // Esfera facetada com sombreamento por quad. Suficiente para o estilo classico.
 void DrawShadedSphere(Vector3 center, float radius, Color color, Vector3 lightDirection,
                       float sunIntensity, float brightness, float gloss = 0.0f,
                       bool unlit = false) {
-    constexpr int rings = 7;
-    constexpr int slices = 12;
+    constexpr int rings = kSphereRings;
+    constexpr int slices = kSphereSlices;
     rlBegin(RL_TRIANGLES);
     for (int ring = 0; ring < rings; ++ring) {
         const float v0 = static_cast<float>(ring) / static_cast<float>(rings);
@@ -563,9 +584,7 @@ void DrawShadedSphere(Vector3 center, float radius, Color color, Vector3 lightDi
             const float theta1 = u1 * 2.0f * PI;
 
             const auto point = [&](float theta, float phi) {
-                return Vector3Add(center, Vector3{radius * std::cos(phi) * std::cos(theta),
-                                                  radius * std::sin(phi),
-                                                  radius * std::cos(phi) * std::sin(theta)});
+                return SpherePoint(center,radius,theta,phi);
             };
             const Vector3 a = point(theta0, phi0);
             const Vector3 b = point(theta1, phi0);
@@ -985,7 +1004,7 @@ void SceneRenderer::drawEditorGuides(const Scene& scene,Camera3D camera,const Ed
         if((options.edges||p->id()==hovered)&&!scene.selected(p->id())) {
             const Color color=p->id()==hovered?Color{240,230,225,230}:Color{42,46,54,165};
             if(p->shape()==PartShape::Block)DrawRotatedBoxWires(p->position(),p->size(),p->rotation(),color);
-            else if(p->shape()==PartShape::Sphere)(p->id()==hovered?DrawSphereWires(p->position(),p->sphereRadius(),8,12,Color{240,230,225,230}):DrawSphereWires(p->position(),p->sphereRadius(),6,8,color));
+            else if(p->shape()==PartShape::Sphere)DrawSphereGuideWires(p->position(),p->sphereRadius(),color);
         }
         if(options.bounds) {
             Vector3 low{INFINITY,INFINITY,INFINITY},high{-INFINITY,-INFINITY,-INFINITY};

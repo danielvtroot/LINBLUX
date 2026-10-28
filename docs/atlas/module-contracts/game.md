@@ -1,5 +1,10 @@
 # Módulo `game`
 
+**Bounds de navegação:** `NavGrid::build` usa `sphereRadius()` nos três eixos
+para esferas, como render/picking/Bullet. Dimensões autorais não são regravadas;
+o comportamento anterior das caixas permanece. Regressão: `linblux_tests`
+(esfera com tamanho 40×4×60, rotação, serialização e grade limitada ao raio).
+
 **Responsabilidade:** modelo de personagem/rig R6, animações, assets de jogo,
 spawn, sessão de runtime, câmera do jogador, input e físicas do personagem.
 

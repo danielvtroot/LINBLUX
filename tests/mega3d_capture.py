@@ -62,7 +62,7 @@ def fixtures(root):
 
 
 def capture(binary, root, stage):
-    from PIL import Image
+    from PIL import Image, ImageChops
     output = root/stage
     output.mkdir(parents=True,exist_ok=True)
     summary = []
@@ -103,6 +103,18 @@ def capture(binary, root, stage):
                     summary.append(dict(fixture=name,resolution=[width,height],image=str(shot),
                                         rss_kib=int(rss[1]),timing=timing[-1] if timing else 'unavailable',
                                         project_sha256=hashlib.sha256(original).hexdigest()))
+                    if stage == 'after' and name == 'grey-room':
+                        xdo('mousemove',400,190);time.sleep(.5)
+                        def f8():
+                            xdo('keydown','F8');time.sleep(.3);xdo('keyup','F8');time.sleep(.7)
+                        f8()
+                        debug = output/('f8-on-'+str(width)+'.png')
+                        subprocess.run(['scrot','-o','-u',str(debug)],check=True,timeout=5)
+                        crop=(215,200,width-300,height-75)
+                        difference=ImageChops.difference(Image.open(shot).convert('RGB'),
+                                                        Image.open(debug).convert('RGB')).crop(crop)
+                        assert difference.getbbox(), 'F8 did not change the actual viewport'
+                        f8();xdo('mousemove',5,5);time.sleep(.5)
                 # Xvfb has no window manager to implement Alt+F4.
                 from editor_restart import close_window
                 close_window(window)
