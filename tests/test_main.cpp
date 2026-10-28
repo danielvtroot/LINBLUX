@@ -619,7 +619,7 @@ void TestGizmoLayout() {
     // Same direct-face acquisition moves the entire wall, never its size.
     for(bool local:{false,true})for(float width:{2.f,191.f}){
         part.setTransform({{0,5,0},QuatFromEulerDegrees({0,25,0}),{width,10,1}});
-        camera.setOrbit(part.position(),20,.4f,.2f);const auto initial=part.transform();
+        camera.setOrbit(part.position(),20,.95f,.2f);const auto initial=part.transform();
         Gizmo move;move.setFaceMove(true);move.setLocalSpace(local);move.setSnap(1,.5f,15);
         const auto surface=Build(part,ToolMode::Scale,camera,viewport,true);
         const auto hit=FaceUnderCursor(surface,{683,384});CHECK(hit.index>=0);
