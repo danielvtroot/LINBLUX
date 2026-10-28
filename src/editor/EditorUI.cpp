@@ -1107,7 +1107,8 @@ void EditorUI::handleShortcuts(const EditorInput& input, const InputRoute& route
         if(input.shift)editorGeometry_.bounds=!editorGeometry_.bounds;
         else if(ImGui::GetIO().KeyCtrl)editorGeometry_.normals=!editorGeometry_.normals;
         else editorGeometry_.edges=!editorGeometry_.edges;
-        setStatus("F8: contornos | Shift+F8: limites | Ctrl+F8: normais");
+        setStatus(editorGeometry_.edges?"Arestas: ativadas · F8 | Shift+F8: limites | Ctrl+F8: normais":
+                                       "Arestas: desativadas · F8 | Shift+F8: limites | Ctrl+F8: normais");
     }
     if (route.editorKeys && input.tool >= 0) {
         const ToolMode tools[] = {ToolMode::Select, ToolMode::Move, ToolMode::Scale, ToolMode::Rotate};
@@ -1285,6 +1286,7 @@ void EditorUI::drawMainMenuBar() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu(i18n::Label("View"))) {
+        ImGui::MenuItem("Arestas", "F8", &editorGeometry_.edges);
         ImGui::MenuItem(i18n::Label("Toolbox"), nullptr, &showToolbox_);
         ImGui::MenuItem(i18n::Label("Explorer"), nullptr, &showExplorer_);
         ImGui::MenuItem(i18n::Label("Properties"), nullptr, &showProperties_);
@@ -1591,6 +1593,9 @@ void EditorUI::drawToolbar() {
 
     if (ImGui::BeginTabItem(i18n::Label("View"))) {
         ImGui::Spacing();
+        ImGui::Checkbox("Arestas", &editorGeometry_.edges);
+        if(ImGui::IsItemHovered())ImGui::SetTooltip("Arestas de depuração · F8. Desativadas por padrão.");
+        ImGui::SameLine();
         if (IconButton("toolbox_toggle", Icon::Part, "Toolbox", showToolbox_,
                        "Show or hide the Toolbox")) {
             showToolbox_ = !showToolbox_;

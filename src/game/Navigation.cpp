@@ -74,7 +74,9 @@ bool NavGrid::build(const Scene& scene, const PhysicsWorld& physics, const Confi
     for (const Part* part : scene.parts()) {
         if (part == nullptr || !part->canCollide() || !part->anchored()) continue;
         const Vector3 p = part->position();
-        const Vector3 half = Vector3Scale(part->size(), .5f);
+        const float radius = part->sphereRadius();
+        const Vector3 half = part->shape() == PartShape::Sphere
+            ? Vector3{radius, radius, radius} : part->halfExtents();
         const float lo[3] = {p.x - half.x, p.y - half.y, p.z - half.z};
         const float hi[3] = {p.x + half.x, p.y + half.y, p.z + half.z};
         if (!any) {

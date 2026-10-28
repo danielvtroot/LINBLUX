@@ -22,6 +22,7 @@
 #include "rendering/SceneRenderer.h"
 #include "scene/Scene.h"
 #include "objects/Baseplate.h"
+#include "objects/Lighting.h"
 
 using namespace loblox;
 
@@ -522,6 +523,83 @@ void VerifyRotatedPartRendering(RenderTexture2D target, SceneRenderer& renderer,
     }
 }
 
+void VerifyEditorGuideDepth() {
+    gCase="editor-guides-depth";gCaseFailures=0;
+    CHECK(!EditorGeometryView{}.edges);
+    Scene scene;scene.lighting()->setSkyEnabled(false);
+    auto* box=scene.createPart(PartShape::Block,{0,0,0},{8,6,2},"Visible");
+    box->setColor(WHITE);box->setMaterial(PartMaterial::Neon);
+    Camera3D camera{{8,7,12},{0,0,0},{0,1,0},45,CAMERA_PERSPECTIVE};
+    SceneRenderer renderer;
+    auto target=LoadRenderTexture(640,400);
+    auto render=[&](EditorGeometryView options,InstanceId hovered=0) {
+        BeginTextureMode(target);renderer.drawScene(scene,camera,640,400,0);
+        renderer.drawEditorGuides(scene,camera,options,hovered);EndTextureMode();
+        auto result=LoadImageFromTexture(target.texture);ImageFlipVertical(&result);return result;
+    };
+    auto clean=render({});auto edges=render({true,false,false});
+    // The visible top/front seam must be continuous, not alternating pixels
+    // lost to coplanar depth. Sample its neighbourhood, tolerating rasterization.
+    const auto a=GetWorldToScreenEx({-4,3,1},camera,640,400);
+    const auto b=GetWorldToScreenEx({4,3,1},camera,640,400);
+    int covered=0;
+    for(int i=3;i<97;++i) {
+        const auto p=Vector2Lerp(a,b,float(i)/100);bool found=false;
+        for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x) {
+            const int px=int(p.x)+x,py=int(p.y)+y;
+            const auto c=GetImageColor(clean,px,py),e=GetImageColor(edges,px,py);
+            if(int(c.r)+c.g+c.b-int(e.r)-e.g-e.b>60)found=true;
+        }
+        covered+=found;
+    }
+    std::printf("Guide seam coverage: %d/94\n",covered);CHECK(covered>=90);
+    UnloadImage(clean);UnloadImage(edges);
+    // A completely hidden hovered box must produce zero pixels. This also
+    // catches an accidental disable-depth-test workaround.
+    box->setSize({16,16,2});camera={{0,0,12},{0,0,0},{0,1,0},45,CAMERA_PERSPECTIVE};
+    auto* hidden=scene.createPart(PartShape::Block,{0,0,-3},{3,3,2},"Behind wall");
+    clean=render({});auto hovered=render({},hidden->id());
+    int changed=0;
+    for(int y=0;y<400;++y)for(int x=0;x<640;++x) {
+        const auto c=GetImageColor(clean,x,y),h=GetImageColor(hovered,x,y);
+        changed+=c.r!=h.r||c.g!=h.g||c.b!=h.b;
+    }
+    CHECK(changed==0);UnloadImage(clean);UnloadImage(hovered);
+    // Bounds of a rotated nonuniform-size sphere use its real radius and
+    // ignore rotation. Compare against an explicit axis-aligned radius box.
+    scene.clearObjects();auto* sphere=scene.createPart(PartShape::Sphere,{0,0,0},{8,2,6},"Sphere");
+    sphere->setRotationEulerDegrees({20,40,15});
+    camera.position={0,0,5};
+    clean=render({});edges=render({true,false,false});
+    const float y=std::sin(PI/14),z=std::cos(PI/14);
+    const auto sa=GetWorldToScreenEx({0,-y,z},camera,640,400);
+    const auto sb=GetWorldToScreenEx({0,y,z},camera,640,400);
+    covered=0;
+    for(int i=3;i<97;++i) {
+        const auto p=Vector2Lerp(sa,sb,float(i)/100);bool found=false;
+        for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx) {
+            const auto c=GetImageColor(clean,int(p.x)+dx,int(p.y)+dy);
+            const auto e=GetImageColor(edges,int(p.x)+dx,int(p.y)+dy);
+            if(int(c.r)+c.g+c.b-int(e.r)-e.g-e.b>40)found=true;
+        }
+        covered+=found;
+    }
+    std::printf("Sphere guide seam coverage: %d/94\n",covered);CHECK(covered>=90);
+    UnloadImage(clean);UnloadImage(edges);
+    auto bounds=render({false,true,false});
+    ProjectedBounds expected;
+    for(const auto corner:OrientedBox{{0,0,0},QuaternionIdentity(),{1,1,1}}.corners()) {
+        const auto p=GetWorldToScreenEx(corner,camera,640,400);
+        expected.minX=std::min(expected.minX,p.x);expected.maxX=std::max(expected.maxX,p.x);
+        expected.minY=std::min(expected.minY,p.y);expected.maxY=std::max(expected.maxY,p.y);
+    }
+    const auto purple=FindBounds(bounds,[](Color c){return c.r>c.g+20&&c.b>c.r+10;});
+    std::printf("Sphere AABB pixels: %d,%d-%d,%d; projected: %.1f,%.1f-%.1f,%.1f\n",
+        purple.minX,purple.minY,purple.maxX,purple.maxY,expected.minX,expected.minY,expected.maxX,expected.maxY);
+    CHECK(BoundsNear(purple,expected,3));
+    UnloadImage(bounds);UnloadRenderTexture(target);
+}
+
 void VerifySurfaceFeedback() {
     char directory[]="/tmp/linblux-surface-snap-XXXXXX";CHECK(mkdtemp(directory)!=nullptr);
     for(const Vector2 size:{Vector2{1280,720},Vector2{1920,1080}}) {
@@ -564,6 +642,15 @@ void VerifySurfaceFeedback() {
         renderer.drawEditorGuides(scene,camera.camera(),{});EndTextureMode();
         auto after=LoadImageFromTexture(texture.texture);ImageFlipVertical(&after);
         int changed=0;for(int py=0;py<int(size.y);++py)for(int px=0;px<int(size.x);++px) {
+            const auto a=GetImageColor(before,px,py),b=GetImageColor(after,px,py);
+            if(std::abs(a.r-b.r)+std::abs(a.g-b.g)+std::abs(a.b-b.b)>15)++changed;
+        }
+        CHECK(changed==0); // Normal Editor is the shared scene, no debug lines.
+        UnloadImage(after);
+        BeginTextureMode(texture);renderer.drawScene(scene,camera,int(size.x),int(size.y),moving->id());
+        renderer.drawEditorGuides(scene,camera.camera(),{true,false,false});EndTextureMode();
+        after=LoadImageFromTexture(texture.texture);ImageFlipVertical(&after);
+        changed=0;for(int py=0;py<int(size.y);++py)for(int px=0;px<int(size.x);++px) {
             const auto a=GetImageColor(before,px,py),b=GetImageColor(after,px,py);
             if(std::abs(a.r-b.r)+std::abs(a.g-b.g)+std::abs(a.b-b.b)>15)++changed;
         }
@@ -612,6 +699,7 @@ int main() {
     VerifyRotatedPartRendering(target, renderer, camera);
     VerifyBaseplateStudTransform(target, renderer, camera);
     VerifySurfaceFeedback();
+    VerifyEditorGuideDepth();
 
     const ToolMode modes[3] = {ToolMode::Move, ToolMode::Scale, ToolMode::Rotate};
     const char* modeNames[3] = {"Move", "Scale", "Rotate"};

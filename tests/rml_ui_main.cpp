@@ -216,8 +216,11 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             const Vector2 point{view.x+projected.x,view.y+projected.y};clickAt(point);CHECK(scene.selection()==part);
             event("keydown alt");clickAt(point);event("keyup alt");CHECK(scene.selection()==behind);
             event("keydown alt");clickAt(point);event("keyup alt");CHECK(scene.selection()==part);
-            const bool edges=EditorUITestAccess::editorEdges(ui);key("F8");CHECK(EditorUITestAccess::editorEdges(ui)!=edges);
+            const bool edges=EditorUITestAccess::editorEdges(ui);CHECK(!edges);
+            key("F8");CHECK(EditorUITestAccess::editorEdges(ui)!=edges);
             key("F8");CHECK(EditorUITestAccess::editorEdges(ui)==edges);
+            click("tab-View");click("editor-edges");CHECK(EditorUITestAccess::editorEdges(ui));
+            click("editor-edges");CHECK(!EditorUITestAccess::editorEdges(ui));click("tab-Home");
             click("cmd-tool-1");frames(2);auto& gizmo=EditorUITestAccess::partGizmo(ui);
             const auto layout=gizmolayout::Build(*part,ToolMode::Move,camera,view,false,gizmo.visualSettings());
             const auto h=layout.moveHandle[1],d=layout.axisDirection[0];const auto original=part->position();

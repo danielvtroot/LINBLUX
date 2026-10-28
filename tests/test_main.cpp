@@ -11,6 +11,7 @@
 
 #include "core/Config.h"
 #include "core/Diagnostics.h"
+#include "game/Navigation.h"
 #include "objects/Baseplate.h"
 #include "objects/SpawnLocation.h"
 #include "editor/Gizmo.h"
@@ -1618,6 +1619,30 @@ void TestBaseplatePhysics() {
     EndSection();
 }
 
+void TestSphereBoundsCompatibility() {
+    using namespace loblox;
+    Section("Esfera: tamanho legado, raio real e navegacao");
+    Scene scene;
+    auto* sphere=scene.createPart(PartShape::Sphere,{0,2,0},{40,4,60},"Unequal sphere");
+    sphere->setAnchored(true);sphere->setRotationEulerDegrees({15,35,20});
+    CHECK(NearlyEqual(sphere->sphereRadius(),2.f));
+    CHECK(NearlyEqual(sphere->bounds().half,Vector3{2,2,2}));
+    const auto original=projectio::toJson(scene);
+    Scene restored;std::string error;
+    CHECK(projectio::fromJson(restored,original,error));
+    const auto* copy=static_cast<const Part*>(restored.find(sphere->id()));
+    CHECK(copy&&NearlyEqual(copy->size(),Vector3{40,4,60}));
+    CHECK(copy&&NearlyEqual(copy->sphereRadius(),2.f));
+    PhysicsWorld physics;physics.attach(scene);
+    NavGrid grid;NavGrid::Config config;config.cellSize=1;config.agentHeight=1;config.agentRadius=0;
+    CHECK(grid.build(scene,physics,config));
+    CHECK(grid.columns()==5&&grid.rows()==5);
+    CHECK(!sphere->intersect({{3,2,10},{0,0,-1}}).hit);
+    CHECK(sphere->intersect({{0,2,10},{0,0,-1}}).hit);
+    CHECK(projectio::toJson(scene)==original);
+    EndSection();
+}
+
 void TestClearObjects() {
     Section("Limpeza de cena (carregar projeto)");
     loblox::Scene scene;
@@ -1671,6 +1696,7 @@ int main() {
     TestTransactionalLoad();
     TestBaseplatePhysics();
     TestClearObjects();
+    TestSphereBoundsCompatibility();
 
     std::printf("\n%d checagens, %d falhas\n", gChecks, gFailures);
     if (gFailures != 0) {

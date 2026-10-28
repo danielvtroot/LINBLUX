@@ -20,7 +20,7 @@ struct RigRenderState {
     bool pivots = false;
 };
 struct EditorGeometryView {
-    bool edges=true;
+    bool edges=false;
     bool bounds=false;
     bool normals=false;
 };
