@@ -35,7 +35,7 @@ def capture(args):
     before=project.read_bytes();output=root/args.stage;output.mkdir(exist_ok=True)
     env=dict(os.environ,HOME=str(output),XDG_DATA_HOME=str(output/'data'),XDG_CONFIG_HOME=str(output/'config'),XDG_STATE_HOME=str(output/'state'),LIBGL_ALWAYS_SOFTWARE='1',LP_NUM_THREADS='2')
     def click(x,y):
-        xdo('mousemove',x,y);xdo('mousedown',1);time.sleep(.25);xdo('mouseup',1);time.sleep(.4)
+        xdo('mousemove','--sync',x,y);time.sleep(.3);xdo('mousedown',1);time.sleep(.3);xdo('mouseup',1);time.sleep(.6)
     with (output/'studio.log').open('w') as log:
         proc=subprocess.Popen([str(args.binary.resolve()),'--project',str(project)],cwd=output,env=env,stdout=log,stderr=log)
         try:
@@ -44,13 +44,13 @@ def capture(args):
                 return r.stdout.splitlines()[-1] if r.returncode==0 else None
             window=wait_for(find_window,proc,25)
             for width,height in ((1366,768),(1920,1080)):
-                xdo('windowsize',window,width,height);xdo('windowmove',window,0,0);xdo('windowfocus','--sync',window);time.sleep(2)
+                xdo('windowsize',window,width,height);xdo('windowmove',window,0,0);xdo('windowfocus','--sync',window);time.sleep(4)
                 click(width-220,243)
                 for distance,zoom in [('close',0),('far',-4)]:
                     if zoom:
                         xdo('mousemove',int(width*.45),int(height*.5));xdo('click','--repeat',4,'--delay',120,5);time.sleep(.5)
                     for name,x in [('move',133 if width==1366 else 145),('scale',214 if width==1366 else 233),('rotate',295 if width==1366 else 320)]:
-                        click(x,92);xdo('mousemove',5,5);time.sleep(.7)
+                        xdo('keydown',{'move':'2','scale':'3','rotate':'4'}[name]);time.sleep(.25);xdo('keyup',{'move':'2','scale':'3','rotate':'4'}[name]);xdo('mousemove',5,5);time.sleep(.7)
                         subprocess.run(['scrot','-o','-u',str(output/f'{name}-{distance}-{width}.png')],check=True,timeout=5)
                 # Return to the same camera before resizing.
                 xdo('mousemove',int(width*.45),int(height*.5));xdo('click','--repeat',4,'--delay',120,4);time.sleep(.5)
