@@ -1849,6 +1849,20 @@ void EditorUI::drawViewport() {
         gizmoInput.cursorSurface=true;gizmoInput.alignToNormal=alignSnapNormal_;gizmoInput.feature=snapFeature_;
         gizmoInput.cursorRay=camera_.rayFromScreen({input.mouse.x-viewportRect.x,input.mouse.y-viewportRect.y},
                                                   {viewportRect.width,viewportRect.height});
+        float nearest=INFINITY;bool containsSphere=false,nearestSphere=false;
+        for(const auto* p:scene_.parts()) {
+            if(p->color().a==0)continue;
+            if(p==selection||selection->isAncestorOf(p)) {
+                containsSphere|=p->shape()==PartShape::Sphere;
+                continue;
+            }
+            const auto hit=p->intersect(gizmoInput.cursorRay);
+            if(hit.hit&&hit.distance<nearest) {
+                nearest=hit.distance;
+                nearestSphere=p->shape()==PartShape::Sphere;
+            }
+        }
+        if(containsSphere||nearestSphere)gizmoInput.surfaceIssue="Encaixe de face/borda/vértice disponível para caixas; esfera: use movimento livre";
     }
 
     // Prioridade unica: o gizmo processa a entrada antes da camera e da

@@ -23,6 +23,7 @@ struct GizmoInput {
     bool cursorSurface = false;
     Ray cursorRay{};
     bool alignToNormal = false;
+    const char* surfaceIssue = nullptr;
     gizmomath::SnapFeature feature = gizmomath::SnapFeature::Face;
     const std::vector<gizmomath::SurfaceBox>* movingBoxes = nullptr;
     const std::vector<gizmomath::SurfaceBox>* targetBoxes = nullptr;

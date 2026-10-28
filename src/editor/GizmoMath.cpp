@@ -114,6 +114,11 @@ SurfaceSnap SnapUnderCursor(const std::vector<SurfaceBox>& moving,
     const std::vector<SurfaceBox>& targets,Vector3 reference,Ray ray,SnapFeature feature,
     bool alignNormal,Quaternion orientation,std::uint64_t previous) {
     SurfaceSnap out;if(moving.empty()) {out.reason="Esferas: encaixe de caixa indisponível";return out;}
+    for(const auto& member:moving)if(!ValidBox(member.pose))return out;
+    for(float value:{reference.x,reference.y,reference.z,ray.position.x,ray.position.y,ray.position.z,
+        ray.direction.x,ray.direction.y,ray.direction.z})if(!std::isfinite(value))return out;
+    if(Vector3LengthSqr(ray.direction)<1e-8f)return out;
+    ray.direction=Vector3Normalize(ray.direction);
     const SurfaceBox* target=nullptr;RayCollision closest{};closest.distance=INFINITY;
     for(const auto& box:targets) {
         if(!ValidBox(box.pose))continue;
@@ -154,6 +159,20 @@ SurfaceSnap SnapUnderCursor(const std::vector<SurfaceBox>& moving,
         support=std::max(support,Radius(member.pose,out.normal)-Vector3DotProduct(Vector3Subtract(member.pose.position,reference),out.normal));
     }
     Vector3 desired=Vector3Add(out.point,Vector3Scale(out.normal,support));
+    if(feature==SnapFeature::Face) {
+        float nearest=INFINITY;Vector3 anchor{};
+        for(const auto& member:poses) {
+            Vector3 sum{};int count=0;
+            for(const auto corner:OrientedBox{member.pose.position,member.pose.rotation,HalfExtents(member.pose.size)}.corners())
+                if(std::fabs(Vector3DotProduct(Vector3Subtract(corner,reference),out.normal)+support)<=.001f) {
+                    sum=Vector3Add(sum,corner);++count;
+                }
+            if(count) {const auto point=Vector3Scale(sum,1.f/count);
+                const float distance=Vector3DistanceSqr(point,out.point);
+                if(distance<nearest){nearest=distance;anchor=point;}}
+        }
+        if(std::isfinite(nearest))desired=Vector3Add(reference,Vector3Subtract(out.point,anchor));
+    }
     if(feature!=SnapFeature::Face) {
         // Align the nearest support vertex/edge of the moving selection with
         // the requested target feature, without ever entering the target.

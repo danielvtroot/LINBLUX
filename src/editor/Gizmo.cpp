@@ -108,6 +108,9 @@ void Gizmo::snapPosition(Part& part,Vector3 candidate,Vector3 a,Vector3 b,
     surfaceContact_={};
     candidate=gizmomath::SnapGrid(candidate,startTransform_.position,a,b,
         input.shiftDown?0:moveSnap_,gridMode_);
+    if(input.surfaceSnap&&input.surfaceIssue) {
+        surfaceContact_.reason=input.surfaceIssue;part.setPosition(candidate);return;
+    }
     // Um clique sem movimento não desloca o objeto para uma face próxima.
     if(input.surfaceSnap&&input.targetBoxes&&Vector2Distance(input.mousePosition,
         Vector2Add(startMouse_,{dragViewport_.x,dragViewport_.y}))>=2) {
