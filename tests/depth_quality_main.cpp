@@ -54,6 +54,7 @@ int main(){
     CHECK(std::fabs(fixed.span-shifted.span)<.001f);
     for(int axis=0;axis<2;++axis){const float step=(shifted.matrix[12+axis]-fixed.matrix[12+axis])*fixed.resolution*.5f;CHECK(std::fabs(step-std::round(step))<.01f);}
     camera.position.x-=.001f;camera.target.x-=.001f;
+    renderer.setShadowQuality(ShadowQuality::Off);stable=render();UnloadImage(stable);CHECK(!renderer.shadowsActive());
     setenv("LINBLUX_DISABLE_HIGH_SHADOWS","1",1);
     {SceneRenderer fallback;fallback.setAntialiasing(Antialiasing::None);fallback.setShadowQuality(ShadowQuality::High);
         BeginTextureMode(target);fallback.drawScene(scene,camera,640,400,0);EndTextureMode();const auto info=ReadShadowCaptureInfo();CHECK(fallback.shadowsActive());CHECK(info.resolution==1024);CHECK(info.taps==8);}
