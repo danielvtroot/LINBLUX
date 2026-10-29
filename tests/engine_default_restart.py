@@ -30,7 +30,11 @@ def events():
 def xdo(*args):
  return subprocess.run(['xdotool',*map(str,args)],capture_output=True,text=True,check=True,timeout=5).stdout.strip()
 def click(window,x,y):
- xdo('mousemove','--window',window,x,y);xdo('mousedown',1);time.sleep(.18);xdo('mouseup',1);time.sleep(.3)
+ # Loading a project compiles materials on the first rendered frames. Give
+ # the pointer a frame to enter the new UI, then keep down/up in separate
+ # llvmpipe frames; an event burst immediately after 'open' is not a click.
+ xdo('mousemove','--window',window,x,y);time.sleep(.3)
+ xdo('mousedown',1);time.sleep(.5);xdo('mouseup',1);time.sleep(.4)
 def shot(name):
  path=root/(name+'.png');subprocess.run(['scrot','-o','-u',str(path)],check=True);return path
 def primary_block(path,min_y=0,max_y=None,min_x=8,max_x=None):

@@ -1296,7 +1296,11 @@ void StudioFrontend::draw() {
     }
     if(auto* place=p.el("place-surface"))place->SetClass("active",p.ui.placement_.active());
     if(auto* assembly=dynamic_cast<Rml::ElementFormControl*>(p.el("assembly"));assembly&&p.formOwner(p.context->GetFocusElement())!=assembly)assembly->SetValue("none");
-    if(auto* planes=p.el("move-planes")){if(p.ui.gizmo_.planarHandles())planes->SetAttribute("checked","");else planes->RemoveAttribute("checked");}
+    if(auto* planes=p.el("move-planes")){
+        // Pivot planes belong to rig editing; never switch Part/Model Move away from faces.
+        planes->GetParentNode()->SetProperty("display",p.ui.selectedRig_.empty()?"none":"flex");
+        if(p.ui.rigGizmo_.planarHandles())planes->SetAttribute("checked","");else planes->RemoveAttribute("checked");
+    }
     if(auto* scale=dynamic_cast<Rml::ElementFormControl*>(p.el("scale-origin"));scale&&p.formOwner(p.context->GetFocusElement())!=scale){
         const std::string value=p.ui.gizmo_.centeredScaleOption()?"center":"face";if(scale->GetValue()!=value)scale->SetValue(value);
     }

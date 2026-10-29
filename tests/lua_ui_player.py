@@ -64,10 +64,17 @@ finally:
 image = Image.open(shot).convert("RGB")
 green = sum(1 for pixel in image.getdata()
             if abs(pixel[0] - 76) < 30 and abs(pixel[1] - 217) < 30 and abs(pixel[2] - 100) < 40)
-panel = sum(1 for pixel in image.getdata()
-            if abs(pixel[0] - 15) < 12 and abs(pixel[1] - 15) < 12 and abs(pixel[2] - 19) < 14)
+# The example requests alpha E6, so the panel must be composited with the
+# sky underneath, not equal to its unblended #0F0F13 source color. Compare an
+# interior strip (away from text/bar/native menu) to same-height sky samples.
+alpha = 230 / 255
+panel = 0
+for y in range(58, 74):
+    sky = image.getpixel((330, y))
+    expected = [round(c * alpha + sky[i] * (1-alpha)) for i,c in enumerate((15,15,19))]
+    panel += sum(all(abs(image.getpixel((x,y))[i]-expected[i]) <= 3 for i in range(3)) for x in range(128,310))
 log_text = (root / "player.log").read_text()
 assert "Falha" not in log_text, log_text
 assert green > 120, f"health bar not painted by the Player (green pixels: {green})"
-assert panel > 4000, f"UI panel not painted by the Player (panel pixels: {panel})"
+assert panel > .95 * (310-128) * (74-58), f"UI panel not painted by the Player (panel pixels: {panel})"
 print(f"Player UI: example validated headless and painted ({green} bar / {panel} panel pixels); {root}")

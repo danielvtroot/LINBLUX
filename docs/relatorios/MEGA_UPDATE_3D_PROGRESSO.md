@@ -577,3 +577,32 @@ extensão OBB e permite repetir o último deslocamento confirmado.
   coincidiam em `2386f8f`; este incremento ainda é WIP local e **não publicado**.
   A grade visual de construção segue como incremento separado; fases 5–7 não
   iniciadas nesta etapa.
+
+
+## Studio 2.0 — checkpoint de recuperação e manipulação (29/10/2026)
+
+- Base local/remota conferida: `e1ff4416532365b872d779d434a4c7d4223406e4`.
+  Os 21 caminhos WIP foram preservados em `.turbo/checkpoints/studio2-initial/`
+  (ZIP, patch e manifesto SHA-256); alterações sem relação não foram incluídas.
+  ConstructionPlacement e ConstructionUI já estavam publicados nessa base.
+- Move de Parts/Models permanece por face mesmo com planos habilitados. A opção
+  de planos fica restrita ao rig. Scale mantém a face oposta e não foi redesenhado.
+- Corrigidas fixtures Precision UI (aquisição por face), Script Input (ESC captura
+  input sem parar simulação), Lua UI Player (alfa real), RifleDemo (tempo simulado
+  versus real) e Restart (clique entre quadros). Models passou sem ampliar timeout;
+  o timeout anterior resultava do orçamento restante de 16,5 s.
+- Seis regressões gráficas passaram no TURBO: Precision 35,98 s, Models 53,21 s,
+  Script Input 16,59 s, Restart 28,95 s, Lua UI Player 4,93 s e RifleDemo 13,33 s.
+  Logs: `.turbo/logs/studio2/{ui-fixed,native-fixed}/tests/`.
+- Build oficial Studio/Player aprovado; testes headless focados 3/3. FAST executou
+  19/19 sem falhas, mas reportou cobertura desconhecida: aprovação PARCIAL,
+  não aprovação global. Run `20261029T152732Z-9151`; nenhuma suíte FULL.
+- Studio real capturado em 1366×768 e 1920×1080, parede de 191 unidades, piso,
+  parede adjacente e peça pequena girada com decal. PNGs inspecionados de Move
+  hover e Scale arrastando; sem eixos concorrentes no pivô. Manifesto comprova
+  Move sem redimensionar, Scale com face oposta fixa, snap, undo/redo e ESC.
+  Evidências: `.turbo/logs/studio2/faces/after/` (30 PNGs e manifest.json).
+- Ambiente Xvfb/llvmpipe, cena equivalente isolada; não é aprovação manual do
+  usuário nem benchmark de GPU física. Sliders seguem no próximo incremento;
+  layout, Explorador, simplificação adicional e limpeza NÃO INICIADOS.
+  Sequência obrigatória: `STUDIO_2_0_PLANO.md`. Não declarar lançamento pronto.

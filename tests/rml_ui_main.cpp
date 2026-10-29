@@ -266,11 +266,13 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             click("tab-View");click("editor-edges");CHECK(EditorUITestAccess::editorEdges(ui));
             click("editor-edges");CHECK(!EditorUITestAccess::editorEdges(ui));click("tab-Home");
             click("cmd-tool-1");frames(2);auto& gizmo=EditorUITestAccess::partGizmo(ui);
-            const auto layout=gizmolayout::Build(*part,ToolMode::Move,camera,view,false,gizmo.visualSettings());
-            const auto h=layout.moveHandle[1],d=layout.axisDirection[0];const auto original=part->position();
+            CHECK(gizmo.faceMove());gizmo.setPlanarHandles(true);CHECK(gizmo.faceMove());
+            const auto layout=gizmolayout::Build(*part,ToolMode::Scale,camera,view,false,gizmo.visualSettings());
+            const auto h=layout.faces[5].screen;const Vector2 d{0,-1};const auto original=part->position();const auto originalSize=part->size();
+            CHECK(gizmolayout::FaceUnderCursor(layout,h).index==5);
             const auto drag=[&](){event("mousemove "+std::to_string(int(view.x+h.x))+" "+std::to_string(int(view.y+h.y)));event("mousedown 1");
                 CHECK(gizmo.dragging());event("mousemove "+std::to_string(int(view.x+h.x+d.x*30))+" "+std::to_string(int(view.y+h.y+d.y*30)));};
-            drag();const auto raw=part->position();event("mouseup 1");key("ctrl+z");CHECK(NearlyEqual(part->position(),original));
+            drag();const auto raw=part->position();CHECK(!NearlyEqual(raw,original));CHECK(NearlyEqual(part->size(),originalSize));event("mouseup 1");key("ctrl+z");CHECK(NearlyEqual(part->position(),original));
             const auto cursorRay=camera.rayFromScreen({h.x+d.x*30,h.y+d.y*30},{view.width,view.height});
             auto* target=scene.createPart(PartShape::Block,Vector3Add(cursorRay.position,Vector3Scale(cursorRay.direction,35)),{4,4,2},"Alvo sob o cursor");target->setAnchored(true);frames(2);
             EditorActions actions(ui);CHECK(actions.dispatch({"grid-mode","absolute"}));CHECK(gizmo.gridMode()==gizmomath::GridMode::Absolute);
@@ -416,6 +418,7 @@ assert(math.abs(part.velocity.x-1)<0.001)
             scene.createScript(InstanceClass::Script,nullptr,"EntradaReal.lua")->source=R"(
 assert(linblux.storage.status().persistent)
 linblux.scene.root:set_attribute("stored_presses",linblux.storage.get("tecla_e",0))
+linblux.events.on("update",function() linblux.scene.root:set_attribute("menu_ticks",(linblux.scene.root:get_attribute("menu_ticks") or 0)+1) end)
 linblux.camera.configure({locked=true, fov=85})
 linblux.camera.set_pose({position=linblux.vec3(15,10,15),target=linblux.vec3(0,2,0),fov=95})
 linblux.events.on("key_pressed", function(key)
@@ -445,8 +448,10 @@ end)
             event("keydown e");frames(3);CHECK(rt.scriptInput().keys[KEY_E]);
             auto presses=[&]{const auto& attrs=rt.scene().workspace()->attributes();return attrs.count("real_presses")?std::get<double>(attrs.at("real_presses")):0.;};
             CHECK(presses()==1);event("keyup e");CHECK(!rt.scriptInput().keys[KEY_E]);
-            key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);
-            key("e");CHECK(presses()==1);key("Escape");CHECK(rt.state()==game::RuntimeState::Playing);
+            key("Escape");CHECK(ui.gameMenuOpen());CHECK(rt.state()==game::RuntimeState::Playing);
+            const auto ticks=[&]{return std::get<double>(rt.scene().workspace()->attributes().at("menu_ticks"));};
+            const double menuTime=ticks();frames(4);CHECK(ticks()>menuTime);
+            key("e");CHECK(presses()==1);key("Escape");CHECK(!ui.gameMenuOpen());CHECK(rt.state()==game::RuntimeState::Playing);
             key("e");CHECK(presses()==2);
             CHECK(!rt.playerCamera().scripted());CHECK(rt.playerCamera().camera().fovy==85);
             for(const auto& message:rt.scripts().messages()){if(message.error)std::fprintf(stderr,"Input Lua: %s\n",message.text.c_str());CHECK(!message.error);}

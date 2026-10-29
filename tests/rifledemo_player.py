@@ -30,7 +30,8 @@ linblux.events.on('update',function()
  end
 end)
 task.spawn(function()
- task.wait(11)
+ local deadline=linblux.time.now()+15
+ repeat task.wait(.1) until (collects>=2 and equips>=2 and drops>=1 and walked and fires>=2 and reloads>=1 and damaged) or linblux.time.now()>=deadline
  assert(collects>=2 and equips>=2 and drops>=1,'E/1/Delete/recoleta não executados')
  assert(walked,'guia não caminhou com animação')
  assert(fires>=2 and reloads>=1 and damaged,'tiro, recarga ou dano não executados')
@@ -63,7 +64,12 @@ try:
  assert left>right+100,'official logo decal is absent or horizontally mirrored'
  shoot();key('r');time.sleep(1.8);key('Delete');assert hotbar_red(capture('dropped'))==0,'hotbar survived Delete'
  key('e',.85);key('1');shoot()
- time.sleep(4);im=capture('verified');cyan=sum(1 for c in im.getdata() if c[0]<25 and c[1]>235 and 145<c[2]<195)
+ # Wait for the assertion marker, not a fixed wall-clock delay: simulation
+ # time is bounded per frame and need not track llvmpipe rendering time.
+ deadline=time.monotonic()+12;cyan=0
+ while cyan<=1000 and time.monotonic()<deadline:
+  assert p.poll() is None,(root/'player.log').read_text()[-3000:]
+  time.sleep(.2);im=capture('verified');cyan=sum(1 for c in im.getdata() if c[0]<25 and c[1]>235 and 145<c[2]<195)
  assert cyan>1000,'Lua assertions did not reach their success marker'
  key('Escape');cmd('mousemove','--window',window,50,685);cmd('mousedown',1);time.sleep(.25);cmd('mouseup',1)
  p.wait(timeout=6);assert p.returncode==0,(root/'player.log').read_text()[-3000:]
