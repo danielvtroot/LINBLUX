@@ -305,11 +305,14 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="apply-image"||c.action=="apply-texture") {
             auto* part=e.scene_.selection();if(!part||!part->isPart())throw std::runtime_error("Select a Part before applying an image");
             const auto path=game::ResolveImagePath(game::AssetsDir(),c.value);if(path.empty())throw std::runtime_error("Image asset missing");
-            // Um decal NOVO entra em "Ajustar" (imagem inteira, sem deformar).
-            // Substituir a imagem de um decal já existente preserva o modo que
-            // o autor escolheu, então arquivos antigos continuam esticando.
+            // Um decal NOVO entra em "Preencher": a imagem toma a face
+            // INTEIRA do lado escolhido, cortando o excesso em vez de deformar
+            // ou deixar tarjas transparentes. "Ajustar" (imagem inteira com
+            // sobra) continua disponível no painel. Substituir a imagem de um
+            // decal já existente preserva o modo que o autor escolheu, então
+            // arquivos antigos continuam esticando.
             if(c.action=="apply-image"&&part->attributes().find("decal_image")==part->attributes().end())
-                part->setAttribute("decal_fit",std::string("fit"));
+                part->setAttribute("decal_fit",std::string("fill"));
             part->setAttribute(c.action=="apply-image"?"decal_image":"texture_image",game::ImageReference(path));
             e.setStatus("Image applied to "+part->name());
         }

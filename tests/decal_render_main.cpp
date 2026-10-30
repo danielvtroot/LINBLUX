@@ -220,6 +220,34 @@ int main() {
             if(Classify(filledEdge)==Hue::Unknown||Classify(filledSide)==Hue::Unknown){++failures;std::fprintf(stderr,
                 "preencher: a imagem deve cobrir topo e laterais (%d,%d,%d)/(%d,%d,%d)\n",
                 filledEdge.r,filledEdge.g,filledEdge.b,filledSide.r,filledSide.g,filledSide.b);}
+            // Face larga e baixa (4 x 1): a imagem 2:1 tem de tomar a face
+            // INTEIRA no modo Preencher, cantos inclusive. Era o caso real do
+            // JPEG 736x837 numa Part com proporção diferente da imagem: em
+            // "Ajustar" a imagem ficava pequena no meio da face.
+            {
+                const loblox::Transform saved=part->transform();
+                loblox::Transform wide=saved;wide.size={4.0f,1.0f,2.0f};part->setTransform(wide);
+                part->setAttribute("decal_fit",std::string("fill"));
+                const Camera3D cam{{0,0,-8},{0,0,0},{0,1,0},45,CAMERA_PERSPECTIVE};
+                auto widePixel=[&](const char* tag,float sx,float sy)->Color {
+                    const Image shot=renderFull(tag,cam);
+                    const Vector2 point=GetWorldToScreen(Vector3{sx,sy,-1.021f},cam);
+                    const Color pixel=GetImageColor(shot,
+                        std::clamp(int(std::lround(point.x)),1,shot.width-2),
+                        std::clamp(int(std::lround(point.y)),1,shot.height-2));
+                    UnloadImage(shot);return pixel;
+                };
+                struct Corner { float x,y;const char* label; };
+                const Corner corners[4]={{-1.8f,0.45f,"sup-esq"},{1.8f,0.45f,"sup-dir"},
+                                          {-1.8f,-0.45f,"inf-esq"},{1.8f,-0.45f,"inf-dir"}};
+                for(const Corner& corner:corners) {
+                    const Color pixel=widePixel((std::string("wide-fill-")+corner.label).c_str(),corner.x,corner.y);++checks;
+                    if(Classify(pixel)==Hue::Unknown){++failures;std::fprintf(stderr,
+                        "preencher em face larga %s: o canto deveria ter imagem (%d,%d,%d)\n",
+                        corner.label,pixel.r,pixel.g,pixel.b);}
+                }
+                part->setTransform(saved);
+            }
         }
         part->removeAttribute("decal_image");part->removeAttribute("decal_flip_u");
         part->removeAttribute("decal_fit");part->removeAttribute("decal_face");

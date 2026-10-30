@@ -397,7 +397,7 @@ void EditorUI::drawInstanceProperties(Instance& object) {
                     part.setAttribute("decal_tint", std::string(hexOut));
                 }
             }
-            if (row("Decal Fit", "Ajustar mantém a proporção da imagem; Esticar é o padrão dos arquivos antigos.")) {
+            if (row("Decal Fit", "Preencher é o padrão de decal novo: cobre a face inteira sem deformar. Ajustar mostra a imagem inteira com sobra; Esticar é o padrão dos arquivos antigos.")) {
                 static const char* modes[3] = {"Esticar","Ajustar","Preencher"};
                 int current = 0;
                 if (const auto it = part.attributes().find("decal_fit"); it != part.attributes().end())
