@@ -169,7 +169,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         rect("toolbox",{0,panelTop,left,usable});rect("explorer",{float(w)-right,panelTop,right,exHeight});
         rect("properties",{float(w)-right,ui.showExplorer_?panelTop+5+exHeight:panelTop,right,ui.showExplorer_?usable-exHeight-5:usable});
         style("toolbox-content","height",Num(usable-94)+"px");
-        style("tree","height",Num(exHeight-63)+"px");
+        style("tree","height",Num(exHeight-91)+"px");
         const float propHeight=ui.showExplorer_?usable-exHeight-5:usable;
         style("property-body","height",Num(std::max(30.f,propHeight-91))+"px");
         rect("left-divider",{left,panelTop,5,usable});display("left-divider",ui.showToolbox_);
@@ -251,6 +251,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         text("viewport-hint",ui.activeDocument_==0?"RMB + WASD · Q / E":"Ctrl+S save · Ctrl+W close");
     }
     void prompt(const std::string& kind) {
+        display("dialog-confirm",true);
         if(auto* confirm=el("dialog-confirm")){confirm->SetClass("image-locked",false);confirm->RemoveAttribute("disabled");}
         if(experiences&&kind=="import-image"){experiences->chooseAsset();return;}
         if(experiences&&kind=="open"){experiences->enqueue("import");return;}
@@ -408,6 +409,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(!button) {if(auto* row=ancestor(target,"data-node-row"))commands.push_back({"select",ImGui::GetIO().KeyCtrl?"toggle":"",row->GetAttribute<InstanceId>("data-node-row",0)});return;}
         if(button->GetTagName()=="input"||button->GetTagName()=="select")return;
         const auto action=attr(button,"data-action"),v=attr(button,"data-value");
+        if(!dialogOpen)display("dialog-confirm",true);
         if(action=="rig-decal-add"||action=="rig-decal-delete"||
             (action=="apply-image"&&!ui.scene_.selection()&&ui.selectedRigBody_>=0)) {
             if(ui.runtime_.active())return;
@@ -426,6 +428,26 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             contextOpen=false;display("context-menu",false);return;
         }
         if(contextOpen&&button->GetParentNode()==el("context-menu")){display("context-menu",false);contextOpen=false;}
+        if(action=="normalization-preview") {
+            if(ui.runtime_.active()){ui.setStatus("Abra a prévia no modo Editar.",true);return;}
+            std::string rows;int count=0;
+            for(const auto* part:ui.scene_.parts()) {
+                const auto proposed=NewPartName(part->name());
+                if(proposed==part->name())continue;
+                bool conflict=false;
+                if(part->parent())for(const auto* sibling:part->parent()->children())
+                    if(sibling!=part&&sibling->isPart()&&NewPartName(sibling->name())==proposed)conflict=true;
+                rows+="<p>"+Escape(part->name())+" → "+Escape(proposed.empty()?"[nome inválido]":proposed)+
+                    (conflict?" <b>CONFLITO</b>":"")+"</p>";++count;
+            }
+            dialog="normalization-preview";dialogOpen=true;
+            text("dialog-title","Normalizar nomes das peças — prévia");
+            text("dialog-description","Prévia apenas: nenhuma alteração será aplicada. Referências Lua por nome podem quebrar; strings de scripts não serão substituídas. A aplicação em lote depende de cópia de segurança e recuperação segura, ainda pendentes nesta Alpha.");
+            text("dialog-error","");
+            el("appearance-controls")->SetInnerRML("<div style=\"max-height:180px;overflow:auto;\">"+(count?rows:"<p>Nenhum nome precisa de normalização.</p>")+"</div>");
+            auto* field=static_cast<Rml::ElementFormControl*>(el("dialog-value"));field->SetDisabled(true);field->SetValue(std::to_string(count)+" peça(s)");
+            el("dialog-confirm")->SetAttribute("disabled","");display("dialog-confirm",false);display("dialog-overlay",true,"flex");context->GetRootElement()->Focus();return;
+        }
         if(action=="rename"){prompt("rename");return;}
         if(action=="open-dialog"||action=="save-dialog"){prompt(action=="open-dialog"?"open":"save-as");return;}
         if(action=="import-dialog"){prompt("import-image");return;}
@@ -625,6 +647,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(action=="choose-color"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
         if(action=="insert-menu") {std::string menu;for(const auto& item:std::vector<std::pair<std::string,std::string>>{{"part","Part"},{"folder","Pasta"},{"model","Modelo"},{"attachment","Attachment"},{"script","Script"},{"local-script","LocalScript"},{"module","Módulo"},{"r6","Personagem R6"},{"item-prototypes","Protótipos de itens"},{"server-scripts","ServerScriptService"},{"server-storage","ServerStorage"},{"replicated-storage","ReplicatedStorage"}})menu+=Button(item.first,item.second);el("context-menu")->SetInnerRML(i18n::Markup(menu));auto b=bounds("new-object");rect("context-menu",{b.x-176,b.y+23,196,322});display("context-menu",true);contextOpen=true;return;}
         if(action=="cancel-dialog") {dialogOpen=false;context->GetRootElement()->Focus();return;}
+        if(action=="confirm-dialog"&&dialog=="normalization-preview")return;
         if(action=="confirm-dialog") {const auto v=value(el("dialog-value"));const auto id=ui.scene_.selection()?ui.scene_.selection()->id():0;
             if(actions.dispatch({dialog,v,id})) {if(dialog=="import-sound"||dialog.rfind("rename-sound:",0)==0)invalidateAudio();if(dialog=="import-image"||dialog.rfind("rename-image:",0)==0||dialog.rfind("replace-image:",0)==0||dialog.rfind("delete-image:",0)==0)invalidateImages();dialogOpen=false;context->GetRootElement()->Focus();treeHash=0;}else text("dialog-error",ui.status_);return;}
         if(action=="close-advanced"){showAdvanced("");return;}
@@ -671,6 +694,21 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             for(const auto& body:rig.bodies){hash^=std::hash<std::string>{}(body.image);for(const auto& d:body.decals)hash^=std::hash<std::string>{}(d.id+d.name);}
         }
         if(treeHash==hash && hash!=0)return;
+        // Studio-only authoring defaults: persistence/runtime loading stays untouched.
+        // Run on tree invalidation so legacy opens and new documents share this path.
+        if(!ui.runtime_.active()) {
+            const auto count=ui.scene_.objects().size();
+            ui.scene_.ensureService(InstanceClass::ServerScriptService);
+            auto* storage=ui.scene_.ensureService(InstanceClass::ServerStorage);
+            ui.scene_.ensureService(InstanceClass::ReplicatedStorage);
+            bool occupied=false;
+            for(const auto* child:storage->children())if(child->name()=="Itens")occupied=true;
+            if(!occupied)if(auto* folder=ui.scene_.createContainer(InstanceClass::Folder,storage,"Itens"))folder->setName("Itens");
+            if(count!=ui.scene_.objects().size()) {
+                if(!ui.scene_.selection())ui.scene_.select(storage);
+                ui.setStatus("Serviços e ServerStorage/Itens disponíveis. Salve para persistir; nenhum arquivo foi gravado automaticamente.");
+            }
+        }
         treeHash=hash;
         std::string s;auto matches=[&](const Instance* node){std::string name=node->name()+" "+node->className(),q=search;std::transform(name.begin(),name.end(),name.begin(),::tolower);std::transform(q.begin(),q.end(),q.begin(),::tolower);return q.empty()||name.find(q)!=std::string::npos;};
         std::function<bool(const Instance*)> relevant=[&](const Instance* n){if(matches(n))return true;for(auto* c:n->children())if(relevant(c))return true;return false;};
@@ -679,7 +717,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             const auto marker=node->attributes().find("_linblux_item_prototype");
             const bool item=type==InstanceClass::Model&&marker!=node->attributes().end()&&std::get_if<bool>(&marker->second)&&std::get<bool>(marker->second);
             const std::string icon=item?"item":type==InstanceClass::Workspace?"workspace":type==InstanceClass::Lighting?"lighting":type==InstanceClass::Folder?"folder":type==InstanceClass::Model?"model":type==InstanceClass::ModuleScript?"module":type==InstanceClass::LocalScript?"local-script":type==InstanceClass::SpawnLocation?"spawn":IsSurfaceClass(type)?"image":IsScriptClass(type)?"script":IsRootServiceClass(type)?"service":"part";
-            s+="<div id=\"node-"+id+"\" class=\"tree-row"+(ui.scene_.selected(node->id())?" selected":"")+"\" data-node-row=\""+id+"\" title=\""+Escape(node->name()+" · "+node->className())+"\" style=\"padding-left:"+std::to_string(3+depth*12)+"px\">";
+            s+="<div id=\"node-"+id+"\" class=\"tree-row"+std::string(depth==0?" service-root":"")+(ui.scene_.selected(node->id())?" selected":"")+"\" data-node-row=\""+id+"\" title=\""+Escape(node->name()+" · "+node->className())+"\" style=\"padding-left:"+std::to_string(3+depth*12)+"px\">";
             if(!node->children().empty())s+="<button id=\"fold-"+id+"\" class=\"fold\" data-fold=\""+id+"\"><img src=\"icon-chevron-"+(collapsed.count(node->id())?"right":"down")+"\"/></button>";
             else s+="<span class=\"leaf\"/>";
             s+="<img src=\"icon-"+icon+"\"/><span class=\"node-name\">"+Escape(node->name())+"</span></div>";
@@ -990,7 +1028,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             }
             const std::pair<ImGuiKey,Rml::Input::KeyIdentifier> keys[]={{ImGuiKey_Backspace,Rml::Input::KI_BACK},{ImGuiKey_Delete,Rml::Input::KI_DELETE},{ImGuiKey_LeftArrow,Rml::Input::KI_LEFT},{ImGuiKey_RightArrow,Rml::Input::KI_RIGHT},{ImGuiKey_Home,Rml::Input::KI_HOME},{ImGuiKey_End,Rml::Input::KI_END},{ImGuiKey_Tab,Rml::Input::KI_TAB},{ImGuiKey_A,Rml::Input::KI_A},{ImGuiKey_C,Rml::Input::KI_C},{ImGuiKey_V,Rml::Input::KI_V},{ImGuiKey_X,Rml::Input::KI_X},{ImGuiKey_Z,Rml::Input::KI_Z},{ImGuiKey_Y,Rml::Input::KI_Y}};
             for(auto key:keys){if(playerPaused&&key.first==ImGuiKey_Tab)continue;if(ImGui::IsKeyPressed(key.first))context->ProcessKeyDown(key.second,mods);if(ImGui::IsKeyReleased(key.first))context->ProcessKeyUp(key.second,mods);}
-            if(ImGui::IsKeyPressed(ImGuiKey_Enter,false)){if(dialogOpen) {EditorCommand c{dialog,value(el("dialog-value")),ui.scene_.selection()?ui.scene_.selection()->id():0};if(actions.dispatch(c)){if(dialog=="import-sound"||dialog.rfind("rename-sound:",0)==0)invalidateAudio();if(dialog=="import-image"||dialog.rfind("rename-image:",0)==0||dialog.rfind("replace-image:",0)==0||dialog.rfind("delete-image:",0)==0)invalidateImages();dialogOpen=false;}else text("dialog-error",ui.status_);}else {commit(focused);focusValue=value(focused);}if(auto* select=dynamic_cast<Rml::ElementFormControlSelect*>(focused))select->HideSelectBox();if(context->GetFocusElement()!=focused)focused->Focus();focused->Blur();}
+            if(ImGui::IsKeyPressed(ImGuiKey_Enter,false)){if(dialogOpen&&dialog=="normalization-preview") { /* read-only preview */ } else if(dialogOpen) {EditorCommand c{dialog,value(el("dialog-value")),ui.scene_.selection()?ui.scene_.selection()->id():0};if(actions.dispatch(c)){if(dialog=="import-sound"||dialog.rfind("rename-sound:",0)==0)invalidateAudio();if(dialog=="import-image"||dialog.rfind("rename-image:",0)==0||dialog.rfind("replace-image:",0)==0||dialog.rfind("delete-image:",0)==0)invalidateImages();dialogOpen=false;}else text("dialog-error",ui.status_);}else {commit(focused);focusValue=value(focused);}if(auto* select=dynamic_cast<Rml::ElementFormControlSelect*>(focused))select->HideSelectBox();if(context->GetFocusElement()!=focused)focused->Focus();focused->Blur();}
             if(ImGui::IsKeyPressed(ImGuiKey_Escape,false)) {
                 if(playerPaused&&attr(focused,"type")=="range") {
                     // A slider is live, not an unfinished text edit. Escape

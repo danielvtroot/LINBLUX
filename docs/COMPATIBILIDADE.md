@@ -37,4 +37,6 @@ as busca por nome deve usar o nome retornado/handle, em vez de pressupor espaço
 Parts em ServerStorage/ReplicatedStorage exigem esta revisão de armazenamento ou
 posterior. Builds anteriores podem recusar essa hierarquia; preserve uma cópia
 antes de alternar versões. A assinatura dos formatos e os IDs não mudaram.
-Cenas antigas continuam carregando sem conversão automática de nomes ou serviços.
+ProjectIO preserva cenas antigas. No Studio, o Explorador completa serviços ausentes
+e ServerStorage/Itens em memória, sem recriar scripts nem salvar automaticamente.
+Nomes antigos não são convertidos; a ação de normalização oferece somente prévia.

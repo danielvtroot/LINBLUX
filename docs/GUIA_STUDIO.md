@@ -39,8 +39,10 @@ quebras de linha e nomes vazios são recusados; use letras, números ou `_`,
 até 128 bytes. Parts irmãs não podem receber o mesmo nome por renomeação.
 Pastas, Modelos, títulos de experiências e mídia mantêm suas regras atuais.
 
-Abrir/salvar preserva nomes antigos e IDs. A conversão em lote com prévia,
-análise de referências Lua e undo ainda não está disponível. Ao duplicar uma
+Abrir/salvar preserva nomes antigos e IDs. **Normalizar nomes das peças**, no
+Explorador, mostra uma prévia e conflitos entre irmãs, sem aplicar mudanças.
+A aplicação em lote com análise de referências Lua e recuperação segura continua
+pendente; a prévia avisa que referências por nome podem quebrar. Ao duplicar uma
 peça antiga, revise referências a nomes no comportamento da nova cópia; scripts
 não são reescritos automaticamente.
 
@@ -50,8 +52,11 @@ A árvore mostra Mundo, Iluminação, ServerScriptService, ServerStorage e
 ReplicatedStorage nessa ordem, preservando nomes, IDs e filhos existentes.
 Serviços usam um ícone próprio; não são pastas comuns. Eles podem ser selecionados
 e expandidos, mas não excluídos nem movidos para outro objeto. O menu **+**
-localiza ou cria o serviço escolhido sem duplicá-lo. Os padrões novos incluem
-os serviços; carregar uma cena antiga não injeta serviços nem altera o arquivo.
+localiza ou cria o serviço escolhido sem duplicá-lo. Ao abrir o Studio, serviços
+ausentes e a pasta convencional **ServerStorage/Itens** são disponibilizados
+em memória, também em cenas antigas. Scripts não são recriados. Nada é gravado
+automaticamente: use Salvar para persistir os contêineres adicionados. Objetos
+existentes são preservados; um objeto já chamado Itens não é substituído.
 
 ServerStorage e ReplicatedStorage são armazenamento local: Parts, Modelos e
 seus filhos permanecem no Explorador, mas não aparecem no Mundo, não têm corpos

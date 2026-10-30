@@ -250,3 +250,5 @@ button.image-locked { opacity: 0.45; pointer-events: none; }
 .playlist-clear { margin-top: 6px; }
 .compact .audio-card { width: 220px; }
 .compact .music-field { width: 100%; margin-right: 0; }
+
+.tree-row.service-root { border-top: 1px #3e424b; margin-top: 3px; }

@@ -1,4 +1,5 @@
 #include "ui/Localization.h"
+#include "objects/Lighting.h"
 // Actual RML document, GL3 renderer, engine actions and X11 input, not mock UI.
 #include "editor/EditorUI.h"
 #include "editor/StudioTheme.h"
@@ -74,17 +75,28 @@ int main() {
     InitWindow(1366,768,"LINBLUX RML integration");SetWindowPosition(0,0);SetExitKey(KEY_NULL);SetTargetFPS(60);
     rlImGuiSetup(true);ImGui::GetIO().ConfigFlags|=ImGuiConfigFlags_DockingEnable;ImGui::GetIO().IniFilename=nullptr;studio::Apply();
     {
-        Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();scene.gameAssets().player.enableShiftLock=true;
+        Scene scene;scene.buildDefaultScene();if(!std::getenv("LINBLUX_VISIBLE_ONLY"))scene.installDefaultScripts();scene.gameAssets().player.enableShiftLock=true;
         auto* folder=scene.createContainer(InstanceClass::Folder,nullptr,"Buildings");
         auto* part=scene.createPart(PartShape::Block,{14,3,0},{4,6,1},"Wall");part->setAnchored(true);scene.select(part);
         PhysicsWorld physics;physics.attach(scene);EditorCamera camera;SceneRenderer renderer;AppConfig config;
         // Audio tests exercise UI/backend, not shadow quality; keep software GL cheap.
         if(std::getenv("LINBLUX_PLAYER_AUDIO_ONLY")||std::getenv("LINBLUX_AUDIO_PANEL_ONLY")||std::getenv("LINBLUX_NATIVE_AUDIO_ONLY")||std::getenv("LINBLUX_EXPLORER_ONLY"))renderer.setQuality(RenderQuality::Low);
         config.defaultProjectPath=std::string(directory)+"/map.json";
-        const auto untouched=projectio::toJson(scene);
+        if(std::getenv("LINBLUX_VISIBLE_ONLY")) {
+            if(const char* path=std::getenv("LINBLUX_VISIBLE_PROJECT")) {std::string error;CHECK(projectio::load(scene,path,error));}
+            else {
+                CHECK(!scene.service(InstanceClass::ServerStorage));
+                scene.createPart(PartShape::Block,{20,2,0},{2,2,2},"Plataforma inicial325",500);
+                scene.createPart(PartShape::Block,{23,2,0},{2,2,2},"PlataformaInicial325",501);
+            }
+            std::string error;CHECK(projectio::save(scene,config.defaultProjectPath,error));
+            Scene legacy;CHECK(projectio::load(legacy,config.defaultProjectPath,error));
+            if(!std::getenv("LINBLUX_VISIBLE_PROJECT"))CHECK(!legacy.service(InstanceClass::ServerStorage));
+        }
         EditorUI ui(scene,physics,camera,renderer,config);std::string error;
         CHECK(ui.enableModernFrontend(error));std::fprintf(stderr,"RML init: %s\n",error.c_str());
         if(!ui.frontend())return 1;
+        const auto untouched=projectio::toJson(scene);
         std::function<void()> observeFrame;
         auto frames=[&](int count=2){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(BLACK);rlImGuiBegin();ui.draw();rlImGuiEnd();ui.renderModernFrontend();EndDrawing();if(observeFrame)observeFrame();}};
         auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames((std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")||(std::getenv("LINBLUX_PLAYER_MENU_ONLY")&&!std::getenv("LINBLUX_PLAYER_AUDIO_ONLY")))?1:2);};
@@ -118,10 +130,47 @@ int main() {
         // Optional fast iteration path; the registered CTest always exercises
         // the full editor + player sequence without this environment variable.
         capture("studio-1366");
+        if(std::getenv("LINBLUX_VISIBLE_ONLY")) {
+            auto* storage=scene.service(InstanceClass::ServerStorage);CHECK(storage);
+            auto* replicated=scene.service(InstanceClass::ReplicatedStorage);CHECK(replicated);
+            CHECK(scene.service(InstanceClass::ServerScriptService));
+            CHECK(storage->children().size()==1&&storage->children()[0]->name()=="Itens");
+            const auto storageId=storage->id(),replicatedId=replicated->id(),itemsId=storage->children()[0]->id();
+            const auto objectCount=scene.objects().size();
+            CHECK(scene.find(500)&&scene.find(500)->name()=="Plataforma inicial325");
+            CHECK(scene.service(InstanceClass::ServerScriptService)->children().empty());
+            click("fold-"+std::to_string(scene.workspace()->id())); // compact view, no insertion menu
+            for(auto* service:{static_cast<Instance*>(scene.workspace()),static_cast<Instance*>(scene.lighting()),scene.service(InstanceClass::ServerScriptService),storage,replicated}) {
+                auto b=ui.frontend()->elementBounds("node-"+std::to_string(service->id()));CHECK(b.width>0&&b.y>=0&&b.y+b.height<768);
+            }
+            frames(4);CHECK(scene.objects().size()==objectCount);
+            Scene disk;CHECK(projectio::load(disk,config.defaultProjectPath,error));
+            if(!std::getenv("LINBLUX_VISIBLE_PROJECT"))CHECK(!disk.service(InstanceClass::ServerStorage)); // no silent save
+            event("mousemove 700 600");frames(3);capture("servicos-automaticos-1366");
+            click("normalization-preview");frames(2);
+            CHECK(ui.frontend()->elementText("dialog-title").find("prévia")!=std::string::npos);
+            CHECK(ui.frontend()->elementText("appearance-controls").find("PlataformaInicial325")!=std::string::npos);
+            CHECK(ui.frontend()->elementText("appearance-controls").find("CONFLITO")!=std::string::npos);
+            capture("normalizacao-previa-1366");key("Return");
+            CHECK(scene.find(500)->name()=="Plataforma inicial325");
+            click("dialog-cancel");CHECK(scene.find(500)->name()=="Plataforma inicial325");
+            ui.frontend()->resetDocumentView();frames(2);
+            EditorActions actions(ui);scene.select(scene.workspace());CHECK(actions.dispatch({"part",""}));
+            CHECK(scene.selection()&&scene.selection()->isPart()&&ValidPartName(scene.selection()->name()));
+            CHECK(actions.dispatch({"save",""}));
+            CHECK(projectio::load(scene,config.defaultProjectPath,error));ui.frontend()->resetDocumentView();frames(3);
+            CHECK(scene.service(InstanceClass::ServerStorage)->id()==storageId);
+            CHECK(scene.service(InstanceClass::ReplicatedStorage)->id()==replicatedId);
+            CHECK(scene.find(itemsId)&&scene.service(InstanceClass::ServerStorage)->children().size()==1);
+            CHECK(scene.objects().size()==objectCount+1);
+            capture("servicos-reabertos-1366");
+            std::printf("Visible services UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
         if(std::getenv("LINBLUX_EXPLORER_ONLY")) {
             renderer.setQuality(RenderQuality::Low);
             if(std::getenv("LINBLUX_STORAGE_ONLY")) {
-                auto* unrelated=scene.createContainer(InstanceClass::Folder,scene.workspace(),"Itens");
+                auto* unrelated=scene.createContainer(InstanceClass::Folder,scene.workspace(),"Itens");unrelated->setName("Itens");
                 EditorActions actions(ui);CHECK(actions.dispatch({"item-prototypes",""}));
                 auto* items=scene.selection();CHECK(items&&items->instanceClass()==InstanceClass::Folder);
                 CHECK(items!=unrelated&&items->name()=="Itens"&&unrelated->name()=="Itens");
