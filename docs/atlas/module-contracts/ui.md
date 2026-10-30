@@ -54,3 +54,16 @@ Na correção de 25/10/2026, as capturas de Home/menu foram inspecionadas a
 1280×720; a regressão de ações passou em 23,76 s, supervisionada com limite de
 60 s. Exportação por diálogo nativo e exclusão confirmada não foram exercitadas
 nessa regressão curta; o cancelamento da exclusão foi verificado.
+
+**Sliders de áudio (Studio 2.0):** Câmera, volume geral e biblioteca usam o
+mesmo widget RmlUi `range`, apresentado por `.slider-control` em `player.rcss`.
+`change` fornece o valor novo antes de atualizar o atributo `value`; consumir o
+payload, não a posição anterior. Durante edição, conservar o DOM e atualizar
+somente os percentuais. O backend continua sendo raylib/GameAssets/AudioSystem.
+O menu nativo captura o arraste até soltar, transfere foco no clique e mantém o
+último volume positivo para desmutar. Ausência de dispositivo desabilita o ajuste.
+Testes focados: `linblux_audio_panel_ui`, `linblux_player_audio_slider_ui`,
+`linblux_player_audio_slider_hd_ui`, `linblux_native_audio_slider_ui` e
+`linblux_player_menu`, sempre pelo TURBO. O sink ALSA em
+`tests/fixtures/audio/null.conf` é exclusivo dos testes; não representa audição
+em dispositivo físico nem altera a configuração de áudio do sistema.

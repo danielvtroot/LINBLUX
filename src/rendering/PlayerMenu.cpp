@@ -15,6 +15,7 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
  DrawRectangle(int(left),0,int(side),height,{15,15,19,250});
  auto text=[&](const std::string& value,float x,float y,float size,Color color){DrawTextEx(font,value.c_str(),{x,y},size*s,s,color);};
  const auto mouse=GetMousePosition();int current=0;bool quit=false;
+ if(!paused||!IsMouseButtonDown(MOUSE_BUTTON_LEFT))draggingSlider_=-1;
  if(paused){if(IsKeyPressed(KEY_TAB)||IsKeyPressed(KEY_DOWN))focus_=(focus_+1)%std::max(1,count_);if(IsKeyPressed(KEY_UP))focus_=(focus_+std::max(1,count_)-1)%std::max(1,count_);}
  auto button=[&](const std::string& label,Rectangle r,bool active=false){
   const int id=current++;const bool hover=paused&&CheckCollisionPointRec(mouse,r);
@@ -34,20 +35,21 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
  text(heading,x,26*s,17,white);
  if(button("×",{left+w-48*s,18*s,32*s,32*s})){open_=false;runtime.resume();}
  DrawLine(int(x),int(66*s),int(left+w-18*s),int(66*s),{70,52,60,255});
- const Rectangle content{x,76*s,available,height-90*s};
+ const Rectangle content{x-8*s,76*s,available+16*s,height-90*s};
  if(paused&&CheckCollisionPointRec(mouse,content))scroll_=std::clamp(scroll_-GetMouseWheelMove()*36*s,0.f,250*s);
  BeginScissorMode(int(content.x),int(content.y),int(content.width),int(content.height));
  float y=90*s-scroll_;
  auto line=[&](const std::string& value){text(value,x,y,16,muted);y+=30*s;};
  auto action=[&](const std::string& label){const bool clicked=button(label,{x,y,available,36*s});y+=48*s;return clicked;};
- auto slider=[&](const char* label,float& value,float min,float max){
+ auto slider=[&](const char* label,float& value,float min,float max,bool enabled=true){
   char b[100];std::snprintf(b,sizeof(b),"%s: %.2f",label,value);line(b);
-  const int id=current++;Rectangle track{x,y,available,22*s};const bool hover=paused&&CheckCollisionPointRec(mouse,track)&&CheckCollisionPointRec(mouse,content);
-  if(hover&&IsMouseButtonDown(MOUSE_BUTTON_LEFT))value=min+std::clamp((mouse.x-x)/available,0.f,1.f)*(max-min);
-  if(paused&&id==focus_){if(IsKeyPressed(KEY_LEFT))value=std::max(min,value-(max-min)/20);if(IsKeyPressed(KEY_RIGHT))value=std::min(max,value+(max-min)/20);}
+  const int id=current++;Rectangle track{x-8*s,y,available+16*s,22*s};const bool hover=enabled&&paused&&CheckCollisionPointRec(mouse,track)&&CheckCollisionPointRec(mouse,content);
+  if(hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){draggingSlider_=id;focus_=id;}
+  if(enabled&&paused&&draggingSlider_==id&&IsMouseButtonDown(MOUSE_BUTTON_LEFT))value=min+std::clamp((mouse.x-x)/available,0.f,1.f)*(max-min);
+  if(enabled&&paused&&id==focus_){if(IsKeyPressed(KEY_HOME))value=min;if(IsKeyPressed(KEY_END))value=max;if(IsKeyPressed(KEY_LEFT))value=std::max(min,value-(max-min)/20);if(IsKeyPressed(KEY_RIGHT))value=std::min(max,value+(max-min)/20);}
   DrawRectangle(int(x),int(y+9*s),int(available),int(4*s),{65,56,64,255});
   DrawRectangle(int(x),int(y+9*s),int(available*std::clamp((value-min)/std::max(.0001f,max-min),0.f,1.f)),int(4*s),red);
-  DrawCircleV({x+available*std::clamp((value-min)/std::max(.0001f,max-min),0.f,1.f),y+11*s},6*s,white);y+=46*s;
+  DrawCircleV({x+available*std::clamp((value-min)/std::max(.0001f,max-min),0.f,1.f),y+11*s},6*s,enabled?white:muted);y+=46*s;
  };
  auto& settings=runtime.settings();
  if(page_==0){line(runtime.rig().name);line("Vida: "+std::to_string(int(runtime.health()))+" / "+std::to_string(int(settings.maxHealth)));if(action("Renascer personagem")){std::string error;runtime.resetCharacter(error);}}
@@ -62,12 +64,12 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
  }
  if(page_==2){slider("Sensibilidade",settings.sensitivity,.0001f,.03f);line("WASD: mover · Espaço: pular");line("Botão direito: girar câmera");line("E: segurar para interagir");line("1–9: equipar · Delete: soltar");line("PgUp / PgDn: trocar página");line("Esc: abrir e fechar menu");}
  if(page_==3){if(IsAudioDeviceReady()){
-     float volume=GetMasterVolume();
+     float volume=GetMasterVolume();if(volume>0)lastAudibleVolume_=volume;
      slider("Volume geral",volume,0,1);if(paused)SetMasterVolume(volume);
      const int pct=int(std::round(volume*100));
      char label[16];std::snprintf(label,sizeof(label),"%d%%",pct);line(label);
-     if(action(volume>0?"Mudo (silenciar tudo)":"Ativar som")){SetMasterVolume(volume>0?0.f:1.f);}
- }else line("Dispositivo de áudio indisponível nesta sessão.");}
+     if(action(volume>0?"Mudo (silenciar tudo)":"Ativar som")){if(volume>0)lastAudibleVolume_=volume;SetMasterVolume(volume>0?0.f:lastAudibleVolume_);}
+ }else {float unavailable=0;slider("Volume geral",unavailable,0,1,false);line("Áudio indisponível nesta sessão.");}}
  if(page_==4){if(action(IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE)?"Sair da tela cheia":"Entrar em tela cheia"))ToggleBorderlessWindowed();line("Ajuste a resolução pela janela.");}
  if(page_==5){line("LINBLUX Player · Alpha em desenvolvimento");line("Experiências locais com Lua e Bullet.");line("Use Esc para retornar ao jogo.");line("Menu protegido: scripts não o removem.");}
  EndScissorMode();count_=std::max(1,current);focus_=std::clamp(focus_,0,count_-1);return quit;

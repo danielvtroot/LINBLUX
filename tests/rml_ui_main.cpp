@@ -7,6 +7,7 @@
 #include "ui/StudioFrontend.h"
 #include "ui/EditorActions.h"
 #include "rendering/SceneRenderer.h"
+#include "rendering/PlayerMenu.h"
 #include "rendering/EditorCamera.h"
 #include "serialization/ProjectIO.h"
 #include "game/ImageAssets.h"
@@ -64,6 +65,7 @@ bool SameProjectValue(const nlohmann::json& a,const nlohmann::json& b) {
     return a==b;
 }
 int main() {
+    setvbuf(stdout,nullptr,_IONBF,0);
     char pattern[]="/tmp/loblox-rml-ui-XXXXXX";const char* directory=mkdtemp(pattern);if(!directory)return 1;
     setenv("XDG_CONFIG_HOME",directory,1);diag::configure(std::string(directory)+"/events.jsonl");
     setenv("XDG_STATE_HOME",(std::string(directory)+"/state").c_str(),1);
@@ -76,6 +78,8 @@ int main() {
         auto* folder=scene.createContainer(InstanceClass::Folder,nullptr,"Buildings");
         auto* part=scene.createPart(PartShape::Block,{14,3,0},{4,6,1},"Wall");part->setAnchored(true);scene.select(part);
         PhysicsWorld physics;physics.attach(scene);EditorCamera camera;SceneRenderer renderer;AppConfig config;
+        // Audio tests exercise UI/backend, not shadow quality; keep software GL cheap.
+        if(std::getenv("LINBLUX_PLAYER_AUDIO_ONLY")||std::getenv("LINBLUX_AUDIO_PANEL_ONLY")||std::getenv("LINBLUX_NATIVE_AUDIO_ONLY"))renderer.setQuality(RenderQuality::Low);
         config.defaultProjectPath=std::string(directory)+"/map.json";
         const auto untouched=projectio::toJson(scene);
         EditorUI ui(scene,physics,camera,renderer,config);std::string error;
@@ -83,7 +87,7 @@ int main() {
         if(!ui.frontend())return 1;
         std::function<void()> observeFrame;
         auto frames=[&](int count=2){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(BLACK);rlImGuiBegin();ui.draw();rlImGuiEnd();ui.renderModernFrontend();EndDrawing();if(observeFrame)observeFrame();}};
-        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames((std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")||std::getenv("LINBLUX_PLAYER_MENU_ONLY"))?1:2);};
+        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames((std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")||(std::getenv("LINBLUX_PLAYER_MENU_ONLY")&&!std::getenv("LINBLUX_PLAYER_AUDIO_ONLY")))?1:2);};
         auto key=[&](const std::string& name){event("keydown "+name);event("keyup "+name);};
         auto clickAt=[&](Vector2 p){event("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));event("mousedown 1");event("mouseup 1");};
         auto click=[&](const std::string& id){
@@ -114,7 +118,75 @@ int main() {
         // Optional fast iteration path; the registered CTest always exercises
         // the full editor + player sequence without this environment variable.
         capture("studio-1366");
+        if(std::getenv("LINBLUX_EXPLORER_ONLY")) {
+            renderer.setQuality(RenderQuality::Low);
+            for(int i=0;i<60;++i)scene.createContainer(InstanceClass::Folder,folder,"Objeto "+std::to_string(i));
+            auto* child=scene.createContainer(InstanceClass::Folder,folder,"Nome com espaços preservados");
+            const auto id="node-"+std::to_string(child->id()),parentId="node-"+std::to_string(folder->id());
+            const auto authored=projectio::toJson(scene);
+            for(int width:{1366,1920}) {
+                resizeWindow(width,width==1366?768:1080);frames();
+                ui.frontend()->scrollIntoView(id);frames();
+                const auto row=ui.frontend()->elementBounds(id);
+                CHECK(row.height>=19&&row.height<=22);CHECK(row.width>120);
+                click(id);CHECK(scene.selection()==child);
+                capture("explorer-selected-"+std::to_string(width));
+                ui.frontend()->scrollIntoView(parentId);frames();
+                click("fold-"+std::to_string(folder->id()));
+                CHECK(ui.frontend()->elementBounds(id).height==0);
+                click("tree-search");event("type --clearmodifiers --delay 1 Nome");frames(3);
+                CHECK(ui.frontend()->elementBounds(id).height>=19);
+                CHECK(ui.frontend()->elementBounds(parentId).height>=19);
+                clickVisible(id);CHECK(scene.selection()==child);
+                capture("explorer-filter-"+std::to_string(width));
+                click("tree-search");key("ctrl+a");key("BackSpace");
+                ui.frontend()->scrollIntoView(parentId);frames();
+                click("fold-"+std::to_string(folder->id()));
+                CHECK(ui.frontend()->elementBounds(id).height>=19);
+                CHECK(child->name()=="Nome com espaços preservados");
+                CHECK(SameProjectValue(projectio::toJson(scene),authored));
+            }
+            std::printf("Explorer UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
+        if(std::getenv("LINBLUX_NATIVE_AUDIO_ONLY")) {
+            if(const char* config=std::getenv("LINBLUX_TEST_AUDIO_CONFIG"))setenv("ALSA_CONFIG_PATH",config,1);
+            unsetenv("PULSE_SERVER");InitAudioDevice();CHECK(IsAudioDeviceReady());
+            if(!IsAudioDeviceReady()){rlImGuiShutdown();CloseWindow();return 1;}
+            click("play");auto& runtime=EditorUITestAccess::runtime(ui);
+            PlayerMenu menu;menu.toggle();
+            auto nativeFrames=[&](int count=3){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(Color{90,110,130,255});menu.draw(runtime,GetScreenWidth(),GetScreenHeight(),GetFontDefault(),{},"Áudio");EndDrawing();}};
+            auto nativeEvent=[&](const std::string& args){CHECK(std::system(("xdotool "+args).c_str())==0);nativeFrames();};
+            auto nativeClick=[&](float x,float y){nativeEvent("mousemove "+std::to_string(int(x))+" "+std::to_string(int(y)));nativeEvent("mousedown 1");nativeEvent("mouseup 1");};
+            for(int width:{1366,1920}) {
+                resizeWindow(width,width==1366?768:1080);nativeFrames(16);
+                const float scale=GetScreenHeight()/720.f;
+                nativeClick(70*scale,270*scale);
+                const float panel=std::min(width-16.f,std::clamp(width*.55f,480*scale,840.f));
+                const float left=192*scale,span=panel-214*scale,y=131*scale;
+                for(float level:{0.f,.25f,.5f,.75f,1.f}) {
+                    nativeClick(left+span*level,y);std::printf("Native %d volume %.2f -> %.3f\n",width,level,GetMasterVolume());CHECK(std::fabs(GetMasterVolume()-level)<.01f);
+                }
+                nativeClick(left+span*.5f,y);
+                nativeEvent("keydown Right");nativeEvent("keyup Right");CHECK(std::fabs(GetMasterVolume()-.55f)<.01f);
+                nativeEvent("keydown Left");nativeEvent("keyup Left");CHECK(std::fabs(GetMasterVolume()-.5f)<.01f);
+                nativeClick(left+span/2,214*scale);CHECK(GetMasterVolume()==0);
+                nativeClick(left+span/2,214*scale);CHECK(std::fabs(GetMasterVolume()-.5f)<.01f);
+                nativeClick(left+span*.5f,y);nativeEvent("mousedown 1");
+                nativeEvent("mousemove "+std::to_string(int(left+span+30))+" "+std::to_string(int(y+30)));
+                CHECK(GetMasterVolume()>.99f);nativeEvent("mouseup 1");nativeClick(left+span*.5f,y);
+                TakeScreenshot((std::string(directory)+"/native-audio-"+std::to_string(width)+".png").c_str());
+            }
+            EditorActions(ui).dispatch({"stop",""});CloseAudioDevice();nativeFrames();
+            CHECK(!IsAudioDeviceReady());nativeClick(400,195);CHECK(!IsAudioDeviceReady());
+            TakeScreenshot((std::string(directory)+"/native-audio-unavailable.png").c_str());
+            std::printf("Native audio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
         if(std::getenv("LINBLUX_PLAYER_MENU_ONLY")) {
+            if(const char* audioConfig=std::getenv("LINBLUX_TEST_AUDIO_CONFIG")){setenv("ALSA_CONFIG_PATH",audioConfig,1);const char* pulse=getenv("PULSE_SERVER");if(pulse&&std::string(pulse)=="disabled")unsetenv("PULSE_SERVER");}
+            if(!IsAudioDeviceReady())InitAudioDevice();
+            const bool audioReady=IsAudioDeviceReady();
             scene.createScript(InstanceClass::Script,nullptr,"MenuContinua.lua")->source=R"(
 local npc=linblux.npc.create{name='NPC do menu',position=linblux.vec3(30,2.6,30),size=linblux.vec3(2,5,2),speed=2}
 linblux.npc.move_to(npc,linblux.vec3(65,2.6,30))
@@ -122,15 +194,18 @@ linblux.scene.root:set_attribute('menu_npc',npc.id)
 linblux.events.on('update',function() linblux.scene.root:set_attribute('menu_clock',linblux.time.now()) end)
 )";
             const bool windowOnly=std::getenv("LINBLUX_MENU_WINDOW_ONLY")!=nullptr;
-            const auto sizes=windowOnly?std::vector<Vector2>{{1366,768}}:std::vector<Vector2>{{1280,720},{1920,1080}};
+            const bool audioOnly=std::getenv("LINBLUX_PLAYER_AUDIO_ONLY")!=nullptr;
+            const auto sizes=audioOnly?std::vector<Vector2>{std::getenv("LINBLUX_AUDIO_HD")?Vector2{1920,1080}:Vector2{1366,768}}:windowOnly?std::vector<Vector2>{{1366,768}}:std::vector<Vector2>{{1280,720},{1920,1080}};
             for(auto size:sizes){
-                resizeWindow(int(size.x),int(size.y));click("play");frames(6);auto& rt=EditorUITestAccess::runtime(ui);
-                CHECK(rt.takeDamage(40,error));key("Escape");frames(16);CHECK(rt.state()==game::RuntimeState::Playing&&ui.gameMenuOpen());CHECK(!EditorUITestAccess::captured(ui));
+                resizeWindow(int(size.x),int(size.y));click("play");frames(audioOnly?2:6);auto& rt=EditorUITestAccess::runtime(ui);
+                CHECK(rt.takeDamage(40,error));key("Escape");frames(audioOnly?4:16);CHECK(rt.state()==game::RuntimeState::Playing&&ui.gameMenuOpen());CHECK(!EditorUITestAccess::captured(ui));
+                if(!audioOnly) {
                 const auto clock=std::get<double>(rt.scene().workspace()->attributes().at("menu_clock"));
                 const auto npcId=InstanceId(std::get<double>(rt.scene().workspace()->attributes().at("menu_npc")));
                 const auto npcBefore=rt.scene().findPart(npcId)->position();frames(12);
                 CHECK(std::get<double>(rt.scene().workspace()->attributes().at("menu_clock"))>clock);
                 CHECK(Vector3Distance(rt.scene().findPart(npcId)->position(),npcBefore)>.02f);
+                }
                 const auto vp=ui.frontend()->viewport(),panel=ui.frontend()->elementBounds("pause-panel");
                 CHECK(std::fabs(panel.x-vp.x)<2);CHECK(panel.width<=vp.width*.94f);CHECK(panel.height>=vp.height-2);
                 for(const char* id:{"resume","page-game","page-settings","page-controls","page-audio","page-video","page-about","leave","pause-close"}){
@@ -145,12 +220,34 @@ linblux.events.on('update',function() linblux.scene.root:set_attribute('menu_clo
                     key("Escape");frames(8);CHECK(!ui.gameMenuOpen()&&rt.state()==game::RuntimeState::Playing);
                     key("shift+F5");CHECK(!ui.playing());continue;
                 }
-                if(size.x==1920){key("Escape");frames(14);CHECK(rt.state()==game::RuntimeState::Playing&&!ui.gameMenuOpen());key("shift+F5");CHECK(!ui.playing());continue;}
-                const auto position=rt.position();event("keydown w");frames(5);event("keyup w");CHECK(Vector3Distance(position,rt.position())<.001f);
-                click("page-settings");const auto mode=rt.settings().cameraMode;click("camera-next");CHECK(rt.settings().cameraMode!=mode);
-                const float sensitivity=rt.settings().sensitivity;const auto slider=ui.frontend()->elementBounds("sensitivity-slider");clickAt({slider.x+slider.width*.7f,slider.y+slider.height/2});CHECK(rt.settings().sensitivity!=sensitivity);
-                const bool shift=rt.settings().enableShiftLock;click("shift-lock");CHECK(rt.settings().enableShiftLock!=shift);
-                click("page-audio");CHECK(ui.frontend()->elementBounds("master-volume").width>80);
+                if(size.x==1920&&!audioOnly){key("Escape");frames(14);CHECK(rt.state()==game::RuntimeState::Playing&&!ui.gameMenuOpen());key("shift+F5");CHECK(!ui.playing());continue;}
+                if(!audioOnly) {
+                    const auto position=rt.position();event("keydown w");frames(5);event("keyup w");CHECK(Vector3Distance(position,rt.position())<.001f);
+                    click("page-settings");const auto mode=rt.settings().cameraMode;click("camera-next");CHECK(rt.settings().cameraMode!=mode);
+                    const float sensitivity=rt.settings().sensitivity;const auto slider=ui.frontend()->elementBounds("sensitivity-slider");clickAt({slider.x+slider.width*.7f,slider.y+slider.height/2});CHECK(rt.settings().sensitivity!=sensitivity);
+                    const bool shift=rt.settings().enableShiftLock;click("shift-lock");CHECK(rt.settings().enableShiftLock!=shift);
+                }
+                click("page-audio");const auto masterVolume=ui.frontend()->elementBounds("master-volume");CHECK(masterVolume.width>80);
+                if(audioReady&&audioOnly) {
+                    const auto setVolume=[&](float fraction){const int x=int(masterVolume.x+9+(masterVolume.width-18)*fraction),y=int(masterVolume.y+masterVolume.height*.5f);clickAt({float(x),float(y)});const float actual=GetMasterVolume();CHECK(std::fabs(actual-fraction)<=.06f);};
+                    for(float level:{0.f,.25f,.5f,.75f,1.f})setVolume(level);
+                    setVolume(.5f);key("Right");CHECK(std::fabs(GetMasterVolume()-.55f)<.01f);
+                    key("Left");CHECK(std::fabs(GetMasterVolume()-.5f)<.01f);
+                    click("master-mute");CHECK(GetMasterVolume()==0.f);
+                    click("master-mute");CHECK(std::fabs(GetMasterVolume()-.5f)<.01f);
+                    // Drag the thumb beyond the bounds; capture must stay with it.
+                    clickAt({masterVolume.x+masterVolume.width*.5f,masterVolume.y+14});
+                    std::printf("RML drag start %.3f bounds %.1f %.1f %.1f %.1f\n",GetMasterVolume(),masterVolume.x,masterVolume.y,masterVolume.width,masterVolume.height);
+                    event("mousedown 1");event("mousemove "+std::to_string(int(masterVolume.x+masterVolume.width*.5f+2))+" "+std::to_string(int(masterVolume.y+14)));event("mousemove "+std::to_string(int(masterVolume.x+masterVolume.width+40))+" "+std::to_string(int(masterVolume.y+14)));
+                    std::printf("RML %d outside drag %.3f\n",int(size.x),GetMasterVolume());CHECK(GetMasterVolume()>.99f);event("mouseup 1");setVolume(.5f);
+                    capture("audio-slider-"+std::to_string(int(size.x)));
+                    if(size.x==1920) {
+                        CloseAudioDevice();frames(2);CHECK(!IsAudioDeviceReady());
+                        CHECK(ui.frontend()->elementText("audio-device-status").find("indisponível")!=std::string::npos);
+                        click("master-mute");CHECK(!IsAudioDeviceReady());capture("audio-unavailable");
+                    }
+                }else std::fprintf(stderr,"Audio volume interaction not exercised: no audio device available.\n");
+                if(audioOnly){CHECK(audioReady);key("shift+F5");continue;}
                 click("page-video");CHECK(ui.frontend()->elementBounds("fullscreen-value").width>40);
                 click("page-controls");CHECK(ui.frontend()->elementText("controls-page").find("W A S D")!=std::string::npos);
                 click("page-about");capture("side-help-"+std::to_string(int(size.x)));
@@ -196,6 +293,27 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             CHECK(ui.frontend()->elementBounds("music-background").width>80);
             clickVisible("audio-background-"+id);CHECK(scene.gameAssets().music.background==id);
             clickVisible("audio-playlist-"+id);CHECK(scene.gameAssets().music.playlist==std::vector<std::string>{id});
+            for(int width:{std::getenv("LINBLUX_AUDIO_HD")?1920:1366}) {
+                resizeWindow(width,width==1366?768:1080);
+                ui.frontend()->scrollIntoView("audio-volume-"+id);frames(3);
+                const auto volume=ui.frontend()->elementBounds("audio-volume-"+id);
+                CHECK(volume.width>80&&volume.height>=28);
+                clickAt({volume.x+volume.width*.5f,volume.y+14});
+                CHECK(std::fabs(scene.gameAssets().findSound(id)->volume-.5f)<.06f);
+                key("Right");CHECK(std::fabs(scene.gameAssets().findSound(id)->volume-.55f)<.06f);
+                key("Left");CHECK(std::fabs(scene.gameAssets().findSound(id)->volume-.5f)<.06f);
+                // Several moves without release must preserve the same widget.
+                clickAt({volume.x+volume.width*.5f,volume.y+14});event("mousedown 1");
+                event("mousemove "+std::to_string(int(volume.x+volume.width*.5f+2))+" "+std::to_string(int(volume.y+14)));
+                for(float fraction:{.25f,.75f}) {
+                    event("mousemove "+std::to_string(int(volume.x+9+(volume.width-18)*fraction))+" "+std::to_string(int(volume.y+14)));
+                    std::printf("Library %d %.2f -> %.3f (width %.1f)\n",width,fraction,scene.gameAssets().findSound(id)->volume,volume.width);
+                    CHECK(std::fabs(scene.gameAssets().findSound(id)->volume-fraction)<.06f);
+                }
+                event("mouseup 1");CHECK(ui.frontend()->elementText("audio-level-"+id)==std::to_string(int(std::round(scene.gameAssets().findSound(id)->volume*100)))+"%");
+                ui.frontend()->scrollIntoView("audio-delete-"+id);frames(2);capture("audio-library-"+std::to_string(width));
+                click("audio-play-"+id);click("audio-pause-"+id);click("audio-stop-"+id);
+            }
             ui.frontend()->scrollIntoView("audio-delete-"+id);frames(3);capture("audio-library");
             ui.frontend()->scrollIntoView("audio-import");frames(3);capture("audio-music-settings");
             clickVisible("music-playlist-remove-0");CHECK(scene.gameAssets().music.playlist.empty());
@@ -232,7 +350,12 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
                 for(int i=0;i<4;++i){walls[i]->setPosition({40.f+i*8,15,30});}physics.syncScene(scene);
                 const Vector3 points[4]={{0,0,-10},{-10,0,0},{10,0,0},{0,0,10}};
                 for(int i=0;i<4;++i){
-                    scene.select(walls[i]);frames(2);click("tab-Model");click("place-surface");CHECK(EditorUITestAccess::placement(ui).active());
+                    scene.select(walls[i]);frames(2);click("tab-Model");
+                    if(width==1366&&i==0){
+                        CHECK(ui.frontend()->elementBounds("construction-grid").width==0);
+                        CHECK(ui.frontend()->elementBounds("construction-grid-spacing").width==0);
+                    }
+                    click("place-surface");CHECK(EditorUITestAccess::placement(ui).active());
                     const auto view=ui.frontend()->viewport();Vector2 local;CHECK(camera.projectChecked(points[i],{view.width,view.height},local));
                     const Vector2 point{local.x+view.x,local.y+view.y};const auto original=projectio::toJson(scene);
                     event("mousemove "+std::to_string(int(point.x))+" "+std::to_string(int(point.y)));frames(2);
@@ -398,17 +521,36 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             const auto authored=projectio::toJson(scene);CHECK(projectio::save(scene,config.defaultProjectPath,error));
             Scene reloaded;CHECK(projectio::load(reloaded,config.defaultProjectPath,error));
             CHECK(SameProjectValue(nlohmann::json::parse(projectio::toJson(reloaded)),nlohmann::json::parse(authored)));
-            scene.createScript(InstanceClass::Script,nullptr,"CorpoEditor.lua")->source=R"(
-local part=linblux.scene.find("Wall")
+            scene.createScript(InstanceClass::Script,nullptr,"CorpoEditor.lua")->source=
+                std::string("local part=linblux.scene.find(")+std::to_string(part->id())+R"lua()
 assert(math.abs(part.body.density-2.5)<0.001 and math.abs(part.body.restitution-0.75)<0.001)
 part.anchored=false
-assert(math.abs(part.mass-60)<0.001)
-part:apply_impulse(linblux.vec3(60,0,0))
-assert(math.abs(part.velocity.x-1)<0.001)
-)";
-            click("play");frames(8);auto& runtime=EditorUITestAccess::runtime(ui);CHECK(ui.playing());CHECK(runtime.scripts().errorCount()==0);
+part:apply_impulse(linblux.vec3(600,0,0))
+linblux.scene.root:set_attribute("physics_probe_velocity",part.velocity.x)
+)lua";
+            const auto authoredBeforePlay=projectio::toJson(scene);
+            const auto authoredTransform=part->transform();
+            const auto authoredBodyPosition=physics.bodyPosition(part->id());
+            click("play");frames(8);auto& runtime=EditorUITestAccess::runtime(ui);CHECK(ui.playing());
+            for(const auto& message:runtime.scripts().messages())if(message.error)std::fprintf(stderr,"Body physics Lua: %s\n",message.text.c_str());
+            CHECK(runtime.scripts().errorCount()==0);
+            auto* runtimePart=runtime.scene().findPart(part->id());CHECK(runtimePart&&runtimePart!=part);
+            if(runtimePart) {
+                CHECK(runtime.scene().workspace()->attributes().count("physics_probe_velocity"));
+                if(runtime.scene().workspace()->attributes().count("physics_probe_velocity")) {
+                    const auto probeVelocity=float(std::get<double>(runtime.scene().workspace()->attributes().at("physics_probe_velocity")));
+                    CHECK(std::fabs(probeVelocity-10.f)<.01f);
+                }
+                CHECK(std::fabs(runtimePart->position().x-authoredTransform.position.x)>.02f);
+            }
+            CHECK(SameProjectValue(projectio::toJson(scene),authoredBeforePlay));
+            CHECK(NearlyEqual(part->position(),authoredTransform.position));
+            CHECK(NearlyEqual(physics.bodyPosition(part->id()),authoredBodyPosition));
             click("stop");frames();CHECK(!ui.playing());CHECK(part->anchored());
             CHECK(NearlyEqual(part->bodyProperties().density,2.5f));
+            CHECK(SameProjectValue(projectio::toJson(scene),authoredBeforePlay));
+            CHECK(NearlyEqual(part->position(),authoredTransform.position));
+            CHECK(NearlyEqual(physics.bodyPosition(part->id()),authoredBodyPosition));
             std::printf("Body Properties UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
             rlImGuiShutdown();CloseWindow();return failures?1:0;
         }

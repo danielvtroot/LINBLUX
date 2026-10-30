@@ -57,13 +57,25 @@ try:
  def capture(name):
   path=root/(name+'.png');subprocess.run(['scrot','-u','-o',str(path)],check=True,timeout=5);return Image.open(path).convert('RGB')
  def hotbar_red(im):return sum(1 for y in range(690,710) for x in range(550,740) if (lambda c:abs(c[0]-215)<4 and abs(c[1]-38)<4 and abs(c[2]-63)<4)(im.getpixel((x,y))))
+ def collect_and_equip():
+  # Wait for the actual inventory state; software GL does not guarantee that
+  # a fixed wall-clock hold spans the required simulated collection time.
+  deadline=time.monotonic()+6
+  cmd('keydown','e')
+  try:
+   while time.monotonic()<deadline:
+    key('1',.05)
+    image=capture('collecting')
+    if hotbar_red(image)>100:return image
+   raise AssertionError('collection/equip did not complete within 6 seconds; '+str(root))
+  finally:cmd('keyup','e')
  assert hotbar_red(capture('empty'))==0,'hotbar appears before collection'
- key('e',.85);key('1');equipped=capture('equipped');assert hotbar_red(equipped)>100,'actual hotbar did not equip'
+ equipped=collect_and_equip();assert hotbar_red(equipped)>100,'actual hotbar did not equip'
  left=sum(1 for c in equipped.crop((930,278,980,300)).getdata() if min(c)>120 and max(c)-min(c)<18)
  right=sum(1 for c in equipped.crop((980,278,1025,300)).getdata() if min(c)>120 and max(c)-min(c)<18)
  assert left>right+100,'official logo decal is absent or horizontally mirrored'
  shoot();key('r');time.sleep(1.8);key('Delete');assert hotbar_red(capture('dropped'))==0,'hotbar survived Delete'
- key('e',.85);key('1');shoot()
+ collect_and_equip();shoot()
  # Wait for the assertion marker, not a fixed wall-clock delay: simulation
  # time is bounded per frame and need not track llvmpipe rendering time.
  deadline=time.monotonic()+12;cyan=0

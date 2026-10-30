@@ -30,13 +30,14 @@ seleção diferente, Play e alterações concorrentes invalidam a proposta.
 `SnapUnderCursor` também oferece `closestFace` para manter Model/partes extensas
 centradas tangencialmente e calcula offset e grade em coordenadas do alvo. Ações
 de montagem duplicam o subgrafo selecionado preservando tamanho/pivô, com passos
-por extensão OBB ou repetição do último deslocamento confirmado.
+por extensão OBB ou repetição do último deslocamento confirmado. A quantização de transformações permanece independente de sobreposição visual.
 
 Guia: `docs/EDITOR_PRECISAO.md`. Testes: CursorConstruction e
 ConstructionPreviewWorkflow em `linblux_studio`, `linblux_construction_ui`
 (prévia, save imutado, cancelamento, quatro paredes/piso, undo/redo, persistência
-nas resoluções 1366×768 e 1920×1080), `editor_precision_ui`, `models_ui` e
-gizmo_visual. Testes com Xvfb sempre via TURBO supervisionado.
+e ausência de controles de grade visual nas resoluções 1366×768 e 1920×1080),
+`editor_precision_ui`, `models_ui` e gizmo_visual. Testes com Xvfb sempre via
+TURBO supervisionado.
 
 **Invariantes:** transformações preservam hierarquia e IDs; undo/redo restaura
 estado anterior; edição não cria corpos físicos nem executa scripts; a câmera

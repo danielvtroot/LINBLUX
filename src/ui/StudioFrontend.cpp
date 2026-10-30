@@ -52,7 +52,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     Rml::Context* context=nullptr;Rml::ElementDocument* document=nullptr;
     Rectangle view{},advancedRect{};float left=204,right=292,bottom=330,propertySplit=.52f,dpi=1;
     std::string tab="Home",advanced,search,page="game",dialog,focusValue,split,propertySearch;
-    bool pauseWasOpen=false;float menuProgress=0;
+    bool pauseWasOpen=false;float menuProgress=0;float masterVolume=1.f,lastAudibleVolume=1.f;
     std::string selectedRigDecal,selectedDecalRig;
     std::string tooltip;double tooltipSince=0;bool contextOpen=false;
     std::string treeMarkup,propertyMarkup,ribbonMarkup,advancedMarkup,documentMarkup;size_t treeHash=0;
@@ -296,7 +296,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             text("player-setting-error","");
         }catch(const std::exception& e){text("player-setting-error",e.what());}
     }
-    void commit(Rml::Element* e) {
+    void commit(Rml::Element* e,const std::string* changedValue=nullptr) {
         if(!e)return;
         if(e->GetId().rfind("image-query",0)==0){imageQuery=value(e);propertyMarkup.clear();advancedMarkup.clear();return;}
         if(e->GetId()=="audio-search"){audioQuery=value(e);advancedMarkup.clear();return;}
@@ -316,8 +316,8 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             return;
         }
         const auto action=attr(e,"data-action"),property=attr(e,"data-property"),setting=attr(e,"data-setting");
-        std::string v=value(e);if(attr(e,"type")=="checkbox")v=e->HasAttribute("checked")?"true":"false";
-        if(action=="player-volume"){if(!ui.gameMenuOpen()||!IsAudioDeviceReady())return;try{SetMasterVolume(std::clamp(std::stof(v),0.f,1.f));}catch(...){}return;}
+        std::string v=changedValue?*changedValue:value(e);if(attr(e,"type")=="checkbox")v=e->HasAttribute("checked")?"true":"false";
+        if(action=="player-volume"){if(!ui.gameMenuOpen()||!IsAudioDeviceReady())return;try{size_t used=0;const float volume=std::stof(v,&used);if(used==v.size()&&std::isfinite(volume)){masterVolume=std::clamp(volume,0.f,1.f);SetMasterVolume(masterVolume);}}catch(...){}return;}
         if(action=="choose-material"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
         if(!property.empty())commands.push_back({"property:"+property,v,e->GetAttribute<InstanceId>("data-node",0)});
         else if(!action.empty())commands.push_back({action,v});
@@ -339,7 +339,12 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(target->GetId()=="tool-search"||target->GetId()=="tool-category") {filterTools();return;}
             if(target->GetId().rfind("image-query",0)==0) {imageQuery=value(target);propertyMarkup.clear();advancedMarkup.clear();return;}
             if(target->GetId()=="audio-search") {audioQuery=value(target);advancedMarkup.clear();return;}
-            if(attr(target,"type")=="checkbox"||target->GetTagName()=="select"||attr(target,"type")=="range")commit(target);
+            if(attr(target,"type")=="range") {
+                // RmlUi dispatches Change before updating the value attribute.
+                // Consume the event value, never the preceding thumb position.
+                const auto changed=Num(event.GetParameter<float>("value",0.f));
+                commit(target,&changed);
+            } else if(attr(target,"type")=="checkbox"||target->GetTagName()=="select")commit(target);
             if(target->GetId()=="prop-Item.Prototype"){focusValue=value(target);target->Blur();propertyMarkup.clear();}
             return;
         }
@@ -360,6 +365,14 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         }
         if(type=="contextmenu")return;
         if(type!="click"||dragging)return;
+        if(auto* button=ancestor(target,"data-action");button&&attr(button,"data-action")=="player-mute") {
+            if(ui.gameMenuOpen()&&IsAudioDeviceReady()) {
+                const float current=GetMasterVolume();
+                if(current>0)lastAudibleVolume=current;
+                SetMasterVolume(current>0?0.f:lastAudibleVolume);
+            }
+            return;
+        }
         if(auto* row=ancestor(target,"data-rig-body")) {
             if(ui.runtime_.active())return;
             ui.selectRig(attr(row,"data-rig"),row->GetAttribute<int>("data-rig-body",-1));
@@ -636,6 +649,9 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         for(int i=0;i<4;++i)el("cmd-tool-"+std::to_string(i))->SetClass("active",i==int(ui.tool_));
         const bool active=ui.runtime_.active();
         el("show-collision-shapes")->SetClass("active",ui.showCollisionShapes_);
+        if(auto* mode=dynamic_cast<Rml::ElementFormControl*>(el("grid-mode"));mode&&formOwner(context->GetFocusElement())!=mode){
+            const auto value=ui.gizmo_.gridMode()==gizmomath::GridMode::Absolute?"absolute":"relative";if(mode->GetValue()!=value)mode->SetValue(value);
+        }
         el("editor-edges")->SetClass("active",ui.editorGeometry_.edges);
         el("editor-edges")->SetAttribute("aria-pressed",ui.editorGeometry_.edges?"true":"false");
         if(active&&!el("play")->HasAttribute("disabled"))el("play")->SetAttribute("disabled","");else if(!active)el("play")->RemoveAttribute("disabled");
@@ -657,8 +673,8 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         std::function<void(const Instance*,int)> row=[&](const Instance* node,int depth){if(!search.empty()&&!relevant(node))return;
             const auto id=std::to_string(node->id());const auto type=node->instanceClass();
             const std::string icon=type==InstanceClass::Workspace?"workspace":type==InstanceClass::Lighting?"lighting":type==InstanceClass::Folder?"folder":type==InstanceClass::Model?"model":type==InstanceClass::ModuleScript?"module":type==InstanceClass::LocalScript?"local-script":type==InstanceClass::SpawnLocation?"spawn":IsSurfaceClass(type)?"image":IsScriptClass(type)?"script":IsRootServiceClass(type)?"storage":"part";
-            s+="<div id=\"node-"+id+"\" class=\"tree-row"+(ui.scene_.selected(node->id())?" selected":"")+"\" data-node-row=\""+id+"\" title=\""+Escape(node->name()+" · "+node->className())+"\" style=\"padding-left:"+std::to_string(3+depth*14)+"px\">";
-            if(!node->children().empty())s+="<button class=\"fold\" data-fold=\""+id+"\"><img src=\"icon-chevron-"+(collapsed.count(node->id())?"right":"down")+"\"/></button>";
+            s+="<div id=\"node-"+id+"\" class=\"tree-row"+(ui.scene_.selected(node->id())?" selected":"")+"\" data-node-row=\""+id+"\" title=\""+Escape(node->name()+" · "+node->className())+"\" style=\"padding-left:"+std::to_string(3+depth*12)+"px\">";
+            if(!node->children().empty())s+="<button id=\"fold-"+id+"\" class=\"fold\" data-fold=\""+id+"\"><img src=\"icon-chevron-"+(collapsed.count(node->id())?"right":"down")+"\"/></button>";
             else s+="<span class=\"leaf\"/>";
             s+="<img src=\"icon-"+icon+"\"/><span class=\"node-name\">"+Escape(node->name())+"</span></div>";
             if(!collapsed.count(node->id())||!search.empty())for(auto* c:node->children())row(c,depth+1);
@@ -1041,7 +1057,7 @@ if(c.action=="r6")showAdvanced("rig");
         for(const auto& sound:assets.sounds){if(sound.id==music.background)backgroundKnown=true;s+="<option value=\""+Escape(sound.id)+"\" "+(sound.id==music.background?"selected=\"selected\"":"")+">"+Escape(sound.name+" · "+sound.filename)+"</option>";}
         if(!backgroundKnown)s+="<option value=\""+Escape(music.background)+"\" selected=\"selected\">Faixa ausente · "+Escape(music.background)+"</option>";
         s+="</select></label>";
-        s+="<label class=\"music-field\"><span>Volume da música</span><input id=\"music-volume\" type=\"range\" min=\"0\" max=\"1\" step=\"0.05\" value=\""+Num(music.volume)+"\" data-action=\"music-volume\"/></label>";
+        s+="<label class=\"music-field\"><span>Volume da música</span><div class=\"slider-control\"><input id=\"music-volume\" type=\"range\" min=\"0\" max=\"1\" step=\"0.05\" value=\""+Num(music.volume)+"\" data-action=\"music-volume\"/><span class=\"slider-value\" id=\"music-level\">"+std::to_string(int(std::round(music.volume*100)))+"%</span></div></label>";
         s+="<label class=\"music-field\"><span>Repetir fundo</span><input id=\"music-loop\" type=\"checkbox\" data-action=\"music-loop\" "+(music.loop?std::string("checked=\"checked\""):std::string())+"/></label>";
         s+="<label class=\"music-field\"><span>Repetir playlist</span><input id=\"music-repeat\" type=\"checkbox\" data-action=\"music-repeat\" "+(music.repeat?std::string("checked=\"checked\""):std::string())+"/></label>";
         s+="</div><div class=\"playlist\"><div class=\"playlist-heading\"><b>Playlist</b><span>"+std::to_string(music.playlist.size())+" faixa(s) · uma por vez</span></div>";
@@ -1071,7 +1087,7 @@ if(c.action=="r6")showAdvanced("rig");
             s+="<div id=\"audio-card-"+Escape(sound.id)+"\" class=\"audio-card\"><div class=\"audio-card-header\"><span class=\"audio-name\" title=\""+Escape(sound.name)+"\">"+Escape(sound.name)+"</span><span class=\"audio-kind"+(isMusic?" music":"")+"\">"+std::string(isMusic?"MÚSICA":"SOM")+"</span></div>";
             s+="<span class=\"audio-meta\">"+Escape(sound.filename)+" · "+(sound.durationSeconds>0?Num(float(sound.durationSeconds))+" s":"duração desconhecida")+" · "+std::to_string(uses)+" uso(s)</span>";
             if(missing)s+="<span class=\"audio-meta audio-missing\">Arquivo ausente: importe novamente ou remova da biblioteca.</span>";
-            s+="<label class=\"audio-inline\"><span>Volume</span><input id=\"audio-volume-"+Escape(sound.id)+"\" type=\"range\" min=\"0\" max=\"1\" step=\"0.05\" value=\""+Num(sound.volume)+"\" data-action=\"sound-volume:"+Escape(sound.id)+"\"/></label>";
+            s+="<label class=\"audio-inline slider-control\"><span>Volume</span><input id=\"audio-volume-"+Escape(sound.id)+"\" type=\"range\" min=\"0\" max=\"1\" step=\"0.05\" value=\""+Num(sound.volume)+"\" data-action=\"sound-volume:"+Escape(sound.id)+"\"/><span class=\"slider-value\" id=\"audio-level-"+Escape(sound.id)+"\">"+std::to_string(int(std::round(sound.volume*100)))+"%</span></label>";
             s+="<label class=\"audio-inline\"><span>Repetir</span><input id=\"audio-loop-"+Escape(sound.id)+"\" type=\"checkbox\" data-action=\"sound-loop:"+Escape(sound.id)+"\" "+(sound.loop?"checked=\"checked\"":"")+"/></label>";
             s+="<label class=\"audio-inline\"><span>Tipo</span><select id=\"audio-kind-"+Escape(sound.id)+"\" data-action=\"sound-kind:"+Escape(sound.id)+"\"><option value=\"sound\" "+(isMusic?"":"selected=\"selected\"")+">Som</option><option value=\"music\" "+(isMusic?"selected=\"selected\"":"")+">Música</option></select></label>";
             s+="<div class=\"audio-actions\">";
@@ -1105,8 +1121,15 @@ if(c.action=="r6")showAdvanced("rig");
     void commonAdvanced() {
         const bool common=advanced=="settings"||advanced=="assets"||advanced=="audio";
         display("advanced-content",common);if(!common)return;
+        if(advanced=="audio") {
+            // Keep the existing DOM during editing, but update live readouts.
+            for(const auto& sound:ui.scene_.gameAssets().sounds)
+                text("audio-level-"+sound.id,std::to_string(int(std::round(sound.volume*100)))+"%");
+            text("music-level",std::to_string(int(std::round(ui.scene_.gameAssets().music.volume*100)))+"%");
+            if(!editing()&&!ImGui::IsMouseDown(0))audioPanel();
+            return;
+        }
         if(editing()||ImGui::IsMouseDown(0))return;
-        if(advanced=="audio"){audioPanel();return;}
         std::string s;
         if(advanced=="settings") {
             const auto& a=ui.scene_.gameAssets();const auto& p=a.player;
@@ -1185,8 +1208,22 @@ if(c.action=="r6")showAdvanced("rig");
         const float health=ui.runtime_.health(),maximum=std::max(1.f,ui.runtime_.settings().maxHealth);
         char s[64];std::snprintf(s,sizeof(s),"%.0f / %.0f",health,maximum);text("pause-health",s);
         text("pause-experience",ui.experienceUi_?ui.experienceUi_->documentTitle():std::filesystem::path(ui.projectPath_).stem().string());
-        if(IsAudioDeviceReady())el("master-volume")->RemoveAttribute("disabled");else el("master-volume")->SetAttribute("disabled","");
-        text("master-volume-label",IsAudioDeviceReady()?std::to_string(int(GetMasterVolume()*100))+"%":"Dispositivo de áudio indisponível nesta sessão.");
+        if(IsAudioDeviceReady()) {
+            el("master-volume")->RemoveAttribute("disabled");
+            masterVolume=GetMasterVolume();
+            if(masterVolume>0)lastAudibleVolume=masterVolume;
+            el("master-mute")->RemoveAttribute("disabled");
+            text("master-mute",masterVolume>0?"Silenciar":"Restaurar som");
+            text("audio-device-status","");
+            text("master-volume-label",std::to_string(int(masterVolume*100))+"%");
+        } else {
+            el("master-volume")->SetAttribute("disabled","");
+            text("master-volume-label","—");
+            el("master-mute")->SetAttribute("disabled","");
+            text("audio-device-status","Dispositivo de áudio indisponível nesta sessão.");
+        }
+        auto* volume=dynamic_cast<Rml::ElementFormControl*>(el("master-volume"));
+        if(volume&&formOwner(context->GetFocusElement())!=volume) {const auto value=Num(masterVolume);if(volume->GetValue()!=value)volume->SetValue(value);}
         text("player-name",ui.runtime_.rig().name);text("map-name",std::filesystem::path(ui.projectPath_).filename().string());
         text("session-state",ui.runtime_.state()==game::RuntimeState::Paused?"Simulação pausada explicitamente":"Simulação em andamento");
         if(paused) {

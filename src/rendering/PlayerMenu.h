@@ -13,7 +13,7 @@ public:
     void toggle(){open_=!open_;}
 private:
     bool open_=false;
-    float progress_=0,scroll_=0;
-    int page_=0,focus_=0,count_=1;
+    float progress_=0,scroll_=0,lastAudibleVolume_=1.f;
+    int page_=0,focus_=0,count_=1,draggingSlider_=-1;
 };
 }

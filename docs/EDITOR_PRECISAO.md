@@ -20,6 +20,9 @@ Um clique sem arraste não encaixa nada.
 **Grade → Absoluta** arredonda a coordenada projetada no eixo/plano ativo;
 componentes inativos não mudam. Os atalhos antigos continuam válidos.
 
+O Studio não desenha grade visual. Os incrementos de Move/Scale e o encaixe por
+superfície continuam disponíveis; a quantização interna não depende de linhas na cena.
+
 O gesto continua usando o histórico existente: soltar confirma uma operação,
 Esc cancela; Ctrl+Z/Ctrl+Y desfazem/refazem inclusive as poses dos filhos e pivôs.
 Comparações geométricas usam tolerância proporcional à precisão float, sem
@@ -59,6 +62,8 @@ pelo TURBO.
 
 Testes: `linblux_gizmo_visual` verifica o marcador renderizado e os gizmos
 existentes; gera capturas em 1280×720 e 1920×1080 em diretório temporário.
+`linblux_construction_ui` também verifica a presença dos controles e a validação
+do espaçamento, além da prévia e persistência de encaixe.
 
 ## Leitura da construção e seleção
 
