@@ -161,7 +161,7 @@ Origem: `docs/relatorios/06-independencia-e-validacao.md`.
 
 ### Etapa 6 — independência e manutenção (24/10/2026)
 
-## Implementação real
+#### Implementação real
 
 Engine, edição, renderização, apresentação, mídia e Studio têm targets separados.
 O executável `linblux_player` carrega e executa experiências sem link com ImGui,
@@ -178,7 +178,7 @@ O formato atual tem seis corpos/juntas. Importação de malhas e esqueletos
 arbitrários, terreno avançado e controladores externos não estão implementados.
 Esses limites impedem declarar concluído o objetivo amplo de importação irrestrita.
 
-## Arquivos principais
+#### Arquivos principais
 
 `CMakeLists.txt`, `src/player/main.cpp`, `src/editor/SceneRendererAdapter.cpp`,
 `src/experiences/ExperienceManager.*`, `src/ui/ExperienceUI.*`,
@@ -188,7 +188,7 @@ Esses limites impedem declarar concluído o objetivo amplo de importação irres
 Os documentos obsoletos foram preservados em `docs/historico` com aviso explícito.
 Licenças e créditos foram mantidos, inclusive o aviso de copyright anterior.
 
-## Regressões encontradas e corrigidas
+#### Regressões encontradas e corrigidas
 
 A primeira rodada completa encontrou dez falhas em 32 testes. Elas incluíam
 buscas por títulos ImGui antigos, coordenadas de botões dependentes de texto em
@@ -206,7 +206,7 @@ No Player, o filtro de recursos rejeitava a logo oficial fora do projeto aberto.
 A exceção agora é específica para a logo interna; caminhos externos continuam
 bloqueados. A imagem é desenhada com alfa pré-multiplicado.
 
-## Evidências e limites
+#### Evidências e limites
 
 O teste de ciclo de vida publica um personagem original com hierarquia, animação,
 imagem, física, câmera e script; reinicia em outro processo, cria uma experiência
@@ -234,4 +234,3 @@ A revisão de assets deixou imagens pessoais de licença desconhecida fora da
 instalação e do índice atual; cópias locais e históricas foram preservadas.
 A licença dos materiais fornecidos e o empacotamento de FFmpeg GPL requerem
 revisão antes de distribuição de binários. Veja ASSETS_E_LICENCAS.md.
-

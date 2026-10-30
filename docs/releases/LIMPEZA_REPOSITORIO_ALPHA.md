@@ -1,7 +1,8 @@
 # Limpeza do repositório Alpha
 
 Data: 30/10/2026. Base: `7e140a263642ad2a140c080f382999848034199d`.
-Limpeza executada; resultados finais de validação serão registrados após os checks.
+**11 arquivos excluídos e 1 relocalizado; 9 documentos consolidados.**
+Markdown versionado: **154 → 147**; arquivos versionados: **504 → 496**.
 
 ## Inventário e decisões
 
@@ -50,9 +51,40 @@ indevidamente; `.gitignore` já cobre essas categorias e não precisou ser alter
 não prova ausência de dados exclusivos. Backups/candidatos/logs não foram varridos
 nem limpos. OpenCode permanece opcional; ATLAS/TURBO funcionam pelo terminal.
 
+## Tamanho e documentação ativa
+
+Soma dos arquivos versionados no checkout: **15540747 → 15536737 bytes**,
+redução de **4010 bytes**. Isso não reduz o histórico ou o tamanho de `.git`.
+Os WIPs preexistentes têm os mesmos hashes antes/depois e não alteram a comparação.
+Permanecem **60 documentos de uso/manutenção**: 29 públicos (25 guias em `docs/`
+e README pt-BR/inglês, CONTRIBUTING e SECURITY), 30 manuais ATLAS/TURBO/backup e
+um único AGENTS. Adaptadores OpenCode, templates, histórico e licenças são contados
+separadamente. AGENTS foi reduzido de 195 para 72 linhas com as proteções essenciais.
+
 ## Validação e publicação
 
-Pendente neste primeiro registro: links finais, build incremental Studio/Player,
-headless afetados, testes Python ATLAS/TURBO e conferência do empacotador.
-Não há mudança de UI/renderização e não será executada suíte gráfica por rotina.
-Bloqueios de redistribuição do binário Alpha continuam vigentes.
+- **PASSOU:** diff completo sem erros de whitespace e 214 referências Markdown/imagem
+  locais verificadas, sem destinos ausentes; referências CMake/instalação preservadas.
+- **PASSOU:** build incremental de `linblux` e `linblux_player` em `build-linblux/`.
+- **PASSOU:** 7 headless — experiences, game, tests, defaults,
+  engine_default_lifecycle, item_actions e rifledemo (6,91 s).
+- **PASSOU:** Python ATLAS 40/40 (52,62 s), TURBO 41/41 (18,15 s).
+- **PASSOU:** empacotador, 85 hashes, executáveis/recursos/licenças presentes,
+  manual de inventário com interações e links locais do pacote válidos.
+  Player validou RifleDemo sem erros Lua, sem janela gráfica.
+- A conferência inicial encontrou uma cópia redundante do README-fonte instalada em
+  `share/linblux/`, com links inválidos. Ela foi retirada somente do staging do
+  pacote; o README de instalação permanece. O pacote foi regenerado e aprovado.
+- **NÃO EXECUTADO:** gráficos/FULL, pois não houve mudança de UI/renderização.
+  Não se repetiu o smoke gráfico da missão anterior. Bloqueios de redistribuição
+  Alpha continuam; nenhum binário ou tag foi publicado. Candidatos anteriores mantidos.
+
+Commits: `3fffd5f` (documentação), `16f3ba9` (protótipo); o commit que contém a
+versão final deste relatório reúne os ajustes do empacotador e o encerramento.
+Push normal e igualdade HEAD local/remoto são conferidos na entrega; hashes e
+resultado ficam em `.turbo/cleanup-alpha/final-git.json` (local). O commit de
+encerramento é identificável por `git log -1 --format=%H -- docs/releases/LIMPEZA_REPOSITORIO_ALPHA.md`.
+
+Pendências: WIPs e dados de papel incerto permanecem protegidos, não classificados
+como lixo. A configuração legacy e as ferramentas de recuperação têm consumidores
+e foram mantidas. Inventário e logs concisos de validação em `.turbo/cleanup-alpha/`.

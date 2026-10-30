@@ -29,8 +29,10 @@ def main():
         # No video with undocumented redistribution rights enters a candidate.
         for video in prefix.rglob('*.mp4'):video.unlink()
         share=prefix/'share/linblux';licenses=share/'licenses';licenses.mkdir(parents=True,exist_ok=True)
+        # The source README has repository-relative links; use the installation README at the archive root.
+        (share/'README.md').unlink()
         docs=share/'docs';shutil.rmtree(docs);docs.mkdir()
-        for name in ['ARCHITECTURE.md','SCRIPTING_LUA.md','INVENTARIO.md','INTERACOES.md','ATTACHMENTS.md','ASSETS_E_LICENCAS.md','ALPHA_0_1_0.md']:
+        for name in ['ARCHITECTURE.md','SCRIPTING_LUA.md','INVENTARIO.md','ATTACHMENTS.md','ASSETS_E_LICENCAS.md','ALPHA_0_1_0.md']:
             source=ROOT/'docs'/name
             if source.is_file():
                 # This is an offline selection, not a copy of the repository.
