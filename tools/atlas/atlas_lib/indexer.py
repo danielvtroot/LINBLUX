@@ -837,12 +837,23 @@ def _rebuild_graph(conn, root: Path, files: dict[str, Path]) -> tuple[int, int]:
 
 
 def index_repository(
-    root: Path, force: bool = False, quiet: bool = False, rehash: bool = False
+    root: Path,
+    force: bool = False,
+    quiet: bool = False,
+    rehash: bool = False,
+    policy=None,
 ) -> dict:
+    if policy is not None and not policy.allow_index_write:
+        raise RuntimeError(
+            f"modo {policy.name}: indexação bloqueada; "
+            "execute com ATLAS_IO_MODE=normal quando houver autorização"
+        )
     started = time.monotonic()
     cache = ensure_cache_dir(root)
     if force:
         remove_index(root)
+    # Writing was already authorised above (hdd-critical raises), so the handle
+    # is writable even when queries in this process run read-only.
     try:
         conn = open_db(root, create=True)
         if not get_meta(conn, "schema_version") or get_meta(conn, "schema_version") != str(INDEX_SCHEMA_VERSION):
@@ -861,6 +872,7 @@ def index_repository(
         "added": 0, "updated": 0, "deleted": 0, "unchanged": 0,
         "skipped": skipped, "symbols": 0, "relations": 0,
         "bytes_read": 0, "indexed_files": len(files), "rehash": bool(rehash),
+        "io_mode": policy.name if policy is not None else "normal",
     }
     parsed: dict[str, dict] = {}
     hashes: dict[str, str] = {}

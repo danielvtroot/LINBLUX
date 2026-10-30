@@ -7,13 +7,17 @@ import json
 import shutil
 import sqlite3
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
+from . import io_mode
 from .config import CONTRACT_MODULES, INDEX_VERSION, cache_dir, db_path, glossary
 from .db import (
     corrupt_or_missing_reason,
     get_meta,
+    index_is_compatible,
     index_status,
+    meta_dict,
     open_db,
     schema_version,
     table_counts,
@@ -50,7 +54,7 @@ def _quick_stale(root: Path, conn: sqlite3.Connection) -> tuple[int, int, int]:
     return changed, missing, removed
 
 
-def status(root: Path) -> dict:
+def status(root: Path, policy=None) -> dict:
     path = db_path(root)
     if not path.is_file():
         return {
@@ -61,9 +65,13 @@ def status(root: Path) -> dict:
             "tools": _tools(),
         }
     started = time.monotonic()
-    conn = open_db(root)
+    conn = open_db(root, policy=policy)
     base = index_status(conn)
-    changed, missing, removed = _quick_stale(root, conn)
+    checked = policy.check_staleness if policy is not None else True
+    if checked:
+        changed, missing, removed = _quick_stale(root, conn)
+    else:
+        changed = missing = removed = 0
     external = [
         dict(row) for row in conn.execute(
             "SELECT name,kind FROM external_deps ORDER BY name LIMIT 30"
@@ -75,12 +83,17 @@ def status(root: Path) -> dict:
         "exists": True,
         **base,
         "stale_estimate": changed,
+        "staleness_checked": checked,
         "missing_files": missing,
         "removed_files": removed,
         "external_deps": external,
         "tools": _tools(),
         "elapsed_seconds": round(time.monotonic() - started, 3),
-        "next": "python3 tools/atlas/atlas.py update" if changed or removed else "índice atualizado",
+        "next": (
+            "defasagem não verificada neste modo; confirme manualmente"
+            if not checked
+            else ("python3 tools/atlas/atlas.py update" if changed or removed else "índice atualizado")
+        ),
         "counts": counts,
         "limitations": ["a estimativa usa tamanho/mtime; verify recalcula SHA-256"],
     }
@@ -110,7 +123,7 @@ def _fts5_available() -> bool:
         return False
 
 
-def doctor(root: Path, strict: bool = False) -> dict:
+def doctor(root: Path, strict: bool = False, policy=None) -> dict:
     issues: list[dict] = []
     path = db_path(root)
     if not path.is_file():
@@ -120,7 +133,9 @@ def doctor(root: Path, strict: bool = False) -> dict:
                         "message": "índice ausente", "fix": "python3 tools/atlas/atlas.py init"}],
             "summary": {"alta": 1, "media": 0, "baixa": 0},
         }
-    conn = open_db(root)
+    # FTS “integrity-check” needs a write-capable handle; hdd-critical blocks
+    # this command in the CLI, so the handle is only opened when allowed.
+    conn = open_db(root) if policy is None or policy.allow_integrity else open_db(root, policy=policy)
     reason = corrupt_or_missing_reason(conn)
     if reason:
         issues.append({
@@ -272,7 +287,7 @@ def doctor(root: Path, strict: bool = False) -> dict:
     }
 
 
-def verify(root: Path) -> dict:
+def verify(root: Path, policy=None) -> dict:
     path = db_path(root)
     checks: list[dict] = []
     if not path.is_file():
@@ -280,7 +295,8 @@ def verify(root: Path) -> dict:
             "ok": False,
             "checks": [{"name": "index", "ok": False, "detail": "índice ausente"}],
         }
-    conn = open_db(root)
+    # Same as doctor: the FTS integrity-check needs a writable handle.
+    conn = open_db(root) if policy is None or policy.allow_integrity else open_db(root, policy=policy)
     try:
         try:
             integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
@@ -351,4 +367,125 @@ def verify(root: Path) -> dict:
         "ok": all(check["ok"] for check in checks),
         "checks": checks,
         "limitations": ["verify valida o índice, não a compilação ou os testes da engine"],
+    }
+
+
+def _meminfo() -> dict[str, int]:
+    """Read /proc/meminfo (a few KiB, no disk access)."""
+    values: dict[str, int] = {}
+    try:
+        with Path("/proc/meminfo").open(encoding="utf-8") as handle:
+            for line in handle:
+                key, _, rest = line.partition(":")
+                parts = rest.split()
+                if parts and parts[0].isdigit():
+                    values[key] = int(parts[0])
+    except OSError:
+        return {}
+    return values
+
+
+def _swap_used_mib() -> int | None:
+    try:
+        lines = Path("/proc/swaps").read_text(encoding="utf-8").splitlines()[1:]
+    except OSError:
+        return None
+    used = 0
+    for line in lines:
+        columns = line.split()
+        if len(columns) >= 4 and columns[3].isdigit():
+            used += int(columns[3])
+    return used // 1024
+
+
+def health(root: Path, policy=None) -> dict:
+    """Operational health of the ATLAS itself: mode, index and free memory.
+
+    Never walks the project tree in a mode that cannot check staleness, never
+    runs SMART/sector scans and never writes. A missing index is reported, not
+    rebuilt.
+    """
+    policy = policy or io_mode.resolve()
+    path = db_path(root)
+    warnings: list[str] = []
+    index: dict = {
+        "exists": path.is_file(),
+        "database": str(path),
+        "staleness_checked": False,
+    }
+    if index["exists"]:
+        try:
+            stat = path.stat()
+            index["bytes"] = stat.st_size
+            index["modified_at"] = datetime.fromtimestamp(
+                stat.st_mtime, timezone.utc
+            ).isoformat(timespec="seconds")
+            conn = open_db(root, policy=policy)
+            try:
+                meta = meta_dict(conn)
+                index["updated_at"] = meta.get("updated_at")
+                index["schema_version"] = schema_version(conn)
+                index["compatible"] = index_is_compatible(conn)
+                index["files"] = conn.execute("SELECT COUNT(*) AS n FROM files").fetchone()["n"]
+                if policy.check_staleness:
+                    changed, missing, removed = _quick_stale(root, conn)
+                    index.update({
+                        "staleness_checked": True,
+                        "stale_estimate": changed,
+                        "missing_files": missing,
+                        "removed_files": removed,
+                    })
+                    if changed or removed:
+                        warnings.append(
+                            f"índice desatualizado: {changed} alterado(s), {removed} removido(s); "
+                            "execute update quando autorizado"
+                        )
+                if not index["compatible"]:
+                    warnings.append(
+                        f"schema {index['schema_version']} incompatível; consultas podem falhar"
+                    )
+            finally:
+                conn.close()
+        except (OSError, sqlite3.DatabaseError, FileNotFoundError) as exc:
+            index["error"] = str(exc)
+            warnings.append(f"índice ilegível: {exc}")
+    else:
+        warnings.append("índice ausente; nenhuma varredura automática será iniciada")
+
+    if not policy.check_staleness:
+        warnings.append(
+            f"modo {policy.name}: defasagem não verificada; o índice pode estar desatualizado"
+        )
+
+    mem = _meminfo()
+    total_mib = mem.get("MemTotal", 0) // 1024
+    available_mib = mem.get("MemAvailable", 0) // 1024
+    swap_mib = _swap_used_mib()
+    cache_enabled = bool(
+        policy.allow_index_write and available_mib >= 512 and available_mib >= total_mib // 8
+    )
+    budget_mib = min(32, max(8, available_mib // 64)) if cache_enabled else 0
+    if swap_mib and swap_mib > 256:
+        warnings.append(
+            f"swap em uso ({swap_mib} MiB): evite caches grandes e testes pesados"
+        )
+
+    return {
+        "ok": not index.get("error") and (index["exists"] or not policy.read_only),
+        "io_mode": policy.name,
+        "read_only": policy.read_only,
+        "policy": policy.as_dict(),
+        "note": policy.note,
+        "index": index,
+        "memory": {
+            "total_mib": total_mib,
+            "available_mib": available_mib,
+            "swap_used_mib": swap_mib,
+        },
+        "cache": {"enabled": cache_enabled, "budget_mib": budget_mib},
+        "warnings": warnings,
+        "limitations": [
+            "health não é diagnóstico de hardware: não lê SMART nem testa setores",
+            "leituras de páginas não residentes podem ocorrer em qualquer modo",
+        ],
     }

@@ -8,11 +8,11 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from . import __version__
+from . import __version__, io_mode
 from .config import repo_root
 from .db import open_db
 from .diagnose import diagnose, fix_plan
-from .diagnostics import doctor, status, verify
+from .diagnostics import doctor, health, status, verify
 from .graph import impact, tests_for, trace
 from .indexer import index_repository
 from .report import benchmark, evaluate, write_generated_docs
@@ -36,6 +36,13 @@ def _normalize_argv(argv: list[str]) -> list[str]:
         elif arg.startswith("--root="):
             globals_.append(arg)
             i += 1
+        elif arg == "--io-mode" and i + 1 < len(argv):
+            globals_.append("--io-mode")
+            globals_.append(argv[i + 1])
+            i += 2
+        elif arg.startswith("--io-mode="):
+            globals_.append(arg)
+            i += 1
         else:
             rest.append(arg)
             i += 1
@@ -52,6 +59,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--quiet", "-q", action="store_true", help="silencia mensagens auxiliares")
     parser.add_argument("--brief", action="store_true", help="saída curta, pensada para agentes de IA")
     parser.add_argument("--detail", action="store_true", help="saída detalhada (padrão nos comandos de consulta)")
+    parser.add_argument(
+        "--io-mode",
+        choices=io_mode.MODES,
+        default=None,
+        help=(
+            "política de I/O: normal, hdd-safe (padrão via ATLAS_IO_MODE; consultas "
+            "somente leitura) ou hdd-critical (nada é gravado)"
+        ),
+    )
     parser.add_argument("--version", action="version", version=f"LINBLUX ATLAS {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -113,6 +129,10 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_p.add_argument("--strict", action="store_true")
 
     sub.add_parser("verify", help="verifica integridade, hashes e consultas")
+
+    sub.add_parser(
+        "health", help="saúde operacional (modo de I/O, índice, memória); não varre o disco"
+    )
 
     sub.add_parser("docs", help="regenera o inventário em docs/atlas/generated")
 
@@ -407,7 +427,10 @@ def _text_render(command: str, data: dict) -> str:
         lines.append(f"Existe: {data.get('exists')}  Compatível: {data.get('compatible')}")
         if data.get("counts"):
             lines.append("Contagens: " + ", ".join(f"{k}={v}" for k, v in data["counts"].items()))
-        lines.append(f"Alterações pendentes (estimativa): {data.get('stale_estimate', 0)}")
+        if data.get("staleness_checked") is False:
+            lines.append("Alterações pendentes: não verificadas neste modo")
+        else:
+            lines.append(f"Alterações pendentes (estimativa): {data.get('stale_estimate', 0)}")
         tools = data.get("tools", {})
         lines.append(f"SQLite/FTS5: {tools.get('sqlite')} / {tools.get('fts5')}")
         lines.append(f"C++ semântico: {tools.get('semantic_cpp')}")
@@ -415,6 +438,41 @@ def _text_render(command: str, data: dict) -> str:
             lines.append("Dependências externas: " + ", ".join(item["name"] for item in data["external_deps"][:12]))
         if data.get("next"):
             lines.append("Próximo: " + data["next"])
+        return "\n".join(lines) + "\n"
+    if command == "health":
+        index = data.get("index", {})
+        memory = data.get("memory", {})
+        cache = data.get("cache", {})
+        lines.append("LINBLUX ATLAS — HEALTH")
+        lines.append(
+            f"modo: {data.get('io_mode')} ({'somente leitura' if data.get('read_only') else 'leitura/escrita'})"
+        )
+        if index.get("exists"):
+            lines.append(
+                f"índice: {index.get('files', 0)} arquivos, {index.get('bytes', 0)} bytes, "
+                f"atualizado {index.get('updated_at') or index.get('modified_at')}, "
+                f"compatível={index.get('compatible')}"
+            )
+            if index.get("staleness_checked"):
+                lines.append(
+                    f"defasagem: {index.get('stale_estimate', 0)} alterado(s), "
+                    f"{index.get('removed_files', 0)} removido(s)"
+                )
+            else:
+                lines.append("defasagem: não verificada neste modo")
+        else:
+            lines.append("índice: ausente (nenhuma varredura automática)")
+        lines.append(
+            f"memória: {memory.get('available_mib', 0)} MiB livres de "
+            f"{memory.get('total_mib', 0)} MiB; swap em uso: {memory.get('swap_used_mib')} MiB"
+        )
+        lines.append(
+            f"cache RAM: {'habilitado, ' + str(cache.get('budget_mib')) + ' MiB' if cache.get('enabled') else 'desativado'}"
+        )
+        for warning in data.get("warnings") or []:
+            lines.append("- aviso: " + warning)
+        if data.get("note"):
+            lines.append("política: " + data["note"])
         return "\n".join(lines) + "\n"
     if command == "doctor":
         lines.append("LINBLUX ATLAS — DOCTOR")
@@ -476,34 +534,41 @@ def main(argv: list[str] | None = None) -> int:
     try:
         root = repo_root(args.root)
         command = args.command
+        policy = io_mode.resolve(args.io_mode)
+        blocked = policy.blocked_reason(command)
+        if blocked:
+            raise RuntimeError(blocked)
         if command == "init":
-            data = index_repository(root, force=True, quiet=args.quiet or args.json)
+            data = index_repository(
+                root, force=True, quiet=args.quiet or args.json, policy=policy
+            )
             data["ok"] = True
         elif command == "update":
             data = index_repository(
-                root, force=False, quiet=args.quiet or args.json, rehash=args.full
+                root, force=False, quiet=args.quiet or args.json, rehash=args.full,
+                policy=policy,
             )
             data["ok"] = True
         elif command == "status":
-            data = status(root)
+            data = status(root, policy=policy)
         elif command == "locate":
-            conn = open_db(root)
+            conn = open_db(root, policy=policy)
             data = locate(root, conn, " ".join(args.query), limit=args.limit, module=args.module)
             conn.close()
         elif command == "symbol":
-            conn = open_db(root)
+            conn = open_db(root, policy=policy)
             data = symbol(conn, args.name, root, limit=args.limit)
             conn.close()
         elif command == "text":
-            conn = open_db(root)
+            conn = open_db(root, policy=policy)
             data = text_search(conn, " ".join(args.query), limit=args.limit)
             conn.close()
         elif command == "impact":
-            conn = open_db(root)
+            conn = open_db(root, policy=policy)
             data = impact(root, conn, args.target, depth=args.depth, limit=args.limit)
             conn.close()
         elif command == "trace":
-            conn = open_db(root)
+            conn = open_db(root, policy=policy)
             data = trace(root, conn, " ".join(args.query), limit=args.limit)
             conn.close()
         elif command == "tests-for":
@@ -511,35 +576,37 @@ def main(argv: list[str] | None = None) -> int:
             path = safe_project_path(root, args.path)
             if path is None:
                 raise ValueError("caminho fora da raiz do projeto")
-            conn = open_db(root)
+            conn = open_db(root, policy=policy)
             tests = tests_for(conn, path)[: max(1, args.limit)]
             conn.close()
             data = {"path": path, "tests": tests}
         elif command == "diagnose":
-            conn = open_db(root)
+            conn = open_db(root, policy=policy)
             data = diagnose(
                 root, conn, " ".join(args.query),
                 max_files=args.max_files, max_tests=args.max_tests,
             )
             conn.close()
         elif command == "fix-plan":
-            conn = open_db(root)
+            conn = open_db(root, policy=policy)
             data = fix_plan(
                 root, conn, " ".join(args.query),
                 max_files=args.max_files, max_tests=args.max_tests,
             )
             conn.close()
         elif command == "doctor":
-            data = doctor(root, strict=args.strict)
+            data = doctor(root, strict=args.strict, policy=policy)
         elif command == "verify":
-            data = verify(root)
+            data = verify(root, policy=policy)
+        elif command == "health":
+            data = health(root, policy=policy)
         elif command == "docs":
-            data = write_generated_docs(root)
+            data = write_generated_docs(root, policy=policy)
             data["ok"] = True
         elif command == "bench":
-            data = benchmark(root, iterations=args.iterations)
+            data = benchmark(root, iterations=args.iterations, policy=policy)
         elif command == "eval":
-            data = evaluate(root)
+            data = evaluate(root, policy=policy)
         else:
             parser.error(f"comando desconhecido: {command}")
             return 2
@@ -552,6 +619,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.brief:
         data = _brief_payload(args.command, data)
+
+    # The I/O mode survives brief payloads too: an agent must be able to tell
+    # whether the answer came from an index it could not verify.
+    if policy.name != "normal" and isinstance(data, dict):
+        data.setdefault("io_mode", policy.name)
+        if policy.note:
+            data.setdefault("io_note", policy.note)
 
     if args.json:
         payload = {"ok": bool(data.get("ok", not data.get("error"))), "command": args.command, "data": data}

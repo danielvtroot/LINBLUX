@@ -15,8 +15,8 @@ from .indexer import index_repository
 from .search import locate
 
 
-def write_generated_docs(root: Path) -> dict:
-    conn = open_db(root)
+def write_generated_docs(root: Path, policy=None) -> dict:
+    conn = open_db(root, policy=policy)
     counts = table_counts(conn)
     modules = [dict(row) for row in conn.execute(
         "SELECT module,COUNT(*) AS files,SUM(line_count) AS lines FROM files "
@@ -95,13 +95,13 @@ def _copy_indexable(source: Path, target: Path) -> int:
     return copied
 
 
-def benchmark(root: Path, iterations: int = 5) -> dict:
+def benchmark(root: Path, iterations: int = 5, policy=None) -> dict:
     iterations = max(1, min(iterations, 20))
     work = Path(tempfile.mkdtemp(prefix="atlas-bench-", dir=root / ".atlas"))
     try:
         copied = _copy_indexable(root, work)
         start = time.perf_counter()
-        first = index_repository(work, force=True, quiet=True)
+        first = index_repository(work, force=True, quiet=True, policy=policy)
         initial_ms = (time.perf_counter() - start) * 1000
         editable = sorted(
             path for path in work.rglob("*")
@@ -111,14 +111,14 @@ def benchmark(root: Path, iterations: int = 5) -> dict:
             raise RuntimeError("nenhum arquivo editável para o benchmark")
         editable[0].write_text(editable[0].read_text(encoding="utf-8") + "\n// atlas bench\n", encoding="utf-8")
         start = time.perf_counter()
-        index_repository(work, quiet=True)
+        index_repository(work, quiet=True, policy=policy)
         one_ms = (time.perf_counter() - start) * 1000
         for path in editable[1:6]:
             path.write_text(path.read_text(encoding="utf-8") + "\n// atlas bench multi\n", encoding="utf-8")
         start = time.perf_counter()
-        index_repository(work, quiet=True)
+        index_repository(work, quiet=True, policy=policy)
         five_ms = (time.perf_counter() - start) * 1000
-        conn = open_db(work)
+        conn = open_db(work, policy=policy)
         counts = table_counts(conn)
         db_bytes = sum(
             path.stat().st_size
@@ -140,7 +140,7 @@ def benchmark(root: Path, iterations: int = 5) -> dict:
         total_ms = (time.perf_counter() - start_all) * 1000
         conn.close()
         peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        real_conn = open_db(root)
+        real_conn = open_db(root, policy=policy)
         real_result = locate(root, real_conn, "camera personagem", limit=5)
         baseline_chars = 0
         for candidate in real_result.get("candidates", [])[:3]:
@@ -191,11 +191,11 @@ def _eval_questions(root: Path) -> list[dict]:
     return [item for item in data if isinstance(item, dict) and item.get("query")]
 
 
-def evaluate(root: Path) -> dict:
+def evaluate(root: Path, policy=None) -> dict:
     questions = _eval_questions(root)
     if not questions:
         return {"ok": False, "error": "tools/atlas/data/eval_questions.json ausente ou vazio"}
-    conn = open_db(root)
+    conn = open_db(root, policy=policy)
     rows = []
     top1 = top3 = module_any = symbol_hits = 0
     file_hits = {1: 0, 3: 0, 5: 0}
