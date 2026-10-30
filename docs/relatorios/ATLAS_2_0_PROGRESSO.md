@@ -202,16 +202,53 @@ glossário e símbolos) foi medida e **descartada**: derrubou o top-3 de 6/8 par
 acertos corretos (S1, S3, S8). O FTS5 já aplica IDF no bm25; só a intenção de
 área ficou.
 
+## Missão 3 — parser C++ e avaliação
+
+### Qualificação C++ (`tools/atlas/atlas_lib/indexer.py`)
+
+- `_namespace_path()` acumula namespaces **aninhados**
+  (`namespace loblox { namespace editor { … } }` → `loblox::editor::…`) e
+  aceita a forma compacta `namespace loblox::editor {`.
+- Definição fora de classe já qualificada (`int loblox::Widget::value()`)
+  não recebe o namespace duas vezes.
+- `kind` continua `method` para definições `Classe::nome` e para métodos inline;
+  funções livres permanecem `function`.
+- Sobrecargas continuam como símbolos distintos (linha/assinatura próprias),
+  não como um único registro.
+- Após reindexar: 1.678 definições C++ em `.cpp`, **239 sem namespace** — todas
+  funções globais legítimas (`main`, helpers de teste como `require`), nenhuma
+  perda de namespace. Métodos aparecem como
+  `loblox::experiences::Stage::publish`, `loblox::game::Inventory::model`.
+- Testes novos: `tests/atlas/test_cpp_parser.py` (8 casos: fora de classe,
+  namespace aninhado, namespace compacto, já qualificado, função livre,
+  sobrecargas, método inline, função global). Inclui um teste que **documenta a
+  limitação** conhecida: o scanner é orientado a linha e ignora um namespace
+  inteiro escrito em uma única linha.
+
+### Avaliação por arquivo (`tools/atlas/data/eval_questions.json`, `report.py`)
+
+- 40 perguntas, cada uma com `expect_files` verificados contra o índice
+  (`missing expected_files: []`), cobrindo editor, gizmos, construção, física,
+  rendering, decals, player, áudio, Lua, inventário, NPC, persistência,
+  exportação, assets e testes.
+- `eval` agora mede **arquivo** além de módulo: `file_r1/r3/r5`, `file_mrr`,
+  `file_rank` por pergunta e `file_evaluated` (só perguntas com `expect_files`).
+- Resultado medido neste ambiente: 40 perguntas, módulo top-1 29/40 (0,725),
+  top-3 36/40 (0,900), módulo presente 39/40 (0,975), símbolo 23/40 (0,575);
+  **arquivo R@1 7/40, R@3 20/40, R@5 24/40, MRR 0,362**.
+- Limitação declarada no próprio JSON: arquivos esperados são relacionados
+  verificados, não causas comprovadas; a amostra é manual.
+
 ## Pendências e próxima ação
 
 1. **P4 — TURBO (restante)**: a seleção agora é aditiva e explicável, mas a
    especificidade continua estrutural: `include` prova dependência de
    compilação, não que o teste exercita o comportamento. `coverage` segue
    `unknown` quando o CMake muda ou há caminhos sem mapeamento.
-2. **P6 — C++**: 645 definições fora de classe continuam sem namespace completo;
-   sobrecargas e templates seguem textuais.
-3. **Avaliação ampliada**: `eval` mede módulos, não arquivos; faltam 40 perguntas
-   com referência de arquivo verificada.
+2. **P6 — C++ (restante)**: namespaces aninhados resolvidos; templates,
+   macros e callbacks continuam textuais e sem camada semântica.
+3. **Avaliação**: 40 perguntas com arquivo medido; R@5 de arquivo é 24/40 e
+   MRR 0,362 — há espaço real de ranking, não é falta de amostra.
 4. **Ranking**: S6 resolvido; S4 exige camada semântica (não é peso).
 5. `locate --json` ainda é grande (28 KB); usar `--brief` ou `diagnose` em fluxo
    de agente.

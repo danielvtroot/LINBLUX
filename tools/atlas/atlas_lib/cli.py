@@ -453,8 +453,18 @@ def _text_render(command: str, data: dict) -> str:
         lines.append("LINBLUX ATLAS — EVAL")
         lines.append(f"Perguntas: {data.get('total')}  top1: {data.get('top1')}  top3: {data.get('top3')}  módulo: {data.get('module_hits')}  símbolo: {data.get('symbol_hits')}")
         lines.append(f"Taxas: top1={data.get('top1_rate')} top3={data.get('top3_rate')} módulo={data.get('module_hit_rate')} símbolo={data.get('symbol_hit_rate')}")
+        if data.get("file_evaluated"):
+            lines.append(
+                f"Arquivo: R@1={data.get('file_r1')}/{data.get('file_evaluated')} "
+                f"R@3={data.get('file_r3')}/{data.get('file_evaluated')} "
+                f"R@5={data.get('file_r5')}/{data.get('file_evaluated')} "
+                f"MRR={data.get('file_mrr')}"
+            )
         for item in data.get("questions", []):
-            lines.append(f"- {item['id']}: {item['query']} → {item['returned_modules']} (rank {item['module_rank']})")
+            lines.append(
+                f"- {item['id']}: {item['query']} → {item['returned_modules']} "
+                f"(módulo {item['module_rank']}, arquivo {item.get('file_rank')})"
+            )
         return "\n".join(lines) + "\n"
     return json.dumps(data, ensure_ascii=False, indent=2) + "\n"
 

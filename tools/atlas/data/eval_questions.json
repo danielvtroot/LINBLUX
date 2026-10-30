@@ -2,85 +2,321 @@
   {
     "id": "camera-follow",
     "query": "a camera nao acompanha o personagem",
-    "expect_modules": ["rendering", "game", "editor"],
-    "expect_symbols": ["EditorCamera", "RuntimeSession", "PlayerSettings"],
-    "notes": "Camera de edição e controlador de runtime."
+    "expect_modules": ["rendering", "game"],
+    "expect_files": ["src/rendering/EditorCamera.cpp", "src/game/Runtime.cpp"],
+    "expect_symbols": ["EditorCamera", "RuntimeSession"],
+    "notes": "Camera de edicao e controlador de runtime."
   },
   {
     "id": "rig-load",
     "query": "o rig nao carrega corretamente",
-    "expect_modules": ["game", "serialization", "editor"],
-    "expect_symbols": ["Rig", "ProjectIO"],
-    "notes": "Persistência de rig e painéis de personagem."
+    "expect_modules": ["game", "serialization"],
+    "expect_files": ["src/serialization/ProjectIO.cpp", "src/objects/Instance.cpp"],
+    "expect_symbols": ["ProjectIO", "Rig"],
+    "notes": "Persistencia de rig e instancias."
   },
   {
     "id": "default-world-save",
     "query": "o mundo padrao nao salva",
-    "expect_modules": ["experiences", "editor"],
+    "expect_modules": ["experiences", "serialization"],
+    "expect_files": ["src/experiences/ExperienceManager.cpp", "src/serialization/ProjectIO.cpp"],
     "expect_symbols": ["ExperienceManager", "saveEngineDefaults"],
-    "notes": "Publicação atômica do Mundo Padrão."
+    "notes": "Publicacao atomica do Mundo Padrao."
   },
   {
     "id": "home-video-freeze",
     "query": "o video da tela inicial trava",
-    "expect_modules": ["media", "app", "ui"],
+    "expect_modules": ["media", "app"],
+    "expect_files": ["src/media/VideoBackground.cpp", "src/app/Application.cpp"],
     "expect_symbols": ["VideoBackground", "Application"],
-    "notes": "Decoder assíncrono e Home."
+    "notes": "Decoder assincrono e Home."
   },
   {
     "id": "black-ui-startup",
     "query": "a interface fica preta ao iniciar",
     "expect_modules": ["ui", "rendering", "app"],
+    "expect_files": ["src/ui/StudioFrontend.cpp", "src/app/Application.cpp"],
     "expect_symbols": ["StudioFrontend", "SceneRenderer", "Application"],
-    "notes": "Frontend RmlUi, camada gráfica e inicialização."
+    "notes": "Frontend RmlUi, camada grafica e inicializacao."
   },
   {
     "id": "add-physics-component",
     "query": "adicionar um novo componente de fisica",
     "expect_modules": ["physics", "game"],
-    "expect_symbols": ["PhysicsWorld", "RuntimeSession"],
-    "notes": "Ponto de extensão da física Bullet."
+    "expect_files": ["src/physics/PhysicsWorld.cpp"],
+    "expect_symbols": ["PhysicsWorld"],
+    "notes": "Ponto de extensao da fisica Bullet."
   },
   {
     "id": "object-disappears",
     "query": "por que esse objeto desaparece",
-    "expect_modules": ["scene", "rendering", "serialization"],
+    "expect_modules": ["scene", "rendering"],
+    "expect_files": ["src/scene/Scene.cpp", "src/rendering/SceneRenderer.cpp"],
     "expect_symbols": ["Scene", "SceneRenderer"],
-    "notes": "Cena, renderização e persistência."
+    "notes": "Cena e renderizacao."
   },
   {
     "id": "where-animation",
     "query": "onde devo implementar o sistema de animacoes",
-    "expect_modules": ["game", "editor", "serialization"],
-    "expect_symbols": ["AnimationClip", "Rig"],
-    "notes": "Rig, clipes e editor de animação."
+    "expect_modules": ["objects", "serialization"],
+    "expect_files": ["src/objects/Instance.cpp", "src/serialization/SceneLua.cpp"],
+    "expect_symbols": ["Instance"],
+    "notes": "Estado de instancia e ponte Lua da cena."
   },
   {
     "id": "impact-scene",
     "query": "que modulos serao afetados se eu modificar a classe Scene",
-    "expect_modules": ["scene", "game", "editor", "serialization"],
+    "expect_modules": ["scene"],
+    "expect_files": ["src/scene/Scene.cpp", "src/scene/Scene.h"],
     "expect_symbols": ["Scene"],
     "notes": "Impacto estrutural de Scene."
   },
   {
     "id": "character-missing",
     "query": "personagem nao aparece ao iniciar",
-    "expect_modules": ["game", "scene", "player"],
-    "expect_symbols": ["RuntimeSession", "Spawn", "Rig"],
-    "notes": "Spawn, cópia de runtime e player."
+    "expect_modules": ["objects", "scene"],
+    "expect_files": ["src/objects/Instance.cpp", "src/scene/Scene.cpp"],
+    "expect_symbols": ["Instance", "Scene"],
+    "notes": "Spawn e copia de runtime."
   },
   {
     "id": "export-experience",
     "query": "salvar e exportar experiencia .lo",
-    "expect_modules": ["experiences", "editor"],
-    "expect_symbols": ["ExperienceManager", "exportPackage"],
-    "notes": "Pacote .lo e interface de experiências."
+    "expect_modules": ["experiences", "serialization"],
+    "expect_files": ["src/experiences/ExperienceManager.cpp", "src/serialization/ProjectIO.cpp"],
+    "expect_symbols": ["ExperienceManager"],
+    "notes": "Pacote .lo e interface de experiencias."
   },
   {
     "id": "import-character",
     "query": "importar personagem pelo Studio",
-    "expect_modules": ["experiences", "editor", "game"],
-    "expect_symbols": ["ExperienceManager", "importCharacter"],
-    "notes": "Importação de personagem e seleção no editor."
+    "expect_modules": ["experiences", "serialization"],
+    "expect_files": ["src/experiences/ExperienceManager.cpp", "src/serialization/ProjectIO.cpp"],
+    "expect_symbols": ["ExperienceManager"],
+    "notes": "Importacao de personagem e selecao no editor."
+  },
+  {
+    "id": "audio-slider-empty",
+    "query": "o slider de audio do menu ESC aparece vazio",
+    "expect_modules": ["rendering", "ui"],
+    "expect_files": ["src/rendering/PlayerMenu.cpp", "src/rendering/PlayerMenu.h"],
+    "expect_symbols": ["PlayerMenu"],
+    "notes": "Menu do jogador (ESC) e sliders de audio."
+  },
+  {
+    "id": "gizmo-old-handles",
+    "query": "mover uma Part abre o gizmo antigo",
+    "expect_modules": ["editor"],
+    "expect_files": ["src/editor/Gizmo.cpp", "src/editor/EditorUI.cpp"],
+    "expect_symbols": ["Gizmo", "EditorUI"],
+    "notes": "Handles de precisao substituindo o gizmo antigo."
+  },
+  {
+    "id": "decal-text-mirrored",
+    "query": "decal com texto aparece espelhado",
+    "expect_modules": ["rendering"],
+    "expect_files": ["src/rendering/SceneRenderer.cpp"],
+    "expect_symbols": ["SceneRenderer"],
+    "notes": "Renderizacao de decals e orientacao de textura."
+  },
+  {
+    "id": "part-falls-in-edit",
+    "query": "uma Part dinamica cai durante edicao",
+    "expect_modules": ["physics", "app"],
+    "expect_files": ["src/physics/PhysicsWorld.cpp", "src/app/Application.cpp"],
+    "expect_symbols": ["PhysicsWorld"],
+    "notes": "Simulacao durante a edicao; S4 da auditoria."
+  },
+  {
+    "id": "surface-construction",
+    "query": "construcao por superficie nao encaixa parede no piso",
+    "expect_modules": ["editor"],
+    "expect_files": ["src/editor/ConstructionPlacement.cpp", "src/editor/ConstructionUI.cpp"],
+    "expect_symbols": ["ConstructionPlacement"],
+    "notes": "Encaixe de superficies na construcao."
+  },
+  {
+    "id": "default-world-test-timeout",
+    "query": "teste de Mundo Padrao expira por timeout",
+    "expect_modules": ["tests"],
+    "expect_files": ["tests/engine_default_main.cpp"],
+    "expect_symbols": [],
+    "notes": "S6 da auditoria: teste de Mundo Padrao."
+  },
+  {
+    "id": "lua-npc-anchored",
+    "query": "script Lua de NPC falha porque a Part esta ancorada",
+    "expect_modules": ["scripting", "objects"],
+    "expect_files": ["src/scripting/LuaRuntime.cpp", "src/objects/Part.cpp"],
+    "expect_symbols": ["LuaRuntime", "Part"],
+    "notes": "API Lua e estado de ancoragem."
+  },
+  {
+    "id": "explorer-auto-names",
+    "query": "explorador cria nomes automaticos confusos",
+    "expect_modules": ["editor"],
+    "expect_files": ["src/editor/EditorUI.cpp", "src/objects/Instance.cpp"],
+    "expect_symbols": ["EditorUI", "Instance"],
+    "notes": "Nomes automaticos no explorador."
+  },
+  {
+    "id": "inventory-item-missing",
+    "query": "item nao aparece no inventario",
+    "expect_modules": ["game"],
+    "expect_files": ["src/game/Inventory.cpp", "src/game/ItemActions.cpp"],
+    "expect_symbols": ["Inventory"],
+    "notes": "Inventario do jogador."
+  },
+  {
+    "id": "item-action-broken",
+    "query": "acao de item nao funciona",
+    "expect_modules": ["game"],
+    "expect_files": ["src/game/ItemActions.cpp"],
+    "expect_symbols": ["ItemActions"],
+    "notes": "Acoes de item."
+  },
+  {
+    "id": "material-no-texture",
+    "query": "material aparece sem textura",
+    "expect_modules": ["rendering", "objects"],
+    "expect_files": ["src/rendering/ModernMaterials.cpp", "src/objects/Material3D.cpp"],
+    "expect_symbols": ["ModernMaterials", "Material3D"],
+    "notes": "Material moderno e material 3D."
+  },
+  {
+    "id": "material-not-saved",
+    "query": "material nao salva apos reiniciar",
+    "expect_modules": ["objects", "serialization"],
+    "expect_files": ["src/objects/Material3D.cpp", "src/serialization/ProjectIO.cpp"],
+    "expect_symbols": ["Material3D", "ProjectIO"],
+    "notes": "Persistencia de material."
+  },
+  {
+    "id": "shadow-grid",
+    "query": "sombra quadriculada na cena",
+    "expect_modules": ["rendering"],
+    "expect_files": ["src/rendering/DirectionalShadow.cpp", "src/rendering/SceneTarget.cpp"],
+    "expect_symbols": ["DirectionalShadow"],
+    "notes": "Filtragem de sombra direcional."
+  },
+  {
+    "id": "shadow-clipped",
+    "query": "sombra direcional cortada nas bordas",
+    "expect_modules": ["rendering"],
+    "expect_files": ["src/rendering/DirectionalShadow.cpp"],
+    "expect_symbols": ["DirectionalShadow"],
+    "notes": "Extensao do volume de sombra."
+  },
+  {
+    "id": "depth-broken",
+    "query": "profundidade quebrada em objetos distantes",
+    "expect_modules": ["rendering"],
+    "expect_files": ["src/rendering/SceneTarget.cpp"],
+    "expect_symbols": ["SceneTarget"],
+    "notes": "Alvo de cena e buffer de profundidade."
+  },
+  {
+    "id": "spawn-parts",
+    "query": "spawn nao cria as Parts da experiencia",
+    "expect_modules": ["objects", "game"],
+    "expect_files": ["src/objects/SpawnLocation.cpp"],
+    "expect_symbols": ["SpawnLocation"],
+    "notes": "Ponto de spawn e criacao de Parts."
+  },
+  {
+    "id": "baseplate-missing",
+    "query": "baseplate nao aparece no mundo padrao",
+    "expect_modules": ["objects"],
+    "expect_files": ["src/objects/Baseplate.cpp"],
+    "expect_symbols": ["Baseplate"],
+    "notes": "Baseplate do mundo padrao."
+  },
+  {
+    "id": "point-light-dim",
+    "query": "luz pontual nao ilumina a cena",
+    "expect_modules": ["objects"],
+    "expect_files": ["src/objects/Lighting.cpp"],
+    "expect_symbols": ["Lighting"],
+    "notes": "Luzes da cena."
+  },
+  {
+    "id": "lua-require",
+    "query": "require de script Lua falha",
+    "expect_modules": ["scripting"],
+    "expect_files": ["src/scripting/LuaRuntime.cpp"],
+    "expect_symbols": ["LuaRuntime"],
+    "notes": "Carregamento de modulos Lua."
+  },
+  {
+    "id": "lua-ui-text",
+    "query": "texto da UI feita em Lua nao aparece",
+    "expect_modules": ["rendering"],
+    "expect_files": ["src/rendering/LuaUiRenderer.cpp"],
+    "expect_symbols": ["LuaUiRenderer"],
+    "notes": "Renderer de UI Lua."
+  },
+  {
+    "id": "overlay-stuck",
+    "query": "overlay de experiencia nao some",
+    "expect_modules": ["rendering", "ui"],
+    "expect_files": ["src/rendering/ExperienceOverlay.cpp", "src/ui/ExperienceUI.cpp"],
+    "expect_symbols": ["ExperienceOverlay"],
+    "notes": "Overlay de experiencia."
+  },
+  {
+    "id": "experience-button",
+    "query": "botao da experiencia nao responde",
+    "expect_modules": ["ui"],
+    "expect_files": ["src/ui/ExperienceUI.cpp"],
+    "expect_symbols": ["ExperienceUI"],
+    "notes": "Interacao da UI de experiencia."
+  },
+  {
+    "id": "localization-english",
+    "query": "texto da interface esta em ingles",
+    "expect_modules": ["ui"],
+    "expect_files": ["src/ui/Localization.cpp"],
+    "expect_symbols": ["Localization"],
+    "notes": "Tabela de localizacao."
+  },
+  {
+    "id": "file-dialog",
+    "query": "dialogo de salvar nao abre",
+    "expect_modules": ["ui"],
+    "expect_files": ["src/ui/NativeFileDialog.cpp"],
+    "expect_symbols": ["NativeFileDialog"],
+    "notes": "Dialogo nativo de arquivos."
+  },
+  {
+    "id": "image-assets-black",
+    "query": "imagem importada fica preta",
+    "expect_modules": ["game", "ui"],
+    "expect_files": ["src/game/ImageAssets.cpp"],
+    "expect_symbols": ["ImageAssets"],
+    "notes": "Importacao de imagens."
+  },
+  {
+    "id": "assets-not-copied",
+    "query": "assets nao sao copiados para o projeto",
+    "expect_modules": ["game", "serialization"],
+    "expect_files": ["src/game/GameAssetsIO.cpp"],
+    "expect_symbols": ["GameAssetsIO"],
+    "notes": "Copia de assets para o projeto."
+  },
+  {
+    "id": "project-wont-open",
+    "query": "projeto nao abre depois de exportar",
+    "expect_modules": ["serialization"],
+    "expect_files": ["src/serialization/ProjectIO.cpp"],
+    "expect_symbols": ["ProjectIO"],
+    "notes": "Leitura do projeto exportado."
+  },
+  {
+    "id": "diagnostics-log",
+    "query": "log de diagnostico nao e gravado",
+    "expect_modules": ["core"],
+    "expect_files": ["src/core/Diagnostics.cpp"],
+    "expect_symbols": ["Diagnostics"],
+    "notes": "Log de diagnostico da engine."
   }
 ]

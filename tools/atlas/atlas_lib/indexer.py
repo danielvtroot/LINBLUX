@@ -171,6 +171,24 @@ def _class_intervals(text: str) -> list[tuple[int, int, str, str]]:
     return intervals
 
 
+def _namespace_path(intervals: list[tuple[int, int, str]], pos: int) -> str:
+    """Full namespace of a position, including nested and ``a::b`` namespaces.
+
+    ``_enclosing`` returns only the innermost interval, which loses ``loblox``
+    in ``namespace loblox { namespace editor { ... } }``.
+    """
+    merged: list[str] = []
+    for item in sorted(intervals):
+        if not (item[0] <= pos <= item[1]):
+            continue
+        segments = [segment for segment in item[2].split("::") if segment]
+        if merged and segments and merged[-1] == segments[0]:
+            merged.extend(segments[1:])
+        else:
+            merged.extend(segments)
+    return "::".join(merged)
+
+
 def _enclosing(intervals, pos: int, name_index: int = 2) -> str:
     best = None
     for item in intervals:
@@ -326,7 +344,7 @@ def parse_cpp(text: str, allow_declarations: bool = True) -> dict:
         if key in seen:
             return
         seen.add(key)
-        namespace = _enclosing(namespaces, pos)
+        namespace = _namespace_path(namespaces, pos)
         owner = _enclosing(classes, pos, 2)
         if owner == name:
             owner = ""
@@ -336,9 +354,14 @@ def parse_cpp(text: str, allow_declarations: bool = True) -> dict:
         if name.startswith("::"):
             qualified = name.lstrip(":")
         elif "::" in name:
-            # Out-of-class definition (``Class::method``): the namespace comes
-            # from this file, the owner is already inside the name (audit B7).
-            qualified = "::".join(parts + [name]) if parts else name
+            # Out-of-class definition (``Class::method`` or
+            # ``loblox::Class::method``): the owner is already inside the name,
+            # so only prepend the namespace when it is not already there.
+            prefix = "::".join(parts)
+            if prefix and name.startswith(prefix + "::"):
+                qualified = name
+            else:
+                qualified = "::".join(parts + [name]) if parts else name
             if kind == "function":
                 kind = "method"
         else:
