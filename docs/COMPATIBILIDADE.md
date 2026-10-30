@@ -17,3 +17,12 @@ A troca de marca não altera nomes de serviços, propriedades nem APIs Lua.
 Os rigging e os clipes do formato R6 permanecem legíveis. Suporte a malhas e
 esqueletos arbitrários exige uma evolução do formato e do runtime; não se deve
 renomear o tipo serializado e declarar essa evolução pronta.
+
+## Plataforma e versão Alpha
+
+A distribuição é identificada como LINBLUX Alpha 0.1.0. O build oficial é
+`build-linblux/`. Linux x86_64 é o ambiente validado nesta missão; testes gráficos
+usam Xvfb/llvmpipe. Windows, macOS e outras distribuições Linux não foram validados.
+O pacote depende de glibc/libstdc++, OpenGL/X11 e bibliotecas listadas no manifesto.
+Configurações desconhecidas legadas não são convertidas em mudança de objetos.
+A remoção da grade visual não migra cenas nem altera o Snap.

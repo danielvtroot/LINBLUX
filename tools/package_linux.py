@@ -31,7 +31,25 @@ def main():
         docs=share/'docs';shutil.rmtree(docs);docs.mkdir()
         for name in ['ARCHITECTURE.md','SCRIPTING_LUA.md','INVENTARIO.md','INTERACOES.md','ATTACHMENTS.md','ASSETS_E_LICENCAS.md','ALPHA_0_1_0.md']:
             if (ROOT/'docs'/name).is_file():shutil.copy2(ROOT/'docs'/name,docs/name)
-        shutil.copy2(ROOT/'README.md',prefix/'README.md')
+        (prefix/'README.md').write_text("""# LINBLUX Alpha 0.1.0 — candidato interno
+
+Este arquivo não é uma Release pública aprovada. Consulte ESTADO-DO-CANDIDATO.txt.
+
+Na pasta extraída, execute:
+
+```sh
+./bin/linblux
+./bin/linblux_player --project ./share/linblux/examples/rifledemo/world.loblox.json
+```
+
+Dependências do sistema e hashes constam em manifest.json. O pacote não é universal.
+A revisão de redistribuição FFmpeg/raylib ainda bloqueia a publicação binária.
+Fontes DejaVu/Liberation devem estar instaladas no sistema.
+
+[Notas da Alpha](share/linblux/docs/ALPHA_0_1_0.md) ·
+[Licenças](share/linblux/licenses/) ·
+[Código e documentação](https://github.com/danielvtroot/LINBLUX)
+""")
         dependencies={}
         for binary in ['linblux','linblux_player']:
             target=prefix/'bin'/binary

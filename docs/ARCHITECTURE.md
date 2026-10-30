@@ -29,3 +29,8 @@ Limites: Scene ainda contém seleção/listeners usados pela autoria; a serializ
 conhece dados de rig compatíveis de seis juntas; recursos de imagem ainda usam
 raylib no núcleo. São pontos de acoplamento remanescentes, documentados para a
 evolução gradual. LINBLUX Server e transporte multiplayer não estão implementados.
+
+O build oficial é `build-linblux/`. A distribuição Alpha 0.1.0 usa CMake 0.1.0;
+identificadores legados de formatos e APIs continuam compatíveis. O empacotador
+instala recursos selecionados e registra dependências em manifesto separado do
+build local. Veja [BUILD](BUILD.md) e [Alpha](ALPHA_0_1_0.md).

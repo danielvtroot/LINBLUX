@@ -1,35 +1,48 @@
-# Validação
+# Testes e evidências
+
+Use o build oficial configurado conforme [BUILD](BUILD.md):
 
 ```sh
-cmake -S . -B build
-cmake --build build -j2
-ctest --test-dir build --output-on-failure
+cmake --build build-linblux -j2
+ctest --test-dir build-linblux -N
+ctest --test-dir build-linblux -R '^linblux_(game|tests|defaults|engine_default_lifecycle)$' --output-on-failure
 ```
 
-Suítes de núcleo verificam objetos, persistência transacional, física, Lua,
-spawn, animação, manipulação e experiências. `linblux_defaults` verifica edição,
-persistência, cópias independentes e restauração dos padrões. `linblux_video`
-percorre o clipe completo (~24 s) e verifica loop, cancelamento e fallback.
-`linblux_home_video` renderiza em múltiplas resoluções, confere movimento nas
-bordas, interação, liberação no editor, confirmação de exclusão e padrões na UI.
+A consulta `-N` não executa testes. Os quatro testes selecionados acima são
+headless: objetos, Lua, física, persistência, padrões e ciclo de autoria/runtime.
+Outros testes devem ser escolhidos pelo contrato alterado e suas labels.
 
-Os testes gráficos usam Xvfb/Mesa; testes de interação usam xdotool e seletor
-nativo (zenity/yad/kdialog). Ausência dessas ferramentas pode remover testes da
-configuração: consulte `ctest --test-dir build -N`, não confunda ausência com sucesso.
+## Integrações gráficas
+
+Nunca execute diretamente CTest para testes com label `graphics`, Xvfb ou Mesa
+por software. Use supervisão TURBO para timeout individual, orçamento global,
+encerramento do grupo de processos e logs completos:
 
 ```sh
-ctest --test-dir build -R 'experiences|defaults|home_video|video' --output-on-failure
+python3 tools/turbo/turbo.py test --mode fast --changed --plan
+python3 tools/turbo/turbo.py test --mode impact --changed --budget 300 --per-test-timeout 130
+python3 tools/turbo/turbo.py report
+```
+
+`--plan` mostra a seleção e o que fica fora sem executar. FAST/IMPACT não prometem
+cobertura total. `PASSED_PARTIAL`, `BUDGET_EXHAUSTED`, `UNKNOWN`, `REUSED`,
+`NO_TESTS` e `TIMEOUT` não são aprovação plena. Não repita baterias pesadas
+quando build, regressão específica e integração relevante já fornecerem evidência.
+
+As integrações usam Xvfb/Mesa e, conforme o teste, xdotool, Pillow e seletores
+nativos. A ausência de ferramentas pode impedir o registro de testes: teste
+não registrado ou não executado nunca conta como aprovado. Capturas em llvmpipe
+não medem desempenho de GPU física; backend de áudio null não comprova som audível.
+
+## Ferramentas locais
+
+```sh
+python3 -m unittest discover -s tests/atlas -p 'test_*.py'
+python3 -m unittest discover -s tests/turbo -p 'test_*.py'
 python3 scripts/generate-theme.py --check
 ```
 
-Capturas do executável e os relatórios em relatorios/ complementam os testes.
-Medições em llvmpipe são de rasterização por CPU; desempenho de GPU integrada real
-permanece uma verificação separada. Fixtures antigas receberam atualização de
-marca e geometria: não se deve aprovar apenas por preservar aparência da marca anterior.
-
-O teste `linblux_engine_default_lifecycle` cobre o ciclo de autoria/reinício em
-processos separados, importação, runtime e proteção do padrão. O teste
-`linblux_engine_default_restart` reinicia o Studio real e usa o cartão e os botões
-da interface, exigindo Pillow (`python3-pil`). As suítes legadas usam os títulos
-traduzidos das janelas; a verificação da logo compara a proporção do próprio
-arquivo oficial, sem impor a silhueta da marca anterior.
+Execute as suítes das ferramentas quando elas forem alteradas. O [ATLAS](atlas/README.md)
+ajuda a encontrar testes, mas associações estruturais não provam execução do
+comportamento. O [relatório da Alpha](releases/ALPHA_0_1_0_LANCAMENTO.md) registra
+somente as verificações desta missão; relatórios antigos valem para suas revisões.
