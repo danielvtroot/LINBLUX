@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS files (
   language TEXT NOT NULL,
   size INTEGER NOT NULL,
   mtime_ns INTEGER NOT NULL,
+  ctime_ns INTEGER NOT NULL DEFAULT 0,
   sha256 TEXT NOT NULL,
   line_count INTEGER NOT NULL,
   indexed_at TEXT NOT NULL,
@@ -135,7 +136,10 @@ def open_db(root: Path, create: bool = False) -> sqlite3.Connection:
     conn = new_connection(path)
     if create:
         conn.executescript(SCHEMA)
-        set_meta(conn, "schema_version", str(INDEX_SCHEMA_VERSION))
+        # Never overwrite the version of an existing database: index_repository
+        # needs the stored value to detect an incompatible schema and rebuild.
+        if get_meta(conn, "schema_version") is None:
+            set_meta(conn, "schema_version", str(INDEX_SCHEMA_VERSION))
         conn.commit()
     return conn
 
@@ -180,7 +184,9 @@ def table_counts(conn: sqlite3.Connection) -> dict[str, int]:
 def snapshot_files(conn: sqlite3.Connection) -> dict[str, dict]:
     return {
         row["path"]: dict(row)
-        for row in conn.execute("SELECT id,path,size,mtime_ns,sha256,module,language FROM files")
+        for row in conn.execute(
+            "SELECT id,path,size,mtime_ns,ctime_ns,sha256,module,language FROM files"
+        )
     }
 
 

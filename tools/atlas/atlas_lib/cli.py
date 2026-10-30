@@ -11,6 +11,7 @@ from pathlib import Path
 from . import __version__
 from .config import repo_root
 from .db import open_db
+from .diagnose import diagnose, fix_plan
 from .diagnostics import doctor, status, verify
 from .graph import impact, tests_for, trace
 from .indexer import index_repository
@@ -25,7 +26,7 @@ def _normalize_argv(argv: list[str]) -> list[str]:
     i = 0
     while i < len(argv):
         arg = argv[i]
-        if arg in {"--json", "-j", "--quiet", "-q"}:
+        if arg in {"--json", "-j", "--quiet", "-q", "--brief", "--detail"}:
             globals_.append(arg)
             i += 1
         elif arg == "--root" and i + 1 < len(argv):
@@ -49,13 +50,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root", default=".", help="raiz do projeto (padrão: diretório atual)")
     parser.add_argument("--json", "-j", action="store_true", help="saída JSON estruturada")
     parser.add_argument("--quiet", "-q", action="store_true", help="silencia mensagens auxiliares")
+    parser.add_argument("--brief", action="store_true", help="saída curta, pensada para agentes de IA")
+    parser.add_argument("--detail", action="store_true", help="saída detalhada (padrão nos comandos de consulta)")
     parser.add_argument("--version", action="version", version=f"LINBLUX ATLAS {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     init = sub.add_parser("init", help="cria/recria o índice completo")
     init.add_argument("--force", action="store_true", help="remove o cache antes de indexar")
 
-    sub.add_parser("update", help="atualiza o índice incrementalmente")
+    update_p = sub.add_parser("update", help="atualiza o índice incrementalmente")
+    update_p.add_argument(
+        "--full",
+        action="store_true",
+        help="recalcula SHA-256 de todos os arquivos (ignora o atalho de metadados)",
+    )
 
     sub.add_parser("status", help="estado do índice e ferramentas")
 
@@ -83,6 +91,23 @@ def build_parser() -> argparse.ArgumentParser:
 
     tests_p = sub.add_parser("tests-for", help="testes associados a um arquivo")
     tests_p.add_argument("path")
+    tests_p.add_argument("--limit", type=int, default=20)
+
+    diagnose_p = sub.add_parser(
+        "diagnose", help="diagnóstico curto: arquivos, linhas, hipóteses e testes"
+    )
+    diagnose_p.add_argument("query", nargs="+")
+    diagnose_p.add_argument("--max-files", type=int, default=5)
+    diagnose_p.add_argument("--max-tests", type=int, default=3)
+    diagnose_p.add_argument("--max-chars", type=int, default=1100)
+    diagnose_p.add_argument("--detail", action="store_true", help="saída completa, sem limite")
+
+    plan_p = sub.add_parser("fix-plan", help="plano de correção somente leitura")
+    plan_p.add_argument("query", nargs="+")
+    plan_p.add_argument("--max-files", type=int, default=3)
+    plan_p.add_argument("--max-tests", type=int, default=3)
+    plan_p.add_argument("--max-chars", type=int, default=1100)
+    plan_p.add_argument("--detail", action="store_true", help="saída completa, sem limite")
 
     doctor_p = sub.add_parser("doctor", help="diagnostica inconsistências estruturais")
     doctor_p.add_argument("--strict", action="store_true")
@@ -99,10 +124,112 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _clip(text: str, limit: int, *, detail: bool = False) -> str:
+    """Deterministic line-boundary truncation with an explicit omission marker.
+
+    Agents get a short answer by default; ``--detail`` returns everything and
+    ``--max-chars`` tunes the budget without ever producing invalid JSON.
+    """
+    if detail or limit <= 0 or len(text) <= limit:
+        return text
+    marker = "… (omitido; use --detail para a saída completa)\n"
+    budget = max(0, limit - len(marker))
+    kept = text[:budget]
+    cut = kept.rsplit("\n", 1)[0] if "\n" in kept else kept
+    return cut + "\n" + marker
+
+
+def _brief_payload(command: str, data: dict) -> dict:
+    """Few fields, deterministic truncation, never an invalid partial object."""
+    if command in {"locate", "diagnose", "fix-plan"}:
+        files = [
+            {
+                key: item.get(key)
+                for key in ("path", "line", "module", "score", "symbol", "match_types", "textual", "inferred")
+            }
+            for item in (data.get("files") or [])[:5]
+        ]
+        tests = data.get("tests") or []
+        names = [item if isinstance(item, str) else item.get("name") for item in tests][:3]
+        payload = {
+            "query": data.get("query"),
+            "confidence": data.get("confidence"),
+            "files": files,
+            "tests": [name for name in names if name],
+            "next": data.get("next") if isinstance(data.get("next"), str) else (data.get("next") or [])[:2],
+        }
+        if command == "fix-plan":
+            payload["plan"] = (data.get("plan") or [])[:3]
+        if data.get("hypotheses"):
+            payload["hypotheses"] = data["hypotheses"][:2]
+        return payload
+    if command == "impact":
+        return {
+            "resolved_file": data.get("resolved_file"),
+            "module": data.get("module"),
+            "affected_count": data.get("affected_count"),
+            "files": (data.get("affected_files") or [])[:5],
+            "tests": [test.get("name") for test in (data.get("tests") or [])][:5],
+            "risks": (data.get("risks") or [])[:2],
+        }
+    if command == "tests-for":
+        return {
+            "path": data.get("path"),
+            "tests": [
+                {key: test.get(key) for key in ("name", "target", "confidence", "reasons")}
+                for test in (data.get("tests") or [])[:8]
+            ],
+        }
+    return data
+
+
+def _brief_text(command: str, data: dict) -> str:
+    lines: list[str] = []
+    if command in {"locate", "diagnose", "fix-plan"}:
+        lines.append(f"ATLAS {command.upper()} — confiança {data.get('confidence', '?')}")
+        for item in data.get("files") or []:
+            where = f"{item['path']}:{item['line']}" if item.get("line") else item["path"]
+            symbol = f" ({item['symbol']})" if item.get("symbol") else ""
+            why = ", ".join(item.get("match_types") or []) or ("inferido" if item.get("inferred") else "?")
+            lines.append(f"- {where}{symbol} [{why}]")
+        if data.get("tests"):
+            lines.append("testes: " + ", ".join(str(name) for name in data["tests"] if name))
+        if data.get("hypotheses"):
+            lines.append("hipótese: " + str(data["hypotheses"][0].get("text", "")))
+        for step in data.get("plan") or []:
+            lines.append(f"{step.get('step')}. {step.get('action')} {step.get('where')}")
+        next_step = data.get("next")
+        if isinstance(next_step, str):
+            lines.append("próximo: " + next_step)
+        elif next_step:
+            lines.append("próximo: " + "; ".join(str(item) for item in next_step[:2]))
+        return "\n".join(lines) + "\n"
+    if command == "impact":
+        lines.append(f"ATLAS IMPACT — {data.get('resolved_file')}")
+        lines.append(f"afetados: {data.get('affected_count')}")
+        for path in data.get("files") or []:
+            lines.append(f"- {path}")
+        if data.get("tests"):
+            lines.append("testes: " + ", ".join(data["tests"]))
+        return "\n".join(lines) + "\n"
+    if command == "tests-for":
+        lines.append(f"ATLAS TESTS-FOR — {data.get('path')}")
+        for test in data.get("tests") or []:
+            lines.append(f"- {test['name']} [{test.get('confidence')}] {test.get('target') or ''}")
+        return "\n".join(lines) + "\n"
+    return _text_render(command, data)
+
+
 def _text_render(command: str, data: dict) -> str:
     lines: list[str] = []
     if command in {"init", "update"}:
         lines.append("LINBLUX ATLAS — ÍNDICE")
+        if data.get("noop"):
+            lines.append(
+                f"Nada a fazer: {data.get('indexed_files', 0)} arquivos já indexados "
+                f"({data.get('elapsed_seconds', 0)}s)"
+            )
+            return "\n".join(lines) + "\n"
         lines.append(
             f"Arquivos: {data.get('indexed_files', 0)}  novos: {data.get('added', 0)}  "
             f"alterados: {data.get('updated', 0)}  removidos: {data.get('deleted', 0)}"
@@ -122,6 +249,12 @@ def _text_render(command: str, data: dict) -> str:
         lines.append(f"Confiança: {data.get('confidence','baixa')}")
         if data.get("tokens"):
             lines.append("Termos: " + ", ".join(data["tokens"]))
+        if data.get("files"):
+            lines += ["", "Arquivos prováveis:"]
+            for item in data["files"][:8]:
+                where = f"{item['path']}:{item['line']}" if item.get("line") else item["path"]
+                why = ", ".join(item.get("match_types") or []) or "sem evidência textual"
+                lines.append(f"- {where}  (score {item['score']}, {why})")
         lines += ["", "Áreas candidatas:"]
         for index, candidate in enumerate(data.get("candidates", []), 1):
             lines.append(f"{index}. {candidate['module']} — pontuação {candidate['score']:.1f}")
@@ -222,10 +355,49 @@ def _text_render(command: str, data: dict) -> str:
         if data.get("next"):
             lines += ["", "Próxima investigação:"] + [f"- {item}" for item in data["next"]]
         return "\n".join(lines) + "\n"
+    if command == "diagnose":
+        lines.append("LINBLUX ATLAS — DIAGNÓSTICO")
+        lines.append(f"Problema: {data.get('query','')}")
+        lines.append(f"Confiança: {data.get('confidence','baixa')} (hipótese, não causa confirmada)")
+        lines += ["", "Arquivos prováveis:"]
+        for item in data.get("files", [])[:4]:
+            where = f"{item['path']}:{item['line']}" if item.get("line") else item["path"]
+            symbol = f" — {item['symbol']}" if item.get("symbol") else ""
+            lines.append(f"- {where}{symbol} ({', '.join(item.get('match_types') or [])})")
+            if item.get("snippet"):
+                lines.append(f"  {item['snippet'][:100]}")
+        hypotheses = data.get("hypotheses") or []
+        if hypotheses:
+            lines += ["", "Hipótese (não confirmada):"]
+            lines.append(f"- [{hypotheses[0]['confidence']}] {hypotheses[0]['text']}")
+        if data.get("tests"):
+            lines += ["", "Testes sugeridos:"]
+            for test in data["tests"][:3]:
+                reason = (test.get("reason") or "")[:90]
+                lines.append(f"- {test['name']} [{test.get('confidence')}] {reason}")
+        if data.get("risks"):
+            lines += ["", "Riscos:"] + [f"- {item}" for item in data["risks"][:3]]
+        if data.get("next"):
+            lines += ["", f"Próximo passo: {data['next']}"]
+        lines.append("Limitação: ranking textual/estrutural; confirme o código antes de editar")
+        return "\n".join(lines) + "\n"
+    if command == "fix-plan":
+        lines.append("LINBLUX ATLAS — PLANO DE CORREÇÃO (somente leitura)")
+        lines.append("")
+        for step in data.get("plan", []):
+            lines.append(f"{step['step']}. {step['action']}: {step['where']}")
+            lines.append(f"   por quê: {step['why']}")
+            lines.append(f"   pronto quando: {step['done_when']}")
+        if data.get("next"):
+            lines += ["", f"Próximo passo: {data['next']}"]
+        return "\n".join(lines) + "\n"
     if command == "tests-for":
         lines.append(f"LINBLUX ATLAS — TESTES PARA {data.get('path','')}")
         for test in data.get("tests", []):
-            lines.append(f"- {test['name']}: {test.get('command','')}")
+            reason = (test.get("reasons") or [""])[0]
+            lines.append(
+                f"- {test['name']} [{test.get('confidence','?')}]: {reason}"
+            )
         if not data.get("tests"):
             lines.append("Nenhum teste mapeado.")
         return "\n".join(lines) + "\n"
@@ -298,7 +470,9 @@ def main(argv: list[str] | None = None) -> int:
             data = index_repository(root, force=True, quiet=args.quiet or args.json)
             data["ok"] = True
         elif command == "update":
-            data = index_repository(root, force=False, quiet=args.quiet or args.json)
+            data = index_repository(
+                root, force=False, quiet=args.quiet or args.json, rehash=args.full
+            )
             data["ok"] = True
         elif command == "status":
             data = status(root)
@@ -328,9 +502,23 @@ def main(argv: list[str] | None = None) -> int:
             if path is None:
                 raise ValueError("caminho fora da raiz do projeto")
             conn = open_db(root)
-            tests = tests_for(conn, path)
+            tests = tests_for(conn, path)[: max(1, args.limit)]
             conn.close()
             data = {"path": path, "tests": tests}
+        elif command == "diagnose":
+            conn = open_db(root)
+            data = diagnose(
+                root, conn, " ".join(args.query),
+                max_files=args.max_files, max_tests=args.max_tests,
+            )
+            conn.close()
+        elif command == "fix-plan":
+            conn = open_db(root)
+            data = fix_plan(
+                root, conn, " ".join(args.query),
+                max_files=args.max_files, max_tests=args.max_tests,
+            )
+            conn.close()
         elif command == "doctor":
             data = doctor(root, strict=args.strict)
         elif command == "verify":
@@ -352,11 +540,25 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ATLAS: {exc}", file=sys.stderr)
         return 2
 
+    if args.brief:
+        data = _brief_payload(args.command, data)
+
     if args.json:
         payload = {"ok": bool(data.get("ok", not data.get("error"))), "command": args.command, "data": data}
+        # Uniform error envelope: every command reports failure the same way.
+        if data.get("error"):
+            payload["error"] = data["error"]
         print(json.dumps(payload, ensure_ascii=False, indent=2))
+    elif args.brief:
+        text = _brief_text(args.command, data)
+        if args.command in {"diagnose", "fix-plan"}:
+            text = _clip(text, getattr(args, "max_chars", 1100), detail=args.detail)
+        print(text, end="")
     else:
-        print(_text_render(args.command, data), end="")
+        text = _text_render(args.command, data)
+        if args.command in {"diagnose", "fix-plan"}:
+            text = _clip(text, getattr(args, "max_chars", 1100), detail=args.detail)
+        print(text, end="")
 
     if args.command == "verify" and not data.get("ok"):
         return 1

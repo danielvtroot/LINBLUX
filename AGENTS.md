@@ -11,7 +11,8 @@ código. Consulte-o antes de varrer grandes áreas do repositório.
 
 ```bash
 python3 tools/atlas/atlas.py update
-python3 tools/atlas/atlas.py status
+python3 tools/atlas/atlas.py diagnose "descrição do sintoma"   # comece aqui
+python3 tools/atlas/atlas.py fix-plan "descrição do sintoma"   # plano read-only
 python3 tools/atlas/atlas.py locate "sintoma ou termo"
 python3 tools/atlas/atlas.py symbol NomeDoSimbolo
 python3 tools/atlas/atlas.py impact src/modulo/arquivo.cpp
@@ -19,6 +20,12 @@ python3 tools/atlas/atlas.py tests-for src/modulo/arquivo.cpp
 python3 tools/atlas/atlas.py doctor
 python3 tools/atlas/atlas.py verify
 ```
+
+`diagnose` é a rota curta: devolve até 5 arquivos com linha e símbolo, a razão
+do ranking, hipóteses (sempre rotuladas como hipótese), testes sugeridos e o
+próximo passo, em ~1.000 caracteres. Use `--detail` só quando precisar.
+`tests-for` explica cada teste (`include`, mesmo target, cadeia) e nunca prova
+que o teste executa o arquivo.
 
 Use `--json` para saída estruturada. O cache fica em `.atlas/` e é
 reconstruível; nunca é a fonte da verdade. A fonte da verdade é o código,

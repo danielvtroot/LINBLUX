@@ -24,7 +24,10 @@ from .search import locate
 
 def _quick_stale(root: Path, conn: sqlite3.Connection) -> tuple[int, int, int]:
     files, _ = collect_files(root)
-    rows = {row["path"]: row for row in conn.execute("SELECT path,size,mtime_ns FROM files")}
+    rows = {
+        row["path"]: row
+        for row in conn.execute("SELECT path,size,mtime_ns,ctime_ns FROM files")
+    }
     changed = 0
     missing = 0
     for rel, path in files.items():
@@ -37,7 +40,11 @@ def _quick_stale(root: Path, conn: sqlite3.Connection) -> tuple[int, int, int]:
         except OSError:
             missing += 1
             continue
-        if stat.st_size != row["size"] or stat.st_mtime_ns != row["mtime_ns"]:
+        if (
+            stat.st_size != row["size"]
+            or stat.st_mtime_ns != row["mtime_ns"]
+            or stat.st_ctime_ns != int(row["ctime_ns"] or 0)
+        ):
             changed += 1
     removed = sum(1 for rel in rows if rel not in files)
     return changed, missing, removed

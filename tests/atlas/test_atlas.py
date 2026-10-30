@@ -222,5 +222,119 @@ class AtlasCliTest(unittest.TestCase):
         self.assertIn("contracts-missing", {issue["code"] for issue in report["issues"]})
 
 
+class AtlasV2RegressionTest(unittest.TestCase):
+    """Regressions for the ATLAS 2.0 fixes (audit B1-B6, B14, B17)."""
+
+    def setUp(self) -> None:
+        cache = ROOT / ".atlas"
+        cache.mkdir(parents=True, exist_ok=True)
+        self.tmp = tempfile.TemporaryDirectory(prefix="atlas-v2-", dir=cache)
+        self.root = Path(self.tmp.name) / "repo"
+        shutil.copytree(FIXTURE, self.root)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def invoke(self, *args: str, timeout: int = 60) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(ATLAS), "--root", str(self.root), *args],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+        )
+
+    def json(self, *args: str, expect: int = 0) -> dict:
+        proc = self.invoke(*args, "--json")
+        self.assertEqual(
+            proc.returncode,
+            expect,
+            f"command failed: {args}\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}",
+        )
+        return json.loads(proc.stdout)
+
+    def init(self) -> dict:
+        return self.json("init", "--force")["data"]
+
+    def test_generated_directories_are_not_indexed(self) -> None:
+        for relative in (".turbo/logs/debug.py", "prototype/mock.cpp", "node_modules/pkg/index.js"):
+            target = self.root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("ZZGENERATEDZZ\n", encoding="utf-8")
+        self.init()
+        self.assertEqual(self.json("status")["data"]["counts"]["files"], 8)
+        self.assertEqual(self.json("text", "ZZGENERATEDZZ")["data"]["results"], [])
+
+    def test_second_update_does_not_reread_files(self) -> None:
+        self.init()
+        again = self.json("update")["data"]
+        self.assertEqual(again["bytes_read"], 0)
+        self.assertEqual(again["added"], 0)
+        self.assertEqual(again["updated"], 0)
+        self.assertEqual(again["unchanged"], 8)
+
+    def test_edit_with_preserved_mtime_is_detected(self) -> None:
+        self.init()
+        target = self.root / "src" / "app" / "Service.h"
+        before = target.stat()
+        text = target.read_text(encoding="utf-8").replace("int read() const;", "int load() const;")
+        target.write_text(text, encoding="utf-8")
+        os.utime(target, ns=(before.st_atime_ns, before.st_mtime_ns))
+        self.assertEqual(target.stat().st_size, before.st_size)
+        updated = self.json("update")["data"]
+        self.assertEqual(updated["updated"], 1)
+        self.assertGreater(updated["bytes_read"], 0)
+
+    def test_locate_ranking_is_stable_across_limits(self) -> None:
+        self.init()
+        tops = []
+        for limit in (1, 3, 8, 20):
+            files = self.json("locate", "widget set value", "--limit", str(limit))["data"]["files"]
+            self.assertTrue(files, f"sem candidatos em limit={limit}")
+            tops.append(files[0]["path"])
+        self.assertEqual(len(set(tops)), 1, tops)
+
+    def test_locate_reports_line_and_match_types(self) -> None:
+        self.init()
+        top = self.json("locate", "widget set value")["data"]["files"][0]
+        self.assertTrue(top["line"])
+        self.assertTrue(top["match_types"])
+
+    def test_tests_for_library_source_uses_include_evidence(self) -> None:
+        self.init()
+        tests = self.json("tests-for", "src/core/Widget.cpp")["data"]["tests"]
+        names = [item["name"] for item in tests]
+        self.assertIn("widget_test", names, names)
+        widget = next(item for item in tests if item["name"] == "widget_test")
+        self.assertEqual(widget["confidence"], "confirmed")
+        self.assertTrue(
+            any(reason.startswith("include:") for reason in widget["reasons"]),
+            widget["reasons"],
+        )
+
+    def test_impact_reaches_dependent_test_source(self) -> None:
+        self.init()
+        data = self.json("impact", "src/core/Widget.cpp")["data"]
+        self.assertIn("tests/widget_test.cpp", data["affected_files"])
+
+    def test_diagnose_brief_stays_short_and_json_is_valid(self) -> None:
+        self.init()
+        proc = self.invoke("diagnose", "widget set value")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertLessEqual(len(proc.stdout), 1200)
+        self.assertIn("DIAGNÓSTICO", proc.stdout)
+        payload = self.json("diagnose", "widget set value", "--brief")
+        self.assertTrue(payload["ok"])
+        self.assertIn("files", payload["data"])
+
+    def test_missing_target_uses_uniform_error_envelope(self) -> None:
+        self.init()
+        proc = self.invoke("impact", "naoexiste.cpp", "--json")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = json.loads(proc.stdout)
+        self.assertFalse(payload["ok"])
+        self.assertTrue(payload.get("error"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

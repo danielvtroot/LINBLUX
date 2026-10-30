@@ -19,6 +19,16 @@ python3 tools/atlas/atlas.py doctor
 python3 tools/atlas/atlas.py verify
 ```
 
+Fluxo mínimo para qualquer agente de programação:
+
+```bash
+python3 tools/atlas/atlas.py update                       # índice incremental
+python3 tools/atlas/atlas.py diagnose "sintoma do bug"    # ≤ ~1.100 caracteres
+# abrir somente os arquivos/linhas indicados, editar, então:
+python3 tools/atlas/atlas.py tests-for src/modulo/arquivo.cpp
+python3 tools/turbo/turbo.py test --mode fast --changed
+```
+
 Todas as consultas aceitam `--json`, `--root <diretório>` e limites. Exemplos:
 
 ```bash
@@ -43,7 +53,9 @@ python3 tools/atlas/atlas.py bench --iterations 5
 | `text` | pesquisa textual FTS5 com trecho |
 | `impact` | consumidores diretos/indiretos, testes, riscos e documentação |
 | `trace` | fluxo provável a partir de uma pergunta |
-| `tests-for` | testes mapeados por CMake e por includes |
+| `tests-for` | testes associados, com motivo e confiança (`include`, target, cadeia) |
+| `diagnose` | resposta curta: arquivos, linha, símbolo, hipóteses, testes e próximo passo |
+| `fix-plan` | plano de correção somente leitura, passo a passo, sem editar código |
 | `doctor` | inconsistências estruturais com severidade |
 | `verify` | integridade SQLite/FTS, versão, hashes e consulta de fumaça |
 | `docs` | regenera `docs/atlas/generated/inventory.md` |

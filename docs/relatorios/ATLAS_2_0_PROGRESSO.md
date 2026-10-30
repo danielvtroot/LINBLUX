@@ -1,0 +1,147 @@
+# LINBLUX ATLAS 2.0 — progresso
+
+Registro de checkpoint para outro agente continuar sem reler o projeto.
+Documento de referência: `docs/relatorios/AUDITORIA_ATLAS_2_0.md`.
+
+## Fases concluídas
+
+### Fase 1 — indexação e velocidade (P0)
+
+- `.turbo/`, `prototype/`, `node_modules/`, `.atlas/`, caches e builds excluídos
+  da indexação (`tools/atlas/atlas_lib/config.py`).
+- `update` usa caminho rápido por `size + mtime_ns + ctime_ns`: arquivo inalterado
+  não é lido nem sofre SHA-256 (`tools/atlas/atlas_lib/indexer.py`).
+- Alteração com `mtime` preservado continua detectada porque `ctime` muda; o
+  hash confirma o conteúdo antes de reindexar.
+- `update` resposta inclui `bytes_read`, `rehash`, `added/updated/deleted/unchanged`.
+- Esquema versionado em 2 (`tools/atlas/atlas_lib/db.py`); índice incompatível é
+  reconstruído.
+
+### Fase 2 — ranking estável (P1)
+
+- Pool de candidatos FTS fixo (`CANDIDATE_POOL = 240`), independente de
+  `--limit`; o top-1 não muda mais entre limites.
+- Evidência textual sempre antes de inferência de glossário
+  (`INFERRED_SCORE_CAP`), com `match_types` e `score_breakdown` por arquivo.
+- `files[]` do `locate` traz `line`, `symbols`, `tests`, `textual`, `inferred`.
+
+### Fase 3 — `tests-for` e `impact` (P2)
+
+- `tests-for` (`tools/atlas/atlas_lib/graph.py`) ordena evidência:
+  1. fonte do teste;
+  2. `include` — fonte de teste que inclui o arquivo ou um header do seu fecho
+     (profundidade 3, headers genéricos com fan-out > 4 descartados);
+  3. mesmo target;
+  4. cadeia de targets (estrutural, `inferred`, limitada a 8);
+  5. módulo do arquivo (aproximação, `inferred`).
+- Cada teste retorna `confidence` e `reasons`; `harness` continua marcado quando
+  uma fonte é compartilhada por mais de 3 testes.
+- `impact` percorre include reverso + grafo de targets e lista testes com motivo.
+
+### Fase 4 — `diagnose` / `fix-plan` (P3)
+
+- `atlas.py diagnose "sintoma"` e `atlas.py fix-plan "sintoma"` em
+  `tools/atlas/atlas_lib/diagnose.py`, reutilizando `locate`, `tests_for` e
+  `impact` na mesma conexão SQLite.
+- Saída humana curta por padrão, truncada em limite de linha com marcador
+  explícito; `--detail` mostra tudo, `--max-chars` ajusta o orçamento.
+- `--brief`/`--json` retornam payload reduzido e determinístico.
+- Hipóteses são rotuladas como hipótese; nada é declarado causa confirmada.
+- `fix-plan` é somente leitura (`edits_code: false`).
+
+### Fase 6 — contrato universal (P5, parcial)
+
+- Envelope de erro uniforme: todo `--json` com falha traz `ok: false` e `error`
+  no topo (`tools/atlas/atlas_lib/cli.py`).
+- Cartão curto no `AGENTS.md` e comandos documentados em `docs/atlas/README.md`
+  e `docs/atlas/json.md`.
+
+## Medições (30 de outubro de 2026, índice real de 423 arquivos)
+
+| Operação | Antes (auditoria) | Depois |
+| --- | ---: | ---: |
+| `update` sem alterações | ~930 ms | 98–101 ms |
+| `locate` | 60–150 ms | 98–110 ms |
+| `symbol` | ~70 ms | 65–69 ms |
+| `tests-for` | ~70 ms | 66–67 ms |
+| `impact` | ~90 ms | 68–74 ms |
+| `diagnose` (novo) | inexistente | 115–227 ms |
+| `doctor` | ~200 ms | 237 ms |
+| `verify` | ~250 ms | 265–276 ms |
+| Pico de RSS (`bench`) | ~36 MB | 35,9 MB |
+| Banco SQLite | 4,1–7,5 MB | 7,5 MB |
+
+`bench --iterations 3`: índice completo 2.924 ms; update de 1 arquivo 311 ms;
+update de 5 arquivos 335 ms; consulta média 73,6 ms; máxima 106,6 ms;
+`peak_rss_kib` 35.908; banco 7.503.872 bytes.
+
+Índice atual: 423 arquivos, 4.455 símbolos, 1.279 relações, 44 targets,
+64 testes.
+
+## Ranking (8 sintomas da auditoria)
+
+| Métrica | Baseline | Atual | Meta |
+| --- | ---: | ---: | ---: |
+| Arquivo principal top-1 | 1/8 | 4/8 | — |
+| Arquivo principal top-3 | 1/8 | 6/8 | ≥ 5/8 (atingida) |
+| Arquivo principal top-5 | 5/8 | 6/8 | ≥ 7/8 (**não atingida**) |
+| Arquivo principal top-10 | — | 7/8 | — |
+| MRR (arquivo) | — | 0,653 | — |
+| Módulo top-3 | — | 6/8 | — |
+| Estabilidade entre limites | 2/8 | 8/8 | 8/8 (atingida) |
+
+Sintomas ainda fora do top-5: S4 ("Part dinâmica cai durante edição" →
+`src/physics/PhysicsWorld.cpp` na posição 12) e S6 ("teste de Mundo Padrão
+expira por timeout" → `tests/engine_default_main.cpp` na posição 7).
+
+## `diagnose` — tamanho de saída
+
+Texto humano nos 8 sintomas: 994–1.094 caracteres (limite padrão 1.100,
+`--max-chars` configurável, `--detail` sem corte). JSON `--brief` reduzido a
+5 arquivos, 3 testes e 2 hipóteses.
+
+## `tests-for` nos 6 arquivos C++ verificados
+
+Todos retornam associação com motivo explícito, por exemplo:
+
+- `src/editor/ConstructionPlacement.cpp` → `linblux_gizmo_visual`
+  (`tests/gizmo_visual_main.cpp inclui src/editor/Gizmo.h`).
+- `src/rendering/PlayerMenu.cpp` → `linblux_audio_panel_hd_ui`
+  (`tests/rml_ui_main.cpp inclui src/rendering/PlayerMenu.h`).
+
+As razões são estruturais (include/CMake), não prova de execução, e a
+especificidade varia: headers muito incluídos geram vários testes `confirmed`.
+A meta "6/6 com associações justificadas" está atendida no sentido estrutural;
+a meta de especificidade fina (teste que realmente exercita o arquivo) continua
+aberta.
+
+## Testes
+
+```bash
+python3 -m unittest discover -s tests/atlas -v   # 20 testes, OK
+python3 tools/atlas/atlas.py verify               # OK, hashes conferem
+python3 tools/turbo/turbo.py test --mode fast --changed --plan
+```
+
+Novos testes de regressão em `tests/atlas/test_atlas.py`
+(`AtlasV2RegressionTest`): diretórios gerados ignorados, segundo `update` sem
+leitura, alteração com `mtime` preservado, ranking estável entre limites,
+`line`+`match_types` no `locate`, `tests-for` por include, `impact` alcançando
+teste dependente, `diagnose` curto com JSON válido e envelope de erro uniforme.
+
+## Pendências e próxima ação
+
+1. **P4 — TURBO**: seleção e `tests-for` ainda divergem; o TURBO seleciona por
+   consumidores de target e pode incluir testes irrelevantes. Falta comparar
+   seleção antiga/nova com teste de equivalência antes de trocar a fonte.
+   Resumo de primeira falha já existe em `tools/turbo/turbo_lib/report.py`.
+2. **P6 — C++**: 645 definições fora de classe continuam sem namespace completo;
+   sobrecargas e templates seguem textuais.
+3. **Avaliação ampliada**: `eval` mede módulos, não arquivos; faltam 40 perguntas
+   com referência de arquivo verificada.
+4. **Ranking**: elevar S4 e S6 ao top-5 sem regredir a estabilidade.
+5. `locate --json` ainda é grande (28 KB); usar `--brief` ou `diagnose` em fluxo
+   de agente.
+
+Nada foi commitado além dos arquivos do ATLAS, dos testes e da documentação.
+Alterações preexistentes de outros agentes permanecem intocadas.

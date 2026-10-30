@@ -46,14 +46,21 @@ def query_tokens(query: str) -> list[str]:
 AREA_WEIGHTS = {
     "source": 1.0,
     "test": 0.72,
-    "docs": 0.55,
-    "asset": 0.45,
+    "docs": 0.42,
+    "asset": 0.40,
     "tool": 0.35,
     "script": 0.55,
     "config": 0.5,
     "agent-config": 0.35,
     "package": 0.4,
 }
+
+# Fixed FTS candidate pool. It must not depend on ``--limit``: the audit showed
+# the top-1 changing when only the display limit changed (audit B3 / S1, S4, S7).
+CANDIDATE_POOL = 240
+# A candidate that exists only because of the glossary cannot score above a
+# candidate with real textual evidence (audit B4).
+INFERRED_SCORE_CAP = 6.0
 
 
 
@@ -237,8 +244,12 @@ def _synthesize_hint_rows(
     hints: dict[str, dict],
     existing_modules: set[str],
     module_filter: str | None,
+    existing_paths: set[str] | None = None,
 ) -> list[dict]:
+    """Add files whose *symbols* the glossary points to, even when the module
+    already appeared through a weaker textual match (audit S4/S8)."""
     added = []
+    existing_paths = existing_paths or set()
     for token in tokens:
         hint = hints.get(token)
         if not hint:
@@ -247,14 +258,17 @@ def _synthesize_hint_rows(
             module = normalize_text(module)
             if module_filter and module != normalize_text(module_filter):
                 continue
-            if not module or module in existing_modules:
+            if not module:
                 continue
             hint_symbols = hint.get("symbols", [])
             rows = _module_rows(conn, module, hint_symbols)
             for row in rows:
+                if row["path"] in existing_paths:
+                    continue
                 row["hint_only"] = True
                 row["hint_symbols"] = hint_symbols
                 added.append(row)
+                existing_paths.add(row["path"])
             if rows:
                 existing_modules.add(module)
     return added
@@ -321,6 +335,42 @@ def _confidence(score: float, gap: float) -> str:
     return "baixa"
 
 
+def _match_types(item: dict) -> list[str]:
+    """Which kinds of evidence produced this candidate (explainable output)."""
+    breakdown = item["score_breakdown"]
+    kinds: list[str] = []
+    if breakdown.get("symbols", 0) > 0:
+        kinds.append("symbol")
+    if breakdown.get("fts", 0) > 0:
+        kinds.append("code")
+    if breakdown.get("path", 0) > 0:
+        kinds.append("path")
+    if breakdown.get("glossary", 0) > 0:
+        kinds.append("glossary")
+    if breakdown.get("tests", 0) > 0:
+        kinds.append("test")
+    if item["area"] == "docs":
+        kinds.append("docs")
+    return kinds
+
+
+def _public_file(item: dict) -> dict:
+    return {
+        "path": item["path"],
+        "module": item["module"],
+        "area": item["area"],
+        "score": item["score"],
+        "line": item.get("line"),
+        "textual": item["textual"],
+        "inferred": item["inferred"],
+        "match_types": item["match_types"],
+        "score_breakdown": item["score_breakdown"],
+        "symbols": item["symbols"][:2],
+        "tests": item["tests"][:3],
+        "evidence": item["evidence"][:3],
+    }
+
+
 def overview(root: Path, conn: sqlite3.Connection, limit: int = 12) -> dict:
     rows = conn.execute(
         "SELECT module,COUNT(*) AS files,SUM(line_count) AS lines FROM files "
@@ -346,9 +396,14 @@ def locate(root: Path, conn: sqlite3.Connection, query: str, limit: int = 8, mod
     if not tokens:
         return overview(root, conn, limit)
     hints = _hint_map(root)
-    rows = _candidate_rows(conn, tokens, module, max(limit * 8, 40))
+    rows = _candidate_rows(conn, tokens, module, CANDIDATE_POOL)
     existing_modules = {row["module"] for row in rows}
-    rows.extend(_synthesize_hint_rows(conn, tokens, hints, existing_modules, module))
+    rows.extend(
+        _synthesize_hint_rows(
+            conn, tokens, hints, existing_modules, module,
+            {row["path"] for row in rows},
+        )
+    )
     if not rows:
         return {
             "query": query,
@@ -416,6 +471,12 @@ def locate(root: Path, conn: sqlite3.Connection, query: str, limit: int = 8, mod
         if not evidence:
             evidence.append(f"correspondência textual em {path}")
 
+        inferred = bool(row.get("hint_only")) and not (
+            breakdown["fts"] or path_score or symbol_score
+        )
+        if inferred:
+            score = min(score, INFERRED_SCORE_CAP)
+
         area_weight = AREA_WEIGHTS.get(row["area"], 0.5)
         score *= area_weight
         breakdown["area_weight"] = area_weight
@@ -426,42 +487,73 @@ def locate(root: Path, conn: sqlite3.Connection, query: str, limit: int = 8, mod
             "area": row["area"],
             "language": row["language"],
             "score": round(score, 3),
+            "line": symbols[0]["line"] if symbols else None,
             "score_breakdown": breakdown,
             "evidence": evidence[:6],
             "symbols": symbols[:4],
             "tests": [test["name"] for test in tests[:4]],
-            "inferred": bool(row.get("hint_only")),
+            "inferred": inferred,
         })
 
-    candidates.sort(key=lambda item: (-item["score"], item["module"], item["path"]))
+    # Textual evidence always outranks glossary-only inference, even when the
+    # inferred candidate has a higher raw score. ``--limit`` only truncates the
+    # ordering below; it never reorders it (audit B3/B4).
+    for item in candidates:
+        breakdown = item["score_breakdown"]
+        item["textual"] = bool(
+            breakdown.get("fts", 0) > 0
+            or breakdown.get("path", 0) > 0
+            or breakdown.get("symbols", 0) > 0
+        )
+        item["match_types"] = _match_types(item)
+
+    candidates.sort(
+        key=lambda item: (
+            0 if item["textual"] else 1,
+            -item["score"],
+            item["module"],
+            item["path"],
+        )
+    )
+
+    ranked_files = candidates[: max(limit * 3, 12)]
+
     grouped: dict[str, dict] = {}
-    for candidate in candidates:
-        group = grouped.setdefault(candidate["module"], {
-            "module": candidate["module"],
-            "score": 0.0,
-            "files": [],
-            "symbols": [],
-            "tests": [],
-            "evidence": [],
-            "inferred": False,
-        })
-        if len(group["files"]) < 3:
-            group["score"] += candidate["score"] * (1.0 if not group["files"] else 0.5)
-            group["files"].append(candidate)
-            group["inferred"] = group["inferred"] or candidate["inferred"]
-            for symbol in candidate["symbols"]:
-                if len(group["symbols"]) < 4:
-                    group["symbols"].append({
-                        "qualified": symbol["qualified"], "kind": symbol["kind"],
-                        "path": candidate["path"], "line": symbol["line"],
-                    })
-            for test in candidate["tests"]:
-                if test not in group["tests"] and len(group["tests"]) < 4:
-                    group["tests"].append(test)
-            if candidate["evidence"]:
-                group["evidence"].append(candidate["evidence"][0])
+    module_order: list[str] = []
+    for candidate in ranked_files:
+        module_name = candidate["module"]
+        group = grouped.get(module_name)
+        if group is None:
+            group = {
+                "module": module_name,
+                "score": candidate["score"],
+                "files": [],
+                "symbols": [],
+                "tests": [],
+                "evidence": [],
+                "inferred": False,
+            }
+            grouped[module_name] = group
+            module_order.append(module_name)
+        if len(group["files"]) >= 3:
+            continue
+        group["files"].append(candidate)
+        group["inferred"] = group["inferred"] or candidate["inferred"]
+        for symbol in candidate["symbols"]:
+            if len(group["symbols"]) < 4:
+                group["symbols"].append({
+                    "qualified": symbol["qualified"], "kind": symbol["kind"],
+                    "path": candidate["path"], "line": symbol["line"],
+                })
+        for test in candidate["tests"]:
+            if test not in group["tests"] and len(group["tests"]) < 4:
+                group["tests"].append(test)
+        if candidate["evidence"]:
+            group["evidence"].append(candidate["evidence"][0])
 
-    for module_name, group in grouped.items():
+    modules = [grouped[name] for name in module_order][:limit]
+    for group in modules:
+        module_name = group["module"]
         hint_symbols = _hint_symbols_for(module_name, tokens, hints)
         existing = {
             (symbol["qualified"], symbol["path"], symbol["line"])
@@ -482,11 +574,9 @@ def locate(root: Path, conn: sqlite3.Connection, query: str, limit: int = 8, mod
         if contract:
             group["contract"] = contract
 
-    modules = list(grouped.values())
-    modules.sort(key=lambda item: (-item["score"], item["module"]))
-    modules = modules[:limit]
-    top = modules[0]["score"] if modules else 0.0
-    gap = top - (modules[1]["score"] if len(modules) > 1 else 0.0)
+    files = [_public_file(item) for item in ranked_files[: max(limit, 5)]]
+    top = files[0]["score"] if files else 0.0
+    gap = top - (files[1]["score"] if len(files) > 1 else 0.0)
     confidence = _confidence(top, gap)
     next_steps = []
     for candidate in modules[:3]:
@@ -501,6 +591,7 @@ def locate(root: Path, conn: sqlite3.Connection, query: str, limit: int = 8, mod
         "tokens": tokens,
         "confidence": confidence,
         "candidates": modules,
+        "files": files,
         "next": next_steps[:8],
         "limitations": [
             "ranking textual/regex; não é análise semântica completa de C++",
