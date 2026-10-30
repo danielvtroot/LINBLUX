@@ -27,6 +27,23 @@ próximo passo, em ~1.000 caracteres. Use `--detail` só quando precisar.
 `tests-for` explica cada teste (`include`, mesmo target, cadeia) e nunca prova
 que o teste executa o arquivo.
 
+### I/O: proteja o HDD
+
+Esta máquina tem HDD mecânico e ~6 GiB de RAM. Prefira consultas somente
+leitura e indexe uma vez por tarefa, não a cada comando.
+
+```bash
+ATLAS_IO_MODE=hdd-safe python3 tools/atlas/atlas.py diagnose "sintoma" --brief
+ATLAS_IO_MODE=hdd-critical python3 tools/atlas/atlas.py status
+python3 tools/atlas/atlas.py health --brief
+```
+
+`hdd-safe` abre o índice somente leitura e só indexa quando você pedir
+(`init`/`update`). `hdd-critical` não grava nada: sem `update`, `verify`,
+`bench` nem `docs`; se o índice estiver desatualizado, a resposta diz isso em
+vez de reindexar. Nunca encadeie `update` + `doctor` + `verify` + `bench`
+automaticamente.
+
 Use `--json` para saída estruturada. O cache fica em `.atlas/` e é
 reconstruível; nunca é a fonte da verdade. A fonte da verdade é o código,
 `CMakeLists.txt`, os testes e os contratos manuais em `docs/atlas/`.

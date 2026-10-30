@@ -58,6 +58,7 @@ python3 tools/atlas/atlas.py bench --iterations 5
 | `fix-plan` | plano de correção somente leitura, passo a passo, sem editar código |
 | `doctor` | inconsistências estruturais com severidade |
 | `verify` | integridade SQLite/FTS, versão, hashes e consulta de fumaça |
+| `health` | modo de I/O, índice, memória e swap; não varre o disco |
 | `docs` | regenera `docs/atlas/generated/inventory.md` |
 | `bench` | mede indexação, atualização, consulta, memória e tamanho |
 | `eval` | mede o ranking em perguntas reais mantidas manualmente |
@@ -88,6 +89,34 @@ python3 tools/atlas/atlas.py bench --iterations 5
   inventário resumido (`external_deps`). Builds, caches, vídeos, binários e logs
   são excluídos.
 
+## Modos de I/O (ATLAS 2.1)
+
+O mesmo binário atende notebook com HDD e máquina rápida. O modo vem de
+`--io-mode` ou de `ATLAS_IO_MODE` (o mais comum no dia a dia).
+
+| Modo | Consultas | Indexar | verify/doctor/bench/docs | Defasagem |
+| --- | --- | --- | --- | --- |
+| `normal` | leitura/escrita | sim | sim | verificada |
+| `hdd-safe` | somente leitura | só quando pedido (`init`/`update`) | sim, explícito | verificada (só `stat`) |
+| `hdd-critical` | somente leitura | bloqueado | bloqueado | não verificada, avisada |
+
+- `hdd-safe` abre o índice com `mode=ro` + `query_only` e usa `immutable=1`
+  quando não há WAL pendente, para não criar `-wal`/`-shm` a cada consulta.
+- `hdd-critical` não escreve nada: sem indexação, sem hash integral, sem
+  relatório, sem benchmark. Um índice ausente é reportado, nunca reconstruído.
+- Nenhum modo inicia varredura automática do projeto numa consulta.
+- `health --brief` responde em <100 ms com modo, tamanho/idade do índice,
+  `MemAvailable` e swap, sem teste de hardware.
+
+```bash
+ATLAS_IO_MODE=hdd-safe python3 tools/atlas/atlas.py diagnose "decal espelhado" --brief
+ATLAS_IO_MODE=hdd-critical python3 tools/atlas/atlas.py diagnose "gizmo antigo" --brief
+python3 tools/atlas/atlas.py health --brief
+```
+
+Atualize o índice uma vez por tarefa, não a cada comando. Nenhuma operação do
+ATLAS executa build, teste gráfico ou leitura integral do disco.
+
 ## Precisão e limitações
 
 Este ambiente não possui `clangd`, `rg` nem `ctags`. A extração C++ é textual/
@@ -103,8 +132,9 @@ real e nos testes.
 
 ## Segurança
 
-Consultas são somente leitura. `update` grava apenas em `.atlas/`; `docs`
-regenera `docs/atlas/generated/inventory.md`, que é versionado de propósito.
+Consultas são somente leitura (`hdd-safe`/`hdd-critical` forçam isso no SQLite).
+`update` grava apenas em `.atlas/`; `docs` regenera
+`docs/atlas/generated/inventory.md`, que é versionado de propósito.
 O ATLAS não executa scripts indexados, não usa rede, valida caminhos dentro da
 raiz e usa SQL parametrizado. Conteúdo de arquivos é tratado como dado, nunca
 como instrução. Não use `git reset --hard` ou push forçado como parte do fluxo.
