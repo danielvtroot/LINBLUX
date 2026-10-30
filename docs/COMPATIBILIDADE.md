@@ -26,3 +26,10 @@ usam Xvfb/llvmpipe. Windows, macOS e outras distribuições Linux não foram val
 O pacote depende de glibc/libstdc++, OpenGL/X11 e bibliotecas listadas no manifesto.
 Configurações desconhecidas legadas não são convertidas em mudança de objetos.
 A remoção da grade visual não migra cenas nem altera o Snap.
+
+Novas Parts usam nomes compactos sem espaços; a renomeação manual recusa espaços
+Unicode e controles, mantendo o limite de 128 bytes. A criação compacta palavras
+e a duplicação gera um nome único. A carga por ProjectIO preserva literalmente
+nomes legados, inclusive espaços, sem alterar IDs. Não há migração automática
+de cenas nem substituição de strings Lua. Código que cria novas peças e depois
+as busca por nome deve usar o nome retornado/handle, em vez de pressupor espaços.

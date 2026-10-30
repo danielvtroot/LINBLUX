@@ -146,7 +146,7 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             e.previewPlaying_=false;e.previewPose_={};e.animationDirty_=false;e.timelineDragJoint_=-1;e.hasCopiedKey_=false;e.clipboardId_=0;
             e.camera_.releaseCapture();e.setProjectPath(c.value);if(e.onSceneLoaded_)e.onSceneLoaded_();e.checkInvariants("rml_load");
         }
-        else if(c.action=="rename") {if(c.value.empty()||c.value.size()>128)throw std::runtime_error("Name must contain 1..128 bytes");if(auto* node=e.scene_.find(c.instance))node->setName(c.value);else if(auto* rig=e.scene_.gameAssets().findRig(e.selectedRig_))rig->name=c.value;}
+        else if(c.action=="rename") {if(c.value.empty()||c.value.size()>128)throw std::runtime_error("Name must contain 1..128 bytes");if(auto* node=e.scene_.find(c.instance)){std::string error;if(!node->trySetName(c.value,error))throw std::runtime_error(error);}else if(auto* rig=e.scene_.gameAssets().findRig(e.selectedRig_))rig->name=c.value;}
         else if(c.action=="reparent") {std::string error;if(!e.scene_.reparent(e.scene_.find(c.instance),e.scene_.find(std::stoull(c.value)),error))throw std::runtime_error(error);}
         else if(c.action=="snap") {e.endGizmoSession(true,"snap");e.cancelRigGizmo();e.snapEnabled_=c.value=="true";}
         else if(c.action=="move-planes") {
@@ -339,7 +339,7 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         }
         else if(c.action.rfind("property:",0)==0) {
             auto* node=e.scene_.find(c.instance);if(!node)return false;const auto name=c.action.substr(9);
-            if(name=="Name") {if(c.value.empty()||c.value.size()>128)throw std::runtime_error("Invalid name");node->setName(c.value);}
+            if(name=="Name") {std::string error;if(!node->trySetName(c.value,error))throw std::runtime_error(error);}
             else if(name=="Parent") {std::string error;if(!e.scene_.reparent(node,e.scene_.find(std::stoull(c.value)),error))throw std::runtime_error(error);}
             else if(name.rfind("Attribute:",0)==0) {
                 const auto key=name.substr(10);const auto it=node->attributes().find(key);if(it==node->attributes().end())throw std::runtime_error("Attribute no longer exists");

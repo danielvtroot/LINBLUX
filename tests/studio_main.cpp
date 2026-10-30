@@ -117,16 +117,41 @@ void ModelGizmoSession() {
     CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==after);
     CHECK(scene.remove(b));const auto missing=projectio::toJson(scene);CHECK(!session.applyEdit(edit,true,error));CHECK(projectio::toJson(scene)==missing);
 }
+void PartNamesLua() {
+    Scene author;author.buildDefaultScene();std::string error;
+    auto* legacy=author.createPart(PartShape::Block,{40,4,0},{1,1,1},"Part antiga",700);
+    author.createScript(InstanceClass::Script,nullptr,"Names.lua")->source=R"(
+local old=linblux.scene.find("Part antiga")
+assert(old and old.name=="Part antiga")
+local p=linblux.scene.create("part",{name="Nova Part"})
+assert(p.name=="NovaPart")
+p.name="NomeValido"
+assert(p.name=="NomeValido" and old.name=="Part antiga")
+)";
+    const auto saved=projectio::toJson(author);game::RuntimeSession runtime;
+    CHECK(runtime.start(author,error));CHECK(runtime.scripts().errorCount()==0);
+    runtime.mutableScene().createScript(InstanceClass::Script,nullptr,"InvalidName.lua")->source=
+        "linblux.scene.find('NomeValido').name='Nome com espaço'";
+    runtime.update(1.f/60,{});CHECK(runtime.scripts().errorCount()==1);
+    CHECK(runtime.scripts().messages().back().text.find("Nomes de peças não podem conter espaços")!=std::string::npos);
+    CHECK(author.find(legacy->id())->name()=="Part antiga");runtime.stop();CHECK(projectio::toJson(author)==saved);
+}
 void EditorSelectionAndNames() {
     Scene scene;std::string error;
     auto* a=scene.createPart(PartShape::Block,{0,2,4},{2,2,2},"Peça grande");
     auto* b=scene.createPart(PartShape::Block,{0,2,0},{4,2,2},"Peça grande");
     auto* copy=scene.duplicatePart(*b);copy->setPosition({10,2,0});
-    CHECK(b->name()=="Peça grande_002"&&copy->name()=="Peça grande_003");
-    CHECK(a->name()=="Peça grande");
-    auto* legacy=scene.createPart(PartShape::Block,{20,2,0},{1,1,1},"Plataforma inicial325");
-    auto* duplicate=scene.duplicatePart(*legacy);CHECK(duplicate->name()=="Plataforma inicial325_002");
+    CHECK(b->name()=="PeçaGrande_002"&&copy->name()=="PeçaGrande_003");
+    CHECK(a->name()=="PeçaGrande");
+    auto* legacy=scene.createPart(PartShape::Block,{20,2,0},{1,1,1},"Plataforma inicial325",700);
+    auto* duplicate=scene.duplicatePart(*legacy);CHECK(duplicate->name()=="PlataformaInicial325");
     CHECK(legacy->name()=="Plataforma inicial325");
+    CHECK(!a->trySetName("Parede principal",error));CHECK(a->name()=="PeçaGrande");
+    CHECK(!a->trySetName("Parede\tPrincipal",error));CHECK(!a->trySetName("Parede\nPrincipal",error));
+    CHECK(!a->trySetName("Parede\xc2\xa0Principal",error));CHECK(!a->trySetName("",error));
+    CHECK(!a->trySetName(b->name(),error));CHECK(a->trySetName("ParedePrincipal",error));
+    CHECK(NewPartName("Piso da sala")=="PisoDaSala");CHECK(NewPartName("Nova Part")=="NovaPart");
+    CHECK(!scene.createPart(PartShape::Block,{},{1,1,1},"Nova\tPart"));
     std::string unicode;for(int i=0;i<64;++i)unicode+="Á";
     auto* named=scene.createPart(PartShape::Block,{30,2,0},{1,1,1},unicode);
     auto* namedCopy=scene.duplicatePart(*named);CHECK(namedCopy->name().size()<=128);CHECK(scene.validate(error));
@@ -1907,6 +1932,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    SignificantFallPresentation();NpcHeadingRegression();EditorSelectionAndNames();CursorConstruction();ConstructionPreviewWorkflow();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    SignificantFallPresentation();NpcHeadingRegression();PartNamesLua();EditorSelectionAndNames();CursorConstruction();ConstructionPreviewWorkflow();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

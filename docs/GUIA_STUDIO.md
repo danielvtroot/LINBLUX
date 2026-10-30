@@ -29,3 +29,17 @@ Clique seleciona; Ctrl permite múltipla seleção, F2 renomeia e arrastar alter
 o pai conforme as regras da hierarquia. Nomes antigos, espaços e IDs são preservados.
 A grade visual foi removida. Snap de posição/escala e encaixe por superfície
 continuam disponíveis; veja [Precisão](EDITOR_PRECISAO.md).
+
+## Nomes das peças
+
+Parts novas e duplicadas usam nomes compactos: `Parede principal` vira
+`ParedePrincipal`, `Piso da sala` vira `PisoDaSala`. A geração evita nomes já
+usados. Ao renomear manualmente, espaços (inclusive Unicode), tabulações,
+quebras de linha e nomes vazios são recusados; use letras, números ou `_`,
+até 128 bytes. Parts irmãs não podem receber o mesmo nome por renomeação.
+Pastas, Modelos, títulos de experiências e mídia mantêm suas regras atuais.
+
+Abrir/salvar preserva nomes antigos e IDs. A conversão em lote com prévia,
+análise de referências Lua e undo ainda não está disponível. Ao duplicar uma
+peça antiga, revise referências a nomes no comportamento da nova cópia; scripts
+não são reescritos automaticamente.

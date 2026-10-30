@@ -1050,7 +1050,7 @@ void TestLuaDeclarativeSceneRoundTrip() {
 
     const std::string text = scenelua::toLua(source);
     CHECK(text.find("format = \"loblox-scene\"") != std::string::npos);
-    CHECK(text.find("Lua Part") != std::string::npos);
+    CHECK(text.find("LuaPart") != std::string::npos);
     Scene loaded;
     loaded.buildDefaultScene();
     std::string error;
@@ -1060,7 +1060,7 @@ void TestLuaDeclarativeSceneRoundTrip() {
     const Part* copy = loaded.findPart(part->id());
     CHECK(copy != nullptr);
     if (copy != nullptr) {
-        CHECK_STR(copy->name(), "Lua Part");
+        CHECK_STR(copy->name(), "LuaPart");
         CHECK(copy->instanceClass() == InstanceClass::Part);
         CHECK(NearlyEqual(copy->position(), part->position()));
         CHECK(NearlyEqual(copy->size(), part->size()));

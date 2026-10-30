@@ -302,7 +302,8 @@ Part* Scene::createPart(PartShape shape, Vector3 position, Vector3 size,
         return nullptr;
     }
     const std::string defaultName = shape == PartShape::Block ? "Part" : "Sphere";
-    const std::string requestedName = name.empty() ? defaultName : name;
+    const std::string requestedName = forcedId ? (name.empty()?defaultName:name) : NewPartName(name.empty() ? defaultName : name);
+    if(requestedName.empty())return nullptr;
     const std::string finalName =
         forcedId != kInvalidInstanceId ? requestedName : makeUniqueName(requestedName);
     auto part = std::make_unique<Part>(forcedId != kInvalidInstanceId ? forcedId : allocateId(),
@@ -322,7 +323,8 @@ Baseplate* Scene::createBaseplate(Vector3 position, Vector3 size, const std::str
     if (forcedId != kInvalidInstanceId && byId_.find(forcedId) != byId_.end()) {
         return nullptr;
     }
-    const std::string requestedName = name.empty() ? "Baseplate" : name;
+    const std::string requestedName = forcedId ? (name.empty()?"Baseplate":name) : NewPartName(name.empty() ? "Baseplate" : name);
+    if(requestedName.empty())return nullptr;
     const std::string finalName =
         forcedId != kInvalidInstanceId ? requestedName : makeUniqueName(requestedName);
     auto baseplate = std::make_unique<Baseplate>(
@@ -342,7 +344,8 @@ SpawnLocation* Scene::createSpawnLocation(Vector3 position, Vector3 size,
     if (forcedId != kInvalidInstanceId && byId_.find(forcedId) != byId_.end()) {
         return nullptr;
     }
-    const std::string requestedName = name.empty() ? "SpawnLocation" : name;
+    const std::string requestedName = forcedId ? (name.empty()?"SpawnLocation":name) : NewPartName(name.empty() ? "SpawnLocation" : name);
+    if(requestedName.empty())return nullptr;
     const std::string finalName =
         forcedId != kInvalidInstanceId ? requestedName : makeUniqueName(requestedName);
     auto spawn = std::make_unique<SpawnLocation>(

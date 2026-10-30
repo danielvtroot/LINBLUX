@@ -2181,7 +2181,7 @@ void EditorUI::drawPartProperties(Part& part) {
     char name[128];
     std::snprintf(name, sizeof(name), "%s", part.name().c_str());
     if (ImGui::InputText(i18n::Label("Name"), name, sizeof(name))) {
-        part.setName(name);
+        std::string error;if(!part.trySetName(name,error))setStatus(error,true);
     }
 
     ImGui::BeginDisabled();
@@ -2494,7 +2494,7 @@ void EditorUI::drawDialogs() {
         if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
         const bool enter=ImGui::InputText(i18n::Label("Name"),renameBuffer_,sizeof(renameBuffer_),ImGuiInputTextFlags_EnterReturnsTrue);
         if (enter || ImGui::Button(i18n::Label("Rename"))) {
-            if (auto* node=scene_.find(renameId_); node && renameBuffer_[0]) node->setName(renameBuffer_);
+            if (auto* node=scene_.find(renameId_); node) {std::string error;if(!node->trySetName(renameBuffer_,error))setStatus(error,true);}
             if(auto* rig=scene_.gameAssets().findRig(renameRigId_);rig && renameBuffer_[0])rig->name=renameBuffer_;
             renameId_=0;renameRigId_.clear(); ImGui::CloseCurrentPopup();
         }
