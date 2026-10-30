@@ -58,8 +58,8 @@ SEARCHABLE_JSON_PREFIXES = (
 )
 
 # Prefixes never indexed. The ATLAS fixture is copied into an isolated root by
-# tests and must not leak fake targets into the real inventory. ``prototype/`` is
-# an obsolete stub that no CMake target references (audit ATM-2.0, B1).
+# tests and must not leak fake targets into the real inventory. Keep optional
+# local prototype experiments excluded even after removing the obsolete stub.
 IGNORED_PREFIXES = (
     "tests/atlas/fixture/",
     "prototype/",
