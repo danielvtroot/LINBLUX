@@ -78,6 +78,8 @@ Players.CharacterAdded:Connect(function(character)
     -- Customize this map here. Project defaults are in Game Settings.
 end)
 )");
+    ensureService(InstanceClass::ServerStorage);
+    ensureService(InstanceClass::ReplicatedStorage);
     // CharacterAnimations.server.lua is no longer auto-generated.
     // Animation configuration is now managed exclusively through Game Settings (Game Config).
 }

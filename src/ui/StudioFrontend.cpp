@@ -623,7 +623,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(action=="color-dialog"||action=="material-dialog"){prompt(action=="color-dialog"?"color":"material");return;}
         if(action=="edit-color"){prompt("color:"+v);return;}
         if(action=="choose-color"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
-        if(action=="insert-menu") {std::string menu;for(const auto& item:std::vector<std::pair<std::string,std::string>>{{"part","Part"},{"folder","Pasta"},{"model","Modelo"},{"attachment","Attachment"},{"script","Script"},{"local-script","LocalScript"},{"module","Módulo"},{"r6","Personagem R6"},{"server-storage","ServerStorage"},{"replicated-storage","ReplicatedStorage"}})menu+=Button(item.first,item.second);el("context-menu")->SetInnerRML(i18n::Markup(menu));auto b=bounds("new-object");rect("context-menu",{b.x-176,b.y+23,196,262});display("context-menu",true);contextOpen=true;return;}
+        if(action=="insert-menu") {std::string menu;for(const auto& item:std::vector<std::pair<std::string,std::string>>{{"part","Part"},{"folder","Pasta"},{"model","Modelo"},{"attachment","Attachment"},{"script","Script"},{"local-script","LocalScript"},{"module","Módulo"},{"r6","Personagem R6"},{"server-scripts","ServerScriptService"},{"server-storage","ServerStorage"},{"replicated-storage","ReplicatedStorage"}})menu+=Button(item.first,item.second);el("context-menu")->SetInnerRML(i18n::Markup(menu));auto b=bounds("new-object");rect("context-menu",{b.x-176,b.y+23,196,292});display("context-menu",true);contextOpen=true;return;}
         if(action=="cancel-dialog") {dialogOpen=false;context->GetRootElement()->Focus();return;}
         if(action=="confirm-dialog") {const auto v=value(el("dialog-value"));const auto id=ui.scene_.selection()?ui.scene_.selection()->id():0;
             if(actions.dispatch({dialog,v,id})) {if(dialog=="import-sound"||dialog.rfind("rename-sound:",0)==0)invalidateAudio();if(dialog=="import-image"||dialog.rfind("rename-image:",0)==0||dialog.rfind("replace-image:",0)==0||dialog.rfind("delete-image:",0)==0)invalidateImages();dialogOpen=false;context->GetRootElement()->Focus();treeHash=0;}else text("dialog-error",ui.status_);return;}
@@ -672,14 +672,15 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         std::function<bool(const Instance*)> relevant=[&](const Instance* n){if(matches(n))return true;for(auto* c:n->children())if(relevant(c))return true;return false;};
         std::function<void(const Instance*,int)> row=[&](const Instance* node,int depth){if(!search.empty()&&!relevant(node))return;
             const auto id=std::to_string(node->id());const auto type=node->instanceClass();
-            const std::string icon=type==InstanceClass::Workspace?"workspace":type==InstanceClass::Lighting?"lighting":type==InstanceClass::Folder?"folder":type==InstanceClass::Model?"model":type==InstanceClass::ModuleScript?"module":type==InstanceClass::LocalScript?"local-script":type==InstanceClass::SpawnLocation?"spawn":IsSurfaceClass(type)?"image":IsScriptClass(type)?"script":IsRootServiceClass(type)?"storage":"part";
+            const std::string icon=type==InstanceClass::Workspace?"workspace":type==InstanceClass::Lighting?"lighting":type==InstanceClass::Folder?"folder":type==InstanceClass::Model?"model":type==InstanceClass::ModuleScript?"module":type==InstanceClass::LocalScript?"local-script":type==InstanceClass::SpawnLocation?"spawn":IsSurfaceClass(type)?"image":IsScriptClass(type)?"script":IsRootServiceClass(type)?"service":"part";
             s+="<div id=\"node-"+id+"\" class=\"tree-row"+(ui.scene_.selected(node->id())?" selected":"")+"\" data-node-row=\""+id+"\" title=\""+Escape(node->name()+" · "+node->className())+"\" style=\"padding-left:"+std::to_string(3+depth*12)+"px\">";
             if(!node->children().empty())s+="<button id=\"fold-"+id+"\" class=\"fold\" data-fold=\""+id+"\"><img src=\"icon-chevron-"+(collapsed.count(node->id())?"right":"down")+"\"/></button>";
             else s+="<span class=\"leaf\"/>";
             s+="<img src=\"icon-"+icon+"\"/><span class=\"node-name\">"+Escape(node->name())+"</span></div>";
             if(!collapsed.count(node->id())||!search.empty())for(auto* c:node->children())row(c,depth+1);
         };
-        for(const auto& n:ui.scene_.objects())if(!n->parent())row(n.get(),0);
+        for(auto type:{InstanceClass::Workspace,InstanceClass::Lighting,InstanceClass::ServerScriptService,InstanceClass::ServerStorage,InstanceClass::ReplicatedStorage})
+            if(auto* service=ui.scene_.service(type))row(service,0);
         for(const auto& rig:ui.scene_.gameAssets().rigs) {
             const auto rid=Escape(rig.id);const bool active=ui.selectedRig_==rig.id;
             s+="<div id=\"rig-"+rid+"\" class=\"tree-row"+std::string(active&&ui.selectedRigBody_<0?" selected":"")+"\" data-rig=\""+rid+"\"><span class=\"leaf\"/><img src=\"icon-rig\"/><span class=\"node-name\">"+Escape(rig.name)+"</span></div>";

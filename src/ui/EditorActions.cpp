@@ -86,8 +86,9 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="sphere")e.insertPart(PartShape::Sphere);
         else if(c.action=="spawn")e.insertSpawnLocation();
         else if(c.action=="folder")e.insertContainer(InstanceClass::Folder,e.scene_.find(c.instance));
-        else if(c.action=="server-storage"){e.scene_.ensureService(InstanceClass::ServerStorage);e.setStatus("ServerStorage disponível no Explorador.");}
-        else if(c.action=="replicated-storage"){e.scene_.ensureService(InstanceClass::ReplicatedStorage);e.setStatus("ReplicatedStorage disponível no Explorador.");}
+        else if(c.action=="server-scripts"){e.scene_.select(e.scene_.ensureService(InstanceClass::ServerScriptService));e.setStatus("ServerScriptService disponível no Explorador.");}
+        else if(c.action=="server-storage"){e.scene_.select(e.scene_.ensureService(InstanceClass::ServerStorage));e.setStatus("ServerStorage disponível no Explorador.");}
+        else if(c.action=="replicated-storage"){e.scene_.select(e.scene_.ensureService(InstanceClass::ReplicatedStorage));e.setStatus("ReplicatedStorage disponível no Explorador.");}
         else if(c.action=="apply-item-icon"||c.action=="clear-item-icon"){
             auto* model=e.scene_.selection();if(!model||model->instanceClass()!=InstanceClass::Model)throw std::runtime_error("Selecione um Modelo.");
             if(!model->setAttribute("item_icon",c.action=="clear-item-icon"?std::string():game::NormalizeImageReference(c.value)))throw std::runtime_error("Limite de atributos atingido.");

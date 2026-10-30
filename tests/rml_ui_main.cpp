@@ -79,7 +79,7 @@ int main() {
         auto* part=scene.createPart(PartShape::Block,{14,3,0},{4,6,1},"Wall");part->setAnchored(true);scene.select(part);
         PhysicsWorld physics;physics.attach(scene);EditorCamera camera;SceneRenderer renderer;AppConfig config;
         // Audio tests exercise UI/backend, not shadow quality; keep software GL cheap.
-        if(std::getenv("LINBLUX_PLAYER_AUDIO_ONLY")||std::getenv("LINBLUX_AUDIO_PANEL_ONLY")||std::getenv("LINBLUX_NATIVE_AUDIO_ONLY"))renderer.setQuality(RenderQuality::Low);
+        if(std::getenv("LINBLUX_PLAYER_AUDIO_ONLY")||std::getenv("LINBLUX_AUDIO_PANEL_ONLY")||std::getenv("LINBLUX_NATIVE_AUDIO_ONLY")||std::getenv("LINBLUX_EXPLORER_ONLY"))renderer.setQuality(RenderQuality::Low);
         config.defaultProjectPath=std::string(directory)+"/map.json";
         const auto untouched=projectio::toJson(scene);
         EditorUI ui(scene,physics,camera,renderer,config);std::string error;
@@ -120,6 +120,19 @@ int main() {
         capture("studio-1366");
         if(std::getenv("LINBLUX_EXPLORER_ONLY")) {
             renderer.setQuality(RenderQuality::Low);
+            const auto originalName=part->name();
+            click("prop-Name");key("ctrl+a");event("type --clearmodifiers --delay 1 'Nome Com Espacos'");key("Return");frames(3);
+            CHECK(part->name()==originalName);
+            EditorActions actions(ui);CHECK(!actions.dispatch({"rename","Outro Nome",part->id()}));
+            CHECK(actions.dispatch({"rename","Parede_001",part->id()}));
+            for(int width:{1366,1920}) {
+                resizeWindow(width,width==1366?768:1080);
+                for(auto type:{InstanceClass::ServerScriptService,InstanceClass::ServerStorage,InstanceClass::ReplicatedStorage}) {
+                    auto* service=scene.service(type);CHECK(service);
+                    if(service){const auto id="node-"+std::to_string(service->id());CHECK(ui.frontend()->elementBounds(id).height>=19);click(id);CHECK(scene.selection()==service);}
+                }
+                capture("explorer-services-"+std::to_string(width));
+            }
             for(int i=0;i<60;++i)scene.createContainer(InstanceClass::Folder,folder,"Objeto "+std::to_string(i));
             auto* child=scene.createContainer(InstanceClass::Folder,folder,"Nome com espaços preservados");
             const auto id="node-"+std::to_string(child->id()),parentId="node-"+std::to_string(folder->id());

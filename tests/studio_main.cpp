@@ -117,6 +117,20 @@ void ModelGizmoSession() {
     CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==after);
     CHECK(scene.remove(b));const auto missing=projectio::toJson(scene);CHECK(!session.applyEdit(edit,true,error));CHECK(projectio::toJson(scene)==missing);
 }
+void RootServices() {
+    Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();std::string error;
+    for(auto type:{InstanceClass::ServerScriptService,InstanceClass::ServerStorage,InstanceClass::ReplicatedStorage}) {
+        auto* service=scene.service(type);CHECK(service);if(!service)continue;
+        const auto id=service->id();CHECK(scene.ensureService(type)==service);CHECK(service->id()==id);
+        CHECK(!service->deletable());CHECK(!scene.remove(service));CHECK(!scene.canParent(service,scene.parts()[0]));
+    }
+    const auto saved=projectio::toJson(scene);scene.installDefaultScripts();CHECK(projectio::toJson(scene)==saved);
+    Scene restored;CHECK(projectio::fromJson(restored,saved,error));CHECK(projectio::toJson(restored)==saved);
+    for(auto type:{InstanceClass::ServerScriptService,InstanceClass::ServerStorage,InstanceClass::ReplicatedStorage}) {
+        int count=0;for(const auto& n:restored.objects())count+=n->instanceClass()==type;
+        CHECK(count==1);CHECK(restored.service(type)->id()==scene.service(type)->id());
+    }
+}
 void PartNamesLua() {
     Scene author;author.buildDefaultScene();std::string error;
     auto* legacy=author.createPart(PartShape::Block,{40,4,0},{1,1,1},"Part antiga",700);
@@ -1932,6 +1946,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    SignificantFallPresentation();NpcHeadingRegression();PartNamesLua();EditorSelectionAndNames();CursorConstruction();ConstructionPreviewWorkflow();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    SignificantFallPresentation();NpcHeadingRegression();RootServices();PartNamesLua();EditorSelectionAndNames();CursorConstruction();ConstructionPreviewWorkflow();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

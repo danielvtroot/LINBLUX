@@ -43,3 +43,12 @@ Abrir/salvar preserva nomes antigos e IDs. A conversão em lote com prévia,
 análise de referências Lua e undo ainda não está disponível. Ao duplicar uma
 peça antiga, revise referências a nomes no comportamento da nova cópia; scripts
 não são reescritos automaticamente.
+
+## Serviços do Explorador
+
+A árvore mostra Mundo, Iluminação, ServerScriptService, ServerStorage e
+ReplicatedStorage nessa ordem, preservando nomes, IDs e filhos existentes.
+Serviços usam um ícone próprio; não são pastas comuns. Eles podem ser selecionados
+e expandidos, mas não excluídos nem movidos para outro objeto. O menu **+**
+localiza ou cria o serviço escolhido sem duplicá-lo. Os padrões novos incluem
+os serviços; carregar uma cena antiga não injeta serviços nem altera o arquivo.
