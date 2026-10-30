@@ -397,6 +397,21 @@ void EditorUI::drawInstanceProperties(Instance& object) {
                     part.setAttribute("decal_tint", std::string(hexOut));
                 }
             }
+            if (row("Decal Fit", "Ajustar mantém a proporção da imagem; Esticar é o padrão dos arquivos antigos.")) {
+                static const char* modes[3] = {"Esticar","Ajustar","Preencher"};
+                int current = 0;
+                if (const auto it = part.attributes().find("decal_fit"); it != part.attributes().end())
+                    if (const auto* txt = std::get_if<std::string>(&it->second)) {
+                        if (*txt == "fit") current = 1;
+                        else if (*txt == "fill") current = 2;
+                    }
+                if (ImGui::BeginCombo(i18n::Label("##decal_fit"), modes[current])) {
+                    for (int m = 0; m < 3; ++m)
+                        if (ImGui::Selectable(modes[m]))
+                            part.setAttribute("decal_fit", std::string(m == 0 ? "stretch" : m == 1 ? "fit" : "fill"));
+                    ImGui::EndCombo();
+                }
+            }
             ImGui::EndTable();
             static std::vector<game::ImageAsset> assetsCache;
             static double lastScan = -1.0;
