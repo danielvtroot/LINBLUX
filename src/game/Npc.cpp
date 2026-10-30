@@ -176,7 +176,7 @@ float NpcSystem::waypointRadius() const {
 bool NpcSystem::attach(RuntimeSession& runtime, InstanceId part, std::string& error) {
     if (!runtime.scene_) { error = "Sessão sem cena."; return false; }
     Part* object = runtime.scene_->findPart(part);
-    if (!object || !object->hasNpc()) {
+    if (!object || !runtime.scene_->isWorldObject(object) || !object->hasNpc()) {
         error = "A peça não possui propriedades de NPC.";
         return false;
     }
@@ -212,7 +212,7 @@ bool NpcSystem::attach(RuntimeSession& runtime, InstanceId part, std::string& er
 bool NpcSystem::attachAuthored(RuntimeSession& runtime, std::string& error) {
     if (!runtime.scene_) { error = "Sessão sem cena."; return false; }
     std::vector<InstanceId> ids;
-    for (const Part* part : runtime.scene_->parts()) {
+    for (const Part* part : runtime.scene_->worldParts()) {
         if (part && part->hasNpc() && part->npcProperties()->enabled) ids.push_back(part->id());
     }
     std::sort(ids.begin(), ids.end());
@@ -389,7 +389,7 @@ void NpcSystem::updateClip(Controller& controller, float dt, bool moving) {
 void NpcSystem::publishVisual(RuntimeSession& runtime, const Controller& controller) {
     if (controller.rig.empty() || !runtime.scene_) return;
     const Part* part = runtime.scene_->findPart(controller.part);
-    if (!part) return;
+    if (!part||!runtime.scene_->isWorldObject(part)) return;
     if (!runtime.scene_->gameAssets().findRig(controller.rig)) return;
     NpcVisual visual;
     visual.part = controller.part;
@@ -438,7 +438,7 @@ void NpcSystem::respawn(RuntimeSession& runtime, Controller& controller) {
 
 void NpcSystem::ensureNavigation(RuntimeSession& runtime) {
     if (!runtime.scene_ || !runtime.physics_) return;
-    const std::size_t parts = runtime.scene_->parts().size();
+    const std::size_t parts = runtime.scene_->worldParts().size();
     if (grid_.ready() && !gridDirty_ && parts == gridParts_) return;
     runtime.physics_->syncScene(*runtime.scene_);
     grid_.build(*runtime.scene_, *runtime.physics_, config_);
@@ -507,11 +507,12 @@ bool NpcSystem::stopMoving(InstanceId part) {
 
 void NpcSystem::tick(RuntimeSession& runtime, float dt) {
     if (!runtime.scene_ || !runtime.physics_ || !std::isfinite(dt) || dt <= 0) return;
-    if (runtime.scene_->parts().size() != gridParts_) gridDirty_ = true;
+    if (runtime.scene_->worldParts().size() != gridParts_) gridDirty_ = true;
     for (auto it = controllers_.begin(); it != controllers_.end();) {
         Controller& controller = it->second;
         Part* part = runtime.scene_->findPart(controller.part);
         if (!part || !part->hasNpc()) { it = controllers_.erase(it); continue; }
+        if(!runtime.scene_->isWorldObject(part)){++it;continue;}
         const NpcProperties& properties = *part->npcProperties();
         controller.speed = properties.speed;
         controller.maxHealth = properties.maxHealth;

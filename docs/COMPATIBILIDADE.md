@@ -33,3 +33,8 @@ e a duplicação gera um nome único. A carga por ProjectIO preserva literalment
 nomes legados, inclusive espaços, sem alterar IDs. Não há migração automática
 de cenas nem substituição de strings Lua. Código que cria novas peças e depois
 as busca por nome deve usar o nome retornado/handle, em vez de pressupor espaços.
+
+Parts em ServerStorage/ReplicatedStorage exigem esta revisão de armazenamento ou
+posterior. Builds anteriores podem recusar essa hierarquia; preserve uma cópia
+antes de alternar versões. A assinatura dos formatos e os IDs não mudaram.
+Cenas antigas continuam carregando sem conversão automática de nomes ou serviços.

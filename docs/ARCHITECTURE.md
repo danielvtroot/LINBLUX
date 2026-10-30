@@ -34,3 +34,17 @@ O build oficial é `build-linblux/`. A distribuição Alpha 0.1.0 usa CMake 0.1.
 identificadores legados de formatos e APIs continuam compatíveis. O empacotador
 instala recursos selecionados e registra dependências em manifesto separado do
 build local. Veja [BUILD](BUILD.md) e [Alpha](ALPHA_0_1_0.md).
+
+`Scene::parts()` mantém todos os dados autorais, inclusive armazenamento.
+`worldParts()` e `isWorldObject()` usam um índice da árvore Workspace, reconstruído
+sob demanda após mudanças estruturais e mantendo a ordem de criação das Parts.
+Renderização, Bullet, navegação, NPCs, spawn, picking e consultas de gameplay
+usam essa classificação comum. Hierarquia não é percorrida por Part a cada frame.
+Reparenting notifica a física para remover/restaurar corpos; edição de uma Part
+armazenada não pode criar um corpo por `applyChanges`. A serialização e o cálculo
+de geometria autoral de Modelos continuam usando todos os objetos.
+
+ServerScriptService é um serviço de scripts do runtime local. ServerStorage e
+ReplicatedStorage guardam dados e modelos inativos no Mundo; não representam
+processos de rede. O inventário encontra protótipos nessa hierarquia e instancia
+cópias explicitamente sob Workspace, restaurando os scripts do clone.

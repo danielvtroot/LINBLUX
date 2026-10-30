@@ -1068,7 +1068,7 @@ void SceneRenderer::drawEditorGuides(const Scene& scene,Camera3D camera,const Ed
     Matrix guideProjection=projection;
     guideProjection.m14-=0.0001f;
     rlSetMatrixProjection(guideProjection);
-    for(const auto* p:scene.parts()) {
+    for(const auto* p:scene.worldParts()) {
         if(p->color().a==0)continue;
         if((options.edges||p->id()==hovered)&&!scene.selected(p->id())) {
             const Color color=p->id()==hovered?Color{240,230,225,230}:Color{42,46,54,165};
@@ -1187,7 +1187,7 @@ void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width
     const bool wantsShadow=shadowQuality_!=ShadowQuality::Off&&(quality_==RenderQuality::Medium||quality_==RenderQuality::High)&&lighting&&lighting->shadowsEnabled()&&lighting->sunIntensity()>0&&lighting->shadowStrength()>0;
     std::vector<Part*> opaque,transparent;
     std::vector<ShadowCaster> casters;
-    for(auto* part:scene.parts()) {
+    for(auto* part:scene.worldParts()) {
         if(!part||game::InventoryHidden(*part)||hasRigVisual(part->id()))continue;
         const auto* m=modernAvailable&&part->material3D()?&*part->material3D():nullptr;
         const auto alpha=m?m->baseColor.a:part->color().a;if(!alpha)continue;
@@ -1269,7 +1269,7 @@ void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width
 void SceneRenderer::drawCollisionShapes(const Scene& scene,const PhysicsWorld& physics,
                                         Camera3D camera,InstanceId selection) const {
     BeginMode3D(camera);rlDrawRenderBatchActive();rlDisableDepthTest();rlDisableDepthMask();
-    for(auto* part:scene.parts()) {
+    for(auto* part:scene.worldParts()) {
         CollisionGeometry geometry;if(!physics.collisionGeometry(part->id(),geometry))continue;
         float error=0;const auto visual=part->bounds().corners(),actual=geometry.box.corners();
         for(int i=0;i<8;++i)error=std::max(error,Vector3Distance(visual[i],actual[i]));

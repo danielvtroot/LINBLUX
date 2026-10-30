@@ -7,6 +7,7 @@ bool ConstructionPlacement::begin(const Scene& scene,InstanceId id,std::string& 
     cancel();const auto* selection=scene.find(id);
     if(!selection||(!selection->isPart()&&selection->instanceClass()!=InstanceClass::Model)){
         error="Selecione uma Part ou Modelo para encaixar.";return false;}
+    if(!scene.isWorldObject(selection)){error="Crie uma cópia no Mundo antes de encaixar um objeto armazenado.";return false;}
     model_=selection->instanceClass()==InstanceClass::Model;
     for(const auto* part:scene.parts())if(part==selection||selection->isAncestorOf(part)){
         if(part->shape()!=PartShape::Block){cancel();error="Encaixe disponível para caixas; esfera: use Mover.";return false;}
@@ -18,7 +19,7 @@ bool ConstructionPlacement::begin(const Scene& scene,InstanceId id,std::string& 
     id_=id;error.clear();return true;
 }
 bool ConstructionPlacement::unchanged(const Scene& scene) const {
-    const auto* selection=scene.find(id_);if(!selection)return false;
+    const auto* selection=scene.find(id_);if(!selection||!scene.isWorldObject(selection))return false;
     size_t count=0;for(const auto* part:scene.parts())if(part==selection||selection->isAncestorOf(part))++count;
     if(count!=before_.size())return false;
     for(const auto& box:before_){const auto* part=scene.findPart(box.id);
@@ -32,7 +33,7 @@ void ConstructionPlacement::update(const Scene& scene,Ray ray,gizmomath::SnapFea
     if(!active())return;if(!unchanged(scene)){cancel();return;}
     std::vector<gizmomath::SurfaceBox> targets;float nearestSphere=INFINITY;
     const auto* selection=scene.find(id_);
-    for(const auto* part:scene.parts())if(part!=selection&&!selection->isAncestorOf(part)&&part->color().a>0){
+    for(const auto* part:scene.worldParts())if(part!=selection&&!selection->isAncestorOf(part)&&part->color().a>0){
         if(part->shape()==PartShape::Block)targets.push_back({{part->position(),part->rotation(),part->size()},part->id()});
         else {const auto hit=part->intersect(ray);if(hit.hit)nearestSphere=std::min(nearestSphere,hit.distance);}
     }

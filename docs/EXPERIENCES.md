@@ -41,3 +41,12 @@ promete desfazer uma exclusão já iniciada. Faça backup dos projetos important
 A atualização do índice ocorre depois da remoção dos arquivos; erros do índice
 são informados separadamente. Projetos abertos fora da biblioteca devem ser
 importados para uma cópia interna antes da exclusão pela biblioteca.
+
+## Serviços e recursos armazenados
+
+ServerStorage e ReplicatedStorage são contêineres persistidos junto da cena,
+inclusive seus Modelos, Parts, scripts, atributos e referências de recursos.
+A renderização e a física usam apenas a árvore do Mundo; o armazenamento
+continua acessível pela hierarquia e API Lua. Salvar/reabrir preserva pais e IDs.
+Play usa uma cópia: mover, clonar ou instanciar durante a execução não modifica
+a autoria; Stop descarta essas alterações de partida. Não há replicação em rede.

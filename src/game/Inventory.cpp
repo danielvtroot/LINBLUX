@@ -77,7 +77,7 @@ InstanceId Inventory::spawn(const std::string& type,const ModelFrame* pose){
     auto& h=*impl_;Need(h.items.size()<128,"Limite de 128 itens da sessão atingido.");auto* source=h.model(prototype(type));const auto& definition=h.types.at(type);
     const auto original=Nodes(source);Need(original.size()==definition.nodes.size(),"Estrutura do protótipo mudou; registre outro tipo.");
     for(size_t i=0;i<original.size();++i)Need(original[i]->id()==definition.nodes[i].id&&original[i]->instanceClass()==definition.nodes[i].type,"Componentes do protótipo foram substituídos.");
-    if(pose)Need(pose->valid(),"Pose de criação do item inválida.");auto* copy=h.scene.duplicateTree(*source);Need(copy,"Não foi possível instanciar o item.");
+    if(pose)Need(pose->valid(),"Pose de criação do item inválida.");auto* copy=h.scene.duplicateTree(*source,h.scene.workspace());Need(copy,"Não foi possível instanciar o item.");
     const auto id=copy->id();auto nodes=Nodes(copy);Impl::Item item{type,definition.options,{}};
     for(size_t i=0;i<nodes.size();++i){auto snapshot=definition.nodes[i];snapshot.id=nodes[i]->id();item.nodes.push_back(snapshot);}
     try{

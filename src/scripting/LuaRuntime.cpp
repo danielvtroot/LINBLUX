@@ -885,7 +885,7 @@ struct LuaRuntime::Impl {
     static int Nearby(lua_State* L) {
         auto& self=Host(L);const auto center=ReadVector(L,1);const double radius=Number(L,2);
         Require(radius>=0&&radius<=1000000,"Raio de consulta fora do intervalo");lua_newtable(L);int index=0;
-        for(const auto* part:self.runtime->scene().parts())if(Vector3DistanceSqr(center,part->position())<=radius*radius){self.pushInstance(L,part,true);lua_rawseti(L,-2,++index);}
+        for(const auto* part:self.runtime->scene().worldParts())if(Vector3DistanceSqr(center,part->position())<=radius*radius){self.pushInstance(L,part,true);lua_rawseti(L,-2,++index);}
         return 1;
     }
     static int Gravity(lua_State* L){lua_pushnumber(L,Host(L).runtime->settings().gravity);return 1;}

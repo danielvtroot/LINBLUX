@@ -117,6 +117,70 @@ void ModelGizmoSession() {
     CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==after);
     CHECK(scene.remove(b));const auto missing=projectio::toJson(scene);CHECK(!session.applyEdit(edit,true,error));CHECK(projectio::toJson(scene)==missing);
 }
+void StorageServices() {
+    Scene author;author.buildDefaultScene();std::string error;
+    auto* storage=author.ensureService(InstanceClass::ServerStorage);
+    auto* shared=author.ensureService(InstanceClass::ReplicatedStorage);
+    auto* folder=author.createContainer(InstanceClass::Folder,storage,"Itens");
+    auto* model=author.createContainer(InstanceClass::Model,nullptr,"Espada");
+    auto* blade=author.createPart(PartShape::Block,{40,4,0},{2,4,2},"Lamina");blade->setAnchored(true);
+    CHECK(author.reparent(blade,model,error));
+    auto* behavior=author.createScript(InstanceClass::Script,model,"Item.lua");
+    behavior->source="local r=linblux.scene.root;r:set_attribute('clone_started',(r:get_attribute('clone_started') or 0)+1)";
+    PhysicsWorld physics;physics.attach(author);const auto bodies=physics.bodyCount();
+    CHECK(physics.hasBody(blade->id()));CHECK(author.reparent(model,folder,error));
+    CHECK(!physics.hasBody(blade->id()));CHECK(author.isStored(blade));CHECK(!author.isWorldObject(blade));
+    CHECK(author.parts().size()==3&&author.worldParts().size()==2);
+    ConstructionPlacement placement;CHECK(!placement.begin(author,model->id(),error));
+    physics.applyChanges(blade);CHECK(!physics.hasBody(blade->id()));CHECK(physics.validate(author,error));
+    CHECK(author.validate(error));CHECK(blade->anchored()&&blade->canCollide());
+    Part* hit=nullptr;CHECK(physics.raycast({40,20,0},{0,-1,0},30,&hit));CHECK(hit!=blade);
+    CHECK(author.pickPart({{40,20,0},{0,-1,0}},30)!=blade);
+    CHECK(author.reparent(model,shared,error));CHECK(!physics.hasBody(blade->id()));
+    CHECK(author.reparent(model,author.workspace(),error));CHECK(physics.hasBody(blade->id()));
+    CHECK(physics.bodyCount()==bodies);CHECK(author.isWorldObject(blade));
+    CHECK(placement.begin(author,model->id(),error));
+    CHECK(author.reparent(model,folder,error));
+    placement.update(author,{{40,20,0},{0,-1,0}},gizmomath::SnapFeature::Face,0,1,false);CHECK(!placement.active());CHECK(!physics.hasBody(blade->id()));
+    model->setAttribute("_linblux_item_prototype",true);model->setAttribute("item_type",std::string("espada"));
+    auto* module=author.createScript(InstanceClass::ModuleScript,shared,"Config");module->source="return {value=7}";
+    author.createScript(InstanceClass::Script,storage,"Stored.lua")->source="error('stored script ran')";
+    auto* service=author.ensureService(InstanceClass::ServerScriptService);
+    author.createScript(InstanceClass::Script,service,"Service.lua")->source=R"(
+local store=game:GetService('ServerStorage')
+assert(store:FindFirstChild('Itens'):FindFirstChild('Espada'))
+assert(require(game:GetService('ReplicatedStorage'):FindFirstChild('Config')).value==7)
+linblux.scene.root:set_attribute('service_started',true)
+)";
+    auto* disabled=author.createScript(InstanceClass::Script,service,"Disabled.lua");disabled->enabled=false;disabled->source="error('disabled script ran')";
+    author.createScript(InstanceClass::LocalScript,service,"Local.lua")->source="linblux.scene.root:set_attribute('local_started',true)";
+    author.createScript(InstanceClass::ModuleScript,service,"LazyModule")->source="error('module started without require')";
+    const auto saved=projectio::toJson(author);Scene loaded;
+    CHECK(projectio::fromJson(loaded,saved,error));CHECK(projectio::toJson(loaded)==saved);
+    CHECK(loaded.find(blade->id())->parent()->id()==model->id());CHECK(loaded.isStored(loaded.find(blade->id())));
+    PhysicsWorld loadedPhysics;loadedPhysics.attach(loaded);CHECK(!loadedPhysics.hasBody(blade->id()));
+    game::RuntimeSession runtime;CHECK(runtime.start(author,error));CHECK(runtime.scripts().errorCount()==0);
+    CHECK(runtime.scene().workspace()->attributes().count("service_started"));CHECK(runtime.scene().workspace()->attributes().count("local_started"));
+    CHECK(!runtime.scene().workspace()->attributes().count("clone_started"));
+    auto& inventory=runtime.inventory();CHECK(inventory.prototype("espada")==model->id());
+    const auto id=inventory.spawn("espada");auto* copy=runtime.mutableScene().find(id);
+    CHECK(copy&&id!=model->id()&&copy->parent()==runtime.scene().workspace());
+    CHECK(runtime.scene().isWorldObject(copy));CHECK(runtime.scene().isStored(runtime.scene().find(model->id())));
+    CHECK(copy->children().size()==model->children().size());
+    for(const auto* child:copy->children())CHECK(child->id()!=blade->id()&&child->id()!=behavior->id());
+    runtime.update(1.f/60,{});CHECK(runtime.scripts().errorCount()==0);
+    CHECK(runtime.scene().workspace()->attributes().count("clone_started"));
+    inventory.collect(id);inventory.equip(id);CHECK(inventory.equipped()==id);
+    inventory.drop(id);CHECK(inventory.info(id).state=="world");CHECK(runtime.validate(error));
+    runtime.stop();CHECK(projectio::toJson(author)==saved);CHECK(behavior->enabled);
+    CHECK(runtime.start(author,error));CHECK(runtime.scripts().errorCount()==0);
+    CHECK(runtime.scene().workspace()->attributes().count("service_started"));
+    CHECK(!runtime.scene().workspace()->attributes().count("clone_started"));runtime.stop();
+    CHECK(projectio::toJson(author)==saved);
+    // Destroying an attached PhysicsWorld must leave no live hierarchy callback.
+    {Scene temporary;auto* p=temporary.createPart(PartShape::Block,{});{PhysicsWorld shortLived;shortLived.attach(temporary);}
+        auto* destination=temporary.ensureService(InstanceClass::ServerStorage);CHECK(temporary.reparent(p,destination,error));}
+}
 void RootServices() {
     Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();std::string error;
     for(auto type:{InstanceClass::ServerScriptService,InstanceClass::ServerStorage,InstanceClass::ReplicatedStorage}) {
@@ -1946,6 +2010,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    SignificantFallPresentation();NpcHeadingRegression();RootServices();PartNamesLua();EditorSelectionAndNames();CursorConstruction();ConstructionPreviewWorkflow();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    SignificantFallPresentation();NpcHeadingRegression();StorageServices();RootServices();PartNamesLua();EditorSelectionAndNames();CursorConstruction();ConstructionPreviewWorkflow();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

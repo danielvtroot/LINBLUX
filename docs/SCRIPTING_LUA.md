@@ -640,3 +640,33 @@ repetida. Componentes Surface/Decal/Texture usam seu próprio atributo
 `superficie:set_attribute("flip_u", true)`. A imagem original não é alterada;
 a configuração é salva nos atributos e incluída no `.lo`.
 A placa do RifleDemo demonstra face Back e `decal_flip_u`, com logo legível.
+
+## Serviços locais e armazenamento
+
+`game:GetService("ServerScriptService")`, `ServerStorage` e `ReplicatedStorage`
+usam os serviços existentes, criando um serviço ausente apenas na cópia de Play
+quando solicitado por Lua. Script e LocalScript habilitados sob Mundo ou
+ServerScriptService executam no runtime local; não há separação cliente/servidor
+de rede. ModuleScript não inicia sozinho: requer `require` explícito.
+
+Scripts em armazenamento não iniciam nem mantêm tarefas/listeners ativos. Um
+callback que já começou pode terminar sua chamada; a descoberta seguinte cancela
+o contexto fora da árvore executável. Módulos armazenados podem ser lidos por
+`require` explícito. Desabilitados permanecem desabilitados; Stop/Play começa
+novamente a partir da autoria. Erros aparecem na Saída.
+
+Uma cópia comum de um Modelo guardado só passa a integrar o Mundo ao mudar o pai:
+
+```lua
+local storage = game:GetService("ServerStorage")
+local modelo = storage:FindFirstChild("ModeloBase")
+local copia = modelo:Clone()
+copia.Parent = game:GetService("Workspace")
+```
+
+Para protótipos de inventário, use `linblux.items.spawn(tipo)`: ele restaura o
+comportamento capturado e coloca a nova instância no Mundo, mantendo o original
+guardado. Não há concessão StarterItems automática nem replicação online.
+Novas Parts têm nomes compactos; renomeações manuais com espaços são recusadas.
+Use handles/IDs ou o nome retornado ao criar objetos, preservando referências
+a nomes legados carregados sem tentar substituições arbitrárias em scripts.

@@ -79,7 +79,7 @@ Vector3 SpawnTopCenter(const Part& part) {
 
 std::vector<SpawnPoint> OrderedSpawnPoints(const Scene& scene) {
     std::vector<SpawnPoint> points;
-    for (const Part* part : scene.parts()) {
+    for (const Part* part : scene.worldParts()) {
         if (part == nullptr || !IsSpawnPart(*part)) continue;
         const Vector3 top = SpawnTopCenter(*part);
         if (!std::isfinite(top.x) || !std::isfinite(top.y) || !std::isfinite(top.z)) continue;

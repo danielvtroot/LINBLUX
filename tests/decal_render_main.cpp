@@ -264,6 +264,16 @@ int main() {
         part->setPosition({20,0,0});const auto background=render(nullptr);part->setPosition({0,0,0});
         auto* surface=scene.createSurface(loblox::InstanceClass::Decal,part,"Adesivo do item");auto properties=surface->properties();properties.image=file;surface->setProperties(properties);
         std::string error;auto* model=scene.group({part->id()},"Item de teste",error);
+        const auto visiblePixel=render("storage-visible");++checks;
+        if(!(visiblePixel.r>150&&visiblePixel.g<90&&visiblePixel.b>110)){++failures;std::fprintf(stderr,"Storage baseline absent\n");}
+        auto* storage=scene.ensureService(loblox::InstanceClass::ServerStorage);
+        if(!scene.reparent(model,storage,error)){++failures;std::fprintf(stderr,"Storage parent rejected: %s\n",error.c_str());}
+        const auto hiddenPixel=render("server-storage-hidden");++checks;
+        if(std::abs(int(hiddenPixel.r)-int(background.r))>3||std::abs(int(hiddenPixel.g)-int(background.g))>3){++failures;std::fprintf(stderr,"ServerStorage decal leaked\n");}
+        auto* shared=scene.ensureService(loblox::InstanceClass::ReplicatedStorage);scene.reparent(model,shared,error);
+        const auto sharedPixel=render("replicated-storage-hidden");++checks;
+        if(std::abs(int(sharedPixel.r)-int(background.r))>3||std::abs(int(sharedPixel.g)-int(background.g))>3){++failures;std::fprintf(stderr,"ReplicatedStorage decal leaked\n");}
+        scene.reparent(model,storage,error);
         loblox::PhysicsWorld physics;physics.attach(scene);loblox::game::Inventory inventory(scene,physics);inventory.registerType("teste",model->id());
         const auto templatePixel=render("inventory-prototype");++checks;
         if(std::abs(int(templatePixel.r)-int(background.r))>3||std::abs(int(templatePixel.g)-int(background.g))>3){++failures;std::fprintf(stderr,"Hidden prototype decal leaked\n");}

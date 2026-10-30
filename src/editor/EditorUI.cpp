@@ -1723,6 +1723,7 @@ void EditorUI::drawViewport() {
       }
     };
     Instance* selection = scene_.selection();
+    if(selection&&!scene_.isWorldObject(selection))selection=nullptr;
     Part* selectedPart =
         selection != nullptr && selection->isPart() ? static_cast<Part*>(selection) : nullptr;
     const Rectangle viewportRect{imagePosition.x, imagePosition.y,
@@ -1740,13 +1741,13 @@ void EditorUI::drawViewport() {
     gizmoInput.altDown = input.alt;
     if((tool_==ToolMode::Scale||(tool_==ToolMode::Move&&gizmo_.faceMove()))&&selection&&!gizmo_.dragging()){
         const auto ray=camera_.rayFromScreen({input.mouse.x-viewportRect.x,input.mouse.y-viewportRect.y},{viewportRect.width,viewportRect.height});
-        for(const auto* p:scene_.parts())if(p!=selection&&!selection->isAncestorOf(p)&&p->color().a>=250){
+        for(const auto* p:scene_.worldParts())if(p!=selection&&!selection->isAncestorOf(p)&&p->color().a>=250){
             const auto hit=p->intersect(ray);if(hit.hit)gizmoInput.occlusionDistance=std::min(gizmoInput.occlusionDistance,hit.distance);}
     }
     // Volumes reais dos filhos: o pivô deslocado de um Modelo não é seu centro geométrico.
     std::vector<gizmomath::SurfaceBox> snapMoving,snapTargets;
     if(tool_==ToolMode::Move&&(surfaceSnapEnabled_||ImGui::GetIO().KeyCtrl)&&selection) {
-        for(const auto* p:scene_.parts()) {
+        for(const auto* p:scene_.worldParts()) {
             if(p->color().a==0)continue;
             // A sphere is never an invisible box. These authoring features
             // explicitly support boxes only; sphere picking remains exact.
@@ -1761,7 +1762,7 @@ void EditorUI::drawViewport() {
         gizmoInput.cursorRay=camera_.rayFromScreen({input.mouse.x-viewportRect.x,input.mouse.y-viewportRect.y},
                                                   {viewportRect.width,viewportRect.height});
         float nearest=INFINITY;bool containsSphere=false,nearestSphere=false;
-        for(const auto* p:scene_.parts()) {
+        for(const auto* p:scene_.worldParts()) {
             if(p->color().a==0)continue;
             if(p==selection||selection->isAncestorOf(p)) {
                 containsSphere|=p->shape()==PartShape::Sphere;
@@ -1886,6 +1887,7 @@ void EditorUI::drawViewport() {
 
     // Selection may have changed in the raycast above.
     selection = scene_.selection();
+    if(selection&&!scene_.isWorldObject(selection))selection=nullptr;
     selectedPart = selection && selection->isPart() ? static_cast<Part*>(selection) : nullptr;
     if (readout_.visible && !readout_.editing &&
         (selectedPart == nullptr || selectedPart->id() != readout_.partId)) {
@@ -1937,7 +1939,7 @@ void EditorUI::drawViewport() {
     }
     if(gizmo_.dragging()&&selectedPart&&selectedPart->shape()==PartShape::Block) {
         const auto& pose=selectedPart->transform();
-        for(const auto* other:scene_.parts()) {
+        for(const auto* other:scene_.worldParts()) {
             if(other==selectedPart||other->shape()!=PartShape::Block||other->color().a==0)continue;
             const auto& target=other->transform();
             const float gap=gizmomath::BoxSeparation({pose.position,pose.rotation,pose.size},{target.position,target.rotation,target.size});
@@ -2657,13 +2659,13 @@ void EditorUI::insertPart(PartShape shape) {
     }
     // In edit mode inserted parts must stay where the user places them.
     part->setAnchored(true);
-    if (parent && (parent->instanceClass()==InstanceClass::Folder || parent->instanceClass()==InstanceClass::Model)) {
+    if (parent && (parent->instanceClass()==InstanceClass::Folder || parent->instanceClass()==InstanceClass::Model || parent->instanceClass()==InstanceClass::ServerStorage || parent->instanceClass()==InstanceClass::ReplicatedStorage)) {
         std::string error; if (!scene_.reparent(part,parent,error)) setStatus(error,true);
     }
     scene_.select(part);
     setStatus(shape == PartShape::Sphere ? "Esfera criada e ancorada."
                                          : "Peça criada e ancorada.");
-    if(shape==PartShape::Block&&surfaceSnapEnabled_)beginSurfacePlacement();
+    if(shape==PartShape::Block&&surfaceSnapEnabled_&&scene_.isWorldObject(part))beginSurfacePlacement();
 }
 
 void EditorUI::insertSpawnLocation() {

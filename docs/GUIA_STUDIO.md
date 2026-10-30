@@ -52,3 +52,10 @@ Serviços usam um ícone próprio; não são pastas comuns. Eles podem ser selec
 e expandidos, mas não excluídos nem movidos para outro objeto. O menu **+**
 localiza ou cria o serviço escolhido sem duplicá-lo. Os padrões novos incluem
 os serviços; carregar uma cena antiga não injeta serviços nem altera o arquivo.
+
+ServerStorage e ReplicatedStorage são armazenamento local: Parts, Modelos e
+seus filhos permanecem no Explorador, mas não aparecem no Mundo, não têm corpos
+Bullet ativos e não participam de raycasts, interação ou encaixe de construção.
+Propriedades, scripts e IDs são preservados. Mover o objeto de volta ao Mundo
+restaura sua participação conforme os próprios dados, sem mudar Anchored para
+mascarar armazenamento. Objetos guardados não exibem gizmos no viewport.

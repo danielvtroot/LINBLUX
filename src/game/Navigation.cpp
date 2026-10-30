@@ -71,7 +71,7 @@ bool NavGrid::build(const Scene& scene, const PhysicsWorld& physics, const Confi
     // mapa. Corpos dinamicos (NPCs, caixas moveis) ficam fora da grade.
     bool any = false;
     float minX = 0, maxX = 0, minY = 0, maxY = 0, minZ = 0, maxZ = 0;
-    for (const Part* part : scene.parts()) {
+    for (const Part* part : scene.worldParts()) {
         if (part == nullptr || !part->canCollide() || !part->anchored()) continue;
         const Vector3 p = part->position();
         const float radius = part->sphereRadius();
