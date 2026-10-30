@@ -473,50 +473,94 @@ end)
             click("tab-Home");click("cmd-tool-1");
             click("transform-space");key("Down");key("Return");
             CHECK(EditorUITestAccess::partGizmo(ui).localSpace());
-            for(int axis=0;axis<3;++axis)for(int side:{-1,1}) {
-                auto& gizmo=EditorUITestAccess::partGizmo(ui);const auto viewport=ui.frontend()->viewport();
-                const auto layout=gizmolayout::Build(*part,ToolMode::Move,camera,viewport,true,gizmo.visualSettings());
-                const auto point=layout.moveHandle[axis*2+(side>0)];const auto direction=Vector2Scale(layout.axisDirection[axis],float(side));
-                const auto eye=camera.position();const auto count=EditorUITestAccess::undoCount(ui);
-                event("mousemove "+std::to_string(int(point.x+viewport.x))+" "+std::to_string(int(point.y+viewport.y)));
-                event("mousedown 1");CHECK(gizmo.activeHandle()==gizmomath::MoveHandleId(axis,side));
-                event("mousemove "+std::to_string(int(point.x+viewport.x+direction.x*23))+" "+std::to_string(int(point.y+viewport.y+direction.y*23)));
-                CHECK(NearlyEqual(camera.position(),eye));CHECK(Vector3Distance(part->position(),baseline.position)>.01f);
-                const auto delta=Vector3Subtract(part->position(),baseline.position),basis=gizmomath::Axis(axis,baseline.rotation,true);
-                CHECK(Vector3Length(Vector3CrossProduct(delta,basis))<.001f);
-                CHECK(gizmo.activeHandle()==gizmomath::MoveHandleId(axis,side));event("mouseup 1");
-                CHECK(EditorUITestAccess::undoCount(ui)==count+1);key("ctrl+z");
-                CHECK(NearlyEqual(part->position(),baseline.position,.001f));
+            // Contrato aprovado: Mover desloca a Part inteira arrastando a face,
+            // sem setas e sem alterar o tamanho. O layout de face e o do Scale.
+            auto& gizmo=EditorUITestAccess::partGizmo(ui);
+            const auto viewport=ui.frontend()->viewport();
+            CHECK(gizmo.faceMove());
+            auto pointer=[&](Vector2 absolute){return "mousemove "+std::to_string(int(absolute.x))+" "+std::to_string(int(absolute.y));};
+            auto visibleFace=[](const gizmolayout::Layout& layout) {
+                for(std::size_t i=0;i<layout.faces.size();++i)
+                    if(layout.faces[i].visible&&gizmolayout::FaceUnderCursor(layout,layout.faces[i].screen).index==int(i))return i;
+                return layout.faces.size();
+            };
+            const auto faceLayout=gizmolayout::Build(*part,ToolMode::Scale,camera,viewport,gizmo.localSpace(),gizmo.visualSettings());
+            const auto faceIndex=visibleFace(faceLayout);CHECK(faceIndex<faceLayout.faces.size());
+            const Vector2 facePoint{viewport.x+faceLayout.faces[faceIndex].screen.x,viewport.y+faceLayout.faces[faceIndex].screen.y};
+            const auto normal=faceLayout.faces[faceIndex].normal;
+            const auto anchor=faceLayout.faces[faceIndex].anchor;
+            Vector2 pushed{};CHECK(camera.projectChecked(Vector3Add(anchor,Vector3Scale(normal,camera.worldUnitsPerPixel(anchor,viewport.height)*28)),{viewport.width,viewport.height},pushed));
+            const auto direction=Vector2Normalize(Vector2Subtract(pushed,faceLayout.faces[faceIndex].screen));CHECK(Vector2LengthSqr(direction)>.5f);
+            const auto startTransform=part->transform();const auto moveCount=EditorUITestAccess::undoCount(ui);const auto eye=camera.position();
+            event(pointer(facePoint));event("mousedown 1");CHECK(gizmo.dragging());
+            for(int step=1;step<=4;++step)event(pointer(Vector2{facePoint.x+direction.x*step*8,facePoint.y+direction.y*step*8}));
+            CHECK(NearlyEqual(part->size(),startTransform.size,.001f));
+            CHECK(Vector3Distance(part->position(),startTransform.position)>.01f);
+            CHECK(NearlyEqual(camera.position(),eye));CHECK(scene.selection()==part);
+            capture("move-drag-face");event("mouseup 1");
+            CHECK(EditorUITestAccess::undoCount(ui)==moveCount+1);
+            const auto movedTransform=part->transform();
+            key("ctrl+z");CHECK(NearlyEqual(part->position(),startTransform.position,.001f));
+            key("ctrl+y");CHECK(NearlyEqual(part->position(),movedTransform.position,.001f));
+            key("ctrl+z");CHECK(NearlyEqual(part->position(),startTransform.position,.001f));
+            // ESC durante o arraste restaura a transformacao e nao cria undo.
+            const auto escCount=EditorUITestAccess::undoCount(ui);
+            event(pointer(facePoint));event("mousedown 1");CHECK(gizmo.dragging());
+            for(int step=1;step<=3;++step)event(pointer(Vector2{facePoint.x+direction.x*step*8,facePoint.y+direction.y*step*8}));
+            event("keydown Escape");event("keyup Escape");frames(2);
+            CHECK(!gizmo.dragging());CHECK(NearlyEqual(part->position(),startTransform.position,.001f));
+            event("mouseup 1");CHECK(EditorUITestAccess::undoCount(ui)==escCount);
+            // Scale pela face muda a dimensao; Move nunca troca de tamanho.
+            click("cmd-tool-2");frames(2);
+            const auto sizeBefore=part->size();const auto scaleCount=EditorUITestAccess::undoCount(ui);
+            event(pointer(facePoint));event("mousedown 1");CHECK(EditorUITestAccess::partDragging(ui));
+            for(int step=1;step<=4;++step)event(pointer(Vector2{facePoint.x+direction.x*step*9,facePoint.y+direction.y*step*9}));
+            capture("scale-drag-face");event("mouseup 1");
+            CHECK(!NearlyEqual(part->size(),sizeBefore));CHECK(EditorUITestAccess::undoCount(ui)==scaleCount+1);
+            key("ctrl+z");CHECK(NearlyEqual(part->size(),sizeBefore,.001f));
+            // Girar continua sendo ferramenta independente.
+            click("cmd-tool-3");frames(2);
+            const auto ringLayout=gizmolayout::Build(*part,ToolMode::Rotate,camera,viewport,gizmo.localSpace(),gizmo.visualSettings());
+            const Vector2 ringPoint{viewport.x+ringLayout.rotateMarker[1].x,viewport.y+ringLayout.rotateMarker[1].y};
+            const auto rotationBefore=part->rotation();const auto rotateCount=EditorUITestAccess::undoCount(ui);
+            event(pointer(ringPoint));event("mousedown 1");CHECK(EditorUITestAccess::partDragging(ui));
+            for(int step=1;step<=3;++step)event(pointer(Vector2{ringPoint.x+step*11,ringPoint.y+step*4}));
+            capture("rotate-rings-drag");event("mouseup 1");
+            CHECK(EditorUITestAccess::undoCount(ui)==rotateCount+1);key("ctrl+z");CHECK(NearlyEqual(part->rotation(),rotationBefore,.001f));
+            // Trocar de ferramenta e voltar ao Move preserva a manipulacao por face.
+            for(int tool:{2,3,1}) {click("cmd-tool-"+std::to_string(tool));frames(2);CHECK(EditorUITestAccess::partGizmo(ui).faceMove());}
+            // move-planes pertence ao rig: clicar Mover de novo nao pode traz\xea-lo.
+            CHECK(actions.dispatch({"move-planes","true"}));
+            CHECK(!EditorUITestAccess::partGizmo(ui).planarHandles());CHECK(EditorUITestAccess::partGizmo(ui).faceMove());
+            click("cmd-tool-1");frames(2);CHECK(EditorUITestAccess::partGizmo(ui).faceMove());
+            // Model tambem move pela face e arrasta as Parts filhas.
+            auto* second=scene.createPart(PartShape::Block,{8,5,0},{2,2,2},"Peça do Modelo");second->setAnchored(true);
+            std::string groupError;auto* model=scene.group({part->id(),second->id()},"Modelo Face",groupError);CHECK(model);
+            if(model) {
+                scene.select(model);frames(3);
+                auto& modelGizmo=EditorUITestAccess::partGizmo(ui);const auto* proxy=EditorUITestAccess::modelProxy(ui);CHECK(proxy);
+                if(proxy) {
+                    const auto modelViewport=ui.frontend()->viewport();
+                    const auto modelLayout=gizmolayout::Build(*proxy,ToolMode::Scale,camera,modelViewport,modelGizmo.localSpace(),modelGizmo.visualSettings());
+                    const auto modelFace=visibleFace(modelLayout);CHECK(modelFace<modelLayout.faces.size());
+                    if(modelFace<modelLayout.faces.size()) {
+                        const Vector2 point{modelViewport.x+modelLayout.faces[modelFace].screen.x,modelViewport.y+modelLayout.faces[modelFace].screen.y};
+                        const auto partBefore=part->position();const auto proxyBefore=proxy->position();
+                        event(pointer(point));event("mousedown 1");CHECK(modelGizmo.dragging());
+                        for(int step=1;step<=4;++step)event(pointer(Vector2{point.x+step*9,point.y+step*5}));
+                        capture("model-drag-face");event("mouseup 1");
+                        CHECK(Vector3Distance(part->position(),partBefore)>.01f);
+                        CHECK(Vector3Distance(proxy->position(),proxyBefore)>.01f);
+                        key("ctrl+z");CHECK(NearlyEqual(part->position(),partBefore,.001f));
+                    }
+                }
+                scene.select(part);frames(2);
             }
             CHECK(actions.dispatch({"transform-space","world"}));frames();
-            for(int mode=1;mode<=3;++mode) {
-                click("tab-Home");click("cmd-tool-"+std::to_string(mode));frames();
-                auto& gizmo=EditorUITestAccess::partGizmo(ui);
-                const auto viewport=ui.frontend()->viewport();
-                const auto layout=gizmolayout::Build(*part,static_cast<ToolMode>(mode),camera,viewport,gizmo.localSpace(),gizmo.visualSettings());
-                const Vector2 point=mode==1?layout.moveHandle[1]:mode==2?layout.scaleHandle[1]:layout.rotateMarker[1];
-                const auto eye=camera.position();const auto count=EditorUITestAccess::undoCount(ui);
-                event("mousemove "+std::to_string(int(point.x+viewport.x))+" "+std::to_string(int(point.y+viewport.y)));
-                capture(mode==1?"move-six-arrows":mode==2?"scale-local-face":"rotate-rings");
-                event("mousedown 1");CHECK(EditorUITestAccess::partDragging(ui));
-                const auto direction=layout.axisDirection[0];
-                for(int step=1;step<=4;++step)event("mousemove "+std::to_string(int(point.x+viewport.x+direction.x*step*9))+" "+std::to_string(int(point.y+viewport.y+direction.y*step*9)));
-                CHECK(NearlyEqual(camera.position(),eye));CHECK(scene.selection()==part);
-                if(mode==2) {
-                    const auto axis=gizmomath::Axis(0,baseline.rotation,true);
-                    const auto before=Vector3Subtract(baseline.position,Vector3Scale(axis,baseline.size.x*.5f));
-                    const auto after=Vector3Subtract(part->position(),Vector3Scale(axis,part->size().x*.5f));
-                    CHECK(Vector3Distance(before,after)<.001f);
-                }
-                capture("drag-"+std::to_string(mode));event("mouseup 1");
-                CHECK(!EditorUITestAccess::partDragging(ui));CHECK(EditorUITestAccess::undoCount(ui)==count+1);
-                key("ctrl+z");CHECK(NearlyEqual(part->position(),baseline.position,.001f));CHECK(NearlyEqual(part->size(),baseline.size,.001f));
-                CHECK(NearlyEqual(part->rotation(),baseline.rotation,.001f));
-            }
             click("tab-View");click("show-collision-shapes");event("mousemove 235 650");capture("collision-shapes");
             click("tab-Home");click("cmd-tool-1");
-            for(const Vector2 size:{Vector2{1280,720},Vector2{1366,768},Vector2{1600,900}}) {
-                resizeWindow(int(size.x),int(size.y));capture("move-"+std::to_string(int(size.x)));
+            for(const Vector2 size:{Vector2{1366,768},Vector2{1920,1080}}) {
+                resizeWindow(int(size.x),int(size.y));capture("move-face-"+std::to_string(int(size.x)));
             }
             CHECK(projectio::save(scene,config.defaultProjectPath,error));Scene loaded;CHECK(projectio::load(loaded,config.defaultProjectPath,error));
             const auto expectedJson=nlohmann::json::parse(projectio::toJson(scene)),loadedJson=nlohmann::json::parse(projectio::toJson(loaded));

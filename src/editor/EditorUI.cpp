@@ -590,7 +590,13 @@ void EditorUI::endGizmoSession(bool restoreTransform, const char* reason) {
 }
 
 void EditorUI::setTool(ToolMode tool, const char* source) {
-    if (tool_ == tool) return;
+    if (tool_ == tool) {
+        // Reclicar a ferramenta ja ativa tambem reafirma o contrato: Part/Model
+        // Move e face, nunca o manipulador de setas herdado de outro contexto.
+        gizmo_.setFaceMove(true);
+        gizmo_.setPlanarHandles(false);
+        return;
+    }
     placement_.cancel();
     cancelRigGizmo();
     if (transform_.active()) {
