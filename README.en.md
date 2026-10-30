@@ -25,11 +25,12 @@ important projects; editing, distribution and compatibility still have limitatio
 | --- | --- |
 | Studio | 3D scenes, searchable hierarchy, selection, properties and script editing |
 | Construction | Face-based Move/Scale, Rotate, incremental Snap and surface placement |
-| Objects | Parts, Models, grouping, persistent IDs and Attachments |
+| Objects | Parts, Models, persistent IDs, Attachments and local storage services |
 | Runtime | Separate Player; Play/Stop runs a copy of the authored scene |
 | Lua 5.4 | Objects, events, physics, NPCs, inventory, audio and UI within the current API |
 | Resources | PNG/JPEG, Decals, tiled textures, local sounds and music |
 | Experiences | Local library, saving/reopening and `.lo` import/export |
+| Prototypes | Models in ServerStorage/Itens remain outside rendering/physics and spawn through inventory |
 | Characters | Six-body rig, compatible animations and NPCs |
 
 Moving a face moves the whole Part without resizing it. Face scaling keeps the

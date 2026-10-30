@@ -17,11 +17,14 @@ linblux.events.on('inventory_changed',function(e)
 end)
 linblux.events.on('item_action',function(e)
  if e.action=='activate' then fires=fires+1;assert(e.ammo<e.magazine,'munição não diminuiu') end
- if e.action=='reload_end' then reloads=reloads+1 end
+ if e.action=='reload_end' then
+  reloads=reloads+1
+  linblux.ui.create('panel',{anchor='bottom-left',x=16,y=-50,width=150,height=24,background='#FF00FFFF'})
+ end
 end)
 linblux.events.on('update',function()
  for _,o in ipairs(linblux.scene.root:children()) do
-  if o.name=='Guia LINBLUX' then
+  if o.name=='GuiaLINBLUX' then
    local p=o.position
    if not guideStart then guideStart=p end
    if (p.x-guideStart.x)^2+(p.z-guideStart.z)^2>1 and linblux.npc.animation(o)=='walk' then walked=true end
@@ -74,7 +77,17 @@ try:
  left=sum(1 for c in equipped.crop((930,278,980,300)).getdata() if min(c)>120 and max(c)-min(c)<18)
  right=sum(1 for c in equipped.crop((980,278,1025,300)).getdata() if min(c)>120 and max(c)-min(c)<18)
  assert left>right+100,'official logo decal is absent or horizontally mirrored'
- shoot();key('r');time.sleep(1.8);key('Delete');assert hotbar_red(capture('dropped'))==0,'hotbar survived Delete'
+ shoot();key('r')
+ # Observe the actual reload_end event before dropping (which cancels reload).
+ # A fixed real-time sleep is not a simulation-time guarantee under llvmpipe.
+ deadline=time.monotonic()+8;reloaded=False
+ while not reloaded and time.monotonic()<deadline:
+  assert p.poll() is None,(root/'player.log').read_text()[-3000:]
+  image=capture('reload-complete')
+  reloaded=sum(1 for c in image.crop((0,592,240,720)).getdata() if c[0]>235 and c[1]<25 and c[2]>235)>1000
+  if not reloaded:time.sleep(.15)
+ assert reloaded,'reload_end not observed before drop; '+str(root)
+ key('Delete');assert hotbar_red(capture('dropped'))==0,'hotbar survived Delete'
  collect_and_equip();shoot()
  # Wait for the assertion marker, not a fixed wall-clock delay: simulation
  # time is bounded per frame and need not track llvmpipe rendering time.

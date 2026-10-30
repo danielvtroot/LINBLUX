@@ -84,6 +84,13 @@ int main(int argc,char** argv) {
         auto* mate=scene.createAttachment(matePart,"Encaixe");CHECK(mate);const auto mateId=mate->id();
         CHECK(scene.connectAttachments(muzzleId,mateId,bodyError));
         portableModel->setAttribute("_linblux_item_prototype",true);portableModel->setAttribute("item_type",std::string("portable_item"));portableModel->setAttribute("item_icon",project.manifest.icon);
+        auto* store=scene.ensureService(InstanceClass::ServerStorage);
+        auto* templates=scene.createContainer(InstanceClass::Folder,store,"Itens");
+        auto* savedItem=scene.createContainer(InstanceClass::Model,templates,"ChaveGuardada");const auto savedItemId=savedItem->id();
+        auto* savedPart=scene.createPart(PartShape::Block,{30,5,0},{1,2,1},"CorpoGuardado");const auto savedPartId=savedPart->id();
+        CHECK(scene.reparent(savedPart,savedItem,bodyError));savedItem->setAttribute("_linblux_item_prototype",true);
+        savedItem->setAttribute("item_type",std::string("guardado"));savedItem->setAttribute("item_icon",project.manifest.icon);
+        scene.createScript(InstanceClass::Script,savedItem,"ItemGuardado.lua")->source="linblux.scene.root:set_attribute('item_guardado',true)";
         const auto previous=author.activePlace();author.save(scene);CHECK(author.activePlace()!=previous);CHECK(fs::exists(previous));
         auto m=author.active()->manifest;m.name="Renamed";m.description="Updated description";author.updateMetadata(m);
         const auto goodManifest=Read(project.root/"experience.json");auto badMedia=m;badMedia.icon="assets/missing.png";
@@ -139,6 +146,10 @@ int main(int argc,char** argv) {
         for(const auto& rig:receivedScene.gameAssets().rigs)for(const auto& body:rig.bodies)
             if(!body.image.empty())CHECK(!game::ResolveImagePath(game::AssetsDir(),body.image).empty());
         CHECK(receivedScene.findPart(partId));CHECK(receivedScene.gameAssets().findRig(rigId));
+        CHECK(receivedScene.find(savedItemId)&&receivedScene.findPart(savedPartId));
+        CHECK(receivedScene.isStored(receivedScene.find(savedPartId)));
+        CHECK(std::get<std::string>(receivedScene.find(savedItemId)->attributes().at("item_type"))=="guardado");
+        CHECK(receivedScene.find(savedItemId)->children().size()==2);
         const auto& receivedMaterial=receivedScene.findPart(partId)->material3D();CHECK(receivedMaterial.has_value());
         if(receivedMaterial){CHECK(NearlyEqual(receivedMaterial->roughness,.32f));
             for(const auto* reference:{&receivedMaterial->baseColorTexture,&receivedMaterial->normalTexture,

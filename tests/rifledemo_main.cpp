@@ -69,7 +69,7 @@ int main() {
         step(12, {});
         require(runtime.scripts().errorCount() == 0, "startup errors:\n" + scriptErrors(runtime));
 
-        InstanceId guide=0;for(const auto& object:runtime.scene().objects())if(object->name()=="Guia LINBLUX")guide=object->id();
+        InstanceId guide=0;for(const auto& object:runtime.scene().objects())if(object->name()=="GuiaLINBLUX")guide=object->id();
         require(guide&&!runtime.npcs().rig(guide).empty(),"demo lost animated guide rig");
         const auto guideStart=runtime.scene().findPart(guide)->position();step(60,{});
         require(Vector3Distance(guideStart,runtime.scene().findPart(guide)->position())>.5f,"guide did not patrol: state="+std::string(game::NpcStateName(runtime.npcs().state(guide)))+" path="+std::to_string(runtime.npcs().path(guide).size())+" Lua="+scriptErrors(runtime));

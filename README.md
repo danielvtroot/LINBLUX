@@ -33,11 +33,12 @@ uma base local concreta e evoluir a partir do que funciona.
 | --- | --- |
 | Studio | Cena 3D, Explorador com busca, propriedades, seleção e scripts |
 | Construção | Move e Scale pela face, Rotate, incrementos de Snap e encaixe por superfície |
-| Objetos | Parts, Models, hierarquia, Attachments e ferramentas de agrupamento |
+| Objetos | Parts, Models, hierarquia, Attachments e serviços locais de armazenamento |
 | Execução | Player separado e Play/Stop sobre uma cópia da cena autoral |
 | Lua 5.4 | Objetos, eventos, física, NPCs, inventário, áudio e UI no escopo da API atual |
 | Recursos | PNG/JPEG, Decals, texturas com repetição, sons locais e música |
 | Experiências | Salvar/reabrir, biblioteca local e importação/exportação `.lo` |
+| Protótipos | Modelos em ServerStorage/Itens, fora da renderização e física; spawn pelo inventário |
 | Personagens | Rig atual de seis corpos, animações compatíveis e NPCs |
 
 Os controles por face preservam o tamanho ao mover e mantêm a face oposta ao

@@ -26,9 +26,9 @@ int main(){
         if(!world.findPart(id)||world.gameAssets().defaultRig!=rig||world.gameAssets().findRig(rig)->bodies[game::Torso].color.r!=213)throw std::runtime_error("Padrões não herdados");
         const auto before=projectio::toJson(world);world.findPart(id)->setName("Independente");reopened.save(world);
         auto another=reopened.create(options);Scene second;reopened.open(another,second);
-        if(second.findPart(id)->name()!="Persistência padrão")throw std::runtime_error("Projeto alterou o recurso padrão");
+        if(second.findPart(id)->name()!="PersistênciaPadrão")throw std::runtime_error("Projeto alterou o recurso padrão");
         reopened.restoreFactoryDefaults();auto restored=reopened.create(options);Scene factory;reopened.open(restored,factory);
-        for(auto* p:factory.parts())if(p->name()=="Persistência padrão")throw std::runtime_error("Restauração de fábrica falhou");
+        for(auto* p:factory.parts())if(p->name()=="PersistênciaPadrão")throw std::runtime_error("Restauração de fábrica falhou");
         Scene existing;reopened.open(experience,existing);if(existing.findPart(id)->name()!="Independente")throw std::runtime_error("Restauração sobrescreveu projeto existente");
         std::ofstream(root/"defaults/index.json")<<"{\"format\":\"linblux-engine-defaults\",\"version\":99}";
         bool rejected=false;try{reopened.create(options);}catch(...){rejected=true;}if(!rejected)throw std::runtime_error("Versão futura aceita");

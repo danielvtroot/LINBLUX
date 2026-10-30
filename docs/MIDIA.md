@@ -7,6 +7,9 @@ As capturas usam renderização por software; não representam desempenho em GPU
 
 ### Capturas
 
+<a href="prints/explorador-servicos.png"><img src="prints/explorador-servicos.png" width="480" alt="explorador-servicos"/></a>
+<p>explorador-servicos</p>
+
 <a href="prints/studio-construcao.png"><img src="prints/studio-construcao.png" width="480" alt="studio-construcao"/></a>
 <p>studio-construcao</p>
 

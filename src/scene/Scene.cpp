@@ -659,6 +659,11 @@ Instance* Scene::duplicateTree(const Instance& source, Instance* parent) {
     }
     std::string error;
     if (!reparent(copy,parent,error)) { removeSubtree(copy); return nullptr; }
+    // A new container is a new sibling namespace. Keep valid child labels so
+    // a prototype script can still find its own Parts by name after cloning.
+    if(source.isPart()&&parent!=source.parent()&&ValidPartName(source.name())) {
+        std::string ignored;copy->trySetName(source.name(),ignored);
+    }
     const auto children=source.children();
     for (auto* child : children) {
         if (!duplicateTree(*child,copy)) { removeSubtree(copy); return nullptr; }

@@ -120,6 +120,45 @@ int main() {
         capture("studio-1366");
         if(std::getenv("LINBLUX_EXPLORER_ONLY")) {
             renderer.setQuality(RenderQuality::Low);
+            if(std::getenv("LINBLUX_STORAGE_ONLY")) {
+                auto* unrelated=scene.createContainer(InstanceClass::Folder,scene.workspace(),"Itens");
+                EditorActions actions(ui);CHECK(actions.dispatch({"item-prototypes",""}));
+                auto* items=scene.selection();CHECK(items&&items->instanceClass()==InstanceClass::Folder);
+                CHECK(items!=unrelated&&items->name()=="Itens"&&unrelated->name()=="Itens");
+                const auto folderId=items->id(),count=scene.objects().size();CHECK(actions.dispatch({"item-prototypes",""}));
+                CHECK(scene.selection()->id()==folderId&&scene.objects().size()==count);
+                CHECK(actions.dispatch({"model",""}));auto* item=scene.selection();CHECK(item&&item->instanceClass()==InstanceClass::Model);
+                CHECK(actions.dispatch({"rename","Espada",item->id()}));CHECK(actions.dispatch({"part",""}));auto* stored=scene.selection();
+                CHECK(stored&&stored->isPart()&&scene.isStored(stored));CHECK(!physics.hasBody(stored->id()));
+                CHECK(actions.dispatch({"rename","Lamina",stored->id()}));
+                auto* behavior=scene.createScript(InstanceClass::Script,item,"Item.lua");behavior->source="linblux.scene.root:set_attribute('item_running',true)";
+                scene.select(item);frames(3);clickVisible("prop-Item.Prototype");frames(3);
+                CHECK(item->attributes().count("_linblux_item_prototype"));
+                clickVisible("prop-Item.Type");key("ctrl+a");event("type --clearmodifiers espada");key("Return");frames(3);
+                CHECK(std::get<std::string>(item->attributes().at("item_type"))=="espada");
+                scene.createScript(InstanceClass::Script,nullptr,"SpawnTest.lua")->source=
+                    "local i=linblux.items.spawn('espada',{position=linblux.vec3(0,4,-12)});linblux.scene.root:set_attribute('spawned',i.id)";
+                CHECK(actions.dispatch({"save",""}));Scene loaded;CHECK(projectio::load(loaded,config.defaultProjectPath,error));
+                CHECK(loaded.isStored(loaded.find(stored->id())));const auto authored=projectio::toJson(scene);
+                for(int width:{1366,1920}) {
+                    resizeWindow(width,width==1366?768:1080);
+                    if(width==1366)click("fold-"+std::to_string(scene.workspace()->id()));
+                    clickVisible("node-"+std::to_string(item->id()));CHECK(scene.selection()==item);
+                    CHECK(actions.dispatch({"tool","1"}));frames(3);CHECK(!EditorUITestAccess::modelProxy(ui));
+                    CHECK(!scene.isWorldObject(stored)&&!physics.hasBody(stored->id()));
+                    capture("storage-explorer-"+std::to_string(width));
+                    click("play");frames(6);CHECK(ui.playing());
+                    if(ui.playing()) {
+                        auto& rt=EditorUITestAccess::runtime(ui);CHECK(rt.scripts().errorCount()==0);
+                        CHECK(rt.scene().workspace()->attributes().count("spawned"));CHECK(rt.scene().workspace()->attributes().count("item_running"));
+                        CHECK(rt.scene().isStored(rt.scene().find(stored->id())));
+                        CHECK(actions.dispatch({"stop",""}));frames(3);
+                    }
+                    CHECK(SameProjectValue(projectio::toJson(scene),authored));CHECK(behavior->enabled);
+                }
+                std::printf("Storage Explorer UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+                rlImGuiShutdown();CloseWindow();return failures?1:0;
+            }
             const auto originalName=part->name();
             click("prop-Name");key("ctrl+a");event("type --clearmodifiers --delay 1 'Nome Com Espacos'");key("Return");frames(3);
             CHECK(part->name()==originalName);

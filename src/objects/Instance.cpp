@@ -111,7 +111,7 @@ std::string NewPartName(const std::string& name) {
     if(name.size()>128)return {};
     std::string result;bool capital=false;
     for(size_t i=0;i<name.size();){const auto begin=i;unsigned c;if(!Next(name,i,c))return {};
-        if(c<32||c==127)return {}; // tabs/newlines are errors, never silently cleaned
+        if(c<32||c==127||c==0x85||c==0x2028||c==0x2029)return {}; // reject line breaks, including Unicode
         if(White(c)){capital=true;continue;}
         if(capital&&c>='a'&&c<='z')result+=char(c-'a'+'A');else result.append(name,begin,i-begin);
         capital=false;

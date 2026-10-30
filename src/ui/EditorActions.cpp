@@ -86,6 +86,16 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="sphere")e.insertPart(PartShape::Sphere);
         else if(c.action=="spawn")e.insertSpawnLocation();
         else if(c.action=="folder")e.insertContainer(InstanceClass::Folder,e.scene_.find(c.instance));
+        else if(c.action=="item-prototypes") {
+            if(e.runtime_.active())throw std::runtime_error("Organize protótipos no modo Editar.");
+            auto* storage=e.scene_.ensureService(InstanceClass::ServerStorage);Instance* folder=nullptr;
+            for(auto* child:storage->children())if(child->name()=="Itens") {
+                if(child->instanceClass()!=InstanceClass::Folder)throw std::runtime_error("Já existe um objeto chamado Itens; preserve-o e escolha uma pasta válida.");
+                folder=child;break;
+            }
+            if(!folder){folder=e.scene_.createContainer(InstanceClass::Folder,storage,"Itens");if(!folder)throw std::runtime_error("Não foi possível criar a pasta de protótipos.");folder->setName("Itens");}
+            e.scene_.select(folder);e.setStatus("ServerStorage/Itens: organize Modelos e marque Protótipo de item nas Propriedades.");
+        }
         else if(c.action=="server-scripts"){e.scene_.select(e.scene_.ensureService(InstanceClass::ServerScriptService));e.setStatus("ServerScriptService disponível no Explorador.");}
         else if(c.action=="server-storage"){e.scene_.select(e.scene_.ensureService(InstanceClass::ServerStorage));e.setStatus("ServerStorage disponível no Explorador.");}
         else if(c.action=="replicated-storage"){e.scene_.select(e.scene_.ensureService(InstanceClass::ReplicatedStorage));e.setStatus("ReplicatedStorage disponível no Explorador.");}

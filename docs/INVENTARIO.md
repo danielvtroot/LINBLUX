@@ -141,3 +141,28 @@ Testes nativos cobrem cancelamento, obstáculo, conclusão única, coleta,
 seleção, Delete/recoleta e dados preservados. O teste gráfico separado
 linblux_item_controls_ui usa teclado X11, capturas720p/1080p e paginação. A
 simulação de bits de controle não comprova teste em hardware de gamepad.
+
+## Organizar protótipos em ServerStorage
+
+No menu **+** do Explorador, escolha **Protótipos de itens**. O Studio localiza
+ou cria `ServerStorage/Itens` sem duplicar a pasta e sem alterar pastas homônimas
+em outros pais. `Itens` é uma Folder comum, não um serviço ou classe nova.
+
+1. Crie um Modelo com suas Parts e scripts, ou mova um Modelo existente para a pasta.
+2. Marque **Protótipo de item**, defina o tipo e escolha um ícone opcional nas Propriedades.
+3. Salve. O conteúdo guardado não aparece no Mundo nem possui colisão ativa.
+4. Em um Script de ServerScriptService, use `linblux.items.spawn("espada")`,
+   substituindo pelo tipo configurado.
+5. A instância aparece no Mundo com IDs novos e scripts do clone restaurados.
+   O protótipo original continua guardado; coleta, equipar, guardar e soltar
+   usam o inventário existente.
+
+O catálogo é registrado antes dos scripts de Play. Scripts do protótipo não
+executam enquanto guardados. Hierarquia, tipo, ícone e recursos acompanham
+salvar/reabrir e exportação/importação `.lo`. Stop preserva a autoria.
+Não há StarterItems automático nesta Alpha; concessão inicial pode ser programada
+pelo criador com a API existente, sem prometer uma interface de StarterPack.
+
+O histórico atual cobre transformações. Migração em lote de nomes e undo geral
+de nomes/hierarquia não foram acrescentados; mantenha cópia da experiência antes
+de reorganizações grandes ou revisão de scripts que buscam objetos por nome.
