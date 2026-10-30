@@ -61,6 +61,16 @@ CANDIDATE_POOL = 240
 # A candidate that exists only because of the glossary cannot score above a
 # candidate with real textual evidence (audit B4).
 INFERRED_SCORE_CAP = 6.0
+# "the default-world test times out" is a question about a test, not about the
+# experience manager it exercises.  Detected from the query itself, never from
+# a hardcoded symptom list, and never from the file name alone.
+TEST_INTENT_TOKENS = {
+    "teste", "testes", "test", "tests", "ctest", "timeout", "cobertura", "suite",
+}
+
+
+def _area_intent(tokens: list[str]) -> str | None:
+    return "test" if TEST_INTENT_TOKENS.intersection(tokens) else None
 
 
 
@@ -396,6 +406,7 @@ def locate(root: Path, conn: sqlite3.Connection, query: str, limit: int = 8, mod
     if not tokens:
         return overview(root, conn, limit)
     hints = _hint_map(root)
+    intent = _area_intent(tokens)
     rows = _candidate_rows(conn, tokens, module, CANDIDATE_POOL)
     existing_modules = {row["module"] for row in rows}
     rows.extend(
@@ -478,6 +489,14 @@ def locate(root: Path, conn: sqlite3.Connection, query: str, limit: int = 8, mod
             score = min(score, INFERRED_SCORE_CAP)
 
         area_weight = AREA_WEIGHTS.get(row["area"], 0.5)
+        # A question about a failing/timing-out test is a question about the test
+        # source and its build entry, not about every file of the module it uses.
+        if intent == "test":
+            if row["area"] == "test":
+                area_weight *= 2.0
+                evidence.append("intenção de teste: fonte de teste priorizada")
+            elif row["area"] in {"source", "script"}:
+                area_weight *= 0.8
         score *= area_weight
         breakdown["area_weight"] = area_weight
         evidence = list(dict.fromkeys(evidence))

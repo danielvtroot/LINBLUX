@@ -170,6 +170,38 @@ Testes: `python3 -m unittest discover -s tests/turbo -p 'test_*.py'` → 38 OK,
 incluindo aditividade (antigo ⊆ novo), marcação direto/transitivo, fallback sem
 relações, primeira falha com arquivo/linha/target e ordem do `excerpt`.
 
+## Missão 2 — ranking S4/S6
+
+Alteração em `tools/atlas/atlas_lib/search.py` (`_area_intent`, aplicado em
+`locate`): quando a consulta fala de teste (`teste/testes/test/ctest/timeout/
+cobertura/suite`), fontes de teste recebem peso de área 2,0 e fontes de código
+0,8. É intenção declarada na própria pergunta, não uma lista de sintomas nem
+nome de arquivo; a razão aparece em `evidence`.
+
+| Métrica (limite 8 e 50) | Antes | Depois |
+| --- | ---: | ---: |
+| Arquivo principal top-1 | 4/8 | 4/8 |
+| Arquivo principal top-3 | 6/8 | **7/8** |
+| Arquivo principal top-5 | 6/8 | **7/8** |
+| Arquivo principal top-10 | 7/8 | 7/8 |
+| MRR (arquivo) | 0,653 | 0,677 |
+| Módulo top-1 | 6/8 | **7/8** |
+| Estabilidade entre `--limit 3,5,8,20,50` | 8/8 | 8/8 |
+
+- S6 ("teste de Mundo Padrão expira por timeout"):
+  `tests/engine_default_main.cpp` passou da posição **7 para 3** nos dois limites.
+- S1, S2, S3, S5, S7, S8 não mudaram de posição principal.
+- S4 continua em 12 (`src/physics/PhysicsWorld.cpp`); `src/app/Application.cpp`
+  não aparece nem no top-50. A consulta descreve um comportamento
+  ("Part dinâmica cai durante edição") cujo vínculo com o passo de física não é
+  textual — exige camada semântica, não um ajuste de peso.
+
+Uma tentativa de ponderação por IDF dos tokens (0,6–2,5 sobre caminho,
+glossário e símbolos) foi medida e **descartada**: derrubou o top-3 de 6/8 para
+4/8 e o top-5 para 5/8, porque tokens genéricos como `part` também sustentam
+acertos corretos (S1, S3, S8). O FTS5 já aplica IDF no bm25; só a intenção de
+área ficou.
+
 ## Pendências e próxima ação
 
 1. **P4 — TURBO (restante)**: a seleção agora é aditiva e explicável, mas a
@@ -180,7 +212,7 @@ relações, primeira falha com arquivo/linha/target e ordem do `excerpt`.
    sobrecargas e templates seguem textuais.
 3. **Avaliação ampliada**: `eval` mede módulos, não arquivos; faltam 40 perguntas
    com referência de arquivo verificada.
-4. **Ranking**: elevar S4 e S6 ao top-5 sem regredir a estabilidade.
+4. **Ranking**: S6 resolvido; S4 exige camada semântica (não é peso).
 5. `locate --json` ainda é grande (28 KB); usar `--brief` ou `diagnose` em fluxo
    de agente.
 
