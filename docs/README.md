@@ -13,7 +13,7 @@ validação e limites. A interface oficial atual é em português brasileiro.
 | [Construção e precisão](EDITOR_PRECISAO.md) | Move/Scale por face, Snap e colocação por superfície |
 | [Modelos](MODELOS.md) · [Attachments](ATTACHMENTS.md) | Agrupamento, pivôs e conexões |
 | [Imagens](RECURSOS_DE_IMAGEM.md) · [Áudio](AUDIO_MUSICA.md) | Importar recursos locais e usar em cenas |
-| [Inventário](INVENTARIO.md) | Itens, coleta, hotbar e descarte |
+| [Inventário e interações](INVENTARIO.md) | Itens, coleta, hotbar, ações Lua e descarte |
 | [Padrões da engine](PADROES_DA_ENGINE.md) | Mundo e personagem usados em experiências novas |
 | [Galeria](MIDIA.md) | Capturas reais e procedimento para vídeos |
 
@@ -40,7 +40,7 @@ validação e limites. A interface oficial atual é em português brasileiro.
 [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md) ·
 [Relatório da Alpha](releases/ALPHA_0_1_0_LANCAMENTO.md)
 
-[Relatórios técnicos](relatorios/) e [histórico](historico/) preservam decisões,
+[Relatórios técnicos](relatorios/) e [histórico técnico](historico/README.md) preservam decisões,
 checkpoints e resultados de suas respectivas revisões. Não são um catálogo atual
 de recursos nem prova de que testes antigos passaram nesta versão. Logs, caches
 e builds locais ficam fora do Git; nenhum histórico foi apagado nesta organização.

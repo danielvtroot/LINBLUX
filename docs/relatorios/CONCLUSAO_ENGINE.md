@@ -325,7 +325,7 @@ Interação e controles IMPLEMENTADOS/TESTADOS/VALIDADOS NO PLAYER em 1258b0a594
 E cancela por release/alcance/pausa; linha de visão bloqueia paredes; Delete
 solta sem perder ID/dados; slots/páginas dinâmicos funcionam no Studio/Player.
 FAST15/15; IMPACT20/20 (global parcial); GUI final31,350 s,720p/1080p,
-fonte vetorial e captura inspecionada. Relatório27 e INTERACOES.md.
+fonte vetorial e captura inspecionada. Relatório27 e INVENTARIO.md#coleta-interação-e-hotbar.
 
 PENDENTE imediato: combate genérico e RifleDemo. Depois HUD circular, menu
 lateral, Demo, pacote/instalação limpa e revisão final. Alpha ainda sem

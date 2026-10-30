@@ -17,7 +17,7 @@ Ctrl+S salva a experiência. Use Arquivo para detalhes, exportação `.lo` e pad
 Ícone é quadrado e banner é horizontal; ambos são opcionais e têm placeholder
 LINBLUX. O vídeo do Início é independente da mídia da experiência.
 Arquivar mantém arquivos; Excluir permanentemente apaga a pasta após confirmação.
-Leia EXCLUSAO_SEGURA.md e faça backup dos projetos que deseja preservar.
+Leia [exclusão e arquivamento](EXPERIENCES.md#exclusão-e-arquivamento) e faça backup dos projetos que deseja preservar.
 
 O cartão **Mundo Padrão da Engine** abre um documento protegido, separado dos
 recentes. Salvar rascunho mantém a edição; **Salvar como padrão da engine** pede
