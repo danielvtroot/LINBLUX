@@ -255,3 +255,19 @@ acertos corretos (S1, S3, S8). O FTS5 já aplica IDF no bm25; só a intenção d
 
 Nada foi commitado além dos arquivos do ATLAS, dos testes e da documentação.
 Alterações preexistentes de outros agentes permanecem intocadas.
+
+## Correção real no Studio (30/10) — Mover pela face
+
+- `src/ui/EditorActions.cpp`: a ação `move-planes` agora altera apenas o
+  `rigGizmo_`; o gizmo de Part/Model nunca troca para planos/eixos por um
+  controle oculto. O contrato aprovado é face direta.
+- `src/editor/EditorUI.cpp` (`setTool`): reafirma `setFaceMove(true)` e
+  `setPlanarHandles(false)` ao trocar de ferramenta, para que estado herdado
+  (rig, preferência, código antigo) não traga o gizmo de setas de volta.
+- Localização: uma consulta `diagnose` (~150 ms medidos antes) apontou
+  `src/editor/Gizmo.h`, `TransformSession.h` e `Gizmo.cpp`; o ajuste saiu em
+  2 arquivos, sem tocar no frontend.
+- Verificação: build incremental OK; `ctest -R '^linblux_tests$'` OK (0,9 s),
+  incluindo o bloco que exige deslocamento pela face com `planarHandles` ligado.
+- Não executado: `linblux_manipulation_ui` (gráfico, exige supervisão TURBO e
+  orçamento próprio) — cobre o caso visual de Mover.

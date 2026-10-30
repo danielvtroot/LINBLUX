@@ -604,6 +604,11 @@ void EditorUI::setTool(ToolMode tool, const char* source) {
     event.result = "ok";
     diag::log(event);
     gizmo_.cancel();
+    // Contrato do Studio: Mover desloca pela face. Reafirmar aqui impede que
+    // estado herdado (rig, preferencia ou codigo antigo) traga o gizmo de
+    // setas de volta como padrao ao trocar de ferramenta.
+    gizmo_.setFaceMove(true);
+    gizmo_.setPlanarHandles(false);
     editStartValid_ = false;
     clearTransformReadout();
     tool_ = tool;
