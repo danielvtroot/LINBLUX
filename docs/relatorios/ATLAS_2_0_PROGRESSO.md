@@ -129,12 +129,53 @@ leitura, alteração com `mtime` preservado, ranking estável entre limites,
 `line`+`match_types` no `locate`, `tests-for` por include, `impact` alcançando
 teste dependente, `diagnose` curto com JSON válido e envelope de erro uniforme.
 
+## Missão 1 — integração ATLAS + TURBO (P4)
+
+Arquivos: `tools/turbo/turbo_lib/selection.py`, `report.py`, `runner.py`,
+`tests/turbo/test_turbo.py`.
+
+- `selection.py` agora usa evidência de **include** do ATLAS, de forma
+  puramente aditiva: para cada arquivo alterado ele parte do próprio arquivo e,
+  em `.cpp`, do header irmão (`.h/.hpp/.hh/.hxx` presente no índice), percorre
+  dois níveis de include reverso e mapeia fontes de teste para testes.
+  - Razões novas: `include direto do ATLAS: <fonte> inclui <header>` (obrigatório)
+    e `include transitivo do ATLAS: ...` (adicional, profundidade 2).
+  - Nenhuma razão existente é removida; o alvo de testes nunca encolhe.
+  - Cada teste selecionado recebe `evidence`: `direct`, `transitive` ou
+    `inferred`; o plano publica `evidence_counts` e `atlas_evidence`.
+  - Fallback: sem relações no índice, `atlas_evidence = "unavailable"`, aviso
+    explícito e seleção mantida pelo grafo de targets.
+- `report.py`: `first_error()` extrai o **primeiro** erro acionável e distingue
+  compilação, configuração CMake, link e teste. O bloco de falha mostra
+  `Tipo`, `Provável causa`, `Arquivo: linha:coluna`, `Target` e `Próxima ação`.
+- `runner.py`: `excerpt()` passou a guardar as **primeiras** linhas de erro
+  (antes guardava as últimas, que costumam ser consequência do mesmo erro) e a
+  truncar pelo início.
+
+### Equivalência medida no repositório real (30 arquivos alterados)
+
+| Modo | Seleção antiga | Seleção nova | Removidos | Adicionados |
+| --- | ---: | ---: | ---: | ---: |
+| FAST | 18 | 20 | 0 | 2 |
+| IMPACT | 63 | 64 | 0 | 1 |
+
+Nenhum teste obrigatório desapareceu. A comparação de *nomes* é o critério de
+segurança; as strings de razão de target mudam porque a lista de targets
+atingidos é unida no texto (`consumidor do target: a, b, c`).
+
+Evidência no plano FAST: `direct=14, transitive=6, inferred=0`;
+IMPACT: `direct=54, transitive=7, inferred=3`.
+
+Testes: `python3 -m unittest discover -s tests/turbo -p 'test_*.py'` → 38 OK,
+incluindo aditividade (antigo ⊆ novo), marcação direto/transitivo, fallback sem
+relações, primeira falha com arquivo/linha/target e ordem do `excerpt`.
+
 ## Pendências e próxima ação
 
-1. **P4 — TURBO**: seleção e `tests-for` ainda divergem; o TURBO seleciona por
-   consumidores de target e pode incluir testes irrelevantes. Falta comparar
-   seleção antiga/nova com teste de equivalência antes de trocar a fonte.
-   Resumo de primeira falha já existe em `tools/turbo/turbo_lib/report.py`.
+1. **P4 — TURBO (restante)**: a seleção agora é aditiva e explicável, mas a
+   especificidade continua estrutural: `include` prova dependência de
+   compilação, não que o teste exercita o comportamento. `coverage` segue
+   `unknown` quando o CMake muda ou há caminhos sem mapeamento.
 2. **P6 — C++**: 645 definições fora de classe continuam sem namespace completo;
    sobrecargas e templates seguem textuais.
 3. **Avaliação ampliada**: `eval` mede módulos, não arquivos; faltam 40 perguntas

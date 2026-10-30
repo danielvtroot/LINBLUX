@@ -18,6 +18,7 @@ REQUIRED_REASON_MARKERS = (
     "target de teste direto:",
     "harness de teste alterado:",
     "consumidor do target:",
+    "include direto do ATLAS:",
     "recurso associado:",
     "ferramenta ATLAS alterada:",
     "ferramenta TURBO alterada:",
@@ -58,6 +59,57 @@ def _reverse_includes(inventory: dict) -> dict[str, set[str]]:
         if source and target and (target in known_files or target.endswith((".h", ".hpp", ".hh"))):
             reverse[target].add(source)
     return reverse
+
+
+def _sibling_header(inventory: dict, path: str) -> str | None:
+    """``src/x.cpp`` -> ``src/x.h`` when the header exists in the index.
+
+    A change in the implementation still makes every consumer of the matching
+    header recompile, which is exactly the evidence CMake's target graph misses.
+    """
+    if not path.endswith((".cpp", ".cc", ".cxx", ".c")):
+        return None
+    stem = path.rsplit(".", 1)[0]
+    known = {_normalize(row.get("path") or "") for row in inventory.get("atlas_files", [])}
+    for extension in (".h", ".hpp", ".hh", ".hxx"):
+        candidate = stem + extension
+        if candidate in known:
+            return candidate
+    return None
+
+
+def _tests_by_source(inventory: dict) -> dict[str, set[str]]:
+    mapping: dict[str, set[str]] = defaultdict(set)
+    for name, paths in inventory.get("test_files", {}).items():
+        for path in paths:
+            mapping[_normalize(path)].add(name)
+    for test in inventory.get("tests", []):
+        source = _normalize(test.get("source_path") or "")
+        if source:
+            mapping[source].add(test["name"])
+    return mapping
+
+
+def _include_consumers(
+    reverse_includes: dict[str, set[str]], seeds: set[str], depth: int = 2
+) -> dict[str, tuple[int, str]]:
+    """Include consumers reachable from ``seeds`` -> (depth, header that pulled it)."""
+    reached: dict[str, tuple[int, str]] = {}
+    seen = set(seeds)
+    frontier = set(seeds)
+    for level in range(1, depth + 1):
+        next_frontier: set[str] = set()
+        for current in sorted(frontier):
+            for consumer in reverse_includes.get(current, set()):
+                if consumer in seen:
+                    continue
+                seen.add(consumer)
+                next_frontier.add(consumer)
+                reached.setdefault(consumer, (level, current))
+        frontier = next_frontier
+        if not frontier:
+            break
+    return reached
 
 
 def _targets_for_paths(inventory: dict, paths: set[str]) -> set[str]:
@@ -138,6 +190,8 @@ def build_plan(
         _normalize(row.get("path", "")): row.get("module") for row in inventory.get("atlas_files", [])
     }
     reverse_includes = _reverse_includes(inventory)
+    tests_by_source = _tests_by_source(inventory)
+    include_level: dict[str, int] = {}
     reasons: dict[str, set[str]] = defaultdict(set)
     if mode == "full":
         # FULL is an explicit whole-suite request.  Do not reduce it to the
@@ -190,6 +244,23 @@ def build_plan(
         affected_targets.update(item_targets)
         if not item_targets and not path.startswith(("docs/", "assets/", "midia/", "third_party/")):
             unknown_paths.append(path)
+
+        # ATLAS include evidence (additive): a test source that includes this
+        # file, or a header that includes it, is coupled at compile time even
+        # when its target is not a direct consumer.  Reasons are only added, so
+        # a test selected by the target graph can never be dropped here.
+        if _is_source_change(path):
+            seeds = {path}
+            twin = _sibling_header(inventory, path)
+            if twin:
+                seeds.add(twin)
+            for consumer, (level, origin) in _include_consumers(reverse_includes, seeds).items():
+                for test_name in tests_by_source.get(consumer, ()):
+                    if test_name not in tests:
+                        continue
+                    marker = "include direto" if level == 1 else "include transitivo"
+                    reasons[test_name].add(f"{marker} do ATLAS: {consumer} inclui {origin}")
+                    include_level[test_name] = min(include_level.get(test_name, 3), level)
 
         # Direct test source / test target mapping.
         for test in inventory.get("tests", []):
@@ -337,11 +408,45 @@ def build_plan(
         build_targets.update(affected_targets)
 
     selected_tests = []
+    evidence_counts = {"direct": 0, "transitive": 0, "inferred": 0}
     for name in selected_names:
         test = dict(tests[name])
         test["reasons"] = sorted(reasons.get(name, []))
         test["priority"] = _priority(test["reasons"])
+        level = include_level.get(name)
+        direct = level == 1 or any(
+            reason.startswith((
+                "arquivo do teste ou fonte direta:",
+                "target de teste direto:",
+                "harness de teste alterado:",
+                "ferramenta ATLAS alterada:",
+                "ferramenta TURBO alterada:",
+                "teste do ATLAS alterado:",
+                "teste do TURBO alterado:",
+                "include direto do ATLAS:",
+            ))
+            for reason in test["reasons"]
+        )
+        if direct:
+            test["evidence"] = "direct"
+        elif level == 2 or any(
+            reason.startswith(("consumidor do target:", "include transitivo do ATLAS:"))
+            for reason in test["reasons"]
+        ):
+            test["evidence"] = "transitive"
+        else:
+            test["evidence"] = "inferred"
+        evidence_counts[test["evidence"]] += 1
         selected_tests.append(test)
+
+    atlas_evidence = "applied" if reverse_includes else "unavailable"
+    if atlas_evidence == "unavailable" and any(
+        _is_source_change(_normalize(item["path"])) for item in changed_files
+    ):
+        warnings.append(
+            "evidência por include do ATLAS indisponível (índice ausente ou sem relações); "
+            "seleção mantida pelo grafo de targets"
+        )
     required_tests = [test for test in selected_tests if test["priority"] == "required"]
     recommended_tests = [test for test in selected_tests if test["priority"] == "recommended"]
     coverage = "known" if any(
@@ -376,6 +481,8 @@ def build_plan(
         "filtered": filtered,
         "coverage": coverage,
         "coverage_unknown": coverage != "known",
+        "atlas_evidence": atlas_evidence,
+        "evidence_counts": evidence_counts,
         "unknown_paths": sorted(set(unknown_paths)),
         "structural": structural or cmake_changed,
         "configure_required": cmake_changed,
@@ -400,6 +507,14 @@ def explain(plan: dict) -> str:
         f"Prioridade: obrigatórios={plan.get('required_count', 0)}, "
         f"adicionais={plan.get('recommended_count', 0)}",
         f"Cobertura: {plan['coverage']}",
+        f"Evidência ATLAS: {plan.get('atlas_evidence', '?')}"
+        + (
+            " (diretos={direct}, transitivos={transitive}, inferidos={inferred})".format(
+                **plan.get("evidence_counts", {})
+            )
+            if plan.get("evidence_counts")
+            else ""
+        ),
     ]
     if plan.get("budget_seconds"):
         cap = plan.get("per_test_timeout_seconds") or {}

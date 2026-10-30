@@ -298,6 +298,83 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(full["recommended_count"], 0)
 
 
+    def test_atlas_include_evidence_is_additive(self):
+        consumer = fake_test("consumer", "consumer_tests", ("editor",))
+        inventory_data = fake_inventory(
+            [consumer],
+            source_by_target={
+                "linblux_studio": ["src/editor/value.cpp"],
+                "consumer_tests": ["tests/consumer.cpp"],
+            },
+            deps_by_target={"consumer_tests": ["linblux_studio"]},
+            test_files={"consumer": ["tests/consumer.cpp"]},
+            atlas_files=[
+                {"path": "src/editor/value.h", "module": "editor"},
+                {"path": "src/editor/value.cpp", "module": "editor"},
+                {"path": "tests/consumer.cpp", "module": "editor"},
+            ],
+            atlas_relations=[
+                {"source_path": "tests/consumer.cpp", "target": "src/editor/value.h", "kind": "include"},
+            ],
+        )
+        change = fake_changes("src/editor/value.cpp", "editor")
+        legacy = selection.build_plan({**inventory_data, "atlas_relations": []}, change, "impact")
+        plan = selection.build_plan(inventory_data, change, "impact")
+        self.assertTrue(set(legacy["selected_names"]) <= set(plan["selected_names"]))
+        legacy_reasons = {test["name"]: set(test["reasons"]) for test in legacy["selected_tests"]}
+        for test in plan["selected_tests"]:
+            self.assertTrue(
+                legacy_reasons.get(test["name"], set()) <= set(test["reasons"]),
+                test["name"],
+            )
+        self.assertIn("consumer", plan["selected_names"])
+        self.assertEqual(plan["atlas_evidence"], "applied")
+        entry = next(test for test in plan["selected_tests"] if test["name"] == "consumer")
+        self.assertEqual(entry["evidence"], "direct")
+        self.assertTrue(any("include direto do ATLAS" in reason for reason in entry["reasons"]))
+        self.assertIn("consumer", plan["required_names"])
+
+    def test_atlas_include_evidence_marks_transitive(self):
+        deep = fake_test("deep", "deep_tests", ("editor",))
+        inventory_data = fake_inventory(
+            [deep],
+            source_by_target={"deep_tests": ["tests/deep.cpp"]},
+            deps_by_target={"deep_tests": []},
+            test_files={"deep": ["tests/deep.cpp"]},
+            atlas_files=[
+                {"path": "src/editor/value.h", "module": "editor"},
+                {"path": "src/editor/mid.h", "module": "editor"},
+                {"path": "tests/deep.cpp", "module": "editor"},
+            ],
+            atlas_relations=[
+                {"source_path": "src/editor/mid.h", "target": "src/editor/value.h", "kind": "include"},
+                {"source_path": "tests/deep.cpp", "target": "src/editor/mid.h", "kind": "include"},
+            ],
+        )
+        plan = selection.build_plan(inventory_data, fake_changes("src/editor/value.h", "editor"), "impact")
+        self.assertIn("deep", plan["selected_names"])
+        entry = next(test for test in plan["selected_tests"] if test["name"] == "deep")
+        self.assertEqual(entry["evidence"], "transitive")
+        self.assertTrue(any("include transitivo do ATLAS" in reason for reason in entry["reasons"]))
+
+    def test_missing_atlas_graph_keeps_target_selection(self):
+        unit = fake_test("unit", "unit_tests", ("core",))
+        inventory_data = fake_inventory(
+            [unit],
+            source_by_target={
+                "linblux_engine": ["src/core/value.cpp"],
+                "unit_tests": ["tests/unit.cpp"],
+            },
+            deps_by_target={"unit_tests": ["linblux_engine"]},
+            atlas_files=[{"path": "src/core/value.cpp", "module": "core"}],
+        )
+        inventory_data.pop("atlas_relations")
+        plan = selection.build_plan(inventory_data, fake_changes("src/core/value.cpp"), "fast")
+        self.assertIn("unit", plan["selected_names"])
+        self.assertEqual(plan["atlas_evidence"], "unavailable")
+        self.assertTrue(any("ATLAS" in warning for warning in plan["warnings"]))
+
+
 class CacheTests(unittest.TestCase):
     def _last(self, **updates):
         base = {
@@ -730,6 +807,69 @@ class DocsAndOrganizeTests(unittest.TestCase):
             self.assertEqual(before, after)
             self.assertFalse(audit["apply_supported"])
             self.assertTrue(any(item["kind"] == "duplicate-candidates" for item in audit["findings"]))
+
+
+class ReportTests(unittest.TestCase):
+    def test_failure_shows_first_error_with_location(self):
+        detail = (
+            "In file included from src/a.cpp:1:\n"
+            "src/core/value.cpp:42:7: error: 'value_' was not declared in this scope\n"
+            "src/core/value.cpp:44:7: error: expected ';' before '}' token\n"
+            "make[2]: *** [CMakeFiles/x.dir/build.make:76: CMakeFiles/x.dir/src/core/value.cpp.o] Error 1\n"
+        )
+        text = report.format_result(
+            {
+                "status": "BUILD_FAILED",
+                "excerpt": detail,
+                "build": {"status": "FAILED", "log": "/tmp/build.log"},
+            }
+        )
+        self.assertIn("Tipo: compilação", text)
+        self.assertIn("Provável causa: 'value_' was not declared in this scope", text)
+        self.assertIn("Arquivo: src/core/value.cpp:42:7", text)
+        self.assertIn("/tmp/build.log", text)
+        self.assertIn("Próxima ação:", text)
+        self.assertNotIn("expected ';' before", text.split("Provável causa")[1].split("\n")[0])
+
+    def test_failure_without_pattern_keeps_detail(self):
+        text = report.format_result(
+            {
+                "status": "BUILD_FAILED",
+                "excerpt": "algo deu errado sem formato reconhecido",
+                "build": {"status": "FAILED"},
+            }
+        )
+        self.assertIn("Tipo: não identificado", text)
+        self.assertIn("algo deu errado", text)
+
+    def test_test_failure_is_labelled_with_target(self):
+        text = report.format_result(
+            {
+                "status": "FAILED",
+                "test": {
+                    "counts": {"selected": 1, "executed": 1, "failed": 1},
+                    "tests": {
+                        "widget_test": {
+                            "status": "FAILED",
+                            "detail": "Assertion 'value == 7' failed at src/widget.cpp:12",
+                            "log": "/tmp/t.log",
+                            "target": "widget_tests",
+                        }
+                    },
+                },
+            }
+        )
+        self.assertIn("Tipo: teste", text)
+        self.assertIn("Target: widget_tests", text)
+        self.assertIn("/tmp/t.log", text)
+
+    def test_excerpt_prefers_first_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "cascade.log"
+            log.write_text("error: root cause here\n" + "error: consequence\n" * 50, encoding="utf-8")
+            text = runner.excerpt(log, max_chars=200)
+            self.assertIn("root cause here", text)
+            self.assertIn("primeiras", text)
 
 
 class CliContractTests(unittest.TestCase):
