@@ -23,4 +23,5 @@ optativa supervisionada, não executada automaticamente na suíte offline.
 Limites: padrões conhecidos não detectam todo segredo; allowlist não inclui
 arquivos privados/ignorados; estado/checkpoint local não protege contra perda
 física do notebook. Git main e recursos omitidos devem ser preservados à parte.
-Veja docs/backup/README.md e docs/relatorios/CONCLUSAO_ENGINE.md.
+Veja [o manual de backup](../../backup/README.md) e
+[o histórico técnico](../../historico/README.md).
