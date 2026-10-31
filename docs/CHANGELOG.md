@@ -9,6 +9,9 @@ Código/documentação em `main`; sem tag ou binário público aprovado.
 - Sliders alinhados ao controle de Câmera, com arraste, teclado e mudo.
 - CMake alinhado a 0.1.0; build oficial `build-linblux/`.
 - README pt-BR/inglês, galeria por metadados e índice de documentação.
+- Apresentação: hero de construção, duas capturas do Explorador/serviços na galeria
+  com títulos revisados e demonstração publicada no YouTube. O MP4 local (~126 MiB)
+  segue fora do Git.
 - Templates de issues/PR, guia Player/build e política de segurança.
 - Fixture RifleDemo aguarda inventário real preservando suas asserções.
 

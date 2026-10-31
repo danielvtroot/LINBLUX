@@ -1,11 +1,28 @@
 <p align="center"><img src="midia/logo.png" width="112" alt="Logo LINBLUX"/></p>
 <h1 align="center">LINBLUX Studio</h1>
-<p align="center">Um ambiente experimental de criação 3D para Linux.</p>
-<p align="center"><strong>Alpha 0.1.0 · criação e experiências locais · interface em português brasileiro</strong></p>
-<p align="center"><a href="README.en.md">English</a> · <a href="docs/ALPHA_0_1_0.md">Download e execução</a> · <a href="docs/README.md">Documentação</a> · <a href="docs/MIDIA.md">Demonstrações</a> · <a href="CONTRIBUTING.md">Contribuir</a></p>
+<p align="center">Uma engine experimental de criação 3D para Linux.</p>
+<p align="center"><strong>Alpha 0.1.0 — projeto experimental de código aberto.</strong></p>
+<p align="center"><a href="docs/README.md">Documentação</a> · <a href="docs/MIDIA.md">Demonstração</a> · <a href="#compilar">Instalação por código-fonte</a> · <a href="CONTRIBUTING.md">Contribuição</a> · <a href="README.en.md">English</a></p>
 
-<!-- A captura principal é escolhida manualmente após revisão de conteúdo. -->
-<p align="center"><img src="docs/prints/studio-construcao.png" width="960" alt="LINBLUX Studio: construção de uma cena 3D, hierarquia e propriedades"/></p>
+<p align="center"><a href="docs/prints/studio-construcao.png"><img src="docs/prints/studio-construcao.png" width="880" alt="LINBLUX Studio: construção 3D de uma sala, Explorador com a hierarquia e painel de propriedades"/></a></p>
+
+<p align="center">
+<a href="docs/prints/explorador-servicos.png"><img src="docs/prints/explorador-servicos.png" width="404" alt="Explorador e serviços: ServerStorage com Itens e um modelo de Espada selecionado"/></a>
+<a href="docs/prints/explorador-servicos-automaticos.png"><img src="docs/prints/explorador-servicos-automaticos.png" width="404" alt="Serviços de armazenamento organizados automaticamente no Explorador"/></a>
+</p>
+<p align="center"><sub><strong>LINBLUX Studio — Construção 3D</strong> · <strong>Explorador e serviços</strong> · <strong>Serviços de armazenamento organizados</strong></sub></p>
+
+## Assista ao LINBLUX em funcionamento
+
+A demonstração está publicada no YouTube: **[Assistir à demonstração LINBLUX](https://www.youtube.com/watch?v=jVck4UuYlWQ)**,
+no canal [Abismroot](https://www.youtube.com/@Abismroot). O GitHub não reproduz
+vídeos do repositório dentro do README, então o player abre em outra aba.
+
+A gravação original (`docs/videos/linblux.mp4`, 1920×1080, cerca de 8 minutos e
+126 MiB) permanece apenas neste ambiente e **não faz parte do Git**: excede o limite
+de 20 MiB da galeria e o limite de 100 MiB por arquivo do GitHub. Nada foi
+recodificado ou duplicado. Músicas, imagens e demais mídias de terceiros usadas no
+vídeo devem ter sua publicação autorizada pelo responsável pelo canal.
 
 ## O que é o LINBLUX?
 
@@ -47,16 +64,15 @@ por incremento continuam disponíveis.
 
 ## Demonstração
 
-<p align="center"><img src="docs/screenshots/alpha-rifledemo-player.png" width="800" alt="RifleDemo no Player: personagem, NPCs e inventário"/></p>
-
 [RifleDemo](assets/examples/rifledemo/README.md) é um exemplo local de Lua,
-itens, NPCs e interação no Player. A captura acima registra o Player de um
-candidato anterior; o resultado de validação atual está nas
-[notas da Alpha](docs/ALPHA_0_1_0.md).
+itens, NPCs e interação no Player. Os resultados de validação do Player estão nas
+[notas da Alpha](docs/ALPHA_0_1_0.md); as capturas públicas do Studio ficam na
+[galeria de mídia](docs/MIDIA.md).
 
-Veja a [galeria de capturas e vídeos](docs/MIDIA.md). Para atualizar a galeria
-com mídia pública revisada, execute `python3 tools/update_readme_media.py`.
-Vídeos grandes ficam em Releases ou em um serviço de vídeo, sem aumentar o clone.
+A galeria é gerada a partir dos arquivos de `docs/prints/` e `docs/videos/`:
+execute `python3 tools/update_readme_media.py`. O script lê apenas metadados,
+não transcodifica e não adiciona arquivos ao Git. Vídeos grandes ficam em
+Releases ou em um serviço de vídeo, sem aumentar o clone.
 
 ## Experimentar no Linux
 
@@ -71,6 +87,8 @@ Q/E desce/sobe e F enquadra a seleção. No Player, WASD move, espaço pula e Es
 abre o menu sem interromper a simulação.
 
 ### Compilar
+
+<a id="compilar"></a>
 
 O build oficial de desenvolvimento é `build-linblux/`. Requisitos e dependências
 por distribuição estão no [guia de build](docs/BUILD.md). A validação desta base
@@ -111,14 +129,18 @@ Veja os targets e limites de acoplamento em [Arquitetura](docs/ARCHITECTURE.md).
 O projeto inclui ferramentas de manutenção locais, utilizáveis por desenvolvedores
 e agentes com acesso ao terminal, sem depender de um serviço externo.
 
-**ATLAS** indexa a estrutura do repositório, localiza código e símbolos, sugere
-hipóteses com evidências e ajuda a analisar impacto. Suas relações são textuais:
-auxiliam a investigação, sem provar a causa de um defeito ou corrigi-lo automaticamente.
+**ATLAS** indexa a estrutura do repositório, localiza arquivos, símbolos e
+possíveis causas de defeitos, sugere hipóteses com evidências e ajuda a analisar
+impacto. Suas relações são textuais: auxiliam a investigação, sem provar a causa
+de um bug nem corrigi-lo automaticamente.
 
-**ATLAS TURBO** seleciona verificações e supervisiona testes com timeout individual,
-orçamento global, encerramento dos processos e logs. Pode reduzir trabalho
-repetido; tempo e cobertura dependem das alterações e do ambiente. Aprovação
-parcial nunca equivale a validação completa.
+**TURBO** identifica as verificações relevantes para uma alteração e as executa
+com timeout individual, orçamento global, encerramento dos processos e logs.
+Pode reduzir trabalho repetido; tempo e cobertura dependem das alterações e do
+ambiente. Aprovação parcial nunca equivale a validação completa.
+
+Tudo roda localmente, sem serviço externo. O modo **HDD-Safe** reduz gravações e
+reindexações em discos mecânicos; o modo HDD-Critical permite apenas consultas.
 
 ```sh
 ATLAS_IO_MODE=hdd-safe python3 tools/atlas/atlas.py diagnose "problema" --brief
@@ -126,7 +148,6 @@ python3 tools/atlas/atlas.py tests-for src/editor/EditorUI.cpp
 python3 tools/turbo/turbo.py test --mode fast --changed --plan
 ```
 
-O modo HDD-Safe reduz gravações; HDD-Critical permite consultas sem reindexar.
 [Manual ATLAS](docs/atlas/README.md) · [Manual TURBO](docs/turbo/README.md) ·
 [Como testar](docs/TESTING.md)
 
@@ -139,6 +160,12 @@ O modo HDD-Safe reduz gravações; HDD-Critical permite consultas sem reindexar.
 | Limitado | Rig de seis corpos, encaixe em caixas, áudio sem mixagem/atenuação 3D e compatibilidade Linux ainda restrita ao ambiente validado |
 | Futuro | Malhas arbitrárias, terreno, multiplayer, contas e publicação online |
 
+O código-fonte e a documentação estão publicados em `main`. A **distribuição
+binária pública permanece bloqueada** por pendências de redistribuição do FFmpeg
+vinculado e pela conclusão dos avisos dos componentes embutidos; não existe
+download aprovado nem pacote Linux universal. Não há tag ou Release de binário
+publicada.
+
 Áudio audível em hardware real e desempenho de GPU física exigem validação
 adicional. Scripts Lua podem usar as capacidades locais da API: execute somente
 experiências de origem confiável. Leia os [limites da Alpha](docs/ALPHA_0_1_0.md)
@@ -146,11 +173,12 @@ e a [compatibilidade](docs/COMPATIBILIDADE.md) antes de distribuir um projeto.
 
 ## Próximos passos
 
-Consolidar o Studio e a engine, melhorar renderização e desempenho, tornar as
-ferramentas de criação mais intuitivas, ampliar personagens, importação 3D,
-terreno e API Lua. Depois, evoluir empacotamento Linux e explorar experiências
-compartilhadas com servidor autoritativo, identidade, replicação, descoberta,
-colaboração e extensões. São objetivos futuros, sem datas prometidas.
+Consolidar o Studio e a engine, melhorar estabilidade, renderização e desempenho,
+tornar as ferramentas de construção 3D mais intuitivas, ampliar personagens,
+scripts Lua, terreno e importação de malhas. Depois, evoluir o empacotamento Linux
+e explorar experiências online — multiplayer, contas, descoberta e colaboração com
+servidor autoritativo. São objetivos futuros, sem datas prometidas, e nenhum
+desses recursos está disponível nesta Alpha.
 [Roadmap completo](docs/ROADMAP.md).
 
 ## Documentação e colaboração

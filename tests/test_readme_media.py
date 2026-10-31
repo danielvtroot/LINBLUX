@@ -51,6 +51,22 @@ class MediaTests(unittest.TestCase):
         for name in ('private', 'shot.tmp', 'empty.png', 'not-image', 'link.png', 'large.mp4'):
             self.assertNotIn(name, text)
 
+    def test_reviewed_titles_and_pending_video_note(self):
+        (self.root / 'docs/prints/studio-construcao.png').write_bytes(b'image')
+        with (self.root / 'docs/videos/linblux.mp4').open('wb') as stream:
+            stream.truncate(media.VIDEO_LIMIT + 1)
+        media.update(self.root)
+        text = self.doc.read_text()
+        self.assertIn('alt="LINBLUX Studio — Construção 3D"', text)
+        self.assertIn(media.VIDEO_PENDING, text)
+        self.assertNotIn('Nenhum vídeo público adicionado', text)
+        self.assertNotIn('linblux.mp4', text)
+
+    def test_unknown_stem_falls_back_to_readable_name(self):
+        (self.root / 'docs/prints/nova_captura.png').write_bytes(b'image')
+        media.update(self.root)
+        self.assertIn('<p>nova captura</p>', self.doc.read_text())
+
     def test_reject_invalid_markers_without_writing(self):
         self.doc.write_text('Manual sem marcadores\n')
         with self.assertRaises(ValueError):

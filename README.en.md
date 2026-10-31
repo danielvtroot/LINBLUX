@@ -1,10 +1,28 @@
 <p align="center"><img src="midia/logo.png" width="112" alt="LINBLUX logo"/></p>
 <h1 align="center">LINBLUX Studio</h1>
-<p align="center">An experimental 3D creation environment for Linux.</p>
-<p align="center"><strong>Alpha 0.1.0 · local experiences · Brazilian Portuguese interface</strong></p>
-<p align="center"><a href="README.md">Português brasileiro</a> · <a href="docs/ALPHA_0_1_0.md">Release status</a> · <a href="docs/README.md">Documentation</a> · <a href="docs/MIDIA.md">Gallery</a> · <a href="CONTRIBUTING.md">Contribute</a></p>
+<p align="center">An experimental 3D creation engine for Linux.</p>
+<p align="center"><strong>Alpha 0.1.0 — an experimental open-source project.</strong></p>
+<p align="center"><a href="README.md">Português brasileiro</a> · <a href="docs/README.md">Documentation</a> · <a href="docs/MIDIA.md">Gallery</a> · <a href="#build">Build from source</a> · <a href="CONTRIBUTING.md">Contribute</a></p>
 
-<p align="center"><img src="docs/prints/studio-construcao.png" width="960" alt="LINBLUX Studio with a 3D scene, hierarchy and properties"/></p>
+<p align="center"><a href="docs/prints/studio-construcao.png"><img src="docs/prints/studio-construcao.png" width="880" alt="LINBLUX Studio: 3D construction of a room, Explorer hierarchy and properties panel"/></a></p>
+
+<p align="center">
+<a href="docs/prints/explorador-servicos.png"><img src="docs/prints/explorador-servicos.png" width="404" alt="Explorer and services: ServerStorage with Items and a Sword model selected"/></a>
+<a href="docs/prints/explorador-servicos-automaticos.png"><img src="docs/prints/explorador-servicos-automaticos.png" width="404" alt="Storage services organized automatically in the Explorer"/></a>
+</p>
+<p align="center"><sub><strong>LINBLUX Studio — 3D construction</strong> · <strong>Explorer and services</strong> · <strong>Organized storage services</strong></sub></p>
+
+## Watch LINBLUX running
+
+The demo is published on YouTube: **[Watch the LINBLUX demo](https://www.youtube.com/watch?v=jVck4UuYlWQ)**,
+on the [Abismroot](https://www.youtube.com/@Abismroot) channel. GitHub does not play
+videos stored in the repository inside a README, so the player opens in a new tab.
+
+The original recording (`docs/videos/linblux.mp4`, 1920×1080, about 8 minutes and
+126 MiB) stays in the development environment only and is **not part of Git**: it
+exceeds the 20 MiB gallery limit and GitHub's 100 MiB per-file limit. Nothing was
+transcoded or duplicated. Music, images and other third-party media used in the
+video must be cleared for publication by the channel owner.
 
 ## What is LINBLUX?
 
@@ -37,27 +55,39 @@ Moving a face moves the whole Part without resizing it. Face scaling keeps the
 opposite face fixed. The visual grid has been removed; transform Snap and
 surface placement remain available. Existing object names are preserved.
 
-## See it running
+## Demonstration
 
-<p align="center"><img src="docs/screenshots/alpha-rifledemo-player.png" width="800" alt="RifleDemo running in the standalone Player"/></p>
+[RifleDemo](assets/examples/rifledemo/README.md) demonstrates Lua, items, NPCs and
+Player interaction. Player validation results are in the
+[Alpha notes](docs/ALPHA_0_1_0.md); public Studio captures are in the
+[media gallery](docs/MIDIA.md).
 
-[RifleDemo](assets/examples/rifledemo/README.md) demonstrates Lua, items, NPCs
-and Player interaction. This screenshot comes from an earlier candidate; consult
-the [Alpha notes](docs/ALPHA_0_1_0.md) for current validation results.
-The [media gallery](docs/MIDIA.md) contains actual captures. Add reviewed public
-media to `docs/prints/` or `docs/videos/`, then run
-`python3 tools/update_readme_media.py`. Large videos should be hosted separately.
+The gallery is generated from the files in `docs/prints/` and `docs/videos/`:
+run `python3 tools/update_readme_media.py`. The script reads metadata only, never
+transcodes, and never adds files to Git. Large videos belong in Releases or a
+video service so they do not increase clone size.
 
 ## Try it on Linux
 
 **A public binary package is still blocked pending dependency redistribution
-review.** No approved binary download is advertised here. Source builds are
-available; see [Alpha status](docs/ALPHA_0_1_0.md).
+review.** No approved binary download is available, and there is no universal
+Linux package or published binary tag/Release. See
+[Alpha status](docs/ALPHA_0_1_0.md). Source builds work on Linux.
+
+After building, open the Studio, create an experience and press **F5** to run it;
+**Shift+F5** stops it. In the editor, right mouse button + WASD moves the camera,
+Q/E moves down/up and F frames the selection. In the Player, WASD moves, space
+jumps and Esc opens the menu while simulation continues.
+
+### Build
+
+<a id="build"></a>
 
 The official development build directory is `build-linblux/`. See
 [build requirements](docs/BUILD.md) before configuring. The validation environment
-uses Linux x86_64, C++17, raylib 6.2.0, Bullet 3.24 and Lua 5.4. RmlUi is fetched
-from a pinned revision; first configuration needs network access or a cached copy.
+uses Linux x86_64, C++17, raylib 6.2.0, Bullet 3.24 and Lua 5.4; this does not
+prove support for every distribution. RmlUi is fetched from a pinned revision, so
+first configuration needs network access or a cached copy.
 
 ```sh
 git clone https://github.com/danielvtroot/LINBLUX.git
@@ -68,9 +98,6 @@ cmake --build build-linblux -j2
 ./build-linblux/linblux_player --project assets/examples/rifledemo/world.loblox.json
 ```
 
-In the Studio, right mouse button + WASD moves the camera; Q/E moves down/up,
-F frames the selection, F5 starts Play and Shift+F5 stops it. In the Player,
-WASD moves, space jumps and Esc opens the menu while simulation continues.
 The interface and most manuals are currently in Brazilian Portuguese.
 
 ## Architecture
@@ -87,14 +114,17 @@ See [Architecture](docs/ARCHITECTURE.md) for targets and remaining coupling.
 ## ATLAS + TURBO
 
 LINBLUX includes local maintenance tools for developers and terminal-capable
-agents, independent of any external service provider. **ATLAS** indexes repository structure,
-finds code and symbols, suggests evidence-based hypotheses and reports impact.
-Its textual relationships do not prove runtime calls or automatically fix bugs.
+agents, independent of any external service provider. **ATLAS** indexes repository structure and
+finds files, symbols and possible bug causes, suggests evidence-based hypotheses
+and reports impact. Its textual relationships do not prove runtime calls or
+automatically fix bugs.
 
-**ATLAS TURBO** selects checks and supervises tests with individual timeouts,
-a global budget, process cleanup and logs. It can avoid unnecessary repeated
-work; speed and coverage depend on the change and environment. Partial coverage
-is never a full pass. HDD-Safe and HDD-Critical modes reduce index I/O.
+**TURBO** selects the checks relevant to a change and runs them with individual
+timeouts, a global budget, process cleanup and logs. It can avoid unnecessary
+repeated work; speed and coverage depend on the change and environment. Partial
+coverage is never a full pass. Everything runs locally, with no external service.
+**HDD-Safe** mode reduces writes and reindexing on mechanical disks; HDD-Critical
+mode allows read-only queries.
 
 ```sh
 ATLAS_IO_MODE=hdd-safe python3 tools/atlas/atlas.py diagnose "problem" --brief
@@ -113,22 +143,32 @@ python3 tools/turbo/turbo.py test --mode fast --changed --plan
 | Limited | Six-body rigs, box surface snapping, no 3D audio mixing/attenuation; Linux portability still needs wider validation |
 | Future | Arbitrary mesh import, terrain, multiplayer, accounts and online publishing |
 
+Source code and documentation are published on `main`. The **public binary
+distribution remains blocked** by the linked FFmpeg redistribution obligations and
+by completing the notices for embedded components; no approved download and no
+universal Linux package exist. No binary tag or Release has been published.
+
 Tests using software rendering do not establish physical GPU performance.
 A null audio backend does not establish audible playback. Run only trusted
 experiences: Lua can access local engine capabilities. There is no automatic
 cross-session inventory persistence or production multiplayer service.
 
-The [roadmap](docs/ROADMAP.md) starts with engine/Studio stability, rendering,
-more intuitive tools, characters, 3D import, terrain, Lua and Linux packaging.
-Later goals include authoritative servers, identity, world replication,
-experience discovery, collaboration and extensions. No delivery dates are promised.
+## Next steps
+
+Consolidate the Studio and the engine, improve stability, rendering and
+performance, make 3D construction more intuitive, and expand characters, Lua
+scripts, terrain and mesh import. Later, evolve Linux packaging and explore online
+experiences — multiplayer, accounts, discovery and collaboration with an
+authoritative server. These are future goals without promised dates, and none of
+them is available in this Alpha. [Full roadmap](docs/ROADMAP.md).
 
 ## Documentation, contributions and license
 
 Start at the [documentation index](docs/README.md). Bug reports should include
 the commit, Linux environment, reproduction steps and a minimal scene without
 private data. Read [CONTRIBUTING](CONTRIBUTING.md), [security guidance](SECURITY.md)
-and the [changelog](docs/CHANGELOG.md).
+and the [changelog](docs/CHANGELOG.md). The interface and most manual pages are in
+Brazilian Portuguese.
 
 Original project code is [MIT licensed](LICENSE). Dependency copyrights and
 notices are preserved. LINBLUX uses raylib, Bullet, Lua, RmlUi, Dear ImGui,

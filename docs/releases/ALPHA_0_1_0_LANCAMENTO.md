@@ -168,6 +168,22 @@ São validações selecionadas em Xvfb/llvmpipe; não equivalem a aprovação gl
 confirmação manual do usuário. As suítes ATLAS/TURBO não foram repetidas porque
 seu código não mudou; benchmarks de armazenamento não foram executados.
 
+## Atualização de apresentação (mesmo dia)
+
+O README principal e o inglês receberam a captura principal de construção e, abaixo
+dela, as duas capturas do Explorador com serviços de armazenamento, com largura
+controlada e link para a imagem completa. A galeria passou a ter três capturas
+revisadas com títulos públicos (`LINBLUX Studio — Construção 3D`, `Explorador e
+serviços`, `Serviços de armazenamento organizados`); o gerador continua usando
+apenas metadados, preserva o restante do documento e segue idempotente.
+A demonstração foi publicada no YouTube
+([vídeo](https://www.youtube.com/watch?v=jVck4UuYlWQ), canal Abismroot), com link no
+README e na galeria; o GitHub não reproduz MP4 do repositório dentro de uma página.
+`docs/videos/linblux.mp4` (~126 MiB) **não entrou no Git**: excede o limite de 20 MiB
+da galeria e o limite de 100 MiB por arquivo do GitHub. Nada foi recodificado ou
+duplicado e nenhuma URL foi inventada. O estado do binário não mudou: a Release
+binária continua bloqueada pelos itens de redistribuição acima.
+
 ## Próximas versões
 
 Concluir obrigações de redistribuição e ampliar validação Linux. Depois consolidar
