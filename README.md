@@ -15,14 +15,7 @@
 ## Assista ao LINBLUX em funcionamento
 
 A demonstração está publicada no YouTube: **[Assistir à demonstração LINBLUX](https://www.youtube.com/watch?v=jVck4UuYlWQ)**,
-no canal [Abismroot](https://www.youtube.com/@Abismroot). O GitHub não reproduz
-vídeos do repositório dentro do README, então o player abre em outra aba.
-
-A gravação original (`docs/videos/linblux.mp4`, 1920×1080, cerca de 8 minutos e
-126 MiB) permanece apenas neste ambiente e **não faz parte do Git**: excede o limite
-de 20 MiB da galeria e o limite de 100 MiB por arquivo do GitHub. Nada foi
-recodificado ou duplicado. Músicas, imagens e demais mídias de terceiros usadas no
-vídeo devem ter sua publicação autorizada pelo responsável pelo canal.
+no canal [Abismroot](https://www.youtube.com/@Abismroot).
 
 ## O que é o LINBLUX?
 
