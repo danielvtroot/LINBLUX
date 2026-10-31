@@ -93,7 +93,7 @@ Medição Release llvmpipe: startup 0,829 s, RSS 130.748 kB; Play 138,2 MiB,
 mediana 61,67 ms/p95 76,54 ms sob testes concorrentes. No Sway privado,
 Play 136,1 MiB, mediana 37,54 ms/p95 57,17 ms. Não comprova 60 FPS nem o
 orçamento real do notebook: host/software/compositor e carga são diferentes.
-`git diff --check` passou; .desenvolvimento/ permanece intocado e fora dos commits.
+`git diff --check` passou; o diretório local de configuração permanece intocado e fora dos commits.
 
 Próximo comando no notebook: `./build/loblox`; executar passos 1–9 e checklist
 manual do guia, coletando JSONL se houver conflito. Não iniciar outra grande
@@ -110,7 +110,7 @@ este documento é um checkpoint funcional (consultar `git log -1`). Sem push.
 Checkpoint de estabilização: `e035035`. Checkpoints anteriores desta missão:
 `d550f85` (roteamento), `3148377` (viewport/axiais), `20e8d9f` (planos),
 `a91d445` (studs/material), `6efaf9b` (startup/restart).
-`.desenvolvimento/` já existia e foi preservado fora dos commits. Nenhum projeto pessoal
+O diretório local de configuração já existia e foi preservado fora dos commits. Nenhum projeto pessoal
 é usado pelos testes novos; os artefatos ficam em `/tmp/loblox-input-*`.
 
 Incremento posterior: Ctrl+D duplica a Part selecionada na mesma posição, com

@@ -1,9 +1,8 @@
 # LINBLUX ATLAS
 
 Sistema local de inteligência estrutural, navegação, impacto e diagnóstico do
-LINBLUX. A interface principal é uma CLI Python independente de OpenCode, rede,
-servidor ou serviço externo. O índice é reconstruível e fica em `.atlas/`, fora do
-Git.
+LINBLUX. A interface principal é uma CLI Python que funciona localmente, sem
+rede ou servidor. O índice é reconstruível e fica em `.atlas/`, fora do Git.
 
 ## Início rápido
 

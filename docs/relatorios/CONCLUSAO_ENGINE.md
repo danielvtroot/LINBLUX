@@ -402,13 +402,13 @@ começa do zero e deve reutilizar o que já está pronto:
 Nada de combate foi implementado nesta sessão; o checkpoint publicado termina na
 UI por Lua. Alpha continua sem tag/Release e sem teste de instalação limpa.
 
-## 26/10 — HUD circular (retomada desenvolvimento)
+## 26/10 — HUD circular (retomada)
 
 IMPLEMENTADO/TESTADO: indicador vermelho compartilhado Studio/Player, ligado à
 saúde real; dano/cura, morte/respawn, animação, escala, pausa, reinício e
 `linblux.ui.health_hud(bool)` validados. Relatório30: FAST16/16 (global parcial),
 3/3 gráficos supervisionados em28,948 s. Captura720p inspecionada. Trabalho
-desenvolvimento de combate/RifleDemo preservado; continua sem validação/publicação.
+WIP de combate/RifleDemo preservado; continua sem validação/publicação.
 Próximo: menu lateral e atualização dos testes antigos de apresentação;
 seguem Demo, pacote, instalação limpa, segurança/licenças e lançamento.
 
@@ -430,7 +430,7 @@ Alpha continua sem pacote validado, tag ou Release; não está lançado.
 
 Menu PUBLICADO:4a0be641eefc0103136f46f81f782a5270e5f1ea, remoto confirmado.
 ItemActions, combate Lua e RifleDemo IMPLEMENTADOS/TESTADOS/VALIDADOS NO PLAYER.
-RifleDemo preservado do desenvolvimento, corrigido e ampliado:3 alvos com rig,
+RifleDemo preservado, corrigido e ampliado:3 alvos com rig,
 guia animado em patrulha, decal oficial,5 sons de síntese originais, UI Lua,
 E/1/tiro/dano/R/Delete/recoleta mantendo ID. Corrigida reinicialização de
 controladores NPC que apagava rotas após os Scripts. Efeitos pertencem ao
@@ -472,7 +472,7 @@ BLOQUEIO DE VALIDAÇÃO: regressão RmlUi atingiu180s, foi encerrada e não apro
 Última captura foi pause-maximized-1366.png. Investigar maximizar/retomar/F10/F11
 em fixture curta. A proposta de migração está em34-rml-migration-wip.patch;
 não foi incluída como teste aprovado. Somente as alterações nossas daquele
-arquivo foram restauradas; todo WIP desenvolvimento funcional está publicado.
+arquivo foram restauradas; todo WIP funcional está publicado.
 Não executar FULL antes de resolver o cenário e a revisão GPL/raylib. Também
 faltam áudio físico e teste em outro sistema Linux. Não existe tag/Release.
 
@@ -627,7 +627,7 @@ por categorias. Templates/armazenamento, rig visível/Editor, itens iniciais e
 recompensas, animações corporais de item, Editor3DValidation e demais testes
 físicos/limpeza auditada continuam PENDENTES. Alpha segue BLOQUEADO.
 
-## Sessão ferramenta de terminal: recuperação desenvolvimento, menu, snap, renderização, Explorador e Player — 27/10/2026
+## Recuperação, menu, snap, renderização, Explorador e Player — 27/10/2026
 
 Commits publicados (origin/main confirmado):
 

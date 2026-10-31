@@ -113,8 +113,8 @@ See [Architecture](docs/ARCHITECTURE.md) for targets and remaining coupling.
 
 ## ATLAS + TURBO
 
-LINBLUX includes local maintenance tools for developers and terminal-capable
-agents, independent of any external service provider. **ATLAS** indexes repository structure and
+LINBLUX includes local maintenance tools accessible from the terminal.
+**ATLAS** indexes repository structure and
 finds files, symbols and possible bug causes, suggests evidence-based hypotheses
 and reports impact. Its textual relationships do not prove runtime calls or
 automatically fix bugs.

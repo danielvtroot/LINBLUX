@@ -50,7 +50,7 @@ tools/backup/install-service.sh
 O instalador grava `~/.config/systemd/user/linblux-backup.service`
 (`Restart=on-failure`, `RestartSec=20`, `WantedBy=default.target`), habilita o
 serviço e instala o comando `backup-status`. O daemon roda com `python3` do
-sistema e não depende de OpenCode, desenvolvimento, desenvolvimento nem do Studio aberto.
+sistema e funciona mesmo com o Studio fechado.
 
 Sem um gerenciador systemd de usuário disponível, o instalador usa o **cron do
 próprio usuário**: uma entrada `@reboot` e um watchdog a cada minuto. Ele preserva

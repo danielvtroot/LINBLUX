@@ -126,8 +126,7 @@ Veja os targets e limites de acoplamento em [Arquitetura](docs/ARCHITECTURE.md).
 
 ## LINBLUX ATLAS + TURBO
 
-O projeto inclui ferramentas de manutenção locais, utilizáveis por desenvolvedores
-e agentes com acesso ao terminal, sem depender de um serviço externo.
+O projeto inclui ferramentas locais de manutenção, acessíveis pelo terminal.
 
 **ATLAS** indexa a estrutura do repositório, localiza arquivos, símbolos e
 possíveis causas de defeitos, sugere hipóteses com evidências e ajuda a analisar
