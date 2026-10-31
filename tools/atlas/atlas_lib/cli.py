@@ -57,7 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root", default=".", help="raiz do projeto (padrão: diretório atual)")
     parser.add_argument("--json", "-j", action="store_true", help="saída JSON estruturada")
     parser.add_argument("--quiet", "-q", action="store_true", help="silencia mensagens auxiliares")
-    parser.add_argument("--brief", action="store_true", help="saída curta, pensada para agentes de IA")
+    parser.add_argument("--brief", action="store_true", help="saída curta para uso no terminal")
     parser.add_argument("--detail", action="store_true", help="saída detalhada (padrão nos comandos de consulta)")
     parser.add_argument(
         "--io-mode",

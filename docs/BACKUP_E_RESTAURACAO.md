@@ -17,6 +17,24 @@ O GitHub protege somente os arquivos efetivamente enviados. Builds, credenciais,
 referências pessoais, logs e experiências pessoais não fazem parte desse backup remoto.
 Faça cópias externas dessas experiências e de seus pacotes `.lo`.
 
+## Verificação em 31/10/2026
+
+A comparação com a API de árvores do GitHub confirmou os mesmos 497 arquivos
+versionados e os mesmos IDs de conteúdo da main local. Builds são gerados e
+precisam ser recompilados depois de clonar. Arquivos ignorados ou não rastreados
+não estão incluídos nessa confirmação.
+
+O repositório isolado do AutoBackup tinha objetos vazios. Sete objetos foram
+recuperados da cópia principal, validando cada SHA original. A árvore e os
+462 arquivos do checkpoint anterior voltaram a ser legíveis. Após reiniciar o
+monitor, o checkpoint `a74da78cde730d6a25e6089438a8f55c106d0727` foi enviado,
+sem erro registrado. Essa reparação não equivale a uma auditoria do HDD nem a
+uma cópia externa dos dados privados.
+
+Os três relatórios não rastreados, `docs/videos/linblux.mp4`, experiências em
+`projects/`, imagens pessoais ignoradas e referências locais continuam fora da
+main. Preserve cópias privadas em outro dispositivo ou armazenamento externo.
+
 ## Rotina de sincronização
 
 1. Revise `git status`, `git diff` e arquivos novos; nunca adicione credenciais.
