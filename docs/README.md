@@ -40,7 +40,7 @@ validação e limites. A interface oficial atual é em português brasileiro.
 [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md) ·
 [Relatório da Alpha](releases/ALPHA_0_1_0_LANCAMENTO.md)
 
-[Relatórios técnicos](relatorios/) e [histórico técnico](historico/README.md) preservam decisões,
-checkpoints e resultados de suas respectivas revisões. Não são um catálogo atual
-de recursos nem prova de que testes antigos passaram nesta versão. Logs, caches
-e builds locais ficam fora do Git; nenhum histórico foi apagado nesta organização.
+[Histórico técnico](historico/README.md): três volumes temáticos, decisões e
+checkpoints de recuperação. Guias substituídos e relatórios redundantes foram
+retirados da árvore atual, com acesso aos originais pelo histórico Git.
+Esses registros não são prova de aprovação dos testes nesta versão.
