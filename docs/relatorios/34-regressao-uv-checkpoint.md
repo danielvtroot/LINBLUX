@@ -23,7 +23,7 @@ O grupo gráfico foi encerrado pelo TURBO; nenhum processo fica executando.
 
 A proposta de migração daquele teste foi guardada em
 `34-rml-migration-wip.patch`. Só alterações nossas foram restauradas no arquivo
-executável de teste para não publicar uma migração sem aprovação; WIP desenvolvimento
+executável de teste para não publicar uma migração sem aprovação; WIP
 já foi preservado e publicado em4e28879. Retomar com:
 
 ```sh

@@ -620,7 +620,7 @@ void TestGizmoLayout() {
     for(bool local:{false,true})for(float width:{2.f,191.f}){
         part.setTransform({{0,5,0},QuatFromEulerDegrees({0,25,0}),{width,10,1}});
         camera.setOrbit(part.position(),20,.95f,.2f);const auto initial=part.transform();
-        Gizmo move;move.setFaceMove(true);move.setLocalSpace(local);move.setSnap(1,.5f,15);
+        Gizmo move;move.setFaceMove(true);move.setPlanarHandles(true);CHECK(move.faceMove());move.setLocalSpace(local);move.setSnap(1,.5f,15);
         const auto surface=Build(part,ToolMode::Scale,camera,viewport,true);
         const auto hit=FaceUnderCursor(surface,{683,384});CHECK(hit.index>=0);
         GizmoInput press;press.mousePosition={683,384};press.leftPressed=press.leftDown=true;
@@ -1050,7 +1050,7 @@ void TestLuaDeclarativeSceneRoundTrip() {
 
     const std::string text = scenelua::toLua(source);
     CHECK(text.find("format = \"loblox-scene\"") != std::string::npos);
-    CHECK(text.find("Lua Part") != std::string::npos);
+    CHECK(text.find("LuaPart") != std::string::npos);
     Scene loaded;
     loaded.buildDefaultScene();
     std::string error;
@@ -1060,7 +1060,7 @@ void TestLuaDeclarativeSceneRoundTrip() {
     const Part* copy = loaded.findPart(part->id());
     CHECK(copy != nullptr);
     if (copy != nullptr) {
-        CHECK_STR(copy->name(), "Lua Part");
+        CHECK_STR(copy->name(), "LuaPart");
         CHECK(copy->instanceClass() == InstanceClass::Part);
         CHECK(NearlyEqual(copy->position(), part->position()));
         CHECK(NearlyEqual(copy->size(), part->size()));

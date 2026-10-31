@@ -2,7 +2,9 @@
 
 Repositório oficial: https://github.com/danielvtroot/LINBLUX (main).
 O remoto `legacy` preserva o endereço anterior. A união dos históricos é um merge
-normal: nenhum commit anterior foi descartado e não se utiliza push forçado.
+normal. Em 31/10/2026, mensagens de commits foram revisadas com preservação
+dos arquivos, autores e datas. Essa revisão mudou hashes; referências antigas
+em relatórios históricos podem apontar para os identificadores anteriores.
 
 Antes da migração em 24/10/2026 foi criado e verificado com `git bundle verify`
 um backup em `/tmp/linblux-backup-20261024-205533`: `history.bundle`, cópia do

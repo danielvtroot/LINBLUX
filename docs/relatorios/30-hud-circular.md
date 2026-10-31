@@ -19,7 +19,7 @@ Logs/capturas em .turbo/logs e build-linblux/.turbo/logs, ignorados.
 Limites: a regressão integral ainda precisa atualizar os seletores de testes
 históricos que exigiam a antiga barra RML. Não executar esses testes como se a
 expectativa visual antiga ainda fosse requisito do produto. Release ainda
-bloqueada por menu/Demo/pacote e validação final. Trabalho desenvolvimento de combate
+bloqueada por menu/Demo/pacote e validação final. Trabalho de combate
 preservado fora do commit deste HUD, snapshot em .turbo/recovery-final e
 AutoBackup remoto eed462f8f1d3 confirmado no início.
 

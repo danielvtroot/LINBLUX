@@ -140,3 +140,43 @@ python3 tools/atlas/atlas.py docs
 
 Registre data, hardware, versão do Python/SQLite e desvios. Não edite os números
 sem uma nova execução.
+
+## ATLAS 2.0 — medições de 30 de outubro de 2026
+
+Índice real reconstruído com **423 arquivos** (4.455 símbolos, 1.279 relações,
+44 targets, 64 testes), banco de 7.503.872 bytes.
+
+| Operação | Antes (auditoria) | Depois |
+| --- | ---: | ---: |
+| `update` sem alterações (cache quente) | ~930 ms | 98–101 ms |
+| `locate` | 60–150 ms | 98–110 ms |
+| `symbol` | ~70 ms | 65–69 ms |
+| `tests-for` | ~70 ms | 66–67 ms |
+| `impact` | ~90 ms | 68–74 ms |
+| `diagnose` (novo) | inexistente | 115–227 ms |
+| `doctor` | ~200 ms | 237 ms |
+| `verify` | ~250 ms | 265–276 ms |
+
+Cada linha é o mínimo/mediana de 3 execuções da CLI completa (processo novo,
+cache de disco aquecido), medidas com `time.time()` em Python.
+
+`bench --iterations 3` (cópia isolada em `.atlas/atlas-bench-*`):
+
+| Métrica | Valor |
+| --- | ---: |
+| Indexação completa | 2.923,8 ms |
+| Update de 1 arquivo | 310,6 ms |
+| Update de 5 arquivos | 334,7 ms |
+| Consulta — média (36) | 73,6 ms |
+| Consulta — máxima | 106,6 ms |
+| Pico de RSS | 35.908 KiB |
+| Banco SQLite | 7.503.872 bytes |
+| Caracteres ATLAS / arquivos candidatos | 15.576 / 114.710 (0,136) |
+
+Saída de `diagnose` nos 8 sintomas da auditoria: 994–1.094 caracteres de texto
+humano, contra 1.907 caracteres antes do limite `--max-chars` padrão.
+
+O caminho rápido do `update` não lê arquivo inalterado (`bytes_read = 0`); um
+arquivo só é lido quando `size`, `mtime_ns` ou `ctime_ns` mudam, e o SHA-256
+decide se o conteúdo mudou de fato. A varredura de metadados dos 423 arquivos
+continua sendo o custo dominante.

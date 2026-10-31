@@ -135,4 +135,16 @@
 #pause .control-row { padding: 10px 0; }
 #pause .control-row kbd { width: 115px; min-width: 115px; }
 #pause .primary { background-color: #ba2838; }
-#master-volume { width: 95%; height: 26px; }
+/* Camera and audio share the same RmlUi range widget and visual language. */
+.slider-control { display: flex; align-items: center; }
+.slider-value { width: 56px; flex-shrink: 0; text-align: right; font-size: 15px; }
+.slider-control input:disabled sliderbar { background-color: #777c85; }
+.slider-control input:disabled sliderprogress { background-color: #696e77; }
+.slider-control input:focus sliderbar { border-color: #d7263f; }
+.audio-grid .audio-card { width: 304px; flex-shrink: 0; min-height: 200px; padding: 14px; }
+.audio-card-header .audio-name { font-size: 14px; white-space: normal; }
+.audio-meta { font-size: 12px; white-space: normal; line-height: 1.4; }
+.audio-inline.slider-control { height: 38px; font-size: 12px; }
+.audio-inline.slider-control input[type=range] { height: 28px; min-width: 80px; }
+.music-field .slider-control { width: 100%; }
+#master-mute { min-width: 140px; height: 36px; }

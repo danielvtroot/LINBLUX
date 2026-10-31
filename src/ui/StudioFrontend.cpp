@@ -52,7 +52,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     Rml::Context* context=nullptr;Rml::ElementDocument* document=nullptr;
     Rectangle view{},advancedRect{};float left=204,right=292,bottom=330,propertySplit=.52f,dpi=1;
     std::string tab="Home",advanced,search,page="game",dialog,focusValue,split,propertySearch;
-    bool pauseWasOpen=false;float menuProgress=0;
+    bool pauseWasOpen=false;float menuProgress=0;float masterVolume=1.f,lastAudibleVolume=1.f;
     std::string selectedRigDecal,selectedDecalRig;
     std::string tooltip;double tooltipSince=0;bool contextOpen=false;
     std::string treeMarkup,propertyMarkup,ribbonMarkup,advancedMarkup,documentMarkup;size_t treeHash=0;
@@ -169,7 +169,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         rect("toolbox",{0,panelTop,left,usable});rect("explorer",{float(w)-right,panelTop,right,exHeight});
         rect("properties",{float(w)-right,ui.showExplorer_?panelTop+5+exHeight:panelTop,right,ui.showExplorer_?usable-exHeight-5:usable});
         style("toolbox-content","height",Num(usable-94)+"px");
-        style("tree","height",Num(exHeight-63)+"px");
+        style("tree","height",Num(exHeight-91)+"px");
         const float propHeight=ui.showExplorer_?usable-exHeight-5:usable;
         style("property-body","height",Num(std::max(30.f,propHeight-91))+"px");
         rect("left-divider",{left,panelTop,5,usable});display("left-divider",ui.showToolbox_);
@@ -251,6 +251,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         text("viewport-hint",ui.activeDocument_==0?"RMB + WASD · Q / E":"Ctrl+S save · Ctrl+W close");
     }
     void prompt(const std::string& kind) {
+        display("dialog-confirm",true);
         if(auto* confirm=el("dialog-confirm")){confirm->SetClass("image-locked",false);confirm->RemoveAttribute("disabled");}
         if(experiences&&kind=="import-image"){experiences->chooseAsset();return;}
         if(experiences&&kind=="open"){experiences->enqueue("import");return;}
@@ -296,7 +297,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             text("player-setting-error","");
         }catch(const std::exception& e){text("player-setting-error",e.what());}
     }
-    void commit(Rml::Element* e) {
+    void commit(Rml::Element* e,const std::string* changedValue=nullptr) {
         if(!e)return;
         if(e->GetId().rfind("image-query",0)==0){imageQuery=value(e);propertyMarkup.clear();advancedMarkup.clear();return;}
         if(e->GetId()=="audio-search"){audioQuery=value(e);advancedMarkup.clear();return;}
@@ -316,8 +317,8 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             return;
         }
         const auto action=attr(e,"data-action"),property=attr(e,"data-property"),setting=attr(e,"data-setting");
-        std::string v=value(e);if(attr(e,"type")=="checkbox")v=e->HasAttribute("checked")?"true":"false";
-        if(action=="player-volume"){if(!ui.gameMenuOpen()||!IsAudioDeviceReady())return;try{SetMasterVolume(std::clamp(std::stof(v),0.f,1.f));}catch(...){}return;}
+        std::string v=changedValue?*changedValue:value(e);if(attr(e,"type")=="checkbox")v=e->HasAttribute("checked")?"true":"false";
+        if(action=="player-volume"){if(!ui.gameMenuOpen()||!IsAudioDeviceReady())return;try{size_t used=0;const float volume=std::stof(v,&used);if(used==v.size()&&std::isfinite(volume)){masterVolume=std::clamp(volume,0.f,1.f);SetMasterVolume(masterVolume);}}catch(...){}return;}
         if(action=="choose-material"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
         if(!property.empty())commands.push_back({"property:"+property,v,e->GetAttribute<InstanceId>("data-node",0)});
         else if(!action.empty())commands.push_back({action,v});
@@ -339,7 +340,12 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(target->GetId()=="tool-search"||target->GetId()=="tool-category") {filterTools();return;}
             if(target->GetId().rfind("image-query",0)==0) {imageQuery=value(target);propertyMarkup.clear();advancedMarkup.clear();return;}
             if(target->GetId()=="audio-search") {audioQuery=value(target);advancedMarkup.clear();return;}
-            if(attr(target,"type")=="checkbox"||target->GetTagName()=="select"||attr(target,"type")=="range")commit(target);
+            if(attr(target,"type")=="range") {
+                // RmlUi dispatches Change before updating the value attribute.
+                // Consume the event value, never the preceding thumb position.
+                const auto changed=Num(event.GetParameter<float>("value",0.f));
+                commit(target,&changed);
+            } else if(attr(target,"type")=="checkbox"||target->GetTagName()=="select")commit(target);
             if(target->GetId()=="prop-Item.Prototype"){focusValue=value(target);target->Blur();propertyMarkup.clear();}
             return;
         }
@@ -360,6 +366,14 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         }
         if(type=="contextmenu")return;
         if(type!="click"||dragging)return;
+        if(auto* button=ancestor(target,"data-action");button&&attr(button,"data-action")=="player-mute") {
+            if(ui.gameMenuOpen()&&IsAudioDeviceReady()) {
+                const float current=GetMasterVolume();
+                if(current>0)lastAudibleVolume=current;
+                SetMasterVolume(current>0?0.f:lastAudibleVolume);
+            }
+            return;
+        }
         if(auto* row=ancestor(target,"data-rig-body")) {
             if(ui.runtime_.active())return;
             ui.selectRig(attr(row,"data-rig"),row->GetAttribute<int>("data-rig-body",-1));
@@ -395,6 +409,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(!button) {if(auto* row=ancestor(target,"data-node-row"))commands.push_back({"select",ImGui::GetIO().KeyCtrl?"toggle":"",row->GetAttribute<InstanceId>("data-node-row",0)});return;}
         if(button->GetTagName()=="input"||button->GetTagName()=="select")return;
         const auto action=attr(button,"data-action"),v=attr(button,"data-value");
+        if(!dialogOpen)display("dialog-confirm",true);
         if(action=="rig-decal-add"||action=="rig-decal-delete"||
             (action=="apply-image"&&!ui.scene_.selection()&&ui.selectedRigBody_>=0)) {
             if(ui.runtime_.active())return;
@@ -413,6 +428,26 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             contextOpen=false;display("context-menu",false);return;
         }
         if(contextOpen&&button->GetParentNode()==el("context-menu")){display("context-menu",false);contextOpen=false;}
+        if(action=="normalization-preview") {
+            if(ui.runtime_.active()){ui.setStatus("Abra a prévia no modo Editar.",true);return;}
+            std::string rows;int count=0;
+            for(const auto* part:ui.scene_.parts()) {
+                const auto proposed=NewPartName(part->name());
+                if(proposed==part->name())continue;
+                bool conflict=false;
+                if(part->parent())for(const auto* sibling:part->parent()->children())
+                    if(sibling!=part&&sibling->isPart()&&NewPartName(sibling->name())==proposed)conflict=true;
+                rows+="<p>"+Escape(part->name())+" → "+Escape(proposed.empty()?"[nome inválido]":proposed)+
+                    (conflict?" <b>CONFLITO</b>":"")+"</p>";++count;
+            }
+            dialog="normalization-preview";dialogOpen=true;
+            text("dialog-title","Normalizar nomes das peças — prévia");
+            text("dialog-description","Prévia apenas: nenhuma alteração será aplicada. Referências Lua por nome podem quebrar; strings de scripts não serão substituídas. A aplicação em lote depende de cópia de segurança e recuperação segura, ainda pendentes nesta Alpha.");
+            text("dialog-error","");
+            el("appearance-controls")->SetInnerRML("<div style=\"max-height:180px;overflow:auto;\">"+(count?rows:"<p>Nenhum nome precisa de normalização.</p>")+"</div>");
+            auto* field=static_cast<Rml::ElementFormControl*>(el("dialog-value"));field->SetDisabled(true);field->SetValue(std::to_string(count)+" peça(s)");
+            el("dialog-confirm")->SetAttribute("disabled","");display("dialog-confirm",false);display("dialog-overlay",true,"flex");context->GetRootElement()->Focus();return;
+        }
         if(action=="rename"){prompt("rename");return;}
         if(action=="open-dialog"||action=="save-dialog"){prompt(action=="open-dialog"?"open":"save-as");return;}
         if(action=="import-dialog"){prompt("import-image");return;}
@@ -610,8 +645,9 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(action=="color-dialog"||action=="material-dialog"){prompt(action=="color-dialog"?"color":"material");return;}
         if(action=="edit-color"){prompt("color:"+v);return;}
         if(action=="choose-color"){static_cast<Rml::ElementFormControl*>(el("dialog-value"))->SetValue(v);return;}
-        if(action=="insert-menu") {std::string menu;for(const auto& item:std::vector<std::pair<std::string,std::string>>{{"part","Part"},{"folder","Pasta"},{"model","Modelo"},{"attachment","Attachment"},{"script","Script"},{"local-script","LocalScript"},{"module","Módulo"},{"r6","Personagem R6"},{"server-storage","ServerStorage"},{"replicated-storage","ReplicatedStorage"}})menu+=Button(item.first,item.second);el("context-menu")->SetInnerRML(i18n::Markup(menu));auto b=bounds("new-object");rect("context-menu",{b.x-176,b.y+23,196,262});display("context-menu",true);contextOpen=true;return;}
+        if(action=="insert-menu") {std::string menu;for(const auto& item:std::vector<std::pair<std::string,std::string>>{{"part","Part"},{"folder","Pasta"},{"model","Modelo"},{"attachment","Attachment"},{"script","Script"},{"local-script","LocalScript"},{"module","Módulo"},{"r6","Personagem R6"},{"item-prototypes","Protótipos de itens"},{"server-scripts","ServerScriptService"},{"server-storage","ServerStorage"},{"replicated-storage","ReplicatedStorage"}})menu+=Button(item.first,item.second);el("context-menu")->SetInnerRML(i18n::Markup(menu));auto b=bounds("new-object");rect("context-menu",{b.x-176,b.y+23,196,322});display("context-menu",true);contextOpen=true;return;}
         if(action=="cancel-dialog") {dialogOpen=false;context->GetRootElement()->Focus();return;}
+        if(action=="confirm-dialog"&&dialog=="normalization-preview")return;
         if(action=="confirm-dialog") {const auto v=value(el("dialog-value"));const auto id=ui.scene_.selection()?ui.scene_.selection()->id():0;
             if(actions.dispatch({dialog,v,id})) {if(dialog=="import-sound"||dialog.rfind("rename-sound:",0)==0)invalidateAudio();if(dialog=="import-image"||dialog.rfind("rename-image:",0)==0||dialog.rfind("replace-image:",0)==0||dialog.rfind("delete-image:",0)==0)invalidateImages();dialogOpen=false;context->GetRootElement()->Focus();treeHash=0;}else text("dialog-error",ui.status_);return;}
         if(action=="close-advanced"){showAdvanced("");return;}
@@ -636,6 +672,9 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         for(int i=0;i<4;++i)el("cmd-tool-"+std::to_string(i))->SetClass("active",i==int(ui.tool_));
         const bool active=ui.runtime_.active();
         el("show-collision-shapes")->SetClass("active",ui.showCollisionShapes_);
+        if(auto* mode=dynamic_cast<Rml::ElementFormControl*>(el("grid-mode"));mode&&formOwner(context->GetFocusElement())!=mode){
+            const auto value=ui.gizmo_.gridMode()==gizmomath::GridMode::Absolute?"absolute":"relative";if(mode->GetValue()!=value)mode->SetValue(value);
+        }
         el("editor-edges")->SetClass("active",ui.editorGeometry_.edges);
         el("editor-edges")->SetAttribute("aria-pressed",ui.editorGeometry_.edges?"true":"false");
         if(active&&!el("play")->HasAttribute("disabled"))el("play")->SetAttribute("disabled","");else if(!active)el("play")->RemoveAttribute("disabled");
@@ -645,25 +684,47 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     void tree() {
         size_t hash=ui.scene_.objects().size()+size_t(ui.scene_.selection()?ui.scene_.selection()->id():0)*399;
         for(auto id:ui.scene_.selectedIds())hash=hash*399+id;
-        for(const auto& n:ui.scene_.objects())hash^=std::hash<std::string>{}(n->name())+(n->id()*911)+(n->parent()?n->parent()->id()*235:0);
+        for(const auto& n:ui.scene_.objects()) {
+            hash^=std::hash<std::string>{}(n->name())+(n->id()*911)+(n->parent()?n->parent()->id()*235:0);
+            const auto it=n->attributes().find("_linblux_item_prototype");
+            if(it!=n->attributes().end())if(const auto* flag=std::get_if<bool>(&it->second);flag&&*flag)hash^=n->id()*6971+0x57a1;
+        }
         for(const auto& rig:ui.scene_.gameAssets().rigs) {
             hash^=std::hash<std::string>{}(rig.id+rig.name+ui.selectedRig_+selectedRigDecal+std::to_string(ui.selectedRigBody_));
             for(const auto& body:rig.bodies){hash^=std::hash<std::string>{}(body.image);for(const auto& d:body.decals)hash^=std::hash<std::string>{}(d.id+d.name);}
         }
         if(treeHash==hash && hash!=0)return;
+        // Studio-only authoring defaults: persistence/runtime loading stays untouched.
+        // Run on tree invalidation so legacy opens and new documents share this path.
+        if(!ui.runtime_.active()) {
+            const auto count=ui.scene_.objects().size();
+            ui.scene_.ensureService(InstanceClass::ServerScriptService);
+            auto* storage=ui.scene_.ensureService(InstanceClass::ServerStorage);
+            ui.scene_.ensureService(InstanceClass::ReplicatedStorage);
+            bool occupied=false;
+            for(const auto* child:storage->children())if(child->name()=="Itens")occupied=true;
+            if(!occupied)if(auto* folder=ui.scene_.createContainer(InstanceClass::Folder,storage,"Itens"))folder->setName("Itens");
+            if(count!=ui.scene_.objects().size()) {
+                if(!ui.scene_.selection())ui.scene_.select(storage);
+                ui.setStatus("Serviços e ServerStorage/Itens disponíveis. Salve para persistir; nenhum arquivo foi gravado automaticamente.");
+            }
+        }
         treeHash=hash;
         std::string s;auto matches=[&](const Instance* node){std::string name=node->name()+" "+node->className(),q=search;std::transform(name.begin(),name.end(),name.begin(),::tolower);std::transform(q.begin(),q.end(),q.begin(),::tolower);return q.empty()||name.find(q)!=std::string::npos;};
         std::function<bool(const Instance*)> relevant=[&](const Instance* n){if(matches(n))return true;for(auto* c:n->children())if(relevant(c))return true;return false;};
         std::function<void(const Instance*,int)> row=[&](const Instance* node,int depth){if(!search.empty()&&!relevant(node))return;
             const auto id=std::to_string(node->id());const auto type=node->instanceClass();
-            const std::string icon=type==InstanceClass::Workspace?"workspace":type==InstanceClass::Lighting?"lighting":type==InstanceClass::Folder?"folder":type==InstanceClass::Model?"model":type==InstanceClass::ModuleScript?"module":type==InstanceClass::LocalScript?"local-script":type==InstanceClass::SpawnLocation?"spawn":IsSurfaceClass(type)?"image":IsScriptClass(type)?"script":IsRootServiceClass(type)?"storage":"part";
-            s+="<div id=\"node-"+id+"\" class=\"tree-row"+(ui.scene_.selected(node->id())?" selected":"")+"\" data-node-row=\""+id+"\" title=\""+Escape(node->name()+" · "+node->className())+"\" style=\"padding-left:"+std::to_string(3+depth*14)+"px\">";
-            if(!node->children().empty())s+="<button class=\"fold\" data-fold=\""+id+"\"><img src=\"icon-chevron-"+(collapsed.count(node->id())?"right":"down")+"\"/></button>";
+            const auto marker=node->attributes().find("_linblux_item_prototype");
+            const bool item=type==InstanceClass::Model&&marker!=node->attributes().end()&&std::get_if<bool>(&marker->second)&&std::get<bool>(marker->second);
+            const std::string icon=item?"item":type==InstanceClass::Workspace?"workspace":type==InstanceClass::Lighting?"lighting":type==InstanceClass::Folder?"folder":type==InstanceClass::Model?"model":type==InstanceClass::ModuleScript?"module":type==InstanceClass::LocalScript?"local-script":type==InstanceClass::SpawnLocation?"spawn":IsSurfaceClass(type)?"image":IsScriptClass(type)?"script":IsRootServiceClass(type)?"service":"part";
+            s+="<div id=\"node-"+id+"\" class=\"tree-row"+std::string(depth==0?" service-root":"")+(ui.scene_.selected(node->id())?" selected":"")+"\" data-node-row=\""+id+"\" title=\""+Escape(node->name()+" · "+node->className())+"\" style=\"padding-left:"+std::to_string(3+depth*12)+"px\">";
+            if(!node->children().empty())s+="<button id=\"fold-"+id+"\" class=\"fold\" data-fold=\""+id+"\"><img src=\"icon-chevron-"+(collapsed.count(node->id())?"right":"down")+"\"/></button>";
             else s+="<span class=\"leaf\"/>";
             s+="<img src=\"icon-"+icon+"\"/><span class=\"node-name\">"+Escape(node->name())+"</span></div>";
             if(!collapsed.count(node->id())||!search.empty())for(auto* c:node->children())row(c,depth+1);
         };
-        for(const auto& n:ui.scene_.objects())if(!n->parent())row(n.get(),0);
+        for(auto type:{InstanceClass::Workspace,InstanceClass::Lighting,InstanceClass::ServerScriptService,InstanceClass::ServerStorage,InstanceClass::ReplicatedStorage})
+            if(auto* service=ui.scene_.service(type))row(service,0);
         for(const auto& rig:ui.scene_.gameAssets().rigs) {
             const auto rid=Escape(rig.id);const bool active=ui.selectedRig_==rig.id;
             s+="<div id=\"rig-"+rid+"\" class=\"tree-row"+std::string(active&&ui.selectedRigBody_<0?" selected":"")+"\" data-rig=\""+rid+"\"><span class=\"leaf\"/><img src=\"icon-rig\"/><span class=\"node-name\">"+Escape(rig.name)+"</span></div>";
@@ -967,7 +1028,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             }
             const std::pair<ImGuiKey,Rml::Input::KeyIdentifier> keys[]={{ImGuiKey_Backspace,Rml::Input::KI_BACK},{ImGuiKey_Delete,Rml::Input::KI_DELETE},{ImGuiKey_LeftArrow,Rml::Input::KI_LEFT},{ImGuiKey_RightArrow,Rml::Input::KI_RIGHT},{ImGuiKey_Home,Rml::Input::KI_HOME},{ImGuiKey_End,Rml::Input::KI_END},{ImGuiKey_Tab,Rml::Input::KI_TAB},{ImGuiKey_A,Rml::Input::KI_A},{ImGuiKey_C,Rml::Input::KI_C},{ImGuiKey_V,Rml::Input::KI_V},{ImGuiKey_X,Rml::Input::KI_X},{ImGuiKey_Z,Rml::Input::KI_Z},{ImGuiKey_Y,Rml::Input::KI_Y}};
             for(auto key:keys){if(playerPaused&&key.first==ImGuiKey_Tab)continue;if(ImGui::IsKeyPressed(key.first))context->ProcessKeyDown(key.second,mods);if(ImGui::IsKeyReleased(key.first))context->ProcessKeyUp(key.second,mods);}
-            if(ImGui::IsKeyPressed(ImGuiKey_Enter,false)){if(dialogOpen) {EditorCommand c{dialog,value(el("dialog-value")),ui.scene_.selection()?ui.scene_.selection()->id():0};if(actions.dispatch(c)){if(dialog=="import-sound"||dialog.rfind("rename-sound:",0)==0)invalidateAudio();if(dialog=="import-image"||dialog.rfind("rename-image:",0)==0||dialog.rfind("replace-image:",0)==0||dialog.rfind("delete-image:",0)==0)invalidateImages();dialogOpen=false;}else text("dialog-error",ui.status_);}else {commit(focused);focusValue=value(focused);}if(auto* select=dynamic_cast<Rml::ElementFormControlSelect*>(focused))select->HideSelectBox();if(context->GetFocusElement()!=focused)focused->Focus();focused->Blur();}
+            if(ImGui::IsKeyPressed(ImGuiKey_Enter,false)){if(dialogOpen&&dialog=="normalization-preview") { /* read-only preview */ } else if(dialogOpen) {EditorCommand c{dialog,value(el("dialog-value")),ui.scene_.selection()?ui.scene_.selection()->id():0};if(actions.dispatch(c)){if(dialog=="import-sound"||dialog.rfind("rename-sound:",0)==0)invalidateAudio();if(dialog=="import-image"||dialog.rfind("rename-image:",0)==0||dialog.rfind("replace-image:",0)==0||dialog.rfind("delete-image:",0)==0)invalidateImages();dialogOpen=false;}else text("dialog-error",ui.status_);}else {commit(focused);focusValue=value(focused);}if(auto* select=dynamic_cast<Rml::ElementFormControlSelect*>(focused))select->HideSelectBox();if(context->GetFocusElement()!=focused)focused->Focus();focused->Blur();}
             if(ImGui::IsKeyPressed(ImGuiKey_Escape,false)) {
                 if(playerPaused&&attr(focused,"type")=="range") {
                     // A slider is live, not an unfinished text edit. Escape
@@ -1041,7 +1102,7 @@ if(c.action=="r6")showAdvanced("rig");
         for(const auto& sound:assets.sounds){if(sound.id==music.background)backgroundKnown=true;s+="<option value=\""+Escape(sound.id)+"\" "+(sound.id==music.background?"selected=\"selected\"":"")+">"+Escape(sound.name+" · "+sound.filename)+"</option>";}
         if(!backgroundKnown)s+="<option value=\""+Escape(music.background)+"\" selected=\"selected\">Faixa ausente · "+Escape(music.background)+"</option>";
         s+="</select></label>";
-        s+="<label class=\"music-field\"><span>Volume da música</span><input id=\"music-volume\" type=\"range\" min=\"0\" max=\"1\" step=\"0.05\" value=\""+Num(music.volume)+"\" data-action=\"music-volume\"/></label>";
+        s+="<label class=\"music-field\"><span>Volume da música</span><div class=\"slider-control\"><input id=\"music-volume\" type=\"range\" min=\"0\" max=\"1\" step=\"0.05\" value=\""+Num(music.volume)+"\" data-action=\"music-volume\"/><span class=\"slider-value\" id=\"music-level\">"+std::to_string(int(std::round(music.volume*100)))+"%</span></div></label>";
         s+="<label class=\"music-field\"><span>Repetir fundo</span><input id=\"music-loop\" type=\"checkbox\" data-action=\"music-loop\" "+(music.loop?std::string("checked=\"checked\""):std::string())+"/></label>";
         s+="<label class=\"music-field\"><span>Repetir playlist</span><input id=\"music-repeat\" type=\"checkbox\" data-action=\"music-repeat\" "+(music.repeat?std::string("checked=\"checked\""):std::string())+"/></label>";
         s+="</div><div class=\"playlist\"><div class=\"playlist-heading\"><b>Playlist</b><span>"+std::to_string(music.playlist.size())+" faixa(s) · uma por vez</span></div>";
@@ -1071,7 +1132,7 @@ if(c.action=="r6")showAdvanced("rig");
             s+="<div id=\"audio-card-"+Escape(sound.id)+"\" class=\"audio-card\"><div class=\"audio-card-header\"><span class=\"audio-name\" title=\""+Escape(sound.name)+"\">"+Escape(sound.name)+"</span><span class=\"audio-kind"+(isMusic?" music":"")+"\">"+std::string(isMusic?"MÚSICA":"SOM")+"</span></div>";
             s+="<span class=\"audio-meta\">"+Escape(sound.filename)+" · "+(sound.durationSeconds>0?Num(float(sound.durationSeconds))+" s":"duração desconhecida")+" · "+std::to_string(uses)+" uso(s)</span>";
             if(missing)s+="<span class=\"audio-meta audio-missing\">Arquivo ausente: importe novamente ou remova da biblioteca.</span>";
-            s+="<label class=\"audio-inline\"><span>Volume</span><input id=\"audio-volume-"+Escape(sound.id)+"\" type=\"range\" min=\"0\" max=\"1\" step=\"0.05\" value=\""+Num(sound.volume)+"\" data-action=\"sound-volume:"+Escape(sound.id)+"\"/></label>";
+            s+="<label class=\"audio-inline slider-control\"><span>Volume</span><input id=\"audio-volume-"+Escape(sound.id)+"\" type=\"range\" min=\"0\" max=\"1\" step=\"0.05\" value=\""+Num(sound.volume)+"\" data-action=\"sound-volume:"+Escape(sound.id)+"\"/><span class=\"slider-value\" id=\"audio-level-"+Escape(sound.id)+"\">"+std::to_string(int(std::round(sound.volume*100)))+"%</span></label>";
             s+="<label class=\"audio-inline\"><span>Repetir</span><input id=\"audio-loop-"+Escape(sound.id)+"\" type=\"checkbox\" data-action=\"sound-loop:"+Escape(sound.id)+"\" "+(sound.loop?"checked=\"checked\"":"")+"/></label>";
             s+="<label class=\"audio-inline\"><span>Tipo</span><select id=\"audio-kind-"+Escape(sound.id)+"\" data-action=\"sound-kind:"+Escape(sound.id)+"\"><option value=\"sound\" "+(isMusic?"":"selected=\"selected\"")+">Som</option><option value=\"music\" "+(isMusic?"selected=\"selected\"":"")+">Música</option></select></label>";
             s+="<div class=\"audio-actions\">";
@@ -1105,8 +1166,15 @@ if(c.action=="r6")showAdvanced("rig");
     void commonAdvanced() {
         const bool common=advanced=="settings"||advanced=="assets"||advanced=="audio";
         display("advanced-content",common);if(!common)return;
+        if(advanced=="audio") {
+            // Keep the existing DOM during editing, but update live readouts.
+            for(const auto& sound:ui.scene_.gameAssets().sounds)
+                text("audio-level-"+sound.id,std::to_string(int(std::round(sound.volume*100)))+"%");
+            text("music-level",std::to_string(int(std::round(ui.scene_.gameAssets().music.volume*100)))+"%");
+            if(!editing()&&!ImGui::IsMouseDown(0))audioPanel();
+            return;
+        }
         if(editing()||ImGui::IsMouseDown(0))return;
-        if(advanced=="audio"){audioPanel();return;}
         std::string s;
         if(advanced=="settings") {
             const auto& a=ui.scene_.gameAssets();const auto& p=a.player;
@@ -1185,8 +1253,22 @@ if(c.action=="r6")showAdvanced("rig");
         const float health=ui.runtime_.health(),maximum=std::max(1.f,ui.runtime_.settings().maxHealth);
         char s[64];std::snprintf(s,sizeof(s),"%.0f / %.0f",health,maximum);text("pause-health",s);
         text("pause-experience",ui.experienceUi_?ui.experienceUi_->documentTitle():std::filesystem::path(ui.projectPath_).stem().string());
-        if(IsAudioDeviceReady())el("master-volume")->RemoveAttribute("disabled");else el("master-volume")->SetAttribute("disabled","");
-        text("master-volume-label",IsAudioDeviceReady()?std::to_string(int(GetMasterVolume()*100))+"%":"Dispositivo de áudio indisponível nesta sessão.");
+        if(IsAudioDeviceReady()) {
+            el("master-volume")->RemoveAttribute("disabled");
+            masterVolume=GetMasterVolume();
+            if(masterVolume>0)lastAudibleVolume=masterVolume;
+            el("master-mute")->RemoveAttribute("disabled");
+            text("master-mute",masterVolume>0?"Silenciar":"Restaurar som");
+            text("audio-device-status","");
+            text("master-volume-label",std::to_string(int(masterVolume*100))+"%");
+        } else {
+            el("master-volume")->SetAttribute("disabled","");
+            text("master-volume-label","—");
+            el("master-mute")->SetAttribute("disabled","");
+            text("audio-device-status","Dispositivo de áudio indisponível nesta sessão.");
+        }
+        auto* volume=dynamic_cast<Rml::ElementFormControl*>(el("master-volume"));
+        if(volume&&formOwner(context->GetFocusElement())!=volume) {const auto value=Num(masterVolume);if(volume->GetValue()!=value)volume->SetValue(value);}
         text("player-name",ui.runtime_.rig().name);text("map-name",std::filesystem::path(ui.projectPath_).filename().string());
         text("session-state",ui.runtime_.state()==game::RuntimeState::Paused?"Simulação pausada explicitamente":"Simulação em andamento");
         if(paused) {
@@ -1294,7 +1376,13 @@ void StudioFrontend::draw() {
         const auto mode=p.ui.renderer_.antialiasing();const std::string value=mode==Antialiasing::None?"off":mode==Antialiasing::FXAA?"fxaa":mode==Antialiasing::MSAA4?"msaa4":"auto";
         if(aa->GetValue()!=value)aa->SetValue(value);
     }
-    if(auto* planes=p.el("move-planes")){if(p.ui.gizmo_.planarHandles())planes->SetAttribute("checked","");else planes->RemoveAttribute("checked");}
+    if(auto* place=p.el("place-surface"))place->SetClass("active",p.ui.placement_.active());
+    if(auto* assembly=dynamic_cast<Rml::ElementFormControl*>(p.el("assembly"));assembly&&p.formOwner(p.context->GetFocusElement())!=assembly)assembly->SetValue("none");
+    if(auto* planes=p.el("move-planes")){
+        // Pivot planes belong to rig editing; never switch Part/Model Move away from faces.
+        planes->GetParentNode()->SetProperty("display",p.ui.selectedRig_.empty()?"none":"flex");
+        if(p.ui.rigGizmo_.planarHandles())planes->SetAttribute("checked","");else planes->RemoveAttribute("checked");
+    }
     if(auto* scale=dynamic_cast<Rml::ElementFormControl*>(p.el("scale-origin"));scale&&p.formOwner(p.context->GetFocusElement())!=scale){
         const std::string value=p.ui.gizmo_.centeredScaleOption()?"center":"face";if(scale->GetValue()!=value)scale->SetValue(value);
     }

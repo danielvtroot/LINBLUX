@@ -15,8 +15,8 @@ from .indexer import index_repository
 from .search import locate
 
 
-def write_generated_docs(root: Path) -> dict:
-    conn = open_db(root)
+def write_generated_docs(root: Path, policy=None) -> dict:
+    conn = open_db(root, policy=policy)
     counts = table_counts(conn)
     modules = [dict(row) for row in conn.execute(
         "SELECT module,COUNT(*) AS files,SUM(line_count) AS lines FROM files "
@@ -95,13 +95,13 @@ def _copy_indexable(source: Path, target: Path) -> int:
     return copied
 
 
-def benchmark(root: Path, iterations: int = 5) -> dict:
+def benchmark(root: Path, iterations: int = 5, policy=None) -> dict:
     iterations = max(1, min(iterations, 20))
     work = Path(tempfile.mkdtemp(prefix="atlas-bench-", dir=root / ".atlas"))
     try:
         copied = _copy_indexable(root, work)
         start = time.perf_counter()
-        first = index_repository(work, force=True, quiet=True)
+        first = index_repository(work, force=True, quiet=True, policy=policy)
         initial_ms = (time.perf_counter() - start) * 1000
         editable = sorted(
             path for path in work.rglob("*")
@@ -111,14 +111,14 @@ def benchmark(root: Path, iterations: int = 5) -> dict:
             raise RuntimeError("nenhum arquivo editável para o benchmark")
         editable[0].write_text(editable[0].read_text(encoding="utf-8") + "\n// atlas bench\n", encoding="utf-8")
         start = time.perf_counter()
-        index_repository(work, quiet=True)
+        index_repository(work, quiet=True, policy=policy)
         one_ms = (time.perf_counter() - start) * 1000
         for path in editable[1:6]:
             path.write_text(path.read_text(encoding="utf-8") + "\n// atlas bench multi\n", encoding="utf-8")
         start = time.perf_counter()
-        index_repository(work, quiet=True)
+        index_repository(work, quiet=True, policy=policy)
         five_ms = (time.perf_counter() - start) * 1000
-        conn = open_db(work)
+        conn = open_db(work, policy=policy)
         counts = table_counts(conn)
         db_bytes = sum(
             path.stat().st_size
@@ -140,7 +140,7 @@ def benchmark(root: Path, iterations: int = 5) -> dict:
         total_ms = (time.perf_counter() - start_all) * 1000
         conn.close()
         peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        real_conn = open_db(root)
+        real_conn = open_db(root, policy=policy)
         real_result = locate(root, real_conn, "camera personagem", limit=5)
         baseline_chars = 0
         for candidate in real_result.get("candidates", [])[:3]:
@@ -191,15 +191,18 @@ def _eval_questions(root: Path) -> list[dict]:
     return [item for item in data if isinstance(item, dict) and item.get("query")]
 
 
-def evaluate(root: Path) -> dict:
+def evaluate(root: Path, policy=None) -> dict:
     questions = _eval_questions(root)
     if not questions:
         return {"ok": False, "error": "tools/atlas/data/eval_questions.json ausente ou vazio"}
-    conn = open_db(root)
+    conn = open_db(root, policy=policy)
     rows = []
     top1 = top3 = module_any = symbol_hits = 0
+    file_hits = {1: 0, 3: 0, 5: 0}
+    file_mrr = 0.0
+    file_evaluated = 0
     for item in questions:
-        result = locate(root, conn, item["query"], limit=6)
+        result = locate(root, conn, item["query"], limit=10)
         candidates = result.get("candidates", [])
         modules = [candidate["module"] for candidate in candidates]
         symbols = []
@@ -232,6 +235,19 @@ def evaluate(root: Path) -> dict:
             module_any += 1
         if symbol_rank:
             symbol_hits += 1
+        expected_files = set(item.get("expect_files", []))
+        returned_files = [entry["path"] for entry in result.get("files", [])]
+        file_rank = next(
+            (index + 1 for index, path in enumerate(returned_files) if path in expected_files),
+            None,
+        )
+        if expected_files:
+            file_evaluated += 1
+            for cutoff in file_hits:
+                if file_rank and file_rank <= cutoff:
+                    file_hits[cutoff] += 1
+            if file_rank:
+                file_mrr += 1.0 / file_rank
         rows.append({
             "id": item.get("id"),
             "query": item["query"],
@@ -240,10 +256,14 @@ def evaluate(root: Path) -> dict:
             "module_rank": rank,
             "expected_symbols": sorted(expected_symbols),
             "symbol_rank": symbol_rank,
+            "expected_files": sorted(expected_files),
+            "returned_files": returned_files[:5],
+            "file_rank": file_rank,
             "confidence": result.get("confidence"),
         })
     conn.close()
     total = len(questions)
+    file_total = file_evaluated or 0
     return {
         "ok": True,
         "total": total,
@@ -255,7 +275,22 @@ def evaluate(root: Path) -> dict:
         "top3_rate": round(top3 / total, 4),
         "module_hit_rate": round(module_any / total, 4),
         "symbol_hit_rate": round(symbol_hits / total, 4),
+        "file_evaluated": file_total,
+        "file_r1": file_hits[1],
+        "file_r3": file_hits[3],
+        "file_r5": file_hits[5],
+        "file_r1_rate": round(file_hits[1] / file_total, 4) if file_total else 0.0,
+        "file_r3_rate": round(file_hits[3] / file_total, 4) if file_total else 0.0,
+        "file_r5_rate": round(file_hits[5] / file_total, 4) if file_total else 0.0,
+        "file_mrr": round(file_mrr / file_total, 4) if file_total else 0.0,
         "questions": rows,
-        "method": "ranking determinístico do locate; módulo esperado definido manualmente",
-        "limitations": ["amostra pequena e mantida manualmente; não representa precisão universal"],
+        "method": (
+            "ranking determinístico do locate; módulo e arquivo esperados definidos "
+            "manualmente e verificados contra o índice"
+        ),
+        "limitations": [
+            "amostra mantida manualmente; não representa precisão universal",
+            "Recall/MRR de arquivo só conta perguntas com expect_files",
+            "os arquivos esperados são relacionados verificados, não causas comprovadas",
+        ],
     }

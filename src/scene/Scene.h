@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "objects/Baseplate.h"
@@ -102,7 +103,11 @@ public:
     Part* findPart(InstanceId id) const;
 
     const std::vector<std::unique_ptr<Instance>>& objects() const { return objects_; }
-    const std::vector<Part*>& parts() const { return parts_; }
+    const std::vector<Part*>& parts() const { return parts_; } // all authored Parts, including storage
+    const std::vector<Part*>& worldParts() const;
+    bool isWorldObject(const Instance* object) const;
+    bool isStored(const Instance* object) const;
+    void addHierarchyListener(std::function<void()> listener) { hierarchyListeners_.push_back(std::move(listener)); }
     game::GameAssets& gameAssets() { return gameAssets_; }
     const game::GameAssets& gameAssets() const { return gameAssets_; }
     std::vector<NpcVisual>& npcVisuals() { return npcVisuals_; }
@@ -139,6 +144,10 @@ private:
 
     std::vector<std::unique_ptr<Instance>> objects_;
     std::vector<Part*> parts_;
+    mutable bool worldDirty_=true;
+    mutable std::vector<Part*> worldParts_;
+    mutable std::unordered_set<InstanceId> worldNodes_;
+    std::vector<std::function<void()>> hierarchyListeners_;
     std::unordered_map<InstanceId, Instance*> byId_;
     std::vector<RemovalListener> removalListeners_;
     Workspace* workspace_ = nullptr;

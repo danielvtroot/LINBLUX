@@ -6,10 +6,13 @@ import json
 import unicodedata
 from pathlib import Path
 
+from . import INDEX_SCHEMA_VERSION
+
 CACHE_DIR = ".atlas"
 DB_NAME = "index.sqlite"
 CONFIG_NAME = "config.json"
-INDEX_VERSION = 1
+# Single source of truth for the on-disk schema lives in atlas_lib/__init__.py.
+INDEX_VERSION = INDEX_SCHEMA_VERSION
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_FTS_CHARS = 400_000
 
@@ -54,13 +57,18 @@ SEARCHABLE_JSON_PREFIXES = (
     "tools/atlas/data/",
 )
 
-# The controlled ATLAS fixture is copied into an isolated root by tests. It must
-# never leak fake targets/symbols into the real project inventory.
-IGNORED_PREFIXES = ("tests/atlas/fixture/",)
+# Prefixes never indexed. The ATLAS fixture is copied into an isolated root by
+# tests and must not leak fake targets into the real inventory. Keep optional
+# local prototype experiments excluded even after removing the obsolete stub.
+IGNORED_PREFIXES = (
+    "tests/atlas/fixture/",
+    "prototype/",
+)
 
 IGNORED_DIRS = {
     ".git",
     ".atlas",
+    ".turbo",
     ".cache",
     "cache",
     "build",

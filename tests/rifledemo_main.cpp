@@ -59,7 +59,7 @@ int main() {
         std::string error;
         require(projectio::load(world, (demo / "world.loblox.json").string(), error), "load: " + error);
 
-        require(world.findPart(18)&&attributeFlag(*world.findPart(18),"decal_flip_u"),"demo lost explicit UV orientation");
+        require(world.findPart(18)&&!attributeFlag(*world.findPart(18),"decal_flip_u"),"demo voltou a depender do workaround de UV");
         const auto authored=projectio::toJson(world);
         game::RuntimeSession runtime;
         require(runtime.start(world, error), "start: " + error);
@@ -69,7 +69,7 @@ int main() {
         step(12, {});
         require(runtime.scripts().errorCount() == 0, "startup errors:\n" + scriptErrors(runtime));
 
-        InstanceId guide=0;for(const auto& object:runtime.scene().objects())if(object->name()=="Guia LINBLUX")guide=object->id();
+        InstanceId guide=0;for(const auto& object:runtime.scene().objects())if(object->name()=="GuiaLINBLUX")guide=object->id();
         require(guide&&!runtime.npcs().rig(guide).empty(),"demo lost animated guide rig");
         const auto guideStart=runtime.scene().findPart(guide)->position();step(60,{});
         require(Vector3Distance(guideStart,runtime.scene().findPart(guide)->position())>.5f,"guide did not patrol: state="+std::string(game::NpcStateName(runtime.npcs().state(guide)))+" path="+std::to_string(runtime.npcs().path(guide).size())+" Lua="+scriptErrors(runtime));
@@ -178,7 +178,7 @@ int main() {
         library.exportPackage(installed,temporary/"RifleDemo.lo");
         experiences::ExperienceManager restored(temporary/"restored",{},temporary/"defaults2");
         const auto imported=restored.importPackage(temporary/"RifleDemo.lo");Scene reopened;restored.open(imported,reopened);
-        require(reopened.findPart(18)&&attributeFlag(*reopened.findPart(18),"decal_flip_u"),"package lost UV orientation");
+        require(reopened.findPart(18)&&!attributeFlag(*reopened.findPart(18),"decal_flip_u"),"package reintroduziu o workaround de UV");
         require(runtime.start(reopened,error),"package start: "+error);step(120,{});
         require(runtime.scripts().errorCount()==0,"package lost scripts/resources: "+scriptErrors(runtime));
         require(runtime.inventory().worldItems().size()==1,"package lost item prototype");

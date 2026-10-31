@@ -1,3 +1,6 @@
+> Checkpoint histórico de 24/10/2026. Instruções de execução e pendências abaixo
+> valem para aquela revisão. Use hoje [Testes](../TESTING.md) e [Alpha](../ALPHA_0_1_0.md).
+
 # Continuidade — 24/10/2026
 
 Pausa solicitada pelo responsável por limite de créditos. Não declarar a missão
@@ -56,7 +59,7 @@ Não substituir este checkout por clone vazio, não usar reset --hard/force push
 Históricos foram unidos por merge. Backups verificados ficam em
 `/home/labubu/projeto/linblux-backups` (incluindo originais movidos de /tmp).
 GitHub protege código rastreado; experiências pessoais/arquivos ignorados precisam
-backup próprio. Logo original não foi alterada. Veja relatorios/01 a 06,
+backup próprio. Logo original não foi alterada. Veja o registro MIGRACAO_LINBLUX_2026_10_24.md,
 PADROES_DA_ENGINE.md, BACKUP_E_RESTAURACAO.md e ASSETS_E_LICENCAS.md.
 
 Compilação final rápida Studio+Player: `/tmp/linblux-delivery-build.log`, sucesso.

@@ -86,10 +86,49 @@ bool IsRootServiceClass(InstanceClass type) {
         type==InstanceClass::ServerScriptService || type==InstanceClass::ServerStorage || type==InstanceClass::ReplicatedStorage;
 }
 
-void Instance::setName(const std::string& name) {
-    if (!name.empty() && name.size()<=128) {
-        name_ = name;
+namespace {
+// Unicode White_Space plus invisible separators that cannot form a useful label.
+bool White(unsigned c) {
+    return c<=32 || c==127 || c==0x85 || c==0xa0 || c==0x1680 ||
+        (c>=0x2000&&c<=0x200b) || c==0x2028 || c==0x2029 || c==0x202f || c==0x205f || c==0x3000 || c==0xfeff;
+}
+bool Next(const std::string& text,size_t& i,unsigned& c) {
+    const auto b=static_cast<unsigned char>(text[i++]);c=b;
+    if(b<128)return true;
+    const int count=b>=0xc2&&b<=0xdf?1:b>=0xe0&&b<=0xef?2:b>=0xf0&&b<=0xf4?3:-1;
+    if(count<0||i+count>text.size())return false;
+    c=b&((1u<<(6-count))-1);
+    for(int n=0;n<count;++n){const auto d=static_cast<unsigned char>(text[i++]);if((d&0xc0)!=0x80)return false;c=(c<<6)|(d&63);}
+    return c>=(count==1?0x80u:count==2?0x800u:0x10000u)&&c<=0x10ffff&&!(c>=0xd800&&c<=0xdfff);
+}
+}
+bool ValidPartName(const std::string& name) {
+    if(name.empty()||name.size()>128)return false;
+    for(size_t i=0;i<name.size();){unsigned c;if(!Next(name,i,c)||White(c))return false;}
+    return true;
+}
+std::string NewPartName(const std::string& name) {
+    if(name.size()>128)return {};
+    std::string result;bool capital=false;
+    for(size_t i=0;i<name.size();){const auto begin=i;unsigned c;if(!Next(name,i,c))return {};
+        if(c<32||c==127||c==0x85||c==0x2028||c==0x2029)return {}; // reject line breaks, including Unicode
+        if(White(c)){capital=true;continue;}
+        if(capital&&c>='a'&&c<='z')result+=char(c-'a'+'A');else result.append(name,begin,i-begin);
+        capital=false;
     }
+    return ValidPartName(result)?result:std::string{};
+}
+bool Instance::trySetName(const std::string& name,std::string& error) {
+    error.clear();
+    if(name==name_)return true; // unchanged legacy labels remain readable/saveable
+    if(isPart()&&!ValidPartName(name)) {error="Nomes de peças não podem conter espaços. Use letras, números ou _.";return false;}
+    if(name.empty()||name.size()>128){error="O nome deve conter de 1 a 128 bytes.";return false;}
+    if(isPart()&&parent_)for(const auto* sibling:parent_->children())
+        if(sibling!=this&&sibling->isPart()&&sibling->name()==name){error="Já existe uma peça com esse nome neste contêiner.";return false;}
+    name_=name;return true;
+}
+void Instance::setName(const std::string& name) {
+    std::string ignored;trySetName(name,ignored);
 }
 bool Instance::setAttribute(const std::string& name, Attribute value) {
     if (name.empty() || name.size()>64 || (!attributes_.count(name) && attributes_.size()>=64)) return false;

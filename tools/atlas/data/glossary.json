@@ -1,16 +1,15 @@
 {
   "terms": {
-    "camera": {
+    "acompanha": {
       "modules": [
         "rendering",
         "game",
         "editor"
       ],
       "symbols": [
+        "PlayerCamera",
         "EditorCamera",
-        "RuntimeSession",
-        "PlayerSettings",
-        "CameraSettings"
+        "RuntimeSession"
       ],
       "paths": [
         "src/rendering",
@@ -18,83 +17,56 @@
         "src/editor"
       ]
     },
-    "visao": {
+    "ancorada": {
       "modules": [
-        "rendering",
+        "objects",
+        "physics",
+        "scripting"
+      ],
+      "symbols": [
+        "Part",
+        "setAnchored"
+      ],
+      "paths": [
+        "src/objects"
+      ]
+    },
+    "ancorado": {
+      "modules": [
+        "objects",
+        "physics",
+        "scripting"
+      ],
+      "symbols": [
+        "Part",
+        "setAnchored"
+      ],
+      "paths": [
+        "src/objects"
+      ]
+    },
+    "ancorar": {
+      "modules": [
+        "objects",
+        "physics",
+        "scripting"
+      ],
+      "symbols": [
+        "Part",
+        "setAnchored"
+      ],
+      "paths": [
+        "src/objects"
+      ]
+    },
+    "anima": {
+      "modules": [
         "game",
         "editor"
       ],
       "symbols": [
-        "EditorCamera",
-        "Camera3D"
-      ],
-      "paths": [
-        "src/rendering",
-        "src/game"
-      ]
-    },
-    "zoom": {
-      "modules": [
-        "game",
-        "rendering"
-      ],
-      "symbols": [
-        "PlayerSettings",
-        "EditorCamera"
-      ],
-      "paths": [
-        "src/game",
-        "src/rendering"
-      ]
-    },
-    "personagem": {
-      "modules": [
-        "game",
-        "editor",
-        "experiences",
-        "serialization"
-      ],
-      "symbols": [
-        "Rig",
-        "RuntimeSession",
-        "Character",
-        "importCharacter",
-        "createLinbluxCharacter",
-        "SpawnLocation",
-        "GameAssets"
-      ],
-      "paths": [
-        "src/game",
-        "src/editor",
-        "src/experiences"
-      ]
-    },
-    "rig": {
-      "modules": [
-        "game",
-        "editor",
-        "serialization"
-      ],
-      "symbols": [
-        "Rig",
-        "RigBody",
-        "Joint",
-        "AnimationClip"
-      ],
-      "paths": [
-        "src/game",
-        "src/editor"
-      ]
-    },
-    "r6": {
-      "modules": [
-        "game",
-        "editor",
-        "defaults"
-      ],
-      "symbols": [
-        "createR6",
-        "createLinbluxCharacter"
+        "AnimationClip",
+        "drawAnimationEditor"
       ],
       "paths": [
         "src/game",
@@ -117,96 +89,133 @@
         "src/editor"
       ]
     },
-    "joint": {
+    "animation": {
       "modules": [
         "game",
-        "editor"
+        "editor",
+        "serialization"
       ],
       "symbols": [
-        "Joint",
-        "Rig",
-        "RightShoulder"
+        "AnimationClip",
+        "AnimationChoice",
+        "drawAnimationEditor"
       ],
       "paths": [
         "src/game",
         "src/editor"
       ]
     },
-    "osso": {
+    "atlas": {
       "modules": [
+        "atlas",
+        "docs",
+        "agents"
+      ],
+      "symbols": [
+        "main"
+      ],
+      "paths": [
+        "tools/atlas",
+        "docs/atlas",
+        "AGENTS.md"
+      ]
+    },
+    "audio": {
+      "modules": [
+        "rendering",
+        "game",
+        "ui"
+      ],
+      "symbols": [
+        "PlayerMenu",
+        "Audio"
+      ],
+      "paths": [
+        "src/rendering",
+        "src/game"
+      ]
+    },
+    "botao": {
+      "modules": [
+        "ui",
+        "ui-assets"
+      ],
+      "symbols": [
+        "StudioFrontend"
+      ],
+      "paths": [
+        "assets/ui",
+        "src/ui"
+      ]
+    },
+    "build": {
+      "modules": [
+        "build",
+        "docs",
+        "tests"
+      ],
+      "symbols": [
+        "linblux"
+      ],
+      "paths": [
+        "CMakeLists.txt",
+        "docs/TESTING.md"
+      ]
+    },
+    "bullet": {
+      "modules": [
+        "physics"
+      ],
+      "symbols": [
+        "PhysicsWorld"
+      ],
+      "paths": [
+        "src/physics"
+      ]
+    },
+    "cair": {
+      "modules": [
+        "physics"
+      ],
+      "symbols": [
+        "PhysicsWorld",
+        "simulate"
+      ],
+      "paths": [
+        "src/physics"
+      ]
+    },
+    "camera": {
+      "modules": [
+        "rendering",
         "game",
         "editor"
       ],
       "symbols": [
-        "Joint",
-        "Rig"
+        "EditorCamera",
+        "RuntimeSession",
+        "PlayerSettings",
+        "CameraSettings"
       ],
       "paths": [
+        "src/rendering",
         "src/game",
         "src/editor"
       ]
     },
-    "mundo": {
+    "carrega": {
       "modules": [
-        "scene",
-        "objects",
+        "game",
         "serialization",
         "experiences"
       ],
       "symbols": [
-        "Scene",
-        "Workspace",
+        "Rig",
+        "ProjectIO",
         "ExperienceManager"
       ],
       "paths": [
-        "src/scene",
-        "src/objects",
-        "src/serialization",
-        "src/experiences"
-      ]
-    },
-    "mapa": {
-      "modules": [
-        "scene",
-        "objects",
-        "serialization"
-      ],
-      "symbols": [
-        "Scene",
-        "ProjectIO"
-      ],
-      "paths": [
-        "src/scene",
-        "src/serialization"
-      ]
-    },
-    "cena": {
-      "modules": [
-        "scene",
-        "objects"
-      ],
-      "symbols": [
-        "Scene",
-        "Instance",
-        "Workspace"
-      ],
-      "paths": [
-        "src/scene",
-        "src/objects"
-      ]
-    },
-    "salvar": {
-      "modules": [
-        "serialization",
-        "experiences",
-        "editor"
-      ],
-      "symbols": [
-        "ProjectIO",
-        "ExperienceManager",
-        "saveCurrentProject"
-      ],
-      "paths": [
+        "src/game",
         "src/serialization",
         "src/experiences"
       ]
@@ -228,440 +237,19 @@
         "src/player"
       ]
     },
-    "persistencia": {
+    "cena": {
       "modules": [
-        "serialization",
-        "experiences"
-      ],
-      "symbols": [
-        "ProjectIO",
-        "ExperienceManager"
-      ],
-      "paths": [
-        "src/serialization",
-        "src/experiences"
-      ]
-    },
-    "padrao": {
-      "modules": [
-        "experiences",
-        "editor",
-        "defaults"
-      ],
-      "symbols": [
-        "ExperienceManager",
-        "saveEngineDefaults",
-        "restoreFactoryDefaults"
-      ],
-      "paths": [
-        "src/experiences",
-        "src/editor",
-        "assets/defaults"
-      ]
-    },
-    "default": {
-      "modules": [
-        "experiences",
-        "editor",
-        "defaults"
-      ],
-      "symbols": [
-        "ExperienceManager",
-        "editEngineDefault"
-      ],
-      "paths": [
-        "src/experiences",
-        "assets/defaults"
-      ]
-    },
-    "herdar": {
-      "modules": [
-        "experiences",
-        "editor"
-      ],
-      "symbols": [
-        "ExperienceManager",
-        "create"
-      ],
-      "paths": [
-        "src/experiences"
-      ]
-    },
-    "video": {
-      "modules": [
-        "media",
-        "app",
-        "ui",
-        "ui-assets"
-      ],
-      "symbols": [
-        "VideoBackground",
-        "Application"
-      ],
-      "paths": [
-        "src/media",
-        "src/app",
-        "assets/ui"
-      ]
-    },
-    "tela": {
-      "modules": [
-        "ui",
-        "ui-assets",
-        "app",
-        "media"
-      ],
-      "symbols": [
-        "StudioFrontend",
-        "Application",
-        "VideoBackground"
-      ],
-      "paths": [
-        "src/ui",
-        "assets/ui",
-        "src/app",
-        "src/media"
-      ]
-    },
-    "home": {
-      "modules": [
-        "ui",
-        "ui-assets",
-        "app"
-      ],
-      "symbols": [
-        "ExperienceUI",
-        "StudioFrontend"
-      ],
-      "paths": [
-        "src/ui",
-        "assets/ui"
-      ]
-    },
-    "interface": {
-      "modules": [
-        "ui",
-        "editor",
-        "ui-assets"
-      ],
-      "symbols": [
-        "EditorUI",
-        "StudioFrontend",
-        "ExperienceUI"
-      ],
-      "paths": [
-        "src/ui",
-        "src/editor",
-        "assets/ui"
-      ]
-    },
-    "ui": {
-      "modules": [
-        "ui",
-        "editor",
-        "ui-assets"
-      ],
-      "symbols": [
-        "EditorUI",
-        "StudioFrontend"
-      ],
-      "paths": [
-        "src/ui",
-        "src/editor",
-        "assets/ui"
-      ]
-    },
-    "rml": {
-      "modules": [
-        "ui",
-        "ui-assets"
-      ],
-      "symbols": [
-        "StudioFrontend",
-        "RmlFrontendSupport"
-      ],
-      "paths": [
-        "src/ui",
-        "assets/ui"
-      ]
-    },
-    "imgui": {
-      "modules": [
-        "editor",
-        "ui"
-      ],
-      "symbols": [
-        "EditorUI",
-        "GamePanels",
-        "StudioPanels"
-      ],
-      "paths": [
-        "src/editor",
-        "src/ui"
-      ]
-    },
-    "botao": {
-      "modules": [
-        "ui",
-        "ui-assets"
-      ],
-      "symbols": [
-        "StudioFrontend"
-      ],
-      "paths": [
-        "assets/ui",
-        "src/ui"
-      ]
-    },
-    "fisica": {
-      "modules": [
-        "physics",
-        "game"
-      ],
-      "symbols": [
-        "PhysicsWorld",
-        "RuntimeSession"
-      ],
-      "paths": [
-        "src/physics",
-        "src/game"
-      ]
-    },
-    "colisao": {
-      "modules": [
-        "physics",
-        "game"
-      ],
-      "symbols": [
-        "PhysicsWorld",
-        "RuntimeSession"
-      ],
-      "paths": [
-        "src/physics",
-        "src/game"
-      ]
-    },
-    "gravidade": {
-      "modules": [
-        "game",
-        "physics"
-      ],
-      "symbols": [
-        "PlayerSettings",
-        "RuntimeSession"
-      ],
-      "paths": [
-        "src/game",
-        "src/physics"
-      ]
-    },
-    "pulo": {
-      "modules": [
-        "game",
-        "physics"
-      ],
-      "symbols": [
-        "PlayerSettings",
-        "RuntimeSession"
-      ],
-      "paths": [
-        "src/game",
-        "src/physics"
-      ]
-    },
-    "bullet": {
-      "modules": [
-        "physics"
-      ],
-      "symbols": [
-        "PhysicsWorld"
-      ],
-      "paths": [
-        "src/physics"
-      ]
-    },
-    "script": {
-      "modules": [
-        "scripting",
-        "serialization",
-        "game"
-      ],
-      "symbols": [
-        "LuaRuntime",
-        "SceneLua",
-        "RuntimeSession"
-      ],
-      "paths": [
-        "src/scripting",
-        "src/serialization",
-        "src/game"
-      ]
-    },
-    "lua": {
-      "modules": [
-        "scripting",
-        "serialization"
-      ],
-      "symbols": [
-        "LuaRuntime",
-        "SceneLua"
-      ],
-      "paths": [
-        "src/scripting",
-        "src/serialization"
-      ]
-    },
-    "spawn": {
-      "modules": [
-        "game",
+        "scene",
         "objects"
       ],
       "symbols": [
-        "Spawn",
-        "SpawnLocation",
-        "RuntimeSession"
+        "Scene",
+        "Instance",
+        "Workspace"
       ],
       "paths": [
-        "src/game",
+        "src/scene",
         "src/objects"
-      ]
-    },
-    "nascimento": {
-      "modules": [
-        "game",
-        "objects"
-      ],
-      "symbols": [
-        "SpawnLocation",
-        "Spawn"
-      ],
-      "paths": [
-        "src/game",
-        "src/objects"
-      ]
-    },
-    "respawn": {
-      "modules": [
-        "game"
-      ],
-      "symbols": [
-        "RuntimeSession",
-        "Spawn"
-      ],
-      "paths": [
-        "src/game"
-      ]
-    },
-    "multiplayer": {
-      "modules": [
-        "docs",
-        "experiences",
-        "game"
-      ],
-      "symbols": [
-        "ExperienceManager"
-      ],
-      "paths": [
-        "docs/ROADMAP.md",
-        "docs/ARCHITECTURE.md"
-      ]
-    },
-    "servidor": {
-      "modules": [
-        "docs",
-        "experiences"
-      ],
-      "symbols": [
-        "ExperienceManager"
-      ],
-      "paths": [
-        "docs/ROADMAP.md",
-        "docs/ARCHITECTURE.md"
-      ]
-    },
-    "server": {
-      "modules": [
-        "docs",
-        "experiences"
-      ],
-      "symbols": [
-        "ExperienceManager"
-      ],
-      "paths": [
-        "docs/ROADMAP.md",
-        "docs/ARCHITECTURE.md"
-      ]
-    },
-    "importar": {
-      "modules": [
-        "experiences",
-        "editor",
-        "serialization"
-      ],
-      "symbols": [
-        "ExperienceManager",
-        "importCharacter",
-        "importPackage"
-      ],
-      "paths": [
-        "src/experiences",
-        "src/editor"
-      ]
-    },
-    "pacote": {
-      "modules": [
-        "experiences"
-      ],
-      "symbols": [
-        "ExperienceManager",
-        "importPackage",
-        "exportPackage"
-      ],
-      "paths": [
-        "src/experiences"
-      ]
-    },
-    "experiencia": {
-      "modules": [
-        "experiences",
-        "ui",
-        "editor"
-      ],
-      "symbols": [
-        "ExperienceManager",
-        "ExperienceUI"
-      ],
-      "paths": [
-        "src/experiences",
-        "src/ui"
-      ]
-    },
-    "luz": {
-      "modules": [
-        "objects",
-        "rendering"
-      ],
-      "symbols": [
-        "Lighting",
-        "SceneRenderer"
-      ],
-      "paths": [
-        "src/objects",
-        "src/rendering"
-      ]
-    },
-    "iluminacao": {
-      "modules": [
-        "objects",
-        "rendering"
-      ],
-      "symbols": [
-        "Lighting",
-        "SceneRenderer"
-      ],
-      "paths": [
-        "src/objects",
-        "src/rendering"
       ]
     },
     "ceu": {
@@ -678,128 +266,101 @@
         "src/rendering"
       ]
     },
-    "sombra": {
+    "classe": {
       "modules": [
-        "rendering",
-        "objects"
-      ],
-      "symbols": [
-        "SceneRenderer",
-        "Lighting"
-      ],
-      "paths": [
-        "src/rendering",
-        "src/objects"
-      ]
-    },
-    "imagem": {
-      "modules": [
+        "scene",
         "game",
-        "rendering",
-        "ui"
-      ],
-      "symbols": [
-        "ImageAssets",
-        "importImage",
-        "ListImages"
-      ],
-      "paths": [
-        "src/game",
-        "src/rendering",
-        "src/ui"
-      ]
-    },
-    "textura": {
-      "modules": [
-        "rendering",
-        "game"
-      ],
-      "symbols": [
-        "SceneRenderer",
-        "ImageAssets"
-      ],
-      "paths": [
-        "src/rendering",
-        "src/game"
-      ]
-    },
-    "decal": {
-      "modules": [
-        "game",
-        "rendering",
         "editor"
       ],
       "symbols": [
-        "RigDecal",
-        "SceneRenderer"
+        "Scene",
+        "RuntimeSession"
       ],
       "paths": [
+        "src/scene",
         "src/game",
-        "src/rendering",
         "src/editor"
       ]
     },
-    "player": {
+    "cmake": {
       "modules": [
-        "player",
-        "game",
-        "rendering"
+        "build"
       ],
       "symbols": [
-        "RuntimeSession",
-        "SceneRenderer"
+        "linblux"
       ],
       "paths": [
-        "src/player",
-        "src/game",
-        "src/rendering"
+        "CMakeLists.txt"
       ]
     },
-    "jogador": {
+    "colisao": {
       "modules": [
-        "game",
-        "player"
+        "physics",
+        "game"
       ],
       "symbols": [
-        "RuntimeSession",
-        "PlayerSettings"
+        "PhysicsWorld",
+        "RuntimeSession"
       ],
       "paths": [
-        "src/game",
-        "src/player"
+        "src/physics",
+        "src/game"
       ]
     },
-    "erro": {
+    "compilar": {
       "modules": [
-        "core",
-        "app",
-        "experiences"
-      ],
-      "symbols": [
-        "Diagnostics",
-        "Application",
-        "ExperienceManager"
-      ],
-      "paths": [
-        "src/core",
-        "src/app",
-        "src/experiences"
-      ]
-    },
-    "falha": {
-      "modules": [
-        "core",
-        "app",
+        "build",
+        "docs",
         "tests"
       ],
       "symbols": [
-        "Diagnostics",
-        "Application"
+        "linblux"
       ],
       "paths": [
-        "src/core",
-        "src/app",
-        "tests"
+        "CMakeLists.txt",
+        "docs/TESTING.md"
+      ]
+    },
+    "componente": {
+      "modules": [
+        "physics",
+        "game",
+        "objects"
+      ],
+      "symbols": [
+        "PhysicsWorld",
+        "Instance",
+        "Part"
+      ],
+      "paths": [
+        "src/physics",
+        "src/game",
+        "src/objects"
+      ]
+    },
+    "construcao": {
+      "modules": [
+        "editor"
+      ],
+      "symbols": [
+        "ConstructionPlacement",
+        "ConstructionUI",
+        "SnapUnderCursor"
+      ],
+      "paths": [
+        "src/editor"
+      ]
+    },
+    "construir": {
+      "modules": [
+        "editor"
+      ],
+      "symbols": [
+        "ConstructionPlacement",
+        "ConstructionUI"
+      ],
+      "paths": [
+        "src/editor"
       ]
     },
     "crash": {
@@ -818,86 +379,48 @@
         "tests"
       ]
     },
-    "teste": {
+    "decal": {
       "modules": [
-        "tests",
-        "build",
-        "atlas"
+        "game",
+        "rendering",
+        "editor"
       ],
       "symbols": [
-        "main"
+        "RigDecal",
+        "SceneRenderer"
       ],
       "paths": [
-        "tests",
-        "CMakeLists.txt"
+        "src/game",
+        "src/rendering",
+        "src/editor"
       ]
     },
-    "test": {
+    "decalque": {
       "modules": [
-        "tests",
-        "build",
-        "atlas"
+        "rendering",
+        "objects"
       ],
       "symbols": [
-        "main"
+        "SceneRenderer",
+        "Part"
       ],
       "paths": [
-        "tests",
-        "CMakeLists.txt"
+        "src/rendering"
       ]
     },
-    "compilar": {
+    "default": {
       "modules": [
-        "build",
-        "docs",
-        "tests"
+        "experiences",
+        "editor",
+        "defaults"
       ],
       "symbols": [
-        "linblux"
+        "ExperienceManager",
+        "editEngineDefault"
       ],
       "paths": [
-        "CMakeLists.txt",
-        "docs/TESTING.md"
-      ]
-    },
-    "build": {
-      "modules": [
-        "build",
-        "docs",
-        "tests"
-      ],
-      "symbols": [
-        "linblux"
-      ],
-      "paths": [
-        "CMakeLists.txt",
-        "docs/TESTING.md"
-      ]
-    },
-    "cmake": {
-      "modules": [
-        "build"
-      ],
-      "symbols": [
-        "linblux"
-      ],
-      "paths": [
-        "CMakeLists.txt"
-      ]
-    },
-    "atlas": {
-      "modules": [
-        "atlas",
-        "docs",
-        "agents"
-      ],
-      "symbols": [
-        "main"
-      ],
-      "paths": [
-        "tools/atlas",
-        "docs/atlas",
-        "AGENTS.md"
+        "src/experiences",
+        "assets/defaults"
       ]
     },
     "desaparece": {
@@ -918,96 +441,294 @@
         "src/rendering"
       ]
     },
-    "sumiu": {
+    "edicao": {
       "modules": [
-        "scene",
-        "game",
-        "serialization"
-      ],
-      "symbols": [
-        "Scene",
-        "ProjectIO"
-      ],
-      "paths": [
-        "src/scene",
-        "src/game",
-        "src/serialization"
-      ]
-    },
-    "preto": {
-      "modules": [
-        "rendering",
-        "app",
-        "ui"
-      ],
-      "symbols": [
-        "SceneRenderer",
-        "Application",
-        "StudioFrontend"
-      ],
-      "paths": [
-        "src/rendering",
-        "src/app",
-        "src/ui"
-      ]
-    },
-    "trava": {
-      "modules": [
-        "media",
-        "app",
-        "ui"
-      ],
-      "symbols": [
-        "VideoBackground",
-        "Application"
-      ],
-      "paths": [
-        "src/media",
-        "src/app",
-        "src/ui"
-      ]
-    },
-    "loop": {
-      "modules": [
-        "media"
-      ],
-      "symbols": [
-        "VideoBackground"
-      ],
-      "paths": [
-        "src/media",
-        "tests/video_main.cpp"
-      ]
-    },
-    "acompanha": {
-      "modules": [
-        "rendering",
-        "game",
         "editor"
       ],
       "symbols": [
-        "PlayerCamera",
-        "EditorCamera",
-        "RuntimeSession"
+        "EditorUI"
       ],
       "paths": [
-        "src/rendering",
-        "src/game",
         "src/editor"
       ]
     },
-    "segue": {
+    "editando": {
       "modules": [
-        "rendering",
+        "editor"
+      ],
+      "symbols": [
+        "EditorUI"
+      ],
+      "paths": [
+        "src/editor"
+      ]
+    },
+    "encaixa": {
+      "modules": [
+        "editor"
+      ],
+      "symbols": [
+        "ConstructionPlacement",
+        "SnapUnderCursor"
+      ],
+      "paths": [
+        "src/editor"
+      ]
+    },
+    "encaixar": {
+      "modules": [
+        "editor"
+      ],
+      "symbols": [
+        "ConstructionPlacement",
+        "SnapUnderCursor"
+      ],
+      "paths": [
+        "src/editor"
+      ]
+    },
+    "encaixe": {
+      "modules": [
+        "editor"
+      ],
+      "symbols": [
+        "ConstructionPlacement",
+        "SnapUnderCursor"
+      ],
+      "paths": [
+        "src/editor"
+      ]
+    },
+    "escalar": {
+      "modules": [
+        "editor"
+      ],
+      "symbols": [
+        "TransformSession",
+        "GizmoMath"
+      ],
+      "paths": [
+        "src/editor"
+      ]
+    },
+    "espelhado": {
+      "modules": [
+        "rendering"
+      ],
+      "symbols": [
+        "SceneRenderer"
+      ],
+      "paths": [
+        "src/rendering"
+      ]
+    },
+    "espelhamento": {
+      "modules": [
+        "rendering"
+      ],
+      "symbols": [
+        "SceneRenderer"
+      ],
+      "paths": [
+        "src/rendering"
+      ]
+    },
+    "espelhar": {
+      "modules": [
+        "rendering"
+      ],
+      "symbols": [
+        "SceneRenderer"
+      ],
+      "paths": [
+        "src/rendering"
+      ]
+    },
+    "experiencia": {
+      "modules": [
+        "experiences",
+        "ui",
+        "editor"
+      ],
+      "symbols": [
+        "ExperienceManager",
+        "ExperienceUI"
+      ],
+      "paths": [
+        "src/experiences",
+        "src/ui"
+      ]
+    },
+    "explorador": {
+      "modules": [
+        "editor"
+      ],
+      "symbols": [
+        "EditorUI",
+        "drawExplorerNode",
+        "Instance"
+      ],
+      "paths": [
+        "src/editor"
+      ]
+    },
+    "exporta": {
+      "modules": [
+        "experiences",
+        "editor"
+      ],
+      "symbols": [
+        "ExperienceManager",
+        "exportPackage"
+      ],
+      "paths": [
+        "src/experiences",
+        "src/editor"
+      ]
+    },
+    "exportar": {
+      "modules": [
+        "experiences",
+        "editor"
+      ],
+      "symbols": [
+        "ExperienceManager",
+        "exportPackage"
+      ],
+      "paths": [
+        "src/experiences",
+        "src/editor"
+      ]
+    },
+    "fisica": {
+      "modules": [
+        "physics",
         "game"
       ],
       "symbols": [
-        "PlayerCamera",
-        "EditorCamera"
+        "PhysicsWorld",
+        "RuntimeSession"
       ],
       "paths": [
-        "src/rendering",
+        "src/physics",
         "src/game"
+      ]
+    },
+    "gizmo": {
+      "modules": [
+        "editor"
+      ],
+      "symbols": [
+        "Gizmo",
+        "GizmoMath",
+        "TransformSession"
+      ],
+      "paths": [
+        "src/editor"
+      ]
+    },
+    "gravidade": {
+      "modules": [
+        "game",
+        "physics"
+      ],
+      "symbols": [
+        "PlayerSettings",
+        "RuntimeSession"
+      ],
+      "paths": [
+        "src/game",
+        "src/physics"
+      ]
+    },
+    "herdar": {
+      "modules": [
+        "experiences",
+        "editor"
+      ],
+      "symbols": [
+        "ExperienceManager",
+        "create"
+      ],
+      "paths": [
+        "src/experiences"
+      ]
+    },
+    "home": {
+      "modules": [
+        "ui",
+        "ui-assets",
+        "app"
+      ],
+      "symbols": [
+        "ExperienceUI",
+        "StudioFrontend"
+      ],
+      "paths": [
+        "src/ui",
+        "assets/ui"
+      ]
+    },
+    "iluminacao": {
+      "modules": [
+        "objects",
+        "rendering"
+      ],
+      "symbols": [
+        "Lighting",
+        "SceneRenderer"
+      ],
+      "paths": [
+        "src/objects",
+        "src/rendering"
+      ]
+    },
+    "imagem": {
+      "modules": [
+        "game",
+        "rendering",
+        "ui"
+      ],
+      "symbols": [
+        "ImageAssets",
+        "importImage",
+        "ListImages"
+      ],
+      "paths": [
+        "src/game",
+        "src/rendering",
+        "src/ui"
+      ]
+    },
+    "imgui": {
+      "modules": [
+        "editor",
+        "ui"
+      ],
+      "symbols": [
+        "EditorUI",
+        "GamePanels",
+        "StudioPanels"
+      ],
+      "paths": [
+        "src/editor",
+        "src/ui"
+      ]
+    },
+    "importar": {
+      "modules": [
+        "experiences",
+        "editor",
+        "serialization"
+      ],
+      "symbols": [
+        "ExperienceManager",
+        "importCharacter",
+        "importPackage"
+      ],
+      "paths": [
+        "src/experiences",
+        "src/editor"
       ]
     },
     "iniciar": {
@@ -1047,164 +768,190 @@
         "src/media"
       ]
     },
-    "aparece": {
+    "interface": {
+      "modules": [
+        "ui",
+        "editor",
+        "ui-assets"
+      ],
+      "symbols": [
+        "EditorUI",
+        "StudioFrontend",
+        "ExperienceUI"
+      ],
+      "paths": [
+        "src/ui",
+        "src/editor",
+        "assets/ui"
+      ]
+    },
+    "jogador": {
       "modules": [
         "game",
-        "scene",
-        "rendering",
+        "player"
+      ],
+      "symbols": [
+        "RuntimeSession",
+        "PlayerSettings"
+      ],
+      "paths": [
+        "src/game",
+        "src/player"
+      ]
+    },
+    "joint": {
+      "modules": [
+        "game",
+        "editor"
+      ],
+      "symbols": [
+        "Joint",
+        "Rig",
+        "RightShoulder"
+      ],
+      "paths": [
+        "src/game",
+        "src/editor"
+      ]
+    },
+    "loop": {
+      "modules": [
+        "media"
+      ],
+      "symbols": [
+        "VideoBackground"
+      ],
+      "paths": [
+        "src/media",
+        "tests/video_main.cpp"
+      ]
+    },
+    "lua": {
+      "modules": [
+        "scripting",
         "serialization"
       ],
       "symbols": [
-        "SpawnLocation",
-        "RuntimeSession",
-        "Scene",
-        "SceneRenderer"
+        "LuaRuntime",
+        "SceneLua"
       ],
       "paths": [
-        "src/game",
-        "src/scene",
-        "src/rendering"
+        "src/scripting",
+        "src/serialization"
       ]
     },
-    "aparecer": {
+    "luz": {
       "modules": [
-        "game",
-        "scene",
+        "objects",
         "rendering"
       ],
       "symbols": [
-        "SpawnLocation",
-        "RuntimeSession",
-        "Scene"
+        "Lighting",
+        "SceneRenderer"
       ],
       "paths": [
-        "src/game",
-        "src/scene",
+        "src/objects",
         "src/rendering"
       ]
     },
-    "carrega": {
+    "mapa": {
       "modules": [
-        "game",
+        "scene",
+        "objects",
+        "serialization"
+      ],
+      "symbols": [
+        "Scene",
+        "ProjectIO"
+      ],
+      "paths": [
+        "src/scene",
+        "src/serialization"
+      ]
+    },
+    "mover": {
+      "modules": [
+        "editor"
+      ],
+      "symbols": [
+        "TransformSession",
+        "Gizmo"
+      ],
+      "paths": [
+        "src/editor"
+      ]
+    },
+    "mudo": {
+      "modules": [
+        "rendering"
+      ],
+      "symbols": [
+        "PlayerMenu"
+      ],
+      "paths": [
+        "src/rendering"
+      ]
+    },
+    "multiplayer": {
+      "modules": [
+        "docs",
+        "experiences",
+        "game"
+      ],
+      "symbols": [
+        "ExperienceManager"
+      ],
+      "paths": [
+        "docs/ROADMAP.md",
+        "docs/ARCHITECTURE.md"
+      ]
+    },
+    "mundo": {
+      "modules": [
+        "scene",
+        "objects",
         "serialization",
         "experiences"
       ],
       "symbols": [
-        "Rig",
-        "ProjectIO",
+        "Scene",
+        "Workspace",
         "ExperienceManager"
       ],
       "paths": [
-        "src/game",
+        "src/scene",
+        "src/objects",
         "src/serialization",
         "src/experiences"
       ]
     },
-    "salva": {
+    "nascimento": {
       "modules": [
-        "experiences",
-        "serialization",
-        "editor"
-      ],
-      "symbols": [
-        "ExperienceManager",
-        "ProjectIO"
-      ],
-      "paths": [
-        "src/experiences",
-        "src/serialization",
-        "src/editor"
-      ]
-    },
-    "exportar": {
-      "modules": [
-        "experiences",
-        "editor"
-      ],
-      "symbols": [
-        "ExperienceManager",
-        "exportPackage"
-      ],
-      "paths": [
-        "src/experiences",
-        "src/editor"
-      ]
-    },
-    "exporta": {
-      "modules": [
-        "experiences",
-        "editor"
-      ],
-      "symbols": [
-        "ExperienceManager",
-        "exportPackage"
-      ],
-      "paths": [
-        "src/experiences",
-        "src/editor"
-      ]
-    },
-    "animation": {
-      "modules": [
-        "game",
-        "editor",
-        "serialization"
-      ],
-      "symbols": [
-        "AnimationClip",
-        "AnimationChoice",
-        "drawAnimationEditor"
-      ],
-      "paths": [
-        "src/game",
-        "src/editor"
-      ]
-    },
-    "anima": {
-      "modules": [
-        "game",
-        "editor"
-      ],
-      "symbols": [
-        "AnimationClip",
-        "drawAnimationEditor"
-      ],
-      "paths": [
-        "src/game",
-        "src/editor"
-      ]
-    },
-    "componente": {
-      "modules": [
-        "physics",
         "game",
         "objects"
       ],
       "symbols": [
-        "PhysicsWorld",
-        "Instance",
-        "Part"
+        "SpawnLocation",
+        "Spawn"
       ],
       "paths": [
-        "src/physics",
         "src/game",
         "src/objects"
       ]
     },
-    "classe": {
+    "nome": {
       "modules": [
-        "scene",
-        "game",
-        "editor"
+        "editor",
+        "objects"
       ],
       "symbols": [
-        "Scene",
-        "RuntimeSession"
+        "renameSelection",
+        "Instance",
+        "setName"
       ],
       "paths": [
-        "src/scene",
-        "src/game",
-        "src/editor"
+        "src/editor",
+        "src/objects"
       ]
     },
     "objeto": {
@@ -1224,6 +971,139 @@
         "src/rendering"
       ]
     },
+    "osso": {
+      "modules": [
+        "game",
+        "editor"
+      ],
+      "symbols": [
+        "Joint",
+        "Rig"
+      ],
+      "paths": [
+        "src/game",
+        "src/editor"
+      ]
+    },
+    "pacote": {
+      "modules": [
+        "experiences"
+      ],
+      "symbols": [
+        "ExperienceManager",
+        "importPackage",
+        "exportPackage"
+      ],
+      "paths": [
+        "src/experiences"
+      ]
+    },
+    "padrao": {
+      "modules": [
+        "experiences",
+        "editor",
+        "defaults"
+      ],
+      "symbols": [
+        "ExperienceManager",
+        "saveEngineDefaults",
+        "restoreFactoryDefaults"
+      ],
+      "paths": [
+        "src/experiences",
+        "src/editor",
+        "assets/defaults"
+      ]
+    },
+    "painel": {
+      "modules": [
+        "editor",
+        "ui"
+      ],
+      "symbols": [
+        "EditorUI",
+        "StudioFrontend"
+      ],
+      "paths": [
+        "src/editor",
+        "src/ui"
+      ]
+    },
+    "parede": {
+      "modules": [
+        "editor"
+      ],
+      "symbols": [
+        "ConstructionPlacement"
+      ],
+      "paths": [
+        "src/editor"
+      ]
+    },
+    "persistencia": {
+      "modules": [
+        "serialization",
+        "experiences"
+      ],
+      "symbols": [
+        "ProjectIO",
+        "ExperienceManager"
+      ],
+      "paths": [
+        "src/serialization",
+        "src/experiences"
+      ]
+    },
+    "personagem": {
+      "modules": [
+        "game",
+        "editor",
+        "experiences",
+        "serialization"
+      ],
+      "symbols": [
+        "Rig",
+        "RuntimeSession",
+        "Character",
+        "importCharacter",
+        "createLinbluxCharacter",
+        "SpawnLocation",
+        "GameAssets"
+      ],
+      "paths": [
+        "src/game",
+        "src/editor",
+        "src/experiences"
+      ]
+    },
+    "piso": {
+      "modules": [
+        "editor"
+      ],
+      "symbols": [
+        "ConstructionPlacement",
+        "Baseplate"
+      ],
+      "paths": [
+        "src/editor"
+      ]
+    },
+    "player": {
+      "modules": [
+        "player",
+        "game",
+        "rendering"
+      ],
+      "symbols": [
+        "RuntimeSession",
+        "SceneRenderer"
+      ],
+      "paths": [
+        "src/player",
+        "src/game",
+        "src/rendering"
+      ]
+    },
     "preta": {
       "modules": [
         "rendering",
@@ -1239,6 +1119,477 @@
         "src/rendering",
         "src/app",
         "src/ui"
+      ]
+    },
+    "preto": {
+      "modules": [
+        "rendering",
+        "app",
+        "ui"
+      ],
+      "symbols": [
+        "SceneRenderer",
+        "Application",
+        "StudioFrontend"
+      ],
+      "paths": [
+        "src/rendering",
+        "src/app",
+        "src/ui"
+      ]
+    },
+    "pulo": {
+      "modules": [
+        "game",
+        "physics"
+      ],
+      "symbols": [
+        "PlayerSettings",
+        "RuntimeSession"
+      ],
+      "paths": [
+        "src/game",
+        "src/physics"
+      ]
+    },
+    "queda": {
+      "modules": [
+        "physics"
+      ],
+      "symbols": [
+        "PhysicsWorld",
+        "simulate"
+      ],
+      "paths": [
+        "src/physics"
+      ]
+    },
+    "r6": {
+      "modules": [
+        "game",
+        "editor",
+        "defaults"
+      ],
+      "symbols": [
+        "createR6",
+        "createLinbluxCharacter"
+      ],
+      "paths": [
+        "src/game",
+        "src/editor"
+      ]
+    },
+    "rascunho": {
+      "modules": [
+        "serialization"
+      ],
+      "symbols": [
+        "ProjectIO"
+      ],
+      "paths": [
+        "src/serialization"
+      ]
+    },
+    "renomear": {
+      "modules": [
+        "editor",
+        "objects"
+      ],
+      "symbols": [
+        "renameSelection",
+        "Instance",
+        "setName"
+      ],
+      "paths": [
+        "src/editor",
+        "src/objects"
+      ]
+    },
+    "respawn": {
+      "modules": [
+        "game"
+      ],
+      "symbols": [
+        "RuntimeSession",
+        "Spawn"
+      ],
+      "paths": [
+        "src/game"
+      ]
+    },
+    "rig": {
+      "modules": [
+        "game",
+        "editor",
+        "serialization"
+      ],
+      "symbols": [
+        "Rig",
+        "RigBody",
+        "Joint",
+        "AnimationClip"
+      ],
+      "paths": [
+        "src/game",
+        "src/editor"
+      ]
+    },
+    "rml": {
+      "modules": [
+        "ui",
+        "ui-assets"
+      ],
+      "symbols": [
+        "StudioFrontend",
+        "RmlFrontendSupport"
+      ],
+      "paths": [
+        "src/ui",
+        "assets/ui"
+      ]
+    },
+    "salva": {
+      "modules": [
+        "experiences",
+        "serialization",
+        "editor"
+      ],
+      "symbols": [
+        "ExperienceManager",
+        "ProjectIO"
+      ],
+      "paths": [
+        "src/experiences",
+        "src/serialization",
+        "src/editor"
+      ]
+    },
+    "salvar": {
+      "modules": [
+        "serialization",
+        "experiences",
+        "editor"
+      ],
+      "symbols": [
+        "ProjectIO",
+        "ExperienceManager",
+        "saveCurrentProject"
+      ],
+      "paths": [
+        "src/serialization",
+        "src/experiences"
+      ]
+    },
+    "script": {
+      "modules": [
+        "scripting",
+        "serialization",
+        "game"
+      ],
+      "symbols": [
+        "LuaRuntime",
+        "SceneLua",
+        "RuntimeSession"
+      ],
+      "paths": [
+        "src/scripting",
+        "src/serialization",
+        "src/game"
+      ]
+    },
+    "segue": {
+      "modules": [
+        "rendering",
+        "game"
+      ],
+      "symbols": [
+        "PlayerCamera",
+        "EditorCamera"
+      ],
+      "paths": [
+        "src/rendering",
+        "src/game"
+      ]
+    },
+    "server": {
+      "modules": [
+        "docs",
+        "experiences"
+      ],
+      "symbols": [
+        "ExperienceManager"
+      ],
+      "paths": [
+        "docs/ROADMAP.md",
+        "docs/ARCHITECTURE.md"
+      ]
+    },
+    "servidor": {
+      "modules": [
+        "docs",
+        "experiences"
+      ],
+      "symbols": [
+        "ExperienceManager"
+      ],
+      "paths": [
+        "docs/ROADMAP.md",
+        "docs/ARCHITECTURE.md"
+      ]
+    },
+    "silenciar": {
+      "modules": [
+        "rendering"
+      ],
+      "symbols": [
+        "PlayerMenu"
+      ],
+      "paths": [
+        "src/rendering"
+      ]
+    },
+    "simular": {
+      "modules": [
+        "physics"
+      ],
+      "symbols": [
+        "PhysicsWorld",
+        "simulate"
+      ],
+      "paths": [
+        "src/physics"
+      ]
+    },
+    "slider": {
+      "modules": [
+        "rendering",
+        "ui"
+      ],
+      "symbols": [
+        "PlayerMenu"
+      ],
+      "paths": [
+        "src/rendering"
+      ]
+    },
+    "sombra": {
+      "modules": [
+        "rendering",
+        "objects"
+      ],
+      "symbols": [
+        "SceneRenderer",
+        "Lighting"
+      ],
+      "paths": [
+        "src/rendering",
+        "src/objects"
+      ]
+    },
+    "spawn": {
+      "modules": [
+        "game",
+        "objects"
+      ],
+      "symbols": [
+        "Spawn",
+        "SpawnLocation",
+        "RuntimeSession"
+      ],
+      "paths": [
+        "src/game",
+        "src/objects"
+      ]
+    },
+    "sumiu": {
+      "modules": [
+        "scene",
+        "game",
+        "serialization"
+      ],
+      "symbols": [
+        "Scene",
+        "ProjectIO"
+      ],
+      "paths": [
+        "src/scene",
+        "src/game",
+        "src/serialization"
+      ]
+    },
+    "superficie": {
+      "modules": [
+        "editor"
+      ],
+      "symbols": [
+        "ConstructionPlacement",
+        "SnapUnderCursor"
+      ],
+      "paths": [
+        "src/editor"
+      ]
+    },
+    "tela": {
+      "modules": [
+        "ui",
+        "ui-assets",
+        "app",
+        "media"
+      ],
+      "symbols": [
+        "StudioFrontend",
+        "Application",
+        "VideoBackground"
+      ],
+      "paths": [
+        "src/ui",
+        "assets/ui",
+        "src/app",
+        "src/media"
+      ]
+    },
+    "test": {
+      "modules": [
+        "tests",
+        "build",
+        "atlas"
+      ],
+      "symbols": [
+        "main"
+      ],
+      "paths": [
+        "tests",
+        "CMakeLists.txt"
+      ]
+    },
+    "teste": {
+      "modules": [
+        "tests",
+        "build",
+        "atlas"
+      ],
+      "symbols": [
+        "main"
+      ],
+      "paths": [
+        "tests",
+        "CMakeLists.txt"
+      ]
+    },
+    "textura": {
+      "modules": [
+        "rendering",
+        "game"
+      ],
+      "symbols": [
+        "SceneRenderer",
+        "ImageAssets"
+      ],
+      "paths": [
+        "src/rendering",
+        "src/game"
+      ]
+    },
+    "timeout": {
+      "modules": [
+        "tests",
+        "build"
+      ],
+      "symbols": [
+        "main"
+      ],
+      "paths": [
+        "tests",
+        "CMakeLists.txt"
+      ]
+    },
+    "trava": {
+      "modules": [
+        "media",
+        "app",
+        "ui"
+      ],
+      "symbols": [
+        "VideoBackground",
+        "Application"
+      ],
+      "paths": [
+        "src/media",
+        "src/app",
+        "src/ui"
+      ]
+    },
+    "ui": {
+      "modules": [
+        "ui",
+        "editor",
+        "ui-assets"
+      ],
+      "symbols": [
+        "EditorUI",
+        "StudioFrontend"
+      ],
+      "paths": [
+        "src/ui",
+        "src/editor",
+        "assets/ui"
+      ]
+    },
+    "video": {
+      "modules": [
+        "media",
+        "app",
+        "ui",
+        "ui-assets"
+      ],
+      "symbols": [
+        "VideoBackground",
+        "Application"
+      ],
+      "paths": [
+        "src/media",
+        "src/app",
+        "assets/ui"
+      ]
+    },
+    "visao": {
+      "modules": [
+        "rendering",
+        "game",
+        "editor"
+      ],
+      "symbols": [
+        "EditorCamera",
+        "Camera3D"
+      ],
+      "paths": [
+        "src/rendering",
+        "src/game"
+      ]
+    },
+    "volume": {
+      "modules": [
+        "rendering"
+      ],
+      "symbols": [
+        "PlayerMenu"
+      ],
+      "paths": [
+        "src/rendering"
+      ]
+    },
+    "zoom": {
+      "modules": [
+        "game",
+        "rendering"
+      ],
+      "symbols": [
+        "PlayerSettings",
+        "EditorCamera"
+      ],
+      "paths": [
+        "src/game",
+        "src/rendering"
       ]
     }
   }

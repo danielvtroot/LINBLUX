@@ -1,20 +1,23 @@
 # Roadmap LINBLUX
 
-Implementado nesta base: edição de cena, gizmos, Bullet, Lua local, persistência,
-animações compatíveis, biblioteca de experiências, mídia de apresentação,
-padrões versionados, vídeo de fundo, Studio e Player separados.
+A Alpha é uma base de criação e execução local. Os itens abaixo são objetivos
+futuros, sem datas prometidas; não são funcionalidades anunciadas como prontas.
 
-Próximos trabalhos, ainda não prontos:
+1. Consolidar a engine e a estabilidade do Studio.
+2. Melhorar renderização, materiais, sombras e desempenho.
+3. Tornar construção e edição mais intuitivas.
+4. Ampliar personagens e animações.
+5. Importar malhas e recursos 3D.
+6. Criar um sistema de terreno.
+7. Expandir e documentar a API Lua.
+8. Melhorar empacotamento e compatibilidade Linux.
+9. Desenvolver multiplayer com servidor autoritativo.
+10. Introduzir identidade, autenticação e contas.
+11. Implementar replicação de mundo e experiências compartilhadas.
+12. Criar publicação e descoberta de experiências.
+13. Permitir colaboração entre criadores.
+14. Desenvolver um ecossistema de extensões e ferramentas.
 
-- Importar malhas e esqueletos arbitrários com migração versionada de rigs/clipes.
-- Medir em notebooks com GPU integrada real e investigar redução de passes RmlUi.
-- Expandir terreno, materiais, sombras e ferramentas de criação.
-- Completar desacoplamento da seleção da cena e das imagens raylib no núcleo.
-- Preparar LINBLUX Server: simulação autoritativa, transporte, replicação,
-  identidade/autenticação e testes de sessões. Não há multiplayer funcional hoje.
-- Concluir a revisão documental de licença dos materiais fornecidos e preparar
-  empacotamento com fontes/avisos das dependências efetivamente distribuídas.
-- Revisar continuamente localização e acessibilidade dos painéis especializados.
-
-Os registros em historico/ descrevem estados anteriores e não representam uma
-lista atual de funcionalidades pendentes ou concluídas.
+Antes da distribuição binária pública atual, faltam concluir as obrigações de
+redistribuição das dependências e validar em outra instalação Linux. Consulte
+[Alpha 0.1.0](ALPHA_0_1_0.md). Conteúdo histórico não substitui esse estado atual.

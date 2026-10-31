@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from . import config
 
 STATUS_PT = {
@@ -46,6 +48,88 @@ def _short(value: str, limit: int = 1200) -> str:
     if len(value) <= limit:
         return value
     return value[:limit] + "\n[... truncado; veja o log completo]"
+
+
+_ERROR_PATTERNS = (
+    (
+        "compilação",
+        re.compile(
+            r"^(?P<file>[^:\s][^:]*\.(?:cpp|cc|cxx|c|h|hpp|hh|hxx|lua|py)):"
+            r"(?P<line>\d+):(?:(?P<column>\d+):)?\s*(?:fatal\s+)?error:\s*(?P<message>.+)$"
+        ),
+    ),
+    (
+        "configuração",
+        re.compile(r"^CMake Error(?: at (?P<file>[^:]+):(?P<line>\d+))?:?\s*(?P<message>.*)$"),
+    ),
+    (
+        "link",
+        re.compile(
+            r"(?P<message>undefined reference to .+|multiple definition of .+|"
+            r"cannot find -l\S+|ld returned \d+ exit status)"
+        ),
+    ),
+    (
+        "teste",
+        re.compile(
+            r"(?P<message>Assertion .+failed|FAILED|Falhou|Segmentation fault|"
+            r"core dumped|terminate called after throwing)",
+            re.IGNORECASE,
+        ),
+    ),
+)
+
+_NEXT_BY_KIND = {
+    "compilação": "corrija o primeiro erro do arquivo indicado e recompile apenas esse target",
+    "configuração": "corrija o CMake indicado; a seleção estrutural é limitada",
+    "link": "localize o símbolo ausente e o target que deveria fornecê-lo",
+    "teste": "leia o log do teste indicado e reproduza o caso antes de editar",
+}
+
+
+def first_error(text: str) -> dict | None:
+    """First actionable error, not the last consequence of a cascading failure."""
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        for kind, pattern in _ERROR_PATTERNS:
+            match = pattern.search(line)
+            if not match:
+                continue
+            groups = match.groupdict()
+            return {
+                "kind": kind,
+                "file": groups.get("file"),
+                "line": groups.get("line"),
+                "column": groups.get("column"),
+                "message": (groups.get("message") or line).strip()[:240],
+                "raw": line[:240],
+            }
+    return None
+
+
+def failure_lines(detail: str, *, target: str | None = None) -> list[str]:
+    """Compact failure block: probable cause, location, target and next action."""
+    found = first_error(detail or "")
+    lines: list[str] = []
+    if found:
+        where = found.get("file") or ""
+        if where and found.get("line"):
+            where += ":" + str(found["line"])
+            if found.get("column"):
+                where += ":" + str(found["column"])
+        lines.append(f"Tipo: {found['kind']}")
+        lines.append(f"Provável causa: {found['message']}")
+        if where:
+            lines.append(f"Arquivo: {where}")
+        lines.append(f"Próxima ação: {_NEXT_BY_KIND.get(found['kind'], 'inspecione o log completo')}")
+    else:
+        lines.append("Tipo: não identificado")
+        lines.append(f"Detalhe: {_short(detail)}")
+    if target:
+        lines.append(f"Target: {target}")
+    return lines
 
 
 def format_plan(plan: dict) -> str:
@@ -119,9 +203,10 @@ def format_result(result: dict, *, detail: bool = False) -> str:
             failure_candidates.append((name, item))
     if failure_candidates:
         name, item = failure_candidates[0]
+        detail = item.get("detail") or test.get("excerpt") or result.get("message", "")
         lines.append("")
         lines.append(f"Falha: {name}")
-        lines.append(f"Detalhe: {_short(item.get('detail') or test.get('excerpt') or result.get('message', ''))}")
+        lines.extend(failure_lines(detail, target=item.get("target")))
     elif result.get("status") == "BUDGET_EXHAUSTED":
         pending = test.get("pending") or result.get("pending") or []
         lines.append("")
@@ -137,7 +222,7 @@ def format_result(result: dict, *, detail: bool = False) -> str:
     elif result.get("status") in {"BUILD_FAILED", "CONFIG_FAILED", "ERROR"}:
         lines.append("")
         lines.append("Falha:")
-        lines.append(_short(result.get("excerpt") or result.get("message") or "consulte o log"))
+        lines.extend(failure_lines(result.get("excerpt") or result.get("message") or "consulte o log"))
     elif result.get("status") == "REUSED":
         lines.append("")
         lines.append("RESULTADO REUTILIZADO — não foi executado agora.")

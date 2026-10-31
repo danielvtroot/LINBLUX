@@ -9,6 +9,26 @@
 #include <limits>
 
 namespace loblox {
+bool Scene::isStored(const Instance* object) const {
+    if(!object||find(object->id())!=object)return false;
+    for(auto* p=object;p;p=p->parent())if(p->instanceClass()==InstanceClass::ServerStorage||p->instanceClass()==InstanceClass::ReplicatedStorage)return true;
+    return false;
+}
+const std::vector<Part*>& Scene::worldParts() const {
+    if(worldDirty_) {
+        worldParts_.clear();worldNodes_.clear();
+        std::vector<const Instance*> pending;if(workspace_)pending.push_back(workspace_);
+        while(!pending.empty()) {const auto* node=pending.back();pending.pop_back();
+            worldNodes_.insert(node->id());for(const auto* child:node->children())pending.push_back(child);}
+        // Keep creation order for transparent rendering and deterministic queries.
+        for(auto* part:parts_)if(worldNodes_.count(part->id()))worldParts_.push_back(part);
+        worldDirty_=false;
+    }
+    return worldParts_;
+}
+bool Scene::isWorldObject(const Instance* object) const {
+    worldParts();return object&&find(object->id())==object&&worldNodes_.count(object->id());
+}
 Part* Scene::pickPart(Ray ray,float maxDistance,Vector3* point) const {
     const auto hits=pickParts(ray,maxDistance);
     if(hits.empty())return nullptr;
@@ -20,7 +40,7 @@ std::vector<Scene::PartPick> Scene::pickParts(Ray ray,float maxDistance) const {
         if(!std::isfinite(v))return hits;
     if(maxDistance<=0||Vector3LengthSqr(ray.direction)<1e-8f)return hits;
     ray.direction=Vector3Normalize(ray.direction);
-    for(auto* part:parts()) {
+    for(auto* part:worldParts()) {
         if(part->color().a==0)continue;
         const auto hit=part->intersect(ray);
         if(hit.hit&&hit.distance>=0&&hit.distance<maxDistance)hits.push_back({part,hit.distance,hit.point});
@@ -78,6 +98,8 @@ Players.CharacterAdded:Connect(function(character)
     -- Customize this map here. Project defaults are in Game Settings.
 end)
 )");
+    ensureService(InstanceClass::ServerStorage);
+    ensureService(InstanceClass::ReplicatedStorage);
     // CharacterAnimations.server.lua is no longer auto-generated.
     // Animation configuration is now managed exclusively through Game Settings (Game Config).
 }
@@ -108,7 +130,7 @@ bool Scene::accepts(InstanceClass type, const Instance* parent) const {
     if (p!=InstanceClass::Workspace && p!=InstanceClass::Folder && p!=InstanceClass::Model &&
         p!=InstanceClass::ServerScriptService && p!=InstanceClass::ServerStorage && p!=InstanceClass::ReplicatedStorage) return false;
     if (type==InstanceClass::Folder || type==InstanceClass::Model) return true;
-    return workspace_->isAncestorOf(parent);
+    return workspace_->isAncestorOf(parent)||isStored(parent);
 }
 
 InstanceId Scene::allocateId() {
@@ -174,7 +196,7 @@ bool Scene::validate(std::string& error) const {
             error = "objeto com pai invalido: " + std::to_string(object->id());
             return false;
         }
-        if (object->isPart() && !workspace_->isAncestorOf(object.get())) {
+        if (object->isPart() && !workspace_->isAncestorOf(object.get()) && !isStored(object.get())) {
             error = "Part fora do Workspace: " + std::to_string(object->id());
             return false;
         }
@@ -227,7 +249,7 @@ bool Scene::validate(std::string& error) const {
         }
         const auto indexed = byId_.find(part->id());
         if (indexed == byId_.end() || indexed->second != part ||
-            !workspace_->isAncestorOf(part)) {
+            (!workspace_->isAncestorOf(part)&&!isStored(part))) {
             error = "Part orfa ou com pai invalido: " + std::to_string(part->id());
             return false;
         }
@@ -292,6 +314,7 @@ bool Scene::adopt(std::unique_ptr<Instance> object, Instance* parent) {
         parts_.push_back(static_cast<Part*>(raw));
     }
     objects_.push_back(std::move(object));
+    worldDirty_=true;
     setNextId(raw->id() + 1);
     return true;
 }
@@ -302,7 +325,8 @@ Part* Scene::createPart(PartShape shape, Vector3 position, Vector3 size,
         return nullptr;
     }
     const std::string defaultName = shape == PartShape::Block ? "Part" : "Sphere";
-    const std::string requestedName = name.empty() ? defaultName : name;
+    const std::string requestedName = forcedId ? (name.empty()?defaultName:name) : NewPartName(name.empty() ? defaultName : name);
+    if(requestedName.empty())return nullptr;
     const std::string finalName =
         forcedId != kInvalidInstanceId ? requestedName : makeUniqueName(requestedName);
     auto part = std::make_unique<Part>(forcedId != kInvalidInstanceId ? forcedId : allocateId(),
@@ -322,7 +346,8 @@ Baseplate* Scene::createBaseplate(Vector3 position, Vector3 size, const std::str
     if (forcedId != kInvalidInstanceId && byId_.find(forcedId) != byId_.end()) {
         return nullptr;
     }
-    const std::string requestedName = name.empty() ? "Baseplate" : name;
+    const std::string requestedName = forcedId ? (name.empty()?"Baseplate":name) : NewPartName(name.empty() ? "Baseplate" : name);
+    if(requestedName.empty())return nullptr;
     const std::string finalName =
         forcedId != kInvalidInstanceId ? requestedName : makeUniqueName(requestedName);
     auto baseplate = std::make_unique<Baseplate>(
@@ -342,7 +367,8 @@ SpawnLocation* Scene::createSpawnLocation(Vector3 position, Vector3 size,
     if (forcedId != kInvalidInstanceId && byId_.find(forcedId) != byId_.end()) {
         return nullptr;
     }
-    const std::string requestedName = name.empty() ? "SpawnLocation" : name;
+    const std::string requestedName = forcedId ? (name.empty()?"SpawnLocation":name) : NewPartName(name.empty() ? "SpawnLocation" : name);
+    if(requestedName.empty())return nullptr;
     const std::string finalName =
         forcedId != kInvalidInstanceId ? requestedName : makeUniqueName(requestedName);
     auto spawn = std::make_unique<SpawnLocation>(
@@ -478,8 +504,8 @@ bool Scene::canParent(const Instance* object, const Instance* parent) const {
         return true;
     };
     if (!fits(object,depth)) return false;
-    // A storage reparent must not strand nested Parts outside Workspace.
-    if (!workspace_->isAncestorOf(parent)) {
+    // Geometry belongs either to Workspace or to an explicit storage service.
+    if (!workspace_->isAncestorOf(parent)&&!isStored(parent)) {
         for (const auto* part:parts_) if (object->isAncestorOf(part)) return false;
     }
     return true;
@@ -517,6 +543,8 @@ bool Scene::reparent(Instance* object, Instance* parent, std::string& error) {
         for(const auto& anchor:anchors)anchor.node->setLocalFrame(anchor.local);
         return false;
     }
+    worldDirty_=true;
+    for(const auto& listener:hierarchyListeners_)listener();
     diag::Event event;event.subsystem="scene";event.name="reparent";event.entityId=object->id();
     event.result="ok";event.context={{"previous_parent",previous},{"parent",parent->id()},{"transform_space","world_preserved"}};
     diag::log(event);
@@ -631,6 +659,11 @@ Instance* Scene::duplicateTree(const Instance& source, Instance* parent) {
     }
     std::string error;
     if (!reparent(copy,parent,error)) { removeSubtree(copy); return nullptr; }
+    // A new container is a new sibling namespace. Keep valid child labels so
+    // a prototype script can still find its own Parts by name after cloning.
+    if(source.isPart()&&parent!=source.parent()&&ValidPartName(source.name())) {
+        std::string ignored;copy->trySetName(source.name(),ignored);
+    }
     const auto children=source.children();
     for (auto* child : children) {
         if (!duplicateTree(*child,copy)) { removeSubtree(copy); return nullptr; }
@@ -659,6 +692,7 @@ bool Scene::canDeleteSubtree(const Instance* object) const {
 }
 
 void Scene::removeSubtree(Instance* object) {
+    worldDirty_=true;
     // Copia os filhos antes de qualquer destruicao.
     const std::vector<Instance*> children = object->children();
     for (Instance* child : children) {
@@ -732,6 +766,7 @@ void Scene::replaceContentsFrom(Scene& source) {
     }
     selection_ = nullptr;selectionIds_.clear();
     source.selection_ = nullptr;source.selectionIds_.clear();
+    worldDirty_=source.worldDirty_=true;
     objects_.swap(source.objects_);
     parts_.swap(source.parts_);
     byId_.swap(source.byId_);
@@ -815,6 +850,7 @@ void Scene::notifyRemoval(Instance* object) {
 }
 
 void Scene::rebuildParts() {
+    worldDirty_=true;
     parts_.clear();
     for (const std::unique_ptr<Instance>& object : objects_) {
         if (object->isPart()) {

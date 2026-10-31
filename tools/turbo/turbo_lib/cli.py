@@ -975,12 +975,39 @@ def _run_organize(args) -> int:
     return _emit(args, "organize", audit, True, "\n".join(lines), 0)
 
 
+def _hdd_critical_refusal(parsed) -> str | None:
+    """``hdd-critical`` means: do not add I/O. Compiling/running tests is I/O.
+
+    ``test --plan`` stays allowed because it only reads the inventory. The
+    refusal is explicit instead of silently skipping work, so an agent never
+    mistakes an untested change for a tested one.
+    """
+    mode = (os.environ.get("ATLAS_IO_MODE") or "").strip().lower()
+    if mode != "hdd-critical":
+        return None
+    if parsed.command not in {"build", "test", "benchmark"}:
+        return None
+    if parsed.command == "test" and getattr(parsed, "plan", False):
+        return None
+    hint = "ATLAS_IO_MODE=hdd-safe" if parsed.command == "test" else "ATLAS_IO_MODE=normal"
+    return (
+        f"modo hdd-critical: {parsed.command} compila/executa testes e escreve em "
+        f"disco; peça autorização e use {hint}. `test --plan` continua permitido."
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     parser = _parser()
     parsed = None
     try:
         parsed = parser.parse_args(normalize_argv(argv))
+        refused = _hdd_critical_refusal(parsed)
+        if refused:
+            return _emit(
+                parsed, parsed.command,
+                {"status": "REFUSED", "message": refused}, False, refused, 1,
+            )
         if parsed.command == "doctor":
             return _run_doctor(parsed)
         if parsed.command == "inventory":

@@ -73,12 +73,14 @@ void PhysicsWorld::attach(Scene& scene) {
             removePart(object->id());
         }
     });
+    scene.addHierarchyListener([this,&scene,alive=std::weak_ptr<char>(hierarchyLifetime_)] { if(!alive.expired()&&attachedScene_==&scene)syncScene(scene); });
     rebuildAll(scene);
 }
 
 void PhysicsWorld::rebuildAll(Scene& scene) {
+    attachedScene_=&scene;
     clearBodies();
-    for (Part* part : scene.parts()) {
+    for (Part* part : scene.worldParts()) {
         addPart(part);
         if (part != nullptr) {
             part->clearDirty();
@@ -170,6 +172,7 @@ void PhysicsWorld::applyCollisionFlag(const Part& part, btRigidBody* body) {
 }
 
 void PhysicsWorld::addPart(Part* part) {
+    if(part&&attachedScene_&&!attachedScene_->isWorldObject(part)){removePart(part->id());return;}
     if (part == nullptr) {
         return;
     }
@@ -209,7 +212,7 @@ bool PhysicsWorld::validate(const Scene& scene, std::string& error) const {
     error.clear();
     if(world_->getNumConstraints()!=static_cast<int>(joints_.size())){error="Índice de juntas Bullet inconsistente.";return false;}
     std::size_t partCount = 0;
-    for (Part* part : scene.parts()) {
+    for (Part* part : scene.worldParts()) {
         if (part == nullptr) {
             error = "Part nula na cena";
             return false;
@@ -418,7 +421,11 @@ void PhysicsWorld::syncJoints(Scene& scene) {
     }else ++it;
 }
 void PhysicsWorld::syncScene(Scene& scene) {
-    for (Part* part : scene.parts()) {
+    attachedScene_=&scene;
+    std::vector<InstanceId> inactive;
+    for(const auto& entry:bodies_)if(!scene.isWorldObject(scene.findPart(entry.first)))inactive.push_back(entry.first);
+    for(auto id:inactive)removePart(id);
+    for (Part* part : scene.worldParts()) {
         if (part == nullptr) {
             continue;
         }
@@ -445,7 +452,7 @@ void PhysicsWorld::simulate(Scene& scene, float deltaSeconds) {
 }
 
 void PhysicsWorld::syncFromBodies(Scene& scene) {
-    for (Part* part : scene.parts()) {
+    for (Part* part : scene.worldParts()) {
         if (part == nullptr || part->anchored() || isPartEditing(part->id())) {
             continue;
         }

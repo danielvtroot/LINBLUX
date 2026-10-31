@@ -26,6 +26,9 @@ específico de comando. Novos campos podem ser adicionados sem quebrar
 consumidores; campos existentes não devem mudar de significado sem incremento
 de `INDEX_VERSION`/documentação.
 
+O envelope de erro carrega `error` no topo **e** dentro de `data`, para
+consumidores antigos e novos:
+
 ## Códigos de saída
 
 | Código | Significado |
@@ -208,13 +211,59 @@ scanner encontrou um corpo. `references` é busca textual, não call graph.
   "ok": true,
   "command": "tests-for",
   "data": {
-    "path": "src/core/Widget.h",
+    "path": "src/core/Widget.cpp",
     "tests": [
-      {"name": "widget_test", "command": "widget_test", "target": "fixture_tests", "source_path": "tests/widget_test.cpp", "timeout": null, "origin": "cmake"}
+      {
+        "name": "widget_test",
+        "command": "widget_test",
+        "target": "fixture_tests",
+        "source_path": "tests/widget_test.cpp",
+        "timeout": null,
+        "origin": "cmake",
+        "confidence": "confirmed",
+        "reasons": ["include: tests/widget_test.cpp inclui src/core/Widget.h (1 fonte(s) de teste)"]
+      }
     ]
   }
 }
 ```
+
+Ordem de evidência: fonte do teste, `include` (transitivo, headers genéricos
+com fan-out > 4 descartados), mesmo target, cadeia de targets (`inferred`) e
+módulo (`inferred`). `confidence` é `confirmed`, `inferred` ou `harness`; o
+motivo está sempre em `reasons` e não prova que o teste executa o arquivo.
+
+## `diagnose` / `fix-plan`
+
+```json
+{
+  "ok": true,
+  "command": "diagnose",
+  "data": {
+    "query": "o slider de audio do menu ESC aparece vazio",
+    "confidence": "parcial",
+    "files": [
+      {"path": "src/rendering/PlayerMenu.cpp", "line": 92, "symbol": "loblox::PlayerMenu::drawAudio", "module": "rendering", "score": 24.5, "textual": true, "inferred": false, "match_types": ["symbol", "path"], "evidence": ["..."], "snippet": "..."}
+    ],
+    "tests": [{"name": "linblux_audio_panel_ui", "target": "linblux_audio_panel_ui_tests", "confidence": "confirmed", "reason": "include: tests/rml_ui_main.cpp inclui ..."}],
+    "hypotheses": [{"text": "o comportamento descrito é implementado em ...", "confidence": "média", "evidence": ["src/rendering/PlayerMenu.cpp:92"]}],
+    "risks": ["cabeçalho público: consumidores precisam recompilar"],
+    "next": "abrir src/rendering/PlayerMenu.cpp:92 e confirmar a hipótese",
+    "chars": 3120,
+    "limitations": ["hipótese derivada de ranking textual/estrutural; não é causa confirmada"]
+  }
+}
+```
+
+`diagnose` compõe `locate`, `symbol`, `tests-for` e `impact` numa única
+conexão. Opções: `--max-files` (1–10), `--max-tests` (1–8), `--brief`,
+`--json`, `--detail` e `--max-chars` (padrão 1.100 no texto humano). O corte é
+sempre em limite de linha e termina com `… (omitido; use --detail para a saída
+completa)`; JSON nunca é truncado em objeto inválido, apenas reduzido em
+`--brief`.
+
+`fix-plan` usa a mesma base e devolve `plan[]` com `action`, `where`, `why` e
+`done_when`, mais `edits_code: false`. Nunca edita nem executa nada.
 
 ## `trace`
 

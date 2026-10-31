@@ -27,3 +27,12 @@ O teste `linblux_video` percorre o clipe completo, verifica loop, abertura
 assíncrona, cancelamento, caminho inválido e cover. As capturas do executável
 validam as camadas e interação. Os números em renderização por software não
 substituem medição em GPU integrada real.
+
+## Distribuição e demonstrações
+
+O vídeo local do Início é opcional e fica fora da instalação padrão e do candidato
+público enquanto seus direitos não estiverem documentados. O fallback estático
+permite usar o Studio sem esse arquivo. A build FFmpeg atual declara GPL v2 ou
+posterior; a distribuição binária continua bloqueada pela revisão pendente.
+Vídeos de demonstração da documentação seguem [MIDIA.md](MIDIA.md) e não são
+coletados automaticamente da pasta `midia/`.

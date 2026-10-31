@@ -121,7 +121,7 @@ no notebook; continuar cobrindo input e Play aprovados. Próximo comando:
 
 Base: `894e89c`, branch `fix/unified-3d-gizmos`; nenhum push.
 Baseline Release: build e CTest 8/8 passaram antes de mudanças.
-Worktree inicial sem mudanças rastreadas; `.desenvolvimento/`, `loblox.png`,
+Worktree inicial sem mudanças rastreadas; configurações locais, `loblox.png`,
 `rosto1.png` e `sky1/` são arquivos preexistentes preservados.
 
 Prioridade: hierarquia verdadeira, Explorer/Properties utilizáveis, depois Lua

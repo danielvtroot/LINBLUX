@@ -88,11 +88,14 @@ def excerpt(log_path: Path, max_chars: int = config.MAX_EXCERPT_CHARS) -> str:
         if patterns.search(line):
             important.append(line)
     if important:
-        picked = "\n".join(important[-8:])
+        # First errors explain the failure; the last ones are usually cascading
+        # consequences of the same root cause (make/ld noise).
+        picked = "\n".join(important[:8])
         if len(picked) > max_chars:
-            picked = picked[-max_chars:]
+            picked = picked[:max_chars]
         return (
-            f"[trecho: {len(important)} linha(s) de erro; log completo no caminho]\n"
+            f"[trecho: primeiras {min(8, len(important))} de {len(important)} linha(s) de erro; "
+            "as seguintes podem ser consequência]\n"
             + picked
         )
     head = text[: max_chars // 3]

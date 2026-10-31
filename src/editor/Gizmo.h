@@ -20,6 +20,7 @@ struct GizmoInput {
     bool shiftDown = false;
     bool altDown = false;   // escala centrada (as duas faces)
     float occlusionDistance=INFINITY;
+    float surfaceOffset = 0;
     bool surfaceSnap = false; // Ctrl: encaixe geométrico durante Mover
     bool cursorSurface = false;
     Ray cursorRay{};
@@ -88,7 +89,7 @@ public:
     bool centeredScaleOption() const {return centerScaleOption_;}
     // Studio moves directly from a face; rig tools may retain pivot axes.
     void setFaceMove(bool value){faceMove_=value;}
-    bool faceMove() const{return faceMove_&&!planarHandles_;}
+    bool faceMove() const{return faceMove_;}
     void setPlanarHandles(bool value){planarHandles_=value;}
     bool planarHandles() const{return planarHandles_;}
     Vector3 faceAnchor() const {return faceAnchorWorld_;}

@@ -26,7 +26,7 @@ InstanceId InteractionSystem::update(Vector3 player,const ScriptInput& input,flo
     if(latched_&&!input.keys[latchKey_]&&!pad)latched_=false;
     struct Candidate {InstanceId id;Vector3 point;float distance;};std::vector<Candidate> candidates;
     for(const auto& entry:entries_){auto* owner=scene_.find(entry.first);if(!owner)continue;float best=std::numeric_limits<float>::infinity();Vector3 closest{};
-        for(const auto* part:scene_.parts())if(owner->isAncestorOf(part)&&!InventoryHidden(*part)){
+        for(const auto* part:scene_.worldParts())if(owner->isAncestorOf(part)&&!InventoryHidden(*part)){
             Vector3 point;const auto bounds=part->bounds();
             if(part->shape()==PartShape::Sphere){const auto delta=Vector3Subtract(player,part->position());point=Vector3Length(delta)>part->sphereRadius()?Vector3Add(part->position(),Vector3Scale(Vector3Normalize(delta),part->sphereRadius())):player;}
             else {auto local=Vector3RotateByQuaternion(Vector3Subtract(player,bounds.center),QuaternionInvert(bounds.rotation));local={std::clamp(local.x,-bounds.half.x,bounds.half.x),std::clamp(local.y,-bounds.half.y,bounds.half.y),std::clamp(local.z,-bounds.half.z,bounds.half.z)};point=Vector3Add(bounds.center,Vector3RotateByQuaternion(local,bounds.rotation));}

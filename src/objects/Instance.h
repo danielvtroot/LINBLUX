@@ -40,6 +40,9 @@ bool IsScriptClass(InstanceClass type);
 bool IsRootServiceClass(InstanceClass type);
 inline bool IsSurfaceClass(InstanceClass type) { return type==InstanceClass::Decal || type==InstanceClass::Texture; }
 
+// New Part labels may be compacted at creation; manual renames are validated.
+bool ValidPartName(const std::string& name);
+std::string NewPartName(const std::string& name);
 class Scene;
 
 // No da hierarquia da cena. Nao possui os filhos (a Scene possui todos os
@@ -56,6 +59,7 @@ public:
 
     const std::string& name() const { return name_; }
     void setName(const std::string& name);
+    bool trySetName(const std::string& name,std::string& error);
     bool setAttribute(const std::string& name, Attribute value);
     const std::map<std::string,Attribute>& attributes() const { return attributes_; }
     void removeAttribute(const std::string& name) { attributes_.erase(name); }

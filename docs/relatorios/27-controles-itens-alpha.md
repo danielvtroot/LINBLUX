@@ -25,7 +25,7 @@ ATLAS localizou runtime/input/render e contratos; TURBO:
 Arquivos: Interaction, Inventory.worldItems, Runtime, LuaRuntime,
 ExperienceOverlay/SceneRenderer, Player, dois hunks de GamePanels, CMake e
 studio/lua_player/rml_ui. Diffs preexistentes de GamePanels foram preservados.
-Guia INTERACOES.md e exemplo interacao_porta.lua usam a API pública real.
+Guia INVENTARIO.md#coleta-interação-e-hotbar e exemplo interacao_porta.lua usam a API pública real.
 
 Próxima fase: áudio. Auditoria encontrou ProbeAudio usando LoadWave para a
 música inteira só para duração, e Player abrindo dispositivo depois dos scripts.

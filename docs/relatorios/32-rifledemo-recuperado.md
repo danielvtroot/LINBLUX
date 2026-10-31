@@ -1,6 +1,6 @@
 # RifleDemo recuperado — 26/10/2026
 
-Base:4a0be641eefc0103136f46f81f782a5270e5f1ea. WIP desenvolvimento preservado e concluído,
+Base:4a0be641eefc0103136f46f81f782a5270e5f1ea. WIP preservado e concluído,
 sem recriar inventário, áudio, UI ou navegação. ItemActions controla estado
 limitado por ID (intervalo, munição, recarga); efeitos/dano/recoil/HUD são Lua.
 RifleDemo contém15 objetos autorais,5 sons originais,3 alvos com rig e saúde,

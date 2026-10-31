@@ -86,8 +86,19 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="sphere")e.insertPart(PartShape::Sphere);
         else if(c.action=="spawn")e.insertSpawnLocation();
         else if(c.action=="folder")e.insertContainer(InstanceClass::Folder,e.scene_.find(c.instance));
-        else if(c.action=="server-storage"){e.scene_.ensureService(InstanceClass::ServerStorage);e.setStatus("ServerStorage disponível no Explorador.");}
-        else if(c.action=="replicated-storage"){e.scene_.ensureService(InstanceClass::ReplicatedStorage);e.setStatus("ReplicatedStorage disponível no Explorador.");}
+        else if(c.action=="item-prototypes") {
+            if(e.runtime_.active())throw std::runtime_error("Organize protótipos no modo Editar.");
+            auto* storage=e.scene_.ensureService(InstanceClass::ServerStorage);Instance* folder=nullptr;
+            for(auto* child:storage->children())if(child->name()=="Itens") {
+                if(child->instanceClass()!=InstanceClass::Folder)throw std::runtime_error("Já existe um objeto chamado Itens; preserve-o e escolha uma pasta válida.");
+                folder=child;break;
+            }
+            if(!folder){folder=e.scene_.createContainer(InstanceClass::Folder,storage,"Itens");if(!folder)throw std::runtime_error("Não foi possível criar a pasta de protótipos.");folder->setName("Itens");}
+            e.scene_.select(folder);e.setStatus("ServerStorage/Itens: organize Modelos e marque Protótipo de item nas Propriedades.");
+        }
+        else if(c.action=="server-scripts"){e.scene_.select(e.scene_.ensureService(InstanceClass::ServerScriptService));e.setStatus("ServerScriptService disponível no Explorador.");}
+        else if(c.action=="server-storage"){e.scene_.select(e.scene_.ensureService(InstanceClass::ServerStorage));e.setStatus("ServerStorage disponível no Explorador.");}
+        else if(c.action=="replicated-storage"){e.scene_.select(e.scene_.ensureService(InstanceClass::ReplicatedStorage));e.setStatus("ReplicatedStorage disponível no Explorador.");}
         else if(c.action=="apply-item-icon"||c.action=="clear-item-icon"){
             auto* model=e.scene_.selection();if(!model||model->instanceClass()!=InstanceClass::Model)throw std::runtime_error("Selecione um Modelo.");
             if(!model->setAttribute("item_icon",c.action=="clear-item-icon"?std::string():game::NormalizeImageReference(c.value)))throw std::runtime_error("Limite de atributos atingido.");
@@ -146,10 +157,17 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             e.previewPlaying_=false;e.previewPose_={};e.animationDirty_=false;e.timelineDragJoint_=-1;e.hasCopiedKey_=false;e.clipboardId_=0;
             e.camera_.releaseCapture();e.setProjectPath(c.value);if(e.onSceneLoaded_)e.onSceneLoaded_();e.checkInvariants("rml_load");
         }
-        else if(c.action=="rename") {if(c.value.empty()||c.value.size()>128)throw std::runtime_error("Name must contain 1..128 bytes");if(auto* node=e.scene_.find(c.instance))node->setName(c.value);else if(auto* rig=e.scene_.gameAssets().findRig(e.selectedRig_))rig->name=c.value;}
+        else if(c.action=="rename") {if(c.value.empty()||c.value.size()>128)throw std::runtime_error("Name must contain 1..128 bytes");if(auto* node=e.scene_.find(c.instance)){std::string error;if(!node->trySetName(c.value,error))throw std::runtime_error(error);}else if(auto* rig=e.scene_.gameAssets().findRig(e.selectedRig_))rig->name=c.value;}
         else if(c.action=="reparent") {std::string error;if(!e.scene_.reparent(e.scene_.find(c.instance),e.scene_.find(std::stoull(c.value)),error))throw std::runtime_error(error);}
         else if(c.action=="snap") {e.endGizmoSession(true,"snap");e.cancelRigGizmo();e.snapEnabled_=c.value=="true";}
-        else if(c.action=="move-planes"){e.gizmo_.setPlanarHandles(c.value=="true"||c.value=="1");e.rigGizmo_.setPlanarHandles(c.value=="true"||c.value=="1");}
+        else if(c.action=="move-planes") {
+            // Planos de pivo pertencem a edicao de rig. Part/Model Move desloca
+            // pela face: um controle oculto nao pode trocar o gizmo da peca.
+            const bool on=c.value=="true"||c.value=="1";
+            e.rigGizmo_.setPlanarHandles(on);
+            e.gizmo_.setPlanarHandles(false);
+            e.gizmo_.setFaceMove(true);
+        }
         else if(c.action=="scale-origin") {
             if(c.value!="face"&&c.value!="center")throw std::runtime_error("Origem da escala inválida");
             e.endGizmoSession(true,"scale_origin");e.cancelRigGizmo();
@@ -166,6 +184,9 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                 c.value=="vertex"?gizmomath::SnapFeature::Vertex:gizmomath::SnapFeature::Face;
         }
         else if(c.action=="snap-align") {e.endGizmoSession(true,"snap_align");e.alignSnapNormal_=c.value=="true";}
+        else if(c.action=="place-surface") {if(e.placement_.active())e.placement_.cancel();else e.beginSurfacePlacement();}
+        else if(c.action=="placement-offset") {const float value=Number(c.value);if(value<0||value>10000)throw std::runtime_error("Afastamento deve ser de 0 a 10000 unidades.");e.placementOffset_=value;}
+        else if(c.action=="assembly") {if(c.value!="none")e.assemblyAction(c.value);}
         else if(c.action=="surface-snap") {e.endGizmoSession(true,"surface_snap");e.cancelRigGizmo();e.surfaceSnapEnabled_=c.value=="true";e.setStatus(e.surfaceSnapEnabled_?"Encaixe de face ativado — arraste Mover para encaixar peças.":"Encaixe de face desativado.");}
         else if(c.action=="move-snap"||c.action=="scale-snap"||c.action=="rotate-snap") {float v=Number(c.value);if(v<=0||v>180)throw std::runtime_error("Snap increment must be 0..180");e.endGizmoSession(true,"snap");e.cancelRigGizmo();(c.action=="move-snap"?e.moveSnap_:c.action=="scale-snap"?e.scaleSnap_:e.rotateSnapDegrees_)=v;}
         else if(c.action=="anchor") {if(auto* node=e.scene_.selection();node&&node->isPart())static_cast<Part*>(node)->setAnchored(!static_cast<Part*>(node)->anchored());}
@@ -295,6 +316,14 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         else if(c.action=="apply-image"||c.action=="apply-texture") {
             auto* part=e.scene_.selection();if(!part||!part->isPart())throw std::runtime_error("Select a Part before applying an image");
             const auto path=game::ResolveImagePath(game::AssetsDir(),c.value);if(path.empty())throw std::runtime_error("Image asset missing");
+            // Um decal NOVO entra em "Preencher": a imagem toma a face
+            // INTEIRA do lado escolhido, cortando o excesso em vez de deformar
+            // ou deixar tarjas transparentes. "Ajustar" (imagem inteira com
+            // sobra) continua disponível no painel. Substituir a imagem de um
+            // decal já existente preserva o modo que o autor escolheu, então
+            // arquivos antigos continuam esticando.
+            if(c.action=="apply-image"&&part->attributes().find("decal_image")==part->attributes().end())
+                part->setAttribute("decal_fit",std::string("fill"));
             part->setAttribute(c.action=="apply-image"?"decal_image":"texture_image",game::ImageReference(path));
             e.setStatus("Image applied to "+part->name());
         }
@@ -321,7 +350,7 @@ bool EditorActions::dispatch(const EditorCommand& c) {
         }
         else if(c.action.rfind("property:",0)==0) {
             auto* node=e.scene_.find(c.instance);if(!node)return false;const auto name=c.action.substr(9);
-            if(name=="Name") {if(c.value.empty()||c.value.size()>128)throw std::runtime_error("Invalid name");node->setName(c.value);}
+            if(name=="Name") {std::string error;if(!node->trySetName(c.value,error))throw std::runtime_error(error);}
             else if(name=="Parent") {std::string error;if(!e.scene_.reparent(node,e.scene_.find(std::stoull(c.value)),error))throw std::runtime_error(error);}
             else if(name.rfind("Attribute:",0)==0) {
                 const auto key=name.substr(10);const auto it=node->attributes().find(key);if(it==node->attributes().end())throw std::runtime_error("Attribute no longer exists");

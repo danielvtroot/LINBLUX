@@ -488,3 +488,121 @@ grandes de câmera/volume/luz ainda podem causar atualização perceptível do f
 não há cascatas nem filtro temporal. Rigs/decals continuam com iluminação CPU como
 antes, embora o rig projete sombra em Parts. O arquivo original do usuário não foi
 alterado nem testado porque não foi identificado. WIPs originais preservados.
+
+
+## Correção de interação dos gizmos — 2026-10-28
+
+O usuário reprovou os controles pequenos agrupados no pivô. Depois de examinar
+esta revisão, aprovou o Scale por face e pediu que Move adotasse a mesma
+interação. Esta orientação substitui o pedido anterior de três setas no pivô
+como padrão do Studio. Nenhuma fase 5 foi iniciada.
+
+### Resultado implementado
+
+- **Selecionar:** silhueta discreta, sem gizmo, cruzes ou readout técnico.
+- **Escalar:** a face inteira é clicável; uma única seta 3D aparece na face em
+  hover/arraste. Parede de 191 unidades usa uma âncora na região visível, sem
+  exigir acesso ao centro da parede. Escala por face mantém o lado oposto;
+  opção Centrada/Alt mantém o centro. Prévia e dimensões em um único indicador.
+- **Mover:** mesma aquisição pela face e mesma alça 3D; desloca a Part inteira,
+  sem mudar suas dimensões. Local usa a normal local; Mundo escolhe o eixo
+  mundial mais próximo da normal. Planos de movimento opcionais restauram
+  eixos no pivô com XY/XZ/YZ; ferramentas de rig preservam seus eixos no pivô.
+- **Girar:** arcos 3D sem quadradinhos/letras, destaque e graus durante o gesto.
+  Iluminação dos controles no desenho CPU melhora contraste sobre peças cinza.
+- Desenho/picking compartilham triângulos; faces usam recorte de frustum e
+  interseção raio/plano. Oclusão por outra Part opaca impede iniciar o gesto.
+  Matemática de transformação, sessões, snap e undo/redo existentes preservados.
+  Nenhuma alteração de física, shaders, sombras, áudio ou Lua.
+
+### Evidências
+
+- Studio real recompilado: `build-linblux/linblux`.
+- ATLAS: locate/impact consultados; update/verify aprovados.
+- Headless focado: `linblux_tests`, `linblux_manipulation`, `linblux_studio`,
+  **3/3 PASS**. Inclui Move direto local/mundo em peças pequenas/191 unidades,
+  dimensão imutável, oclusão, cancelamento e opção de escala centrada.
+- TURBO FAST: **12/12 PASS**, sem cache; run `20261028T092803Z-10975`.
+  Build 90,9 s; testes 9,5 s. FULL não executado.
+- TURBO gráfico: **379 casos, 4882 verificações, zero falhas**;
+  `.turbo/logs/direct-face/graphic-final.log`. A regressão adicional comprova
+  que a alça do Move por face aparece também no sentido positivo do eixo.
+  A inspeção real detectou e corrigiu essa alça antes da publicação.
+- Capturas antes/depois: `.turbo/logs/direct-face/captures/index.html`,
+  PNGs de Selecionar/Mover/Escalar/Girar, hover, arraste, resultado, undo/redo
+  e ESC nas resoluções 1366×768 e 1920×1080. Baseline preservado de `752b3a4`.
+  O script `tests/direct_face_capture.py` usa cópia isolada da mesma cena/câmera,
+  verifica JSON salvo após gestos reais e preserva o arquivo-fonte.
+
+Limites: a experiência original do usuário não foi identificada; usamos cena
+isolada equivalente, com parede de 191 unidades, piso, parede adjacente e peça
+pequena girada com decal. Validação gráfica em llvmpipe, sem extrapolar para GPU
+física. FAST é cobertura parcial do produto; não se declara aprovação global.
+Os quatro WIPs anteriores foram preservados byte a byte e excluídos do commit.
+
+Validação final no Studio: **PASS, 124,6 s**, supervisionada pelo TURBO;
+`.turbo/logs/direct-face/after-final.log`. Move e Scale passaram nas duas
+resoluções com undo/redo/ESC. PNGs inspecionados em tamanho original. Manifests
+confirmam a mesma cena-fonte antes/depois e o hash do executável final capturado.
+
+## Continuação — encaixe de construção por prévia (28/10/2026)
+
+Incremento seguinte à correção visual de Move/Scale; não altera os commits
+publicados anteriores. **Encaixar à superfície** no ribbon Modelo cria uma
+proposta de colocação com Face/Borda/Vértice, alinhamento à normal, afastamento
+e grade opcional. Enquanto o cursor apenas propõe uma pose, cena, física,
+histórico e arquivo salvo não mudam. Clique confirma como undo único; Esc
+cancela. Mudança concorrente invalida a proposta. Models usam caixas reais dos
+filhos, inclusive com pivô distante. A montagem duplica ao lado/acima pela
+extensão OBB e permite repetir o último deslocamento confirmado.
+
+### Validação registrada
+
+- Build TURBO incremental compilou `linblux`, Studio e os alvos FAST selecionados
+  (run `20261028T214817Z-23523`, `build.log`).
+- `linblux_construction_ui` supervisionado: **216 checks, 0 falhas**, com preview,
+  cancelamento, salvar antes do commit, recinto de quatro paredes/piso, undo/redo
+  e reabertura em **1366×768 e 1920×1080** (`.turbo/logs/construction-final-focused/`).
+- `linblux_studio` passou com `ConstructionPreviewWorkflow`; `linblux_models_ui`
+  passou na repetição final com **175 checks** (`.turbo/logs/model-face-retest5/`).
+  Uma tentativa intermediária de Models falhou/time-out na interação antiga de
+  eixo; o teste foi adaptado à aquisição atual Move por face e depois aprovado.
+- TURBO FAST executou **11/11** selecionados sem falhas, mas marcou
+  `PASSED_PARTIAL / coverage unknown`; não é aprovação global. Não se repetiu
+  IMPACT/FULL após esta etapa nem o restart histórico sem relação.
+- ATLAS atualizado/verificado OK após mudanças de código. Capturas/testes usam
+  llvmpipe/Xvfb; não houve confirmação manual do usuário, teste no arquivo
+  original ou benchmark em GPU física.
+- Documentação do Editor e contrato atualizado. O ramo `main` e `origin/main`
+  coincidiam em `2386f8f`; este incremento ainda é WIP local e **não publicado**.
+  A grade visual de construção segue como incremento separado; fases 5–7 não
+  iniciadas nesta etapa.
+
+
+## Studio 2.0 — checkpoint de recuperação e manipulação (29/10/2026)
+
+- Base local/remota conferida: `e1ff4416532365b872d779d434a4c7d4223406e4`.
+  Os 21 caminhos WIP foram preservados em `.turbo/checkpoints/studio2-initial/`
+  (ZIP, patch e manifesto SHA-256); alterações sem relação não foram incluídas.
+  ConstructionPlacement e ConstructionUI já estavam publicados nessa base.
+- Move de Parts/Models permanece por face mesmo com planos habilitados. A opção
+  de planos fica restrita ao rig. Scale mantém a face oposta e não foi redesenhado.
+- Corrigidas fixtures Precision UI (aquisição por face), Script Input (ESC captura
+  input sem parar simulação), Lua UI Player (alfa real), RifleDemo (tempo simulado
+  versus real) e Restart (clique entre quadros). Models passou sem ampliar timeout;
+  o timeout anterior resultava do orçamento restante de 16,5 s.
+- Seis regressões gráficas passaram no TURBO: Precision 35,98 s, Models 53,21 s,
+  Script Input 16,59 s, Restart 28,95 s, Lua UI Player 4,93 s e RifleDemo 13,33 s.
+  Logs: `.turbo/logs/studio2/{ui-fixed,native-fixed}/tests/`.
+- Build oficial Studio/Player aprovado; testes headless focados 3/3. FAST executou
+  19/19 sem falhas, mas reportou cobertura desconhecida: aprovação PARCIAL,
+  não aprovação global. Run `20261029T152732Z-9151`; nenhuma suíte FULL.
+- Studio real capturado em 1366×768 e 1920×1080, parede de 191 unidades, piso,
+  parede adjacente e peça pequena girada com decal. PNGs inspecionados de Move
+  hover e Scale arrastando; sem eixos concorrentes no pivô. Manifesto comprova
+  Move sem redimensionar, Scale com face oposta fixa, snap, undo/redo e ESC.
+  Evidências: `.turbo/logs/studio2/faces/after/` (30 PNGs e manifest.json).
+- Ambiente Xvfb/llvmpipe, cena equivalente isolada; não é aprovação manual do
+  usuário nem benchmark de GPU física. Sliders seguem no próximo incremento;
+  layout, Explorador, simplificação adicional e limpeza NÃO INICIADOS.
+  Sequência obrigatória: `STUDIO_2_0_PLANO.md`. Não declarar lançamento pronto.

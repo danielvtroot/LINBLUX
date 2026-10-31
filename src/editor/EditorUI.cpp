@@ -582,6 +582,7 @@ bool EditorUI::enableModernFrontend(std::string& error) {
 void EditorUI::renderModernFrontend(){if(frontend_)frontend_->render();}
 
 void EditorUI::endGizmoSession(bool restoreTransform, const char* reason) {
+    placement_.cancel();
     if(modelTransform_.active()){modelTransform_.end(restoreTransform,reason);return;}
     Part* part = scene_.findPart(transform_.partId());
     if (restoreTransform) transform_.cancel(part, true, reason);
@@ -589,7 +590,14 @@ void EditorUI::endGizmoSession(bool restoreTransform, const char* reason) {
 }
 
 void EditorUI::setTool(ToolMode tool, const char* source) {
-    if (tool_ == tool) return;
+    if (tool_ == tool) {
+        // Reclicar a ferramenta ja ativa tambem reafirma o contrato: Part/Model
+        // Move e face, nunca o manipulador de setas herdado de outro contexto.
+        gizmo_.setFaceMove(true);
+        gizmo_.setPlanarHandles(false);
+        return;
+    }
+    placement_.cancel();
     cancelRigGizmo();
     if (transform_.active()) {
         endGizmoSession(true, "tool_change");
@@ -602,6 +610,11 @@ void EditorUI::setTool(ToolMode tool, const char* source) {
     event.result = "ok";
     diag::log(event);
     gizmo_.cancel();
+    // Contrato do Studio: Mover desloca pela face. Reafirmar aqui impede que
+    // estado herdado (rig, preferencia ou codigo antigo) traga o gizmo de
+    // setas de volta como padrao ao trocar de ferramenta.
+    gizmo_.setFaceMove(true);
+    gizmo_.setPlanarHandles(false);
     editStartValid_ = false;
     clearTransformReadout();
     tool_ = tool;
@@ -1710,6 +1723,7 @@ void EditorUI::drawViewport() {
       }
     };
     Instance* selection = scene_.selection();
+    if(selection&&!scene_.isWorldObject(selection))selection=nullptr;
     Part* selectedPart =
         selection != nullptr && selection->isPart() ? static_cast<Part*>(selection) : nullptr;
     const Rectangle viewportRect{imagePosition.x, imagePosition.y,
@@ -1727,13 +1741,13 @@ void EditorUI::drawViewport() {
     gizmoInput.altDown = input.alt;
     if((tool_==ToolMode::Scale||(tool_==ToolMode::Move&&gizmo_.faceMove()))&&selection&&!gizmo_.dragging()){
         const auto ray=camera_.rayFromScreen({input.mouse.x-viewportRect.x,input.mouse.y-viewportRect.y},{viewportRect.width,viewportRect.height});
-        for(const auto* p:scene_.parts())if(p!=selection&&!selection->isAncestorOf(p)&&p->color().a>=250){
+        for(const auto* p:scene_.worldParts())if(p!=selection&&!selection->isAncestorOf(p)&&p->color().a>=250){
             const auto hit=p->intersect(ray);if(hit.hit)gizmoInput.occlusionDistance=std::min(gizmoInput.occlusionDistance,hit.distance);}
     }
     // Volumes reais dos filhos: o pivô deslocado de um Modelo não é seu centro geométrico.
     std::vector<gizmomath::SurfaceBox> snapMoving,snapTargets;
     if(tool_==ToolMode::Move&&(surfaceSnapEnabled_||ImGui::GetIO().KeyCtrl)&&selection) {
-        for(const auto* p:scene_.parts()) {
+        for(const auto* p:scene_.worldParts()) {
             if(p->color().a==0)continue;
             // A sphere is never an invisible box. These authoring features
             // explicitly support boxes only; sphere picking remains exact.
@@ -1742,12 +1756,13 @@ void EditorUI::drawViewport() {
             auto& boxes=p==selection||selection->isAncestorOf(p)?snapMoving:snapTargets;
             boxes.push_back({{p->position(),p->rotation(),sz},p->id()});
         }
+        gizmoInput.surfaceOffset=placementOffset_;
         gizmoInput.surfaceSnap=true;gizmoInput.movingBoxes=&snapMoving;gizmoInput.targetBoxes=&snapTargets;
         gizmoInput.cursorSurface=true;gizmoInput.alignToNormal=alignSnapNormal_;gizmoInput.feature=snapFeature_;
         gizmoInput.cursorRay=camera_.rayFromScreen({input.mouse.x-viewportRect.x,input.mouse.y-viewportRect.y},
                                                   {viewportRect.width,viewportRect.height});
         float nearest=INFINITY;bool containsSphere=false,nearestSphere=false;
-        for(const auto* p:scene_.parts()) {
+        for(const auto* p:scene_.worldParts()) {
             if(p->color().a==0)continue;
             if(p==selection||selection->isAncestorOf(p)) {
                 containsSphere|=p->shape()==PartShape::Sphere;
@@ -1769,7 +1784,8 @@ void EditorUI::drawViewport() {
     const bool sessionOwns = route.owner == InputOwner::Transform;
     const auto previousHover = gizmo_.hoveredHandle();
     const bool selectedModel=selection&&selection->instanceClass()==InstanceClass::Model;
-    const bool gizmoAllowed=(viewportOwns||sessionOwns)&&!rigConsumed&&!readout_.editing&&!readoutHovered;
+    const bool placementConsumed=updateSurfacePlacement(input,viewportRect,viewportOwns&&!rigConsumed&&!readoutHovered);
+    const bool gizmoAllowed=!placementConsumed&&(viewportOwns||sessionOwns)&&!rigConsumed&&!readout_.editing&&!readoutHovered;
     const GizmoUpdateResult gizmoResult=selectedModel||modelTransform_.active()
         ?modelTransform_.update(tool_,selection,camera_,viewportRect,hovered,gizmoAllowed,gizmoInput)
         :transform_.update(tool_,selectedPart,camera_,viewportRect,hovered,gizmoAllowed,gizmoInput);
@@ -1819,7 +1835,7 @@ void EditorUI::drawViewport() {
             (cameraOwns || (route.editorKeys && !sessionOwns)),
         viewportOwns && !gizmoResult.consumed && !rigConsumed && !readoutHovered, GetFrameTime());
 
-    if (viewportOwns && !gizmoResult.consumed && !rigConsumed && !readoutHovered &&
+    if (viewportOwns && !placementConsumed && !gizmoResult.consumed && !rigConsumed && !readoutHovered &&
         input.leftPressed) {
         const Vector2 mouse = input.mouse;
         if (mouse.x >= viewportRect.x && mouse.y >= viewportRect.y &&
@@ -1871,6 +1887,7 @@ void EditorUI::drawViewport() {
 
     // Selection may have changed in the raycast above.
     selection = scene_.selection();
+    if(selection&&!scene_.isWorldObject(selection))selection=nullptr;
     selectedPart = selection && selection->isPart() ? static_cast<Part*>(selection) : nullptr;
     if (readout_.visible && !readout_.editing &&
         (selectedPart == nullptr || selectedPart->id() != readout_.partId)) {
@@ -1896,6 +1913,7 @@ void EditorUI::drawViewport() {
         if(const auto* p=scene_.pickPart(ray,5000))hover=p->id();
     }
     renderer_.drawEditorGuides(scene_,camera_.camera(),editorGeometry_,hover);
+    drawSurfacePlacement(viewportRect);
     if(showCollisionShapes_) {
         physics_.syncScene(scene_);
         renderer_.drawCollisionShapes(scene_,physics_,camera_,selection?selection->id():0);
@@ -1903,16 +1921,16 @@ void EditorUI::drawViewport() {
     if (rigState.rig && (showJointPivots_||selectedRigBody_<0) && tool_!=ToolMode::Select &&
         (tool_!=ToolMode::Scale || rigContext_==RigContext::Edit))
         rigGizmo_.drawOverlay(jointProxy_, tool_, camera_, viewportRect);
-    if (selectedPart != nullptr && tool_ != ToolMode::Select) {
+    if (!placement_.active() && selectedPart != nullptr && tool_ != ToolMode::Select) {
         gizmo_.drawOverlay(*selectedPart, tool_, camera_, viewportRect,!readout_.editing);
     }
-    if(selection&&selection->instanceClass()==InstanceClass::Model&&modelTransform_.proxy()&&tool_!=ToolMode::Select)
+    if(!placement_.active()&&selection&&selection->instanceClass()==InstanceClass::Model&&modelTransform_.proxy()&&tool_!=ToolMode::Select)
         gizmo_.drawOverlay(*modelTransform_.proxy(),tool_,camera_,viewportRect,!readout_.editing);
     EndTextureMode();
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-    if(selection&&tool_==ToolMode::Move&&!runtime_.active()) {
+    if(!placement_.active()&&selection&&tool_==ToolMode::Move&&!runtime_.active()) {
         const ImVec2 p{imagePosition.x+12,imagePosition.y+12};
         const char* hint=surfaceSnapEnabled_?"Arraste uma face para mover. Encaixe ativo.":"Arraste uma face para mover. Ctrl: encaixar.";
         const auto s=ImGui::CalcTextSize(hint);
@@ -1921,7 +1939,7 @@ void EditorUI::drawViewport() {
     }
     if(gizmo_.dragging()&&selectedPart&&selectedPart->shape()==PartShape::Block) {
         const auto& pose=selectedPart->transform();
-        for(const auto* other:scene_.parts()) {
+        for(const auto* other:scene_.worldParts()) {
             if(other==selectedPart||other->shape()!=PartShape::Block||other->color().a==0)continue;
             const auto& target=other->transform();
             const float gap=gizmomath::BoxSeparation({pose.position,pose.rotation,pose.size},{target.position,target.rotation,target.size});
@@ -2165,7 +2183,7 @@ void EditorUI::drawPartProperties(Part& part) {
     char name[128];
     std::snprintf(name, sizeof(name), "%s", part.name().c_str());
     if (ImGui::InputText(i18n::Label("Name"), name, sizeof(name))) {
-        part.setName(name);
+        std::string error;if(!part.trySetName(name,error))setStatus(error,true);
     }
 
     ImGui::BeginDisabled();
@@ -2478,7 +2496,7 @@ void EditorUI::drawDialogs() {
         if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
         const bool enter=ImGui::InputText(i18n::Label("Name"),renameBuffer_,sizeof(renameBuffer_),ImGuiInputTextFlags_EnterReturnsTrue);
         if (enter || ImGui::Button(i18n::Label("Rename"))) {
-            if (auto* node=scene_.find(renameId_); node && renameBuffer_[0]) node->setName(renameBuffer_);
+            if (auto* node=scene_.find(renameId_); node) {std::string error;if(!node->trySetName(renameBuffer_,error))setStatus(error,true);}
             if(auto* rig=scene_.gameAssets().findRig(renameRigId_);rig && renameBuffer_[0])rig->name=renameBuffer_;
             renameId_=0;renameRigId_.clear(); ImGui::CloseCurrentPopup();
         }
@@ -2641,12 +2659,13 @@ void EditorUI::insertPart(PartShape shape) {
     }
     // In edit mode inserted parts must stay where the user places them.
     part->setAnchored(true);
-    if (parent && (parent->instanceClass()==InstanceClass::Folder || parent->instanceClass()==InstanceClass::Model)) {
+    if (parent && (parent->instanceClass()==InstanceClass::Folder || parent->instanceClass()==InstanceClass::Model || parent->instanceClass()==InstanceClass::ServerStorage || parent->instanceClass()==InstanceClass::ReplicatedStorage)) {
         std::string error; if (!scene_.reparent(part,parent,error)) setStatus(error,true);
     }
     scene_.select(part);
     setStatus(shape == PartShape::Sphere ? "Esfera criada e ancorada."
                                          : "Peça criada e ancorada.");
+    if(shape==PartShape::Block&&surfaceSnapEnabled_&&scene_.isWorldObject(part))beginSurfacePlacement();
 }
 
 void EditorUI::insertSpawnLocation() {
@@ -2702,6 +2721,7 @@ void EditorUI::duplicateSelection() {
     scene_.select(copy);
     checkInvariants("duplicate");
     setStatus("Duplicado: " + copy->name());
+    if(surfaceSnapEnabled_)beginSurfacePlacement();
 }
 
 void EditorUI::renameSelection() {

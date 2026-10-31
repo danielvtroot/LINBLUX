@@ -13,6 +13,7 @@
 #include "core/Diagnostics.h"
 #include "core/NumberFormat.h"
 #include "editor/EditHistory.h"
+#include "editor/ConstructionPlacement.h"
 #include "editor/ModelTransformSession.h"
 #include "editor/GizmoLayout.h"
 #include "rendering/EditorCamera.h"
@@ -116,16 +117,120 @@ void ModelGizmoSession() {
     CHECK(history.undo(edit));CHECK(session.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==after);
     CHECK(scene.remove(b));const auto missing=projectio::toJson(scene);CHECK(!session.applyEdit(edit,true,error));CHECK(projectio::toJson(scene)==missing);
 }
+void StorageServices() {
+    Scene author;author.buildDefaultScene();std::string error;
+    auto* storage=author.ensureService(InstanceClass::ServerStorage);
+    auto* shared=author.ensureService(InstanceClass::ReplicatedStorage);
+    auto* folder=author.createContainer(InstanceClass::Folder,storage,"Itens");
+    auto* model=author.createContainer(InstanceClass::Model,nullptr,"Espada");
+    auto* blade=author.createPart(PartShape::Block,{40,4,0},{2,4,2},"Lamina");
+    CHECK(author.reparent(blade,model,error));
+    auto* behavior=author.createScript(InstanceClass::Script,model,"Item.lua");
+    behavior->source="local found=false;for _,p in ipairs(linblux.self:children()) do if p.name=='Lamina' then found=true end end;assert(found);local r=linblux.scene.root;r:set_attribute('clone_started',(r:get_attribute('clone_started') or 0)+1)";
+    PhysicsWorld physics;physics.attach(author);const auto bodies=physics.bodyCount();
+    CHECK(physics.hasBody(blade->id()));CHECK(author.reparent(model,folder,error));
+    CHECK(!physics.hasBody(blade->id()));CHECK(author.isStored(blade));CHECK(!author.isWorldObject(blade));
+    CHECK(author.parts().size()==3&&author.worldParts().size()==2);
+    ConstructionPlacement placement;CHECK(!placement.begin(author,model->id(),error));
+    physics.applyChanges(blade);CHECK(!physics.hasBody(blade->id()));CHECK(physics.validate(author,error));
+    CHECK(author.validate(error));CHECK(!blade->anchored()&&blade->canCollide());
+    Part* hit=nullptr;CHECK(physics.raycast({40,20,0},{0,-1,0},30,&hit));CHECK(hit!=blade);
+    CHECK(author.pickPart({{40,20,0},{0,-1,0}},30)!=blade);
+    CHECK(author.reparent(model,shared,error));CHECK(!physics.hasBody(blade->id()));
+    CHECK(author.reparent(model,author.workspace(),error));CHECK(physics.hasBody(blade->id()));
+    CHECK(physics.bodyCount()==bodies);CHECK(author.isWorldObject(blade));CHECK(physics.isDynamic(blade->id()));
+    CHECK(placement.begin(author,model->id(),error));
+    CHECK(author.reparent(model,folder,error));
+    placement.update(author,{{40,20,0},{0,-1,0}},gizmomath::SnapFeature::Face,0,1,false);CHECK(!placement.active());CHECK(!physics.hasBody(blade->id()));
+    model->setAttribute("_linblux_item_prototype",true);model->setAttribute("item_type",std::string("espada"));
+    auto* module=author.createScript(InstanceClass::ModuleScript,shared,"Config");module->source="return {value=7}";
+    author.createScript(InstanceClass::Script,storage,"Stored.lua")->source="error('stored script ran')";
+    auto* service=author.ensureService(InstanceClass::ServerScriptService);
+    author.createScript(InstanceClass::Script,service,"Service.lua")->source=R"(
+local store=game:GetService('ServerStorage')
+assert(store:FindFirstChild('Itens'):FindFirstChild('Espada'))
+assert(require(game:GetService('ReplicatedStorage'):FindFirstChild('Config')).value==7)
+linblux.scene.root:set_attribute('service_started',true)
+)";
+    auto* disabled=author.createScript(InstanceClass::Script,service,"Disabled.lua");disabled->enabled=false;disabled->source="error('disabled script ran')";
+    author.createScript(InstanceClass::LocalScript,service,"Local.lua")->source="linblux.scene.root:set_attribute('local_started',true)";
+    author.createScript(InstanceClass::ModuleScript,service,"LazyModule")->source="error('module started without require')";
+    const auto saved=projectio::toJson(author);Scene loaded;
+    CHECK(projectio::fromJson(loaded,saved,error));CHECK(projectio::toJson(loaded)==saved);
+    CHECK(loaded.find(blade->id())->parent()->id()==model->id());CHECK(loaded.isStored(loaded.find(blade->id())));
+    PhysicsWorld loadedPhysics;loadedPhysics.attach(loaded);CHECK(!loadedPhysics.hasBody(blade->id()));
+    game::RuntimeSession runtime;CHECK(runtime.start(author,error));CHECK(runtime.scripts().errorCount()==0);
+    CHECK(runtime.scene().workspace()->attributes().count("service_started"));CHECK(runtime.scene().workspace()->attributes().count("local_started"));
+    CHECK(!runtime.scene().workspace()->attributes().count("clone_started"));
+    auto& inventory=runtime.inventory();CHECK(inventory.prototype("espada")==model->id());
+    const auto id=inventory.spawn("espada");auto* copy=runtime.mutableScene().find(id);
+    CHECK(copy&&id!=model->id()&&copy->parent()==runtime.scene().workspace());
+    CHECK(runtime.scene().isWorldObject(copy));CHECK(runtime.scene().isStored(runtime.scene().find(model->id())));
+    CHECK(copy->children().size()==model->children().size());
+    for(const auto* child:copy->children())CHECK(child->id()!=blade->id()&&child->id()!=behavior->id());
+    runtime.update(1.f/60,{});CHECK(runtime.scripts().errorCount()==0);
+    CHECK(runtime.scene().workspace()->attributes().count("clone_started"));
+    inventory.collect(id);inventory.equip(id);CHECK(inventory.equipped()==id);
+    inventory.drop(id);CHECK(inventory.info(id).state=="world");CHECK(runtime.validate(error));
+    runtime.stop();CHECK(projectio::toJson(author)==saved);CHECK(behavior->enabled);
+    CHECK(runtime.start(author,error));CHECK(runtime.scripts().errorCount()==0);
+    CHECK(runtime.scene().workspace()->attributes().count("service_started"));
+    CHECK(!runtime.scene().workspace()->attributes().count("clone_started"));runtime.stop();
+    CHECK(projectio::toJson(author)==saved);
+    // Destroying an attached PhysicsWorld must leave no live hierarchy callback.
+    {Scene temporary;auto* p=temporary.createPart(PartShape::Block,{});{PhysicsWorld shortLived;shortLived.attach(temporary);}
+        auto* destination=temporary.ensureService(InstanceClass::ServerStorage);CHECK(temporary.reparent(p,destination,error));}
+}
+void RootServices() {
+    Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();std::string error;
+    for(auto type:{InstanceClass::ServerScriptService,InstanceClass::ServerStorage,InstanceClass::ReplicatedStorage}) {
+        auto* service=scene.service(type);CHECK(service);if(!service)continue;
+        const auto id=service->id();CHECK(scene.ensureService(type)==service);CHECK(service->id()==id);
+        CHECK(!service->deletable());CHECK(!scene.remove(service));CHECK(!scene.canParent(service,scene.parts()[0]));
+    }
+    const auto saved=projectio::toJson(scene);scene.installDefaultScripts();CHECK(projectio::toJson(scene)==saved);
+    Scene restored;CHECK(projectio::fromJson(restored,saved,error));CHECK(projectio::toJson(restored)==saved);
+    for(auto type:{InstanceClass::ServerScriptService,InstanceClass::ServerStorage,InstanceClass::ReplicatedStorage}) {
+        int count=0;for(const auto& n:restored.objects())count+=n->instanceClass()==type;
+        CHECK(count==1);CHECK(restored.service(type)->id()==scene.service(type)->id());
+    }
+}
+void PartNamesLua() {
+    Scene author;author.buildDefaultScene();std::string error;
+    auto* legacy=author.createPart(PartShape::Block,{40,4,0},{1,1,1},"Part antiga",700);
+    author.createScript(InstanceClass::Script,nullptr,"Names.lua")->source=R"(
+local old=linblux.scene.find("Part antiga")
+assert(old and old.name=="Part antiga")
+local p=linblux.scene.create("part",{name="Nova Part"})
+assert(p.name=="NovaPart")
+p.name="NomeValido"
+assert(p.name=="NomeValido" and old.name=="Part antiga")
+)";
+    const auto saved=projectio::toJson(author);game::RuntimeSession runtime;
+    CHECK(runtime.start(author,error));CHECK(runtime.scripts().errorCount()==0);
+    runtime.mutableScene().createScript(InstanceClass::Script,nullptr,"InvalidName.lua")->source=
+        "linblux.scene.find('NomeValido').name='Nome com espaço'";
+    runtime.update(1.f/60,{});CHECK(runtime.scripts().errorCount()==1);
+    CHECK(runtime.scripts().messages().back().text.find("Nomes de peças não podem conter espaços")!=std::string::npos);
+    CHECK(author.find(legacy->id())->name()=="Part antiga");runtime.stop();CHECK(projectio::toJson(author)==saved);
+}
 void EditorSelectionAndNames() {
     Scene scene;std::string error;
     auto* a=scene.createPart(PartShape::Block,{0,2,4},{2,2,2},"Peça grande");
     auto* b=scene.createPart(PartShape::Block,{0,2,0},{4,2,2},"Peça grande");
     auto* copy=scene.duplicatePart(*b);copy->setPosition({10,2,0});
-    CHECK(b->name()=="Peça grande_002"&&copy->name()=="Peça grande_003");
-    CHECK(a->name()=="Peça grande");
-    auto* legacy=scene.createPart(PartShape::Block,{20,2,0},{1,1,1},"Plataforma inicial325");
-    auto* duplicate=scene.duplicatePart(*legacy);CHECK(duplicate->name()=="Plataforma inicial325_002");
+    CHECK(b->name()=="PeçaGrande_002"&&copy->name()=="PeçaGrande_003");
+    CHECK(a->name()=="PeçaGrande");
+    auto* legacy=scene.createPart(PartShape::Block,{20,2,0},{1,1,1},"Plataforma inicial325",700);
+    auto* duplicate=scene.duplicatePart(*legacy);CHECK(duplicate->name()=="PlataformaInicial325");
     CHECK(legacy->name()=="Plataforma inicial325");
+    CHECK(!a->trySetName("Parede principal",error));CHECK(a->name()=="PeçaGrande");
+    CHECK(!a->trySetName("Parede\tPrincipal",error));CHECK(!a->trySetName("Parede\nPrincipal",error));
+    CHECK(!a->trySetName("Parede\xc2\xa0Principal",error));CHECK(!a->trySetName("",error));
+    CHECK(!a->trySetName(b->name(),error));CHECK(a->trySetName("ParedePrincipal",error));
+    CHECK(NewPartName("Piso da sala")=="PisoDaSala");CHECK(NewPartName("Nova Part")=="NovaPart");
+    CHECK(!scene.createPart(PartShape::Block,{},{1,1,1},"Nova\tPart"));
+    CHECK(!scene.createPart(PartShape::Block,{},{1,1,1},"Nova\xe2\x80\xa8Part"));
     std::string unicode;for(int i=0;i<64;++i)unicode+="Á";
     auto* named=scene.createPart(PartShape::Block,{30,2,0},{1,1,1},unicode);
     auto* namedCopy=scene.duplicatePart(*named);CHECK(namedCopy->name().size()<=128);CHECK(scene.validate(error));
@@ -197,6 +302,47 @@ void CursorConstruction() {
         source.rotation=QuaternionMultiply(result.rotationDelta,source.rotation);
         CHECK(NearlyEqual(source.position,{3,1,4},.0001f));
     }
+}
+
+void ConstructionPreviewWorkflow() {
+    using namespace gizmomath;
+    for(float width:{2.f,191.f})for(float thickness:{.1f,1.f})for(float angle:{0.f,30.f}) {
+        Scene scene;PhysicsWorld physics;physics.attach(scene);Gizmo gizmo;TransformSession transform(gizmo,physics);EditHistory history;ModelTransformSession models(scene,physics,transform,history);
+        auto* floor=scene.createPart(PartShape::Block,{0,-thickness*.5f,0},{240,thickness,40},"Floor");floor->setAnchored(true);
+        floor->setRotation(QuatFromEulerDegrees({0,angle,0}));
+        auto* wall=scene.createPart(PartShape::Block,{0,20,50},{width,8,1},"Wall");wall->setAnchored(false);
+        ConstructionPlacement proposal;std::string error;const auto original=projectio::toJson(scene);const auto before=wall->transform();
+        CHECK(proposal.begin(scene,wall->id(),error));
+        proposal.update(scene,{{0,30,0},{0,-1,0}},SnapFeature::Face,0,1,true);
+        CHECK(proposal.contact().snapped&&!proposal.contact().blocked);CHECK(projectio::toJson(scene)==original);
+        CHECK(proposal.preview().size()==1);CHECK(std::fabs(BoxSeparation(proposal.preview()[0].pose,{floor->position(),floor->rotation(),floor->size()}))<.001f);
+        proposal.cancel();CHECK(projectio::toJson(scene)==original);
+        CHECK(proposal.begin(scene,wall->id(),error));proposal.update(scene,{{0,30,0},{0,-1,0}},SnapFeature::Face,.25f,1,true);
+        CHECK(proposal.commit(scene,physics,models,history,error));CHECK(!wall->anchored());CHECK(std::fabs(wall->position().y-(floor->position().y+floor->size().y*.5f+4.25f))<.001f);
+        TransformEdit edit;CHECK(history.undo(edit));wall->setTransform(edit.before);CHECK(SameTransform(before,wall->transform()));
+        CHECK(history.redo(edit));wall->setTransform(edit.after);Scene loaded;CHECK(projectio::fromJson(loaded,projectio::toJson(scene),error));CHECK(SameTransform(loaded.findPart(wall->id())->transform(),wall->transform()));CHECK(!loaded.findPart(wall->id())->anchored());
+    }
+    // At an edge, a long wall stays centred tangentially and its outer face
+    // is flush with the floor boundary; no jump to its 191-unit end corner.
+    const TransformSnapshot wide{{0,30,40},QuaternionIdentity(),{191,8,1}},platform{{0,-.1f,0},QuaternionIdentity(),{200,.2f,20}};
+    const auto edge=SnapUnderCursor({{wide,1}},{{platform,2}},wide.position,{{0,30,9},{0,-1,0}},SnapFeature::Edge,false,wide.rotation,0,0,1,true);
+    CHECK(edge.snapped);CHECK(NearlyEqual(Vector3Add(wide.position,edge.correction),{0,4,9.5f},.001f));
+    Scene scene;PhysicsWorld physics;physics.attach(scene);Gizmo gizmo;TransformSession transform(gizmo,physics);EditHistory history;ModelTransformSession models(scene,physics,transform,history);std::string error;
+    auto* floor=scene.createPart(PartShape::Block,{0,-.5f,0},{40,1,40},"Floor");floor->setAnchored(true);
+    auto* wall=scene.createPart(PartShape::Block,{0,10,30},{12,8,1},"Wall");
+    auto* other=scene.createPart(PartShape::Block,{3,10,30},{1,2,5},"Child");
+    auto* model=scene.group({wall->id(),other->id()},"Building",error);CHECK(model);ModelFrame frame;CHECK(scene.modelFrame(model->id(),frame,error));frame.position={80,12,30};CHECK(scene.setModelPivot(model->id(),frame,error));
+    ConstructionPlacement proposal;CHECK(proposal.begin(scene,model->id(),error));const auto original=projectio::toJson(scene);
+    CHECK(std::fabs(Vector3Length(proposal.duplicateStep(0,.5f))-12.5f)<.001f);
+    proposal.update(scene,{{0,40,0},{0,-1,0}},SnapFeature::Face,0,1,false);CHECK(proposal.contact().snapped);CHECK(projectio::toJson(scene)==original);
+    CHECK(proposal.commit(scene,physics,models,history,error));TransformEdit edit;CHECK(history.undo(edit));CHECK(models.applyEdit(edit,false,error));CHECK(projectio::toJson(scene)==original);CHECK(history.redo(edit));CHECK(models.applyEdit(edit,true,error));
+    // Collision candidate stays a red proposal; even saving cannot mutate it.
+    auto* obstacle=scene.createPart(PartShape::Block,{3,1,8},{3,2,3},"Conflict");
+    CHECK(proposal.begin(scene,model->id(),error));const auto saved=projectio::toJson(scene);
+    proposal.update(scene,{{0,30,8},{0,-1,0}},SnapFeature::Face,0,1,false);
+    CHECK(proposal.contact().blocked&&proposal.contact().blocker==obstacle->id());CHECK(!proposal.commit(scene,physics,models,history,error));CHECK(projectio::toJson(scene)==saved);
+    // A mutation during preview invalidates it instead of overwriting newer work.
+    wall->setPosition({0,20,30});proposal.update(scene,{{0,30,8},{0,-1,0}},SnapFeature::Face,0,1,false);CHECK(!proposal.active());
 }
 
 void SurfaceSnapping() {
@@ -1865,6 +2011,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    SignificantFallPresentation();NpcHeadingRegression();EditorSelectionAndNames();CursorConstruction();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    SignificantFallPresentation();NpcHeadingRegression();StorageServices();RootServices();PartNamesLua();EditorSelectionAndNames();CursorConstruction();ConstructionPreviewWorkflow();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }

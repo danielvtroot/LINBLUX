@@ -6,6 +6,7 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 from . import INDEX_SCHEMA_VERSION
 from .config import CACHE_DIR, db_path
@@ -26,6 +27,7 @@ CREATE TABLE IF NOT EXISTS files (
   language TEXT NOT NULL,
   size INTEGER NOT NULL,
   mtime_ns INTEGER NOT NULL,
+  ctime_ns INTEGER NOT NULL DEFAULT 0,
   sha256 TEXT NOT NULL,
   line_count INTEGER NOT NULL,
   indexed_at TEXT NOT NULL,
@@ -126,16 +128,71 @@ def new_connection(path: Path) -> sqlite3.Connection:
     return conn
 
 
-def open_db(root: Path, create: bool = False) -> sqlite3.Connection:
+def _readonly_connection(path: Path, immutable: bool = False) -> sqlite3.Connection:
+    """Open an existing index without any chance of writing to it.
+
+    ``query_only`` refuses writes at the SQLite level and ``mode=ro`` refuses
+    them at the file level; ``journal_mode`` is never changed, so no WAL or
+    shared-memory file is created. ``immutable=1`` is the last resort when the
+    database has a WAL header but no usable ``-shm`` (e.g. after a crash), where
+    read-only mode alone would need to create one.
+    """
+    uri = f"file:{quote(str(path))}?mode=ro" + ("&immutable=1" if immutable else "")
+    conn = sqlite3.connect(uri, uri=True, timeout=5)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA query_only=1")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA temp_store=MEMORY")
+    return conn
+
+
+def open_db_readonly(root: Path) -> sqlite3.Connection:
+    path = db_path(root)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"indice ausente em {path}; execute: python3 tools/atlas/atlas.py init"
+        )
+    # A read-only WAL database still needs a shared-memory file, which means
+    # creating -wal/-shm on disk. When nothing is pending in the WAL there is
+    # nothing to recover, so ``immutable=1`` reads the database without any of
+    # those writes. A non-empty WAL (unclean shutdown) falls back to mode=ro so
+    # committed pages are not silently ignored.
+    wal = Path(str(path) + "-wal")
+    try:
+        pending = wal.is_file() and wal.stat().st_size > 0
+    except OSError:
+        pending = True
+    if not pending:
+        try:
+            return _readonly_connection(path, immutable=True)
+        except sqlite3.Error:
+            pass
+    try:
+        return _readonly_connection(path)
+    except sqlite3.Error:
+        return _readonly_connection(path, immutable=True)
+
+
+def open_db(root: Path, create: bool = False, policy=None) -> sqlite3.Connection:
     path = db_path(root)
     if not create and not path.is_file():
         raise FileNotFoundError(
             f"indice ausente em {path}; execute: python3 tools/atlas/atlas.py init"
         )
+    if policy is not None and policy.read_only:
+        if create:
+            raise RuntimeError(
+                f"modo {policy.name}: criação do índice bloqueada; "
+                "execute com ATLAS_IO_MODE=normal"
+            )
+        return open_db_readonly(root)
     conn = new_connection(path)
     if create:
         conn.executescript(SCHEMA)
-        set_meta(conn, "schema_version", str(INDEX_SCHEMA_VERSION))
+        # Never overwrite the version of an existing database: index_repository
+        # needs the stored value to detect an incompatible schema and rebuild.
+        if get_meta(conn, "schema_version") is None:
+            set_meta(conn, "schema_version", str(INDEX_SCHEMA_VERSION))
         conn.commit()
     return conn
 
@@ -180,7 +237,9 @@ def table_counts(conn: sqlite3.Connection) -> dict[str, int]:
 def snapshot_files(conn: sqlite3.Connection) -> dict[str, dict]:
     return {
         row["path"]: dict(row)
-        for row in conn.execute("SELECT id,path,size,mtime_ns,sha256,module,language FROM files")
+        for row in conn.execute(
+            "SELECT id,path,size,mtime_ns,ctime_ns,sha256,module,language FROM files"
+        )
     }
 
 

@@ -1,4 +1,5 @@
 #include "ui/Localization.h"
+#include "objects/Lighting.h"
 // Actual RML document, GL3 renderer, engine actions and X11 input, not mock UI.
 #include "editor/EditorUI.h"
 #include "editor/StudioTheme.h"
@@ -7,6 +8,7 @@
 #include "ui/StudioFrontend.h"
 #include "ui/EditorActions.h"
 #include "rendering/SceneRenderer.h"
+#include "rendering/PlayerMenu.h"
 #include "rendering/EditorCamera.h"
 #include "serialization/ProjectIO.h"
 #include "game/ImageAssets.h"
@@ -46,6 +48,7 @@ struct EditorUITestAccess {
     static const Part* modelProxy(EditorUI& ui){return ui.modelTransform_.proxy();}
     static size_t undoCount(EditorUI& ui){return ui.history_.undoCount();}
     static bool partDragging(EditorUI& ui){return ui.transform_.active();}
+    static ConstructionPlacement& placement(EditorUI& ui){return ui.placement_;}
     static bool editorEdges(EditorUI& ui){return ui.editorGeometry_.edges;}
 };
 }
@@ -63,6 +66,7 @@ bool SameProjectValue(const nlohmann::json& a,const nlohmann::json& b) {
     return a==b;
 }
 int main() {
+    setvbuf(stdout,nullptr,_IONBF,0);
     char pattern[]="/tmp/loblox-rml-ui-XXXXXX";const char* directory=mkdtemp(pattern);if(!directory)return 1;
     setenv("XDG_CONFIG_HOME",directory,1);diag::configure(std::string(directory)+"/events.jsonl");
     setenv("XDG_STATE_HOME",(std::string(directory)+"/state").c_str(),1);
@@ -71,18 +75,31 @@ int main() {
     InitWindow(1366,768,"LINBLUX RML integration");SetWindowPosition(0,0);SetExitKey(KEY_NULL);SetTargetFPS(60);
     rlImGuiSetup(true);ImGui::GetIO().ConfigFlags|=ImGuiConfigFlags_DockingEnable;ImGui::GetIO().IniFilename=nullptr;studio::Apply();
     {
-        Scene scene;scene.buildDefaultScene();scene.installDefaultScripts();scene.gameAssets().player.enableShiftLock=true;
+        Scene scene;scene.buildDefaultScene();if(!std::getenv("LINBLUX_VISIBLE_ONLY"))scene.installDefaultScripts();scene.gameAssets().player.enableShiftLock=true;
         auto* folder=scene.createContainer(InstanceClass::Folder,nullptr,"Buildings");
         auto* part=scene.createPart(PartShape::Block,{14,3,0},{4,6,1},"Wall");part->setAnchored(true);scene.select(part);
         PhysicsWorld physics;physics.attach(scene);EditorCamera camera;SceneRenderer renderer;AppConfig config;
+        // Audio tests exercise UI/backend, not shadow quality; keep software GL cheap.
+        if(std::getenv("LINBLUX_PLAYER_AUDIO_ONLY")||std::getenv("LINBLUX_AUDIO_PANEL_ONLY")||std::getenv("LINBLUX_NATIVE_AUDIO_ONLY")||std::getenv("LINBLUX_EXPLORER_ONLY"))renderer.setQuality(RenderQuality::Low);
         config.defaultProjectPath=std::string(directory)+"/map.json";
-        const auto untouched=projectio::toJson(scene);
+        if(std::getenv("LINBLUX_VISIBLE_ONLY")) {
+            if(const char* path=std::getenv("LINBLUX_VISIBLE_PROJECT")) {std::string error;CHECK(projectio::load(scene,path,error));}
+            else {
+                CHECK(!scene.service(InstanceClass::ServerStorage));
+                scene.createPart(PartShape::Block,{20,2,0},{2,2,2},"Plataforma inicial325",500);
+                scene.createPart(PartShape::Block,{23,2,0},{2,2,2},"PlataformaInicial325",501);
+            }
+            std::string error;CHECK(projectio::save(scene,config.defaultProjectPath,error));
+            Scene legacy;CHECK(projectio::load(legacy,config.defaultProjectPath,error));
+            if(!std::getenv("LINBLUX_VISIBLE_PROJECT"))CHECK(!legacy.service(InstanceClass::ServerStorage));
+        }
         EditorUI ui(scene,physics,camera,renderer,config);std::string error;
         CHECK(ui.enableModernFrontend(error));std::fprintf(stderr,"RML init: %s\n",error.c_str());
         if(!ui.frontend())return 1;
+        const auto untouched=projectio::toJson(scene);
         std::function<void()> observeFrame;
         auto frames=[&](int count=2){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(BLACK);rlImGuiBegin();ui.draw();rlImGuiEnd();ui.renderModernFrontend();EndDrawing();if(observeFrame)observeFrame();}};
-        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames((std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")||std::getenv("LINBLUX_PLAYER_MENU_ONLY"))?1:2);};
+        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames((std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")||(std::getenv("LINBLUX_PLAYER_MENU_ONLY")&&!std::getenv("LINBLUX_PLAYER_AUDIO_ONLY")))?1:2);};
         auto key=[&](const std::string& name){event("keydown "+name);event("keyup "+name);};
         auto clickAt=[&](Vector2 p){event("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));event("mousedown 1");event("mouseup 1");};
         auto click=[&](const std::string& id){
@@ -113,7 +130,164 @@ int main() {
         // Optional fast iteration path; the registered CTest always exercises
         // the full editor + player sequence without this environment variable.
         capture("studio-1366");
+        if(std::getenv("LINBLUX_VISIBLE_ONLY")) {
+            auto* storage=scene.service(InstanceClass::ServerStorage);CHECK(storage);
+            auto* replicated=scene.service(InstanceClass::ReplicatedStorage);CHECK(replicated);
+            CHECK(scene.service(InstanceClass::ServerScriptService));
+            CHECK(storage->children().size()==1&&storage->children()[0]->name()=="Itens");
+            const auto storageId=storage->id(),replicatedId=replicated->id(),itemsId=storage->children()[0]->id();
+            const auto objectCount=scene.objects().size();
+            CHECK(scene.find(500)&&scene.find(500)->name()=="Plataforma inicial325");
+            CHECK(scene.service(InstanceClass::ServerScriptService)->children().empty());
+            click("fold-"+std::to_string(scene.workspace()->id())); // compact view, no insertion menu
+            for(auto* service:{static_cast<Instance*>(scene.workspace()),static_cast<Instance*>(scene.lighting()),scene.service(InstanceClass::ServerScriptService),storage,replicated}) {
+                auto b=ui.frontend()->elementBounds("node-"+std::to_string(service->id()));CHECK(b.width>0&&b.y>=0&&b.y+b.height<768);
+            }
+            frames(4);CHECK(scene.objects().size()==objectCount);
+            Scene disk;CHECK(projectio::load(disk,config.defaultProjectPath,error));
+            if(!std::getenv("LINBLUX_VISIBLE_PROJECT"))CHECK(!disk.service(InstanceClass::ServerStorage)); // no silent save
+            event("mousemove 700 600");frames(3);capture("servicos-automaticos-1366");
+            click("normalization-preview");frames(2);
+            CHECK(ui.frontend()->elementText("dialog-title").find("prévia")!=std::string::npos);
+            CHECK(ui.frontend()->elementText("appearance-controls").find("PlataformaInicial325")!=std::string::npos);
+            CHECK(ui.frontend()->elementText("appearance-controls").find("CONFLITO")!=std::string::npos);
+            capture("normalizacao-previa-1366");key("Return");
+            CHECK(scene.find(500)->name()=="Plataforma inicial325");
+            click("dialog-cancel");CHECK(scene.find(500)->name()=="Plataforma inicial325");
+            ui.frontend()->resetDocumentView();frames(2);
+            EditorActions actions(ui);scene.select(scene.workspace());CHECK(actions.dispatch({"part",""}));
+            CHECK(scene.selection()&&scene.selection()->isPart()&&ValidPartName(scene.selection()->name()));
+            CHECK(actions.dispatch({"save",""}));
+            CHECK(projectio::load(scene,config.defaultProjectPath,error));ui.frontend()->resetDocumentView();frames(3);
+            CHECK(scene.service(InstanceClass::ServerStorage)->id()==storageId);
+            CHECK(scene.service(InstanceClass::ReplicatedStorage)->id()==replicatedId);
+            CHECK(scene.find(itemsId)&&scene.service(InstanceClass::ServerStorage)->children().size()==1);
+            CHECK(scene.objects().size()==objectCount+1);
+            capture("servicos-reabertos-1366");
+            std::printf("Visible services UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
+        if(std::getenv("LINBLUX_EXPLORER_ONLY")) {
+            renderer.setQuality(RenderQuality::Low);
+            if(std::getenv("LINBLUX_STORAGE_ONLY")) {
+                auto* unrelated=scene.createContainer(InstanceClass::Folder,scene.workspace(),"Itens");unrelated->setName("Itens");
+                EditorActions actions(ui);CHECK(actions.dispatch({"item-prototypes",""}));
+                auto* items=scene.selection();CHECK(items&&items->instanceClass()==InstanceClass::Folder);
+                CHECK(items!=unrelated&&items->name()=="Itens"&&unrelated->name()=="Itens");
+                const auto folderId=items->id(),count=scene.objects().size();CHECK(actions.dispatch({"item-prototypes",""}));
+                CHECK(scene.selection()->id()==folderId&&scene.objects().size()==count);
+                CHECK(actions.dispatch({"model",""}));auto* item=scene.selection();CHECK(item&&item->instanceClass()==InstanceClass::Model);
+                CHECK(actions.dispatch({"rename","Espada",item->id()}));CHECK(actions.dispatch({"part",""}));auto* stored=scene.selection();
+                CHECK(stored&&stored->isPart()&&scene.isStored(stored));CHECK(!physics.hasBody(stored->id()));
+                CHECK(actions.dispatch({"rename","Lamina",stored->id()}));
+                auto* behavior=scene.createScript(InstanceClass::Script,item,"Item.lua");behavior->source="linblux.scene.root:set_attribute('item_running',true)";
+                scene.select(item);frames(3);clickVisible("prop-Item.Prototype");frames(3);
+                CHECK(item->attributes().count("_linblux_item_prototype"));
+                clickVisible("prop-Item.Type");key("ctrl+a");event("type --clearmodifiers espada");key("Return");frames(3);
+                CHECK(std::get<std::string>(item->attributes().at("item_type"))=="espada");
+                scene.createScript(InstanceClass::Script,nullptr,"SpawnTest.lua")->source=
+                    "local i=linblux.items.spawn('espada',{position=linblux.vec3(0,4,-12)});linblux.scene.root:set_attribute('spawned',i.id)";
+                CHECK(actions.dispatch({"save",""}));Scene loaded;CHECK(projectio::load(loaded,config.defaultProjectPath,error));
+                CHECK(loaded.isStored(loaded.find(stored->id())));const auto authored=projectio::toJson(scene);
+                for(int width:{1366,1920}) {
+                    resizeWindow(width,width==1366?768:1080);
+                    if(width==1366)click("fold-"+std::to_string(scene.workspace()->id()));
+                    clickVisible("node-"+std::to_string(item->id()));CHECK(scene.selection()==item);
+                    CHECK(actions.dispatch({"tool","1"}));frames(3);CHECK(!EditorUITestAccess::modelProxy(ui));
+                    CHECK(!scene.isWorldObject(stored)&&!physics.hasBody(stored->id()));
+                    capture("storage-explorer-"+std::to_string(width));
+                    click("play");frames(6);CHECK(ui.playing());
+                    if(ui.playing()) {
+                        auto& rt=EditorUITestAccess::runtime(ui);CHECK(rt.scripts().errorCount()==0);
+                        CHECK(rt.scene().workspace()->attributes().count("spawned"));CHECK(rt.scene().workspace()->attributes().count("item_running"));
+                        CHECK(rt.scene().isStored(rt.scene().find(stored->id())));
+                        CHECK(actions.dispatch({"stop",""}));frames(3);
+                    }
+                    CHECK(SameProjectValue(projectio::toJson(scene),authored));CHECK(behavior->enabled);
+                }
+                std::printf("Storage Explorer UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+                rlImGuiShutdown();CloseWindow();return failures?1:0;
+            }
+            const auto originalName=part->name();
+            click("prop-Name");key("ctrl+a");event("type --clearmodifiers --delay 1 'Nome Com Espacos'");key("Return");frames(3);
+            CHECK(part->name()==originalName);
+            EditorActions actions(ui);CHECK(!actions.dispatch({"rename","Outro Nome",part->id()}));
+            CHECK(actions.dispatch({"rename","Parede_001",part->id()}));
+            for(int width:{1366,1920}) {
+                resizeWindow(width,width==1366?768:1080);
+                for(auto type:{InstanceClass::ServerScriptService,InstanceClass::ServerStorage,InstanceClass::ReplicatedStorage}) {
+                    auto* service=scene.service(type);CHECK(service);
+                    if(service){const auto id="node-"+std::to_string(service->id());CHECK(ui.frontend()->elementBounds(id).height>=19);click(id);CHECK(scene.selection()==service);}
+                }
+                capture("explorer-services-"+std::to_string(width));
+            }
+            for(int i=0;i<60;++i)scene.createContainer(InstanceClass::Folder,folder,"Objeto "+std::to_string(i));
+            auto* child=scene.createContainer(InstanceClass::Folder,folder,"Nome com espaços preservados");
+            const auto id="node-"+std::to_string(child->id()),parentId="node-"+std::to_string(folder->id());
+            const auto authored=projectio::toJson(scene);
+            for(int width:{1366,1920}) {
+                resizeWindow(width,width==1366?768:1080);frames();
+                ui.frontend()->scrollIntoView(id);frames();
+                const auto row=ui.frontend()->elementBounds(id);
+                CHECK(row.height>=19&&row.height<=22);CHECK(row.width>120);
+                click(id);CHECK(scene.selection()==child);
+                capture("explorer-selected-"+std::to_string(width));
+                ui.frontend()->scrollIntoView(parentId);frames();
+                click("fold-"+std::to_string(folder->id()));
+                CHECK(ui.frontend()->elementBounds(id).height==0);
+                click("tree-search");event("type --clearmodifiers --delay 1 Nome");frames(3);
+                CHECK(ui.frontend()->elementBounds(id).height>=19);
+                CHECK(ui.frontend()->elementBounds(parentId).height>=19);
+                clickVisible(id);CHECK(scene.selection()==child);
+                capture("explorer-filter-"+std::to_string(width));
+                click("tree-search");key("ctrl+a");key("BackSpace");
+                ui.frontend()->scrollIntoView(parentId);frames();
+                click("fold-"+std::to_string(folder->id()));
+                CHECK(ui.frontend()->elementBounds(id).height>=19);
+                CHECK(child->name()=="Nome com espaços preservados");
+                CHECK(SameProjectValue(projectio::toJson(scene),authored));
+            }
+            std::printf("Explorer UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
+        if(std::getenv("LINBLUX_NATIVE_AUDIO_ONLY")) {
+            if(const char* config=std::getenv("LINBLUX_TEST_AUDIO_CONFIG"))setenv("ALSA_CONFIG_PATH",config,1);
+            unsetenv("PULSE_SERVER");InitAudioDevice();CHECK(IsAudioDeviceReady());
+            if(!IsAudioDeviceReady()){rlImGuiShutdown();CloseWindow();return 1;}
+            click("play");auto& runtime=EditorUITestAccess::runtime(ui);
+            PlayerMenu menu;menu.toggle();
+            auto nativeFrames=[&](int count=3){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(Color{90,110,130,255});menu.draw(runtime,GetScreenWidth(),GetScreenHeight(),GetFontDefault(),{},"Áudio");EndDrawing();}};
+            auto nativeEvent=[&](const std::string& args){CHECK(std::system(("xdotool "+args).c_str())==0);nativeFrames();};
+            auto nativeClick=[&](float x,float y){nativeEvent("mousemove "+std::to_string(int(x))+" "+std::to_string(int(y)));nativeEvent("mousedown 1");nativeEvent("mouseup 1");};
+            for(int width:{1366,1920}) {
+                resizeWindow(width,width==1366?768:1080);nativeFrames(16);
+                const float scale=GetScreenHeight()/720.f;
+                nativeClick(70*scale,270*scale);
+                const float panel=std::min(width-16.f,std::clamp(width*.55f,480*scale,840.f));
+                const float left=192*scale,span=panel-214*scale,y=131*scale;
+                for(float level:{0.f,.25f,.5f,.75f,1.f}) {
+                    nativeClick(left+span*level,y);std::printf("Native %d volume %.2f -> %.3f\n",width,level,GetMasterVolume());CHECK(std::fabs(GetMasterVolume()-level)<.01f);
+                }
+                nativeClick(left+span*.5f,y);
+                nativeEvent("keydown Right");nativeEvent("keyup Right");CHECK(std::fabs(GetMasterVolume()-.55f)<.01f);
+                nativeEvent("keydown Left");nativeEvent("keyup Left");CHECK(std::fabs(GetMasterVolume()-.5f)<.01f);
+                nativeClick(left+span/2,214*scale);CHECK(GetMasterVolume()==0);
+                nativeClick(left+span/2,214*scale);CHECK(std::fabs(GetMasterVolume()-.5f)<.01f);
+                nativeClick(left+span*.5f,y);nativeEvent("mousedown 1");
+                nativeEvent("mousemove "+std::to_string(int(left+span+30))+" "+std::to_string(int(y+30)));
+                CHECK(GetMasterVolume()>.99f);nativeEvent("mouseup 1");nativeClick(left+span*.5f,y);
+                TakeScreenshot((std::string(directory)+"/native-audio-"+std::to_string(width)+".png").c_str());
+            }
+            EditorActions(ui).dispatch({"stop",""});CloseAudioDevice();nativeFrames();
+            CHECK(!IsAudioDeviceReady());nativeClick(400,195);CHECK(!IsAudioDeviceReady());
+            TakeScreenshot((std::string(directory)+"/native-audio-unavailable.png").c_str());
+            std::printf("Native audio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
         if(std::getenv("LINBLUX_PLAYER_MENU_ONLY")) {
+            if(const char* audioConfig=std::getenv("LINBLUX_TEST_AUDIO_CONFIG")){setenv("ALSA_CONFIG_PATH",audioConfig,1);const char* pulse=getenv("PULSE_SERVER");if(pulse&&std::string(pulse)=="disabled")unsetenv("PULSE_SERVER");}
+            if(!IsAudioDeviceReady())InitAudioDevice();
+            const bool audioReady=IsAudioDeviceReady();
             scene.createScript(InstanceClass::Script,nullptr,"MenuContinua.lua")->source=R"(
 local npc=linblux.npc.create{name='NPC do menu',position=linblux.vec3(30,2.6,30),size=linblux.vec3(2,5,2),speed=2}
 linblux.npc.move_to(npc,linblux.vec3(65,2.6,30))
@@ -121,15 +295,18 @@ linblux.scene.root:set_attribute('menu_npc',npc.id)
 linblux.events.on('update',function() linblux.scene.root:set_attribute('menu_clock',linblux.time.now()) end)
 )";
             const bool windowOnly=std::getenv("LINBLUX_MENU_WINDOW_ONLY")!=nullptr;
-            const auto sizes=windowOnly?std::vector<Vector2>{{1366,768}}:std::vector<Vector2>{{1280,720},{1920,1080}};
+            const bool audioOnly=std::getenv("LINBLUX_PLAYER_AUDIO_ONLY")!=nullptr;
+            const auto sizes=audioOnly?std::vector<Vector2>{std::getenv("LINBLUX_AUDIO_HD")?Vector2{1920,1080}:Vector2{1366,768}}:windowOnly?std::vector<Vector2>{{1366,768}}:std::vector<Vector2>{{1280,720},{1920,1080}};
             for(auto size:sizes){
-                resizeWindow(int(size.x),int(size.y));click("play");frames(6);auto& rt=EditorUITestAccess::runtime(ui);
-                CHECK(rt.takeDamage(40,error));key("Escape");frames(16);CHECK(rt.state()==game::RuntimeState::Playing&&ui.gameMenuOpen());CHECK(!EditorUITestAccess::captured(ui));
+                resizeWindow(int(size.x),int(size.y));click("play");frames(audioOnly?2:6);auto& rt=EditorUITestAccess::runtime(ui);
+                CHECK(rt.takeDamage(40,error));key("Escape");frames(audioOnly?4:16);CHECK(rt.state()==game::RuntimeState::Playing&&ui.gameMenuOpen());CHECK(!EditorUITestAccess::captured(ui));
+                if(!audioOnly) {
                 const auto clock=std::get<double>(rt.scene().workspace()->attributes().at("menu_clock"));
                 const auto npcId=InstanceId(std::get<double>(rt.scene().workspace()->attributes().at("menu_npc")));
                 const auto npcBefore=rt.scene().findPart(npcId)->position();frames(12);
                 CHECK(std::get<double>(rt.scene().workspace()->attributes().at("menu_clock"))>clock);
                 CHECK(Vector3Distance(rt.scene().findPart(npcId)->position(),npcBefore)>.02f);
+                }
                 const auto vp=ui.frontend()->viewport(),panel=ui.frontend()->elementBounds("pause-panel");
                 CHECK(std::fabs(panel.x-vp.x)<2);CHECK(panel.width<=vp.width*.94f);CHECK(panel.height>=vp.height-2);
                 for(const char* id:{"resume","page-game","page-settings","page-controls","page-audio","page-video","page-about","leave","pause-close"}){
@@ -144,12 +321,34 @@ linblux.events.on('update',function() linblux.scene.root:set_attribute('menu_clo
                     key("Escape");frames(8);CHECK(!ui.gameMenuOpen()&&rt.state()==game::RuntimeState::Playing);
                     key("shift+F5");CHECK(!ui.playing());continue;
                 }
-                if(size.x==1920){key("Escape");frames(14);CHECK(rt.state()==game::RuntimeState::Playing&&!ui.gameMenuOpen());key("shift+F5");CHECK(!ui.playing());continue;}
-                const auto position=rt.position();event("keydown w");frames(5);event("keyup w");CHECK(Vector3Distance(position,rt.position())<.001f);
-                click("page-settings");const auto mode=rt.settings().cameraMode;click("camera-next");CHECK(rt.settings().cameraMode!=mode);
-                const float sensitivity=rt.settings().sensitivity;const auto slider=ui.frontend()->elementBounds("sensitivity-slider");clickAt({slider.x+slider.width*.7f,slider.y+slider.height/2});CHECK(rt.settings().sensitivity!=sensitivity);
-                const bool shift=rt.settings().enableShiftLock;click("shift-lock");CHECK(rt.settings().enableShiftLock!=shift);
-                click("page-audio");CHECK(ui.frontend()->elementBounds("master-volume").width>80);
+                if(size.x==1920&&!audioOnly){key("Escape");frames(14);CHECK(rt.state()==game::RuntimeState::Playing&&!ui.gameMenuOpen());key("shift+F5");CHECK(!ui.playing());continue;}
+                if(!audioOnly) {
+                    const auto position=rt.position();event("keydown w");frames(5);event("keyup w");CHECK(Vector3Distance(position,rt.position())<.001f);
+                    click("page-settings");const auto mode=rt.settings().cameraMode;click("camera-next");CHECK(rt.settings().cameraMode!=mode);
+                    const float sensitivity=rt.settings().sensitivity;const auto slider=ui.frontend()->elementBounds("sensitivity-slider");clickAt({slider.x+slider.width*.7f,slider.y+slider.height/2});CHECK(rt.settings().sensitivity!=sensitivity);
+                    const bool shift=rt.settings().enableShiftLock;click("shift-lock");CHECK(rt.settings().enableShiftLock!=shift);
+                }
+                click("page-audio");const auto masterVolume=ui.frontend()->elementBounds("master-volume");CHECK(masterVolume.width>80);
+                if(audioReady&&audioOnly) {
+                    const auto setVolume=[&](float fraction){const int x=int(masterVolume.x+9+(masterVolume.width-18)*fraction),y=int(masterVolume.y+masterVolume.height*.5f);clickAt({float(x),float(y)});const float actual=GetMasterVolume();CHECK(std::fabs(actual-fraction)<=.06f);};
+                    for(float level:{0.f,.25f,.5f,.75f,1.f})setVolume(level);
+                    setVolume(.5f);key("Right");CHECK(std::fabs(GetMasterVolume()-.55f)<.01f);
+                    key("Left");CHECK(std::fabs(GetMasterVolume()-.5f)<.01f);
+                    click("master-mute");CHECK(GetMasterVolume()==0.f);
+                    click("master-mute");CHECK(std::fabs(GetMasterVolume()-.5f)<.01f);
+                    // Drag the thumb beyond the bounds; capture must stay with it.
+                    clickAt({masterVolume.x+masterVolume.width*.5f,masterVolume.y+14});
+                    std::printf("RML drag start %.3f bounds %.1f %.1f %.1f %.1f\n",GetMasterVolume(),masterVolume.x,masterVolume.y,masterVolume.width,masterVolume.height);
+                    event("mousedown 1");event("mousemove "+std::to_string(int(masterVolume.x+masterVolume.width*.5f+2))+" "+std::to_string(int(masterVolume.y+14)));event("mousemove "+std::to_string(int(masterVolume.x+masterVolume.width+40))+" "+std::to_string(int(masterVolume.y+14)));
+                    std::printf("RML %d outside drag %.3f\n",int(size.x),GetMasterVolume());CHECK(GetMasterVolume()>.99f);event("mouseup 1");setVolume(.5f);
+                    capture("audio-slider-"+std::to_string(int(size.x)));
+                    if(size.x==1920) {
+                        CloseAudioDevice();frames(2);CHECK(!IsAudioDeviceReady());
+                        CHECK(ui.frontend()->elementText("audio-device-status").find("indisponível")!=std::string::npos);
+                        click("master-mute");CHECK(!IsAudioDeviceReady());capture("audio-unavailable");
+                    }
+                }else std::fprintf(stderr,"Audio volume interaction not exercised: no audio device available.\n");
+                if(audioOnly){CHECK(audioReady);key("shift+F5");continue;}
                 click("page-video");CHECK(ui.frontend()->elementBounds("fullscreen-value").width>40);
                 click("page-controls");CHECK(ui.frontend()->elementText("controls-page").find("W A S D")!=std::string::npos);
                 click("page-about");capture("side-help-"+std::to_string(int(size.x)));
@@ -195,6 +394,27 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             CHECK(ui.frontend()->elementBounds("music-background").width>80);
             clickVisible("audio-background-"+id);CHECK(scene.gameAssets().music.background==id);
             clickVisible("audio-playlist-"+id);CHECK(scene.gameAssets().music.playlist==std::vector<std::string>{id});
+            for(int width:{std::getenv("LINBLUX_AUDIO_HD")?1920:1366}) {
+                resizeWindow(width,width==1366?768:1080);
+                ui.frontend()->scrollIntoView("audio-volume-"+id);frames(3);
+                const auto volume=ui.frontend()->elementBounds("audio-volume-"+id);
+                CHECK(volume.width>80&&volume.height>=28);
+                clickAt({volume.x+volume.width*.5f,volume.y+14});
+                CHECK(std::fabs(scene.gameAssets().findSound(id)->volume-.5f)<.06f);
+                key("Right");CHECK(std::fabs(scene.gameAssets().findSound(id)->volume-.55f)<.06f);
+                key("Left");CHECK(std::fabs(scene.gameAssets().findSound(id)->volume-.5f)<.06f);
+                // Several moves without release must preserve the same widget.
+                clickAt({volume.x+volume.width*.5f,volume.y+14});event("mousedown 1");
+                event("mousemove "+std::to_string(int(volume.x+volume.width*.5f+2))+" "+std::to_string(int(volume.y+14)));
+                for(float fraction:{.25f,.75f}) {
+                    event("mousemove "+std::to_string(int(volume.x+9+(volume.width-18)*fraction))+" "+std::to_string(int(volume.y+14)));
+                    std::printf("Library %d %.2f -> %.3f (width %.1f)\n",width,fraction,scene.gameAssets().findSound(id)->volume,volume.width);
+                    CHECK(std::fabs(scene.gameAssets().findSound(id)->volume-fraction)<.06f);
+                }
+                event("mouseup 1");CHECK(ui.frontend()->elementText("audio-level-"+id)==std::to_string(int(std::round(scene.gameAssets().findSound(id)->volume*100)))+"%");
+                ui.frontend()->scrollIntoView("audio-delete-"+id);frames(2);capture("audio-library-"+std::to_string(width));
+                click("audio-play-"+id);click("audio-pause-"+id);click("audio-stop-"+id);
+            }
             ui.frontend()->scrollIntoView("audio-delete-"+id);frames(3);capture("audio-library");
             ui.frontend()->scrollIntoView("audio-import");frames(3);capture("audio-music-settings");
             clickVisible("music-playlist-remove-0");CHECK(scene.gameAssets().music.playlist.empty());
@@ -219,6 +439,43 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             std::printf("Shadow controls UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
             rlImGuiShutdown();CloseWindow();return failures?1:0;
         }
+        if(std::getenv("LINBLUX_CONSTRUCTION_ONLY")) {
+            EditorActions actions(ui);
+            auto parts=scene.parts();for(auto* p:parts)if(p!=part)scene.remove(p);
+            auto* floor=scene.createPart(PartShape::Block,{0,-.1f,0},{22,.2f,22},"Piso fino");floor->setAnchored(true);
+            Part* walls[4]={part};for(int i=1;i<4;++i)walls[i]=scene.createPart(PartShape::Block,{40.f+i*8,15,30},{2,8,18},"Parede "+std::to_string(i));
+            for(int i=0;i<4;++i){walls[i]->setTransform({{40.f+i*8,15,30},QuaternionIdentity(),i==0||i==3?Vector3{22,8,2}:Vector3{2,8,18}});walls[i]->setAnchored(true);}
+            physics.syncScene(scene);
+            for(int width:{1366,1920}){
+                resizeWindow(width,width==1366?768:1080);camera.setOrbit({0,2,0},48,.75f,.85f);frames(3);
+                for(int i=0;i<4;++i){walls[i]->setPosition({40.f+i*8,15,30});}physics.syncScene(scene);
+                const Vector3 points[4]={{0,0,-10},{-10,0,0},{10,0,0},{0,0,10}};
+                for(int i=0;i<4;++i){
+                    scene.select(walls[i]);frames(2);click("tab-Model");
+                    if(width==1366&&i==0){
+                        CHECK(ui.frontend()->elementBounds("construction-grid").width==0);
+                        CHECK(ui.frontend()->elementBounds("construction-grid-spacing").width==0);
+                    }
+                    click("place-surface");CHECK(EditorUITestAccess::placement(ui).active());
+                    const auto view=ui.frontend()->viewport();Vector2 local;CHECK(camera.projectChecked(points[i],{view.width,view.height},local));
+                    const Vector2 point{local.x+view.x,local.y+view.y};const auto original=projectio::toJson(scene);
+                    event("mousemove "+std::to_string(int(point.x))+" "+std::to_string(int(point.y)));frames(2);
+                    CHECK(EditorUITestAccess::placement(ui).contact().snapped);CHECK(SameProjectValue(projectio::toJson(scene),original));
+                    if(i==0){capture("construction-preview-"+std::to_string(width));
+                        CHECK(actions.dispatch({"save"}));Scene saved;CHECK(projectio::load(saved,config.defaultProjectPath,error));CHECK(SameProjectValue(projectio::toJson(saved),original));
+                        key("Escape");CHECK(!EditorUITestAccess::placement(ui).active());CHECK(SameProjectValue(projectio::toJson(scene),original));
+                        click("place-surface");event("mousemove "+std::to_string(int(point.x))+" "+std::to_string(int(point.y)));}
+                    clickAt(point);CHECK(!EditorUITestAccess::placement(ui).active());CHECK(std::fabs(walls[i]->position().y-4)<.001f);
+                    CHECK(std::fabs(gizmomath::BoxSeparation({walls[i]->position(),walls[i]->rotation(),walls[i]->size()},{floor->position(),floor->rotation(),floor->size()}))<.001f);
+                    if(i==0){const auto placed=walls[i]->transform();key("ctrl+z");CHECK(SameProjectValue(projectio::toJson(scene),original));key("ctrl+y");CHECK(SameTransform(walls[i]->transform(),placed));}
+                }
+                capture("construction-room-"+std::to_string(width));CHECK(actions.dispatch({"save"}));Scene loaded;CHECK(projectio::load(loaded,config.defaultProjectPath,error));CHECK(SameProjectValue(projectio::toJson(loaded),projectio::toJson(scene)));
+                for(int i=0;i<4;++i)for(int j=i+1;j<4;++j)CHECK(gizmomath::BoxSeparation({walls[i]->position(),walls[i]->rotation(),walls[i]->size()},{walls[j]->position(),walls[j]->rotation(),walls[j]->size()})>=-.001f);
+                scene.select(walls[0]);CHECK(actions.dispatch({"assembly","above"}));auto* copy=static_cast<Part*>(scene.selection());CHECK(std::fabs(copy->position().y-12)<.001f);scene.remove(copy);
+            }
+            std::printf("Construction UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
         if(std::getenv("LINBLUX_EDITOR_PRECISION_ONLY")) {
             part->setTransform({{14,5,0},QuaternionIdentity(),{2,2,2}});
             auto* behind=scene.createPart(PartShape::Block,{14,5,-5},{2,2,2},"Peça atrás");behind->setAnchored(true);
@@ -233,15 +490,18 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             click("tab-View");click("editor-edges");CHECK(EditorUITestAccess::editorEdges(ui));
             click("editor-edges");CHECK(!EditorUITestAccess::editorEdges(ui));click("tab-Home");
             click("cmd-tool-1");frames(2);auto& gizmo=EditorUITestAccess::partGizmo(ui);
-            const auto layout=gizmolayout::Build(*part,ToolMode::Move,camera,view,false,gizmo.visualSettings());
-            const auto h=layout.moveHandle[1],d=layout.axisDirection[0];const auto original=part->position();
+            CHECK(gizmo.faceMove());gizmo.setPlanarHandles(true);CHECK(gizmo.faceMove());
+            const auto layout=gizmolayout::Build(*part,ToolMode::Scale,camera,view,false,gizmo.visualSettings());
+            const auto h=layout.faces[5].screen;const Vector2 d{0,-1};const auto original=part->position();const auto originalSize=part->size();
+            CHECK(gizmolayout::FaceUnderCursor(layout,h).index==5);
             const auto drag=[&](){event("mousemove "+std::to_string(int(view.x+h.x))+" "+std::to_string(int(view.y+h.y)));event("mousedown 1");
                 CHECK(gizmo.dragging());event("mousemove "+std::to_string(int(view.x+h.x+d.x*30))+" "+std::to_string(int(view.y+h.y+d.y*30)));};
-            drag();const auto raw=part->position();event("mouseup 1");key("ctrl+z");CHECK(NearlyEqual(part->position(),original));
+            drag();const auto raw=part->position();CHECK(!NearlyEqual(raw,original));CHECK(NearlyEqual(part->size(),originalSize));event("mouseup 1");key("ctrl+z");CHECK(NearlyEqual(part->position(),original));
             const auto cursorRay=camera.rayFromScreen({h.x+d.x*30,h.y+d.y*30},{view.width,view.height});
             auto* target=scene.createPart(PartShape::Block,Vector3Add(cursorRay.position,Vector3Scale(cursorRay.direction,35)),{4,4,2},"Alvo sob o cursor");target->setAnchored(true);frames(2);
             EditorActions actions(ui);CHECK(actions.dispatch({"grid-mode","absolute"}));CHECK(gizmo.gridMode()==gizmomath::GridMode::Absolute);
             CHECK(actions.dispatch({"grid-mode","relative"}));click("tab-Model");capture("construction-controls");click("tab-Home");
+
             event("keydown ctrl");drag();CHECK(gizmo.surfaceContact().snapped);capture("precision-contact");
             CHECK(std::fabs(gizmomath::BoxSeparation({part->position(),part->rotation(),part->size()},
                 {target->position(),target->rotation(),target->size()}))<.0001f);
@@ -274,16 +534,35 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             auto* model=scene.selection();CHECK(model&&model->instanceClass()==InstanceClass::Model);
             if(!model||model->instanceClass()!=InstanceClass::Model){capture("model-group-failure");rlImGuiShutdown();CloseWindow();return 1;}
             const auto id=model->id();CHECK(part->parent()==model&&second->parent()==model);
-            // Same visible gizmo, two real parts, one compound undo entry.
             click("cmd-tool-1");frames(2);const auto* proxy=EditorUITestAccess::modelProxy(ui);CHECK(proxy);
-            const auto beforeDrag=projectio::toJson(scene);const auto undoBefore=EditorUITestAccess::undoCount(ui);
-            if(proxy){const auto viewport=ui.frontend()->viewport();auto& gizmo=EditorUITestAccess::partGizmo(ui);
-                const auto layout=gizmolayout::Build(*proxy,ToolMode::Move,camera,viewport,false,gizmo.visualSettings());
-                const auto point=layout.moveHandle[1],direction=layout.axisDirection[0];
-                event("mousemove "+std::to_string(int(point.x+viewport.x))+" "+std::to_string(int(point.y+viewport.y)));event("mousedown 1");
-                CHECK(gizmo.dragging());event("mousemove "+std::to_string(int(point.x+viewport.x+direction.x*26))+" "+std::to_string(int(point.y+viewport.y+direction.y*26)));event("mouseup 1");
-                CHECK(EditorUITestAccess::undoCount(ui)==undoBefore+1);CHECK(part->parent()==model);key("ctrl+z");
-                CHECK(SameProjectValue(nlohmann::json::parse(projectio::toJson(scene)),nlohmann::json::parse(beforeDrag)));
+            const auto beforeDrag=projectio::toJson(scene);
+            const auto undoBefore=EditorUITestAccess::undoCount(ui);
+            if(proxy){
+                const auto startProxy=proxy->transform(),startPart=part->transform();
+                const auto viewport=ui.frontend()->viewport();auto& gizmo=EditorUITestAccess::partGizmo(ui);
+                gizmo.setLocalSpace(false);
+                const auto layout=gizmolayout::Build(*proxy,ToolMode::Scale,camera,viewport,gizmo.localSpace(),gizmo.visualSettings());
+                std::size_t faceIndex=layout.faces.size();
+                for(std::size_t i=0;i<layout.faces.size();++i)if(layout.faces[i].visible&&int(i/2)==1&&
+                    gizmolayout::FaceUnderCursor(layout,layout.faces[i].screen).index==int(i)){faceIndex=i;break;}
+                CHECK(faceIndex<layout.faces.size());
+                if(faceIndex<layout.faces.size()){
+                    const auto point=layout.faces[faceIndex].screen;const auto normal=layout.faces[faceIndex].normal;
+                    const auto sign=(&normal.x)[1]<0?-1.f:1.f;
+                    const Vector3 moveAxis=gizmomath::Axis(1,proxy->rotation(),gizmo.localSpace());
+                    const float worldPerPixel=camera.worldUnitsPerPixel(layout.faces[faceIndex].anchor,viewport.height);
+                    Vector2 a{},b{};
+                    CHECK(camera.projectChecked(layout.faces[faceIndex].anchor,{viewport.width,viewport.height},a));
+                    CHECK(camera.projectChecked(Vector3Add(layout.faces[faceIndex].anchor,Vector3Scale(moveAxis,worldPerPixel*40*sign)),{viewport.width,viewport.height},b));
+                    const auto direction=Vector2Normalize(Vector2Subtract(b,a));
+                    event("mousemove "+std::to_string(int(point.x+viewport.x))+" "+std::to_string(int(point.y+viewport.y)));event("mousedown 1");
+                    CHECK(gizmo.dragging());CHECK(gizmo.activeAxis()==1);
+                    event("mousemove "+std::to_string(int(point.x+viewport.x+direction.x*26))+" "+std::to_string(int(point.y+viewport.y+direction.y*26)));event("mouseup 1");
+                    CHECK(!SameTransform(proxy->transform(),startProxy));CHECK(!SameTransform(part->transform(),startPart));
+                    CHECK(EditorUITestAccess::undoCount(ui)==undoBefore+1);CHECK(part->parent()==model);key("ctrl+z");
+                    CHECK(SameTransform(part->transform(),startPart));
+                    CHECK(SameProjectValue(nlohmann::json::parse(projectio::toJson(scene)),nlohmann::json::parse(beforeDrag)));
+                }
             }
 
             clickVisible("prop-Model.Position.0");key("ctrl+a");event("type --clearmodifiers 20");key("Return");
@@ -294,6 +573,7 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             clickVisible("prop-Model.Scale");key("ctrl+a");event("type --clearmodifiers 2");key("Return");CHECK(NearlyEqual(part->size().x,8));
             clickVisible("prop-Model.Rotation.1");key("ctrl+a");event("type --clearmodifiers 90");key("Return");CHECK(NearlyEqual(part->position().z,8,.01f));
             const auto original=part->position();clickVisible("prop-Pivot.Position.0");key("ctrl+a");event("type --clearmodifiers 30");key("Return");CHECK(NearlyEqual(part->position(),original));
+
             clickVisible("node-"+std::to_string(part->id()));clickVisible("property-attachment-");
             auto* anchor=scene.selection();CHECK(anchor&&anchor->instanceClass()==InstanceClass::Attachment);
             if(!anchor||anchor->instanceClass()!=InstanceClass::Attachment){capture("attachment-create-failure");rlImGuiShutdown();CloseWindow();return 1;}
@@ -342,17 +622,36 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             const auto authored=projectio::toJson(scene);CHECK(projectio::save(scene,config.defaultProjectPath,error));
             Scene reloaded;CHECK(projectio::load(reloaded,config.defaultProjectPath,error));
             CHECK(SameProjectValue(nlohmann::json::parse(projectio::toJson(reloaded)),nlohmann::json::parse(authored)));
-            scene.createScript(InstanceClass::Script,nullptr,"CorpoEditor.lua")->source=R"(
-local part=linblux.scene.find("Wall")
+            scene.createScript(InstanceClass::Script,nullptr,"CorpoEditor.lua")->source=
+                std::string("local part=linblux.scene.find(")+std::to_string(part->id())+R"lua()
 assert(math.abs(part.body.density-2.5)<0.001 and math.abs(part.body.restitution-0.75)<0.001)
 part.anchored=false
-assert(math.abs(part.mass-60)<0.001)
-part:apply_impulse(linblux.vec3(60,0,0))
-assert(math.abs(part.velocity.x-1)<0.001)
-)";
-            click("play");frames(8);auto& runtime=EditorUITestAccess::runtime(ui);CHECK(ui.playing());CHECK(runtime.scripts().errorCount()==0);
+part:apply_impulse(linblux.vec3(600,0,0))
+linblux.scene.root:set_attribute("physics_probe_velocity",part.velocity.x)
+)lua";
+            const auto authoredBeforePlay=projectio::toJson(scene);
+            const auto authoredTransform=part->transform();
+            const auto authoredBodyPosition=physics.bodyPosition(part->id());
+            click("play");frames(8);auto& runtime=EditorUITestAccess::runtime(ui);CHECK(ui.playing());
+            for(const auto& message:runtime.scripts().messages())if(message.error)std::fprintf(stderr,"Body physics Lua: %s\n",message.text.c_str());
+            CHECK(runtime.scripts().errorCount()==0);
+            auto* runtimePart=runtime.scene().findPart(part->id());CHECK(runtimePart&&runtimePart!=part);
+            if(runtimePart) {
+                CHECK(runtime.scene().workspace()->attributes().count("physics_probe_velocity"));
+                if(runtime.scene().workspace()->attributes().count("physics_probe_velocity")) {
+                    const auto probeVelocity=float(std::get<double>(runtime.scene().workspace()->attributes().at("physics_probe_velocity")));
+                    CHECK(std::fabs(probeVelocity-10.f)<.01f);
+                }
+                CHECK(std::fabs(runtimePart->position().x-authoredTransform.position.x)>.02f);
+            }
+            CHECK(SameProjectValue(projectio::toJson(scene),authoredBeforePlay));
+            CHECK(NearlyEqual(part->position(),authoredTransform.position));
+            CHECK(NearlyEqual(physics.bodyPosition(part->id()),authoredBodyPosition));
             click("stop");frames();CHECK(!ui.playing());CHECK(part->anchored());
             CHECK(NearlyEqual(part->bodyProperties().density,2.5f));
+            CHECK(SameProjectValue(projectio::toJson(scene),authoredBeforePlay));
+            CHECK(NearlyEqual(part->position(),authoredTransform.position));
+            CHECK(NearlyEqual(physics.bodyPosition(part->id()),authoredBodyPosition));
             std::printf("Body Properties UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
             rlImGuiShutdown();CloseWindow();return failures?1:0;
         }
@@ -362,6 +661,7 @@ assert(math.abs(part.velocity.x-1)<0.001)
             scene.createScript(InstanceClass::Script,nullptr,"EntradaReal.lua")->source=R"(
 assert(linblux.storage.status().persistent)
 linblux.scene.root:set_attribute("stored_presses",linblux.storage.get("tecla_e",0))
+linblux.events.on("update",function() linblux.scene.root:set_attribute("menu_ticks",(linblux.scene.root:get_attribute("menu_ticks") or 0)+1) end)
 linblux.camera.configure({locked=true, fov=85})
 linblux.camera.set_pose({position=linblux.vec3(15,10,15),target=linblux.vec3(0,2,0),fov=95})
 linblux.events.on("key_pressed", function(key)
@@ -391,8 +691,10 @@ end)
             event("keydown e");frames(3);CHECK(rt.scriptInput().keys[KEY_E]);
             auto presses=[&]{const auto& attrs=rt.scene().workspace()->attributes();return attrs.count("real_presses")?std::get<double>(attrs.at("real_presses")):0.;};
             CHECK(presses()==1);event("keyup e");CHECK(!rt.scriptInput().keys[KEY_E]);
-            key("Escape");CHECK(rt.state()==game::RuntimeState::Paused);
-            key("e");CHECK(presses()==1);key("Escape");CHECK(rt.state()==game::RuntimeState::Playing);
+            key("Escape");CHECK(ui.gameMenuOpen());CHECK(rt.state()==game::RuntimeState::Playing);
+            const auto ticks=[&]{return std::get<double>(rt.scene().workspace()->attributes().at("menu_ticks"));};
+            const double menuTime=ticks();frames(4);CHECK(ticks()>menuTime);
+            key("e");CHECK(presses()==1);key("Escape");CHECK(!ui.gameMenuOpen());CHECK(rt.state()==game::RuntimeState::Playing);
             key("e");CHECK(presses()==2);
             CHECK(!rt.playerCamera().scripted());CHECK(rt.playerCamera().camera().fovy==85);
             for(const auto& message:rt.scripts().messages()){if(message.error)std::fprintf(stderr,"Input Lua: %s\n",message.text.c_str());CHECK(!message.error);}
@@ -414,50 +716,94 @@ end)
             click("tab-Home");click("cmd-tool-1");
             click("transform-space");key("Down");key("Return");
             CHECK(EditorUITestAccess::partGizmo(ui).localSpace());
-            for(int axis=0;axis<3;++axis)for(int side:{-1,1}) {
-                auto& gizmo=EditorUITestAccess::partGizmo(ui);const auto viewport=ui.frontend()->viewport();
-                const auto layout=gizmolayout::Build(*part,ToolMode::Move,camera,viewport,true,gizmo.visualSettings());
-                const auto point=layout.moveHandle[axis*2+(side>0)];const auto direction=Vector2Scale(layout.axisDirection[axis],float(side));
-                const auto eye=camera.position();const auto count=EditorUITestAccess::undoCount(ui);
-                event("mousemove "+std::to_string(int(point.x+viewport.x))+" "+std::to_string(int(point.y+viewport.y)));
-                event("mousedown 1");CHECK(gizmo.activeHandle()==gizmomath::MoveHandleId(axis,side));
-                event("mousemove "+std::to_string(int(point.x+viewport.x+direction.x*23))+" "+std::to_string(int(point.y+viewport.y+direction.y*23)));
-                CHECK(NearlyEqual(camera.position(),eye));CHECK(Vector3Distance(part->position(),baseline.position)>.01f);
-                const auto delta=Vector3Subtract(part->position(),baseline.position),basis=gizmomath::Axis(axis,baseline.rotation,true);
-                CHECK(Vector3Length(Vector3CrossProduct(delta,basis))<.001f);
-                CHECK(gizmo.activeHandle()==gizmomath::MoveHandleId(axis,side));event("mouseup 1");
-                CHECK(EditorUITestAccess::undoCount(ui)==count+1);key("ctrl+z");
-                CHECK(NearlyEqual(part->position(),baseline.position,.001f));
+            // Contrato aprovado: Mover desloca a Part inteira arrastando a face,
+            // sem setas e sem alterar o tamanho. O layout de face e o do Scale.
+            auto& gizmo=EditorUITestAccess::partGizmo(ui);
+            const auto viewport=ui.frontend()->viewport();
+            CHECK(gizmo.faceMove());
+            auto pointer=[&](Vector2 absolute){return "mousemove "+std::to_string(int(absolute.x))+" "+std::to_string(int(absolute.y));};
+            auto visibleFace=[](const gizmolayout::Layout& layout) {
+                for(std::size_t i=0;i<layout.faces.size();++i)
+                    if(layout.faces[i].visible&&gizmolayout::FaceUnderCursor(layout,layout.faces[i].screen).index==int(i))return i;
+                return layout.faces.size();
+            };
+            const auto faceLayout=gizmolayout::Build(*part,ToolMode::Scale,camera,viewport,gizmo.localSpace(),gizmo.visualSettings());
+            const auto faceIndex=visibleFace(faceLayout);CHECK(faceIndex<faceLayout.faces.size());
+            const Vector2 facePoint{viewport.x+faceLayout.faces[faceIndex].screen.x,viewport.y+faceLayout.faces[faceIndex].screen.y};
+            const auto normal=faceLayout.faces[faceIndex].normal;
+            const auto anchor=faceLayout.faces[faceIndex].anchor;
+            Vector2 pushed{};CHECK(camera.projectChecked(Vector3Add(anchor,Vector3Scale(normal,camera.worldUnitsPerPixel(anchor,viewport.height)*28)),{viewport.width,viewport.height},pushed));
+            const auto direction=Vector2Normalize(Vector2Subtract(pushed,faceLayout.faces[faceIndex].screen));CHECK(Vector2LengthSqr(direction)>.5f);
+            const auto startTransform=part->transform();const auto moveCount=EditorUITestAccess::undoCount(ui);const auto eye=camera.position();
+            event(pointer(facePoint));event("mousedown 1");CHECK(gizmo.dragging());
+            for(int step=1;step<=4;++step)event(pointer(Vector2{facePoint.x+direction.x*step*8,facePoint.y+direction.y*step*8}));
+            CHECK(NearlyEqual(part->size(),startTransform.size,.001f));
+            CHECK(Vector3Distance(part->position(),startTransform.position)>.01f);
+            CHECK(NearlyEqual(camera.position(),eye));CHECK(scene.selection()==part);
+            capture("move-drag-face");event("mouseup 1");
+            CHECK(EditorUITestAccess::undoCount(ui)==moveCount+1);
+            const auto movedTransform=part->transform();
+            key("ctrl+z");CHECK(NearlyEqual(part->position(),startTransform.position,.001f));
+            key("ctrl+y");CHECK(NearlyEqual(part->position(),movedTransform.position,.001f));
+            key("ctrl+z");CHECK(NearlyEqual(part->position(),startTransform.position,.001f));
+            // ESC durante o arraste restaura a transformacao e nao cria undo.
+            const auto escCount=EditorUITestAccess::undoCount(ui);
+            event(pointer(facePoint));event("mousedown 1");CHECK(gizmo.dragging());
+            for(int step=1;step<=3;++step)event(pointer(Vector2{facePoint.x+direction.x*step*8,facePoint.y+direction.y*step*8}));
+            event("keydown Escape");event("keyup Escape");frames(2);
+            CHECK(!gizmo.dragging());CHECK(NearlyEqual(part->position(),startTransform.position,.001f));
+            event("mouseup 1");CHECK(EditorUITestAccess::undoCount(ui)==escCount);
+            // Scale pela face muda a dimensao; Move nunca troca de tamanho.
+            click("cmd-tool-2");frames(2);
+            const auto sizeBefore=part->size();const auto scaleCount=EditorUITestAccess::undoCount(ui);
+            event(pointer(facePoint));event("mousedown 1");CHECK(EditorUITestAccess::partDragging(ui));
+            for(int step=1;step<=4;++step)event(pointer(Vector2{facePoint.x+direction.x*step*9,facePoint.y+direction.y*step*9}));
+            capture("scale-drag-face");event("mouseup 1");
+            CHECK(!NearlyEqual(part->size(),sizeBefore));CHECK(EditorUITestAccess::undoCount(ui)==scaleCount+1);
+            key("ctrl+z");CHECK(NearlyEqual(part->size(),sizeBefore,.001f));
+            // Girar continua sendo ferramenta independente.
+            click("cmd-tool-3");frames(2);
+            const auto ringLayout=gizmolayout::Build(*part,ToolMode::Rotate,camera,viewport,gizmo.localSpace(),gizmo.visualSettings());
+            const Vector2 ringPoint{viewport.x+ringLayout.rotateMarker[1].x,viewport.y+ringLayout.rotateMarker[1].y};
+            const auto rotationBefore=part->rotation();const auto rotateCount=EditorUITestAccess::undoCount(ui);
+            event(pointer(ringPoint));event("mousedown 1");CHECK(EditorUITestAccess::partDragging(ui));
+            for(int step=1;step<=3;++step)event(pointer(Vector2{ringPoint.x+step*11,ringPoint.y+step*4}));
+            capture("rotate-rings-drag");event("mouseup 1");
+            CHECK(EditorUITestAccess::undoCount(ui)==rotateCount+1);key("ctrl+z");CHECK(NearlyEqual(part->rotation(),rotationBefore,.001f));
+            // Trocar de ferramenta e voltar ao Move preserva a manipulacao por face.
+            for(int tool:{2,3,1}) {click("cmd-tool-"+std::to_string(tool));frames(2);CHECK(EditorUITestAccess::partGizmo(ui).faceMove());}
+            // move-planes pertence ao rig: clicar Mover de novo nao pode traz\xea-lo.
+            CHECK(actions.dispatch({"move-planes","true"}));
+            CHECK(!EditorUITestAccess::partGizmo(ui).planarHandles());CHECK(EditorUITestAccess::partGizmo(ui).faceMove());
+            click("cmd-tool-1");frames(2);CHECK(EditorUITestAccess::partGizmo(ui).faceMove());
+            // Model tambem move pela face e arrasta as Parts filhas.
+            auto* second=scene.createPart(PartShape::Block,{8,5,0},{2,2,2},"Peça do Modelo");second->setAnchored(true);
+            std::string groupError;auto* model=scene.group({part->id(),second->id()},"Modelo Face",groupError);CHECK(model);
+            if(model) {
+                scene.select(model);frames(3);
+                auto& modelGizmo=EditorUITestAccess::partGizmo(ui);const auto* proxy=EditorUITestAccess::modelProxy(ui);CHECK(proxy);
+                if(proxy) {
+                    const auto modelViewport=ui.frontend()->viewport();
+                    const auto modelLayout=gizmolayout::Build(*proxy,ToolMode::Scale,camera,modelViewport,modelGizmo.localSpace(),modelGizmo.visualSettings());
+                    const auto modelFace=visibleFace(modelLayout);CHECK(modelFace<modelLayout.faces.size());
+                    if(modelFace<modelLayout.faces.size()) {
+                        const Vector2 point{modelViewport.x+modelLayout.faces[modelFace].screen.x,modelViewport.y+modelLayout.faces[modelFace].screen.y};
+                        const auto partBefore=part->position();const auto proxyBefore=proxy->position();
+                        event(pointer(point));event("mousedown 1");CHECK(modelGizmo.dragging());
+                        for(int step=1;step<=4;++step)event(pointer(Vector2{point.x+step*9,point.y+step*5}));
+                        capture("model-drag-face");event("mouseup 1");
+                        CHECK(Vector3Distance(part->position(),partBefore)>.01f);
+                        CHECK(Vector3Distance(proxy->position(),proxyBefore)>.01f);
+                        key("ctrl+z");CHECK(NearlyEqual(part->position(),partBefore,.001f));
+                    }
+                }
+                scene.select(part);frames(2);
             }
             CHECK(actions.dispatch({"transform-space","world"}));frames();
-            for(int mode=1;mode<=3;++mode) {
-                click("tab-Home");click("cmd-tool-"+std::to_string(mode));frames();
-                auto& gizmo=EditorUITestAccess::partGizmo(ui);
-                const auto viewport=ui.frontend()->viewport();
-                const auto layout=gizmolayout::Build(*part,static_cast<ToolMode>(mode),camera,viewport,gizmo.localSpace(),gizmo.visualSettings());
-                const Vector2 point=mode==1?layout.moveHandle[1]:mode==2?layout.scaleHandle[1]:layout.rotateMarker[1];
-                const auto eye=camera.position();const auto count=EditorUITestAccess::undoCount(ui);
-                event("mousemove "+std::to_string(int(point.x+viewport.x))+" "+std::to_string(int(point.y+viewport.y)));
-                capture(mode==1?"move-six-arrows":mode==2?"scale-local-face":"rotate-rings");
-                event("mousedown 1");CHECK(EditorUITestAccess::partDragging(ui));
-                const auto direction=layout.axisDirection[0];
-                for(int step=1;step<=4;++step)event("mousemove "+std::to_string(int(point.x+viewport.x+direction.x*step*9))+" "+std::to_string(int(point.y+viewport.y+direction.y*step*9)));
-                CHECK(NearlyEqual(camera.position(),eye));CHECK(scene.selection()==part);
-                if(mode==2) {
-                    const auto axis=gizmomath::Axis(0,baseline.rotation,true);
-                    const auto before=Vector3Subtract(baseline.position,Vector3Scale(axis,baseline.size.x*.5f));
-                    const auto after=Vector3Subtract(part->position(),Vector3Scale(axis,part->size().x*.5f));
-                    CHECK(Vector3Distance(before,after)<.001f);
-                }
-                capture("drag-"+std::to_string(mode));event("mouseup 1");
-                CHECK(!EditorUITestAccess::partDragging(ui));CHECK(EditorUITestAccess::undoCount(ui)==count+1);
-                key("ctrl+z");CHECK(NearlyEqual(part->position(),baseline.position,.001f));CHECK(NearlyEqual(part->size(),baseline.size,.001f));
-                CHECK(NearlyEqual(part->rotation(),baseline.rotation,.001f));
-            }
             click("tab-View");click("show-collision-shapes");event("mousemove 235 650");capture("collision-shapes");
             click("tab-Home");click("cmd-tool-1");
-            for(const Vector2 size:{Vector2{1280,720},Vector2{1366,768},Vector2{1600,900}}) {
-                resizeWindow(int(size.x),int(size.y));capture("move-"+std::to_string(int(size.x)));
+            for(const Vector2 size:{Vector2{1366,768},Vector2{1920,1080}}) {
+                resizeWindow(int(size.x),int(size.y));capture("move-face-"+std::to_string(int(size.x)));
             }
             CHECK(projectio::save(scene,config.defaultProjectPath,error));Scene loaded;CHECK(projectio::load(loaded,config.defaultProjectPath,error));
             const auto expectedJson=nlohmann::json::parse(projectio::toJson(scene)),loadedJson=nlohmann::json::parse(projectio::toJson(loaded));

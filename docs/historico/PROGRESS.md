@@ -13,7 +13,8 @@ Data desta etapa: 2026-10-19
 - Na pasta local havia um protótipo single-file não versionado (`src/main.cpp`,
   ~7,9 KB) com personagem em blocos, câmera em terceira pessoa e física
   simplificada própria. Esse protótipo foi **preservado** em
-  `prototype/legacy_main.cpp` e não é compilado.
+  `prototype/legacy_main.cpp` e não era compilado. O arquivo foi removido na
+  limpeza da Alpha; a revisão original permanece no Git (veja README.md deste histórico).
 - `CMakeLists.txt` mínimo e `LICENSE` MIT também estavam apenas no local.
 
 Nada do protótipo atendia ao pedido (não tinha editor, hierarquia, ImGui,
@@ -123,7 +124,7 @@ docs/ROADMAP.md
 third_party/imgui/*            (vendorizado)
 third_party/rlimgui/*          (vendorizado)
 third_party/nlohmann/json.hpp  (vendorizado)
-prototype/legacy_main.cpp      (protótipo anterior preservado)
+prototype/legacy_main.cpp      (caminho histórico; removido do ramo principal na limpeza)
 ```
 
 Modificados: `README.md`, `LICENSE` (mantido MIT), `.gitignore`.

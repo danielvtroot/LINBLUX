@@ -2,8 +2,7 @@
 
 O TURBO é a camada local de compilação incremental e validação explicável do
 LINBLUX. Ele usa dados reais do Git, CMake, CTest e do índice
-[ATLAS](../atlas/README.md); não usa rede, servidor, banco externo ou modelo de
-IA. A CLI é independente do OpenCode:
+[ATLAS](../atlas/README.md), sem rede, servidor ou banco externo. Use pela CLI:
 
 ```bash
 python3 tools/turbo/turbo.py doctor

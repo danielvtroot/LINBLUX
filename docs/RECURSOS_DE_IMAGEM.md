@@ -46,3 +46,11 @@ anteriores continuam legíveis; campos novos opcionais usam os valores anteriore
 Pais Part são restaurados antes das superfícies, sem depender da ordem do JSON.
 No renderizador, os componentes usam a mesma orientação de faces e rotação UV
 contínua, com composição na ordem dos filhos.
+
+## Orientação e limites da Alpha
+
+Decals usam a orientação corrigida das faces; esta missão não inverteu UVs.
+Os testes utilizam padrões assimétricos próprios, sem publicar imagens pessoais.
+PNG/JPEG e associações persistidas são cobertos pelas regressões de imagem.
+Texturas com repetição conservam seu caminho separado. Um modo proporcional Fit
+mais completo é melhoria futura e não faz parte da promessa desta Alpha.

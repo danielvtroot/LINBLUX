@@ -210,6 +210,13 @@ Image IconImage(const std::string& name, int resolution) {
     } else if (name == "rotate" || name == "respawn") {
         circle(24, 25, 15);
         triangle(33, 5, 44, 17, 29, 18);
+    } else if (name == "item") {
+        box(12, 16, 24, 25);box(18, 8, 12, 8);
+        line(20, 23, 20, 34);line(28, 23, 28, 34);
+    } else if (name == "service") {
+        box(6, 6, 36, 14);box(6, 27, 36, 14);
+        disc(13, 13, 2, ink);disc(13, 34, 2, ink);
+        line(23, 13, 35, 13);line(23, 34, 35, 34);
     } else if (name == "folder" || name == "toolbox" || name == "storage") {
         box(6, 15, 36, 25);
         box(8, 8, 14, 7);

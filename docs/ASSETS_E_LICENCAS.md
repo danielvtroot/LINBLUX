@@ -46,3 +46,22 @@ conforme a jurisdição; não se promete liberdade jurídica universal do codec.
 Fontes são carregadas do sistema (DejaVu/Liberation/Noto) sem copiar seus arquivos
 para o projeto. Builds e instalações futuras devem registrar versões, origens,
 configuração e licenças de todas as bibliotecas que efetivamente redistribuírem.
+
+## Revisão do candidato em 30/10/2026
+
+`avcodec_license()` e `avformat_license()` das bibliotecas vinculadas retornaram
+`GPL version 2 or later`. A documentação primária do
+[FFmpeg](https://www.ffmpeg.org/legal.html) confirma que opções GPL alteram a
+licença aplicável à build. A distribuição binária permanece bloqueada até
+concluir obrigações e registrar configuração/fontes correspondentes.
+
+O instalador preserva MIT do projeto, ImGui, JSON e RmlUi, zlib do rlImGui e
+a licença stb. Bullet e Lua são dependências do sistema. Fontes não são copiadas.
+O candidato inclui a raylib do ambiente e o aviso do header; falta inventariar
+e fornecer avisos dos componentes embutidos efetivamente usados. Isso é uma
+pendência de distribuição, sem declaração de aprovação jurídica.
+
+`docs/prints/studio-construcao.png` vem da regressão real de construção desta
+missão, com cena sintética própria. Foi inspecionada: não mostra dados pessoais,
+janelas externas ou imagens pessoais. A captura histórica RifleDemo permanece
+identificada como anterior no README. Nenhum vídeo foi adicionado.

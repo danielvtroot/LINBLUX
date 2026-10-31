@@ -123,6 +123,8 @@ private:
     std::unique_ptr<btDiscreteDynamicsWorld> world_;
     std::unordered_map<InstanceId, BodyEntry> bodies_;
     std::unordered_set<InstanceId> editingParts_;
+    Scene* attachedScene_=nullptr;
+    std::shared_ptr<char> hierarchyLifetime_=std::make_shared<char>();
     float fixedStep_ = 1.0f / 60.0f;
     int maxSubSteps_ = 5;
 };

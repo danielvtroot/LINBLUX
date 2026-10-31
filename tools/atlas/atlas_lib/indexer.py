@@ -171,6 +171,24 @@ def _class_intervals(text: str) -> list[tuple[int, int, str, str]]:
     return intervals
 
 
+def _namespace_path(intervals: list[tuple[int, int, str]], pos: int) -> str:
+    """Full namespace of a position, including nested and ``a::b`` namespaces.
+
+    ``_enclosing`` returns only the innermost interval, which loses ``loblox``
+    in ``namespace loblox { namespace editor { ... } }``.
+    """
+    merged: list[str] = []
+    for item in sorted(intervals):
+        if not (item[0] <= pos <= item[1]):
+            continue
+        segments = [segment for segment in item[2].split("::") if segment]
+        if merged and segments and merged[-1] == segments[0]:
+            merged.extend(segments[1:])
+        else:
+            merged.extend(segments)
+    return "::".join(merged)
+
+
 def _enclosing(intervals, pos: int, name_index: int = 2) -> str:
     best = None
     for item in intervals:
@@ -326,15 +344,26 @@ def parse_cpp(text: str, allow_declarations: bool = True) -> dict:
         if key in seen:
             return
         seen.add(key)
-        namespace = _enclosing(namespaces, pos)
+        namespace = _namespace_path(namespaces, pos)
         owner = _enclosing(classes, pos, 2)
         if owner == name:
             owner = ""
         if owner and owner != name and kind == "function":
             kind = "method"
         parts = [part for part in (namespace, owner) if part]
-        if "::" in name:
-            qualified = name
+        if name.startswith("::"):
+            qualified = name.lstrip(":")
+        elif "::" in name:
+            # Out-of-class definition (``Class::method`` or
+            # ``loblox::Class::method``): the owner is already inside the name,
+            # so only prepend the namespace when it is not already there.
+            prefix = "::".join(parts)
+            if prefix and name.startswith(prefix + "::"):
+                qualified = name
+            else:
+                qualified = "::".join(parts + [name]) if parts else name
+            if kind == "function":
+                kind = "method"
         else:
             qualified = "::".join(parts + [name]) if parts else name
         symbols.append({
@@ -622,6 +651,20 @@ def parse_cmake(text: str, cmake_dir: str) -> dict:
             target = args[0]
             kind = name.removeprefix("add_").lower()
             rest = args[1:]
+            if "ALIAS" in rest:
+                # add_library(alias ALIAS real): tests link the alias name while
+                # the sources belong to the real target. Without this edge the
+                # target graph stops and a whole module reports zero consumers
+                # (audit B6: linblux_editor ALIAS linblux_studio).
+                alias_at = rest.index("ALIAS")
+                real = rest[alias_at + 1] if alias_at + 1 < len(rest) else ""
+                entry = targets.setdefault(
+                    target, {"name": target, "type": "alias", "sources": [], "deps": []}
+                )
+                entry["type"] = "alias"
+                if real and real not in entry["deps"]:
+                    entry["deps"].append(real)
+                continue
             declared_type = kind
             if kind == "library" and rest and rest[0] in {
                 "STATIC", "SHARED", "MODULE", "INTERFACE", "OBJECT"
@@ -719,11 +762,98 @@ def parse_cmake(text: str, cmake_dir: str) -> dict:
     return {"targets": targets, "tests": tests, "external": external}
 
 
-def index_repository(root: Path, force: bool = False, quiet: bool = False) -> dict:
+def _rebuild_graph(conn, root: Path, files: dict[str, Path]) -> tuple[int, int]:
+    """Rebuild targets/tests/deps from CMakeLists.txt files on disk."""
+    conn.execute("DELETE FROM cmake_targets")
+    conn.execute("DELETE FROM tests")
+    conn.execute("DELETE FROM external_deps")
+    target_count = 0
+    test_count = 0
+    external_rows: set[tuple[str, str]] = set()
+    for rel, path in files.items():
+        if path.name != "CMakeLists.txt":
+            continue
+        try:
+            cmake_text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        row = conn.execute("SELECT id FROM files WHERE path=?", (rel,)).fetchone()
+        file_id = row["id"] if row else None
+        graph = parse_cmake(cmake_text, str(path.parent.relative_to(root)))
+        for target_name, target in graph["targets"].items():
+            cur = conn.execute(
+                "INSERT INTO cmake_targets(name,type,file_id,evidence) VALUES(?,?,?,?)",
+                (target_name, target["type"], file_id, f"CMakeLists.txt:{rel}"),
+            )
+            target_id = cur.lastrowid
+            target_count += 1
+            for source in target["sources"]:
+                conn.execute(
+                    "INSERT INTO target_sources(target_id,path,kind,confidence) VALUES(?,?,?,?)",
+                    (target_id, source, "source", "confirmed"),
+                )
+            for dep in target["deps"]:
+                conn.execute(
+                    "INSERT INTO target_sources(target_id,path,kind,confidence) VALUES(?,?,?,?)",
+                    (target_id, dep, "dependency", "confirmed"),
+                )
+        for test in graph["tests"]:
+            cur = conn.execute(
+                "INSERT INTO tests(name,command,target,source_path,timeout,labels,origin) VALUES(?,?,?,?,?,?,?)",
+                (
+                    test["name"], test["command"], test.get("target"),
+                    test.get("source_path"), test.get("timeout"), test.get("labels"),
+                    "cmake" + (":conditional" if test.get("conditional") else ""),
+                ),
+            )
+            test_id = cur.lastrowid
+            test_count += 1
+            source = test.get("source_path")
+            if source:
+                conn.execute(
+                    "INSERT INTO test_files(test_id,path,evidence) VALUES(?,?,?)",
+                    (test_id, source, "cmake test source"),
+                )
+            if test.get("target") in graph["targets"]:
+                for source in graph["targets"][test["target"]]["sources"]:
+                    conn.execute(
+                        "INSERT INTO test_files(test_id,path,evidence) VALUES(?,?,?)",
+                        (test_id, source, "target source"),
+                    )
+        for item in graph["external"]:
+            external_rows.add((item["name"], item["kind"]))
+
+    third_party = root / "third_party"
+    if third_party.is_dir():
+        for child in sorted(third_party.iterdir()):
+            if child.is_dir():
+                external_rows.add((child.name, "vendored"))
+    for name, kind in sorted(external_rows):
+        conn.execute(
+            "INSERT OR IGNORE INTO external_deps(name,kind,evidence) VALUES(?,?,?)",
+            (name, kind, "CMake/third_party inventory"),
+        )
+    return target_count, test_count
+
+
+def index_repository(
+    root: Path,
+    force: bool = False,
+    quiet: bool = False,
+    rehash: bool = False,
+    policy=None,
+) -> dict:
+    if policy is not None and not policy.allow_index_write:
+        raise RuntimeError(
+            f"modo {policy.name}: indexação bloqueada; "
+            "execute com ATLAS_IO_MODE=normal quando houver autorização"
+        )
     started = time.monotonic()
     cache = ensure_cache_dir(root)
     if force:
         remove_index(root)
+    # Writing was already authorised above (hdd-critical raises), so the handle
+    # is writable even when queries in this process run read-only.
     try:
         conn = open_db(root, create=True)
         if not get_meta(conn, "schema_version") or get_meta(conn, "schema_version") != str(INDEX_SCHEMA_VERSION):
@@ -741,13 +871,18 @@ def index_repository(root: Path, force: bool = False, quiet: bool = False) -> di
     stats = {
         "added": 0, "updated": 0, "deleted": 0, "unchanged": 0,
         "skipped": skipped, "symbols": 0, "relations": 0,
-        "bytes_read": 0, "indexed_files": len(files),
+        "bytes_read": 0, "indexed_files": len(files), "rehash": bool(rehash),
+        "io_mode": policy.name if policy is not None else "normal",
     }
     parsed: dict[str, dict] = {}
     hashes: dict[str, str] = {}
     mtimes: dict[str, int] = {}
-    unchanged_mtimes: dict[str, int] = {}
+    ctimes: dict[str, int] = {}
+    sizes: dict[str, int] = {}
+    touched: dict[str, tuple[int, int]] = {}
 
+    # Fast path: unchanged metadata (size + mtime + ctime) skips the file read
+    # and the SHA-256 entirely. ``rehash=True`` (update --full) forces hashing.
     for rel, path in files.items():
         prior = existing.get(rel)
         try:
@@ -755,6 +890,17 @@ def index_repository(root: Path, force: bool = False, quiet: bool = False) -> di
         except OSError:
             continue
         mtimes[rel] = stat.st_mtime_ns
+        ctimes[rel] = stat.st_ctime_ns
+        sizes[rel] = stat.st_size
+        if (
+            prior
+            and not rehash
+            and prior["size"] == stat.st_size
+            and prior["mtime_ns"] == stat.st_mtime_ns
+            and int(prior.get("ctime_ns") or 0) == stat.st_ctime_ns
+        ):
+            stats["unchanged"] += 1
+            continue
         read = read_text_file(path)
         if read is None:
             continue
@@ -764,7 +910,11 @@ def index_repository(root: Path, force: bool = False, quiet: bool = False) -> di
         stats["bytes_read"] += len(raw)
         if prior and prior["sha256"] == digest:
             stats["unchanged"] += 1
-            unchanged_mtimes[rel] = mtimes[rel]
+            if (
+                prior["mtime_ns"] != stat.st_mtime_ns
+                or int(prior.get("ctime_ns") or 0) != stat.st_ctime_ns
+            ):
+                touched[rel] = (stat.st_mtime_ns, stat.st_ctime_ns)
             continue
         language = detect_language(path) or "text"
         parsed[rel] = parse_text(rel, language, text)
@@ -777,32 +927,62 @@ def index_repository(root: Path, force: bool = False, quiet: bool = False) -> di
     deleted = [rel for rel in existing if rel not in files]
     stats["deleted"] = len(deleted)
 
+    cmake_files = [(rel, path) for rel, path in files.items() if path.name == "CMakeLists.txt"]
+    cmake_changed = any(rel in parsed for rel, _ in cmake_files) or any(
+        Path(rel).name == "CMakeLists.txt" for rel in deleted
+    )
+    graph_rows = conn.execute("SELECT COUNT(*) AS n FROM cmake_targets").fetchone()["n"]
+    test_rows = conn.execute("SELECT COUNT(*) AS n FROM tests").fetchone()["n"]
+    rebuild_graph = bool(
+        force or cmake_changed or graph_rows == 0 or test_rows == 0 or not existing
+    )
+
+    if not (parsed or deleted or touched or rebuild_graph):
+        counts = table_counts(conn)
+        elapsed = time.monotonic() - started
+        db_files = [cache / "index.sqlite", cache / "index.sqlite-wal", cache / "index.sqlite-shm"]
+        stats.update({
+            "noop": True,
+            "elapsed_seconds": round(elapsed, 3),
+            "symbols_changed": 0,
+            "relations_changed": 0,
+            "symbols": counts["symbols"],
+            "relations": counts["relations"],
+            "counts": counts,
+            "database_bytes": sum(path.stat().st_size for path in db_files if path.exists()),
+        })
+        conn.close()
+        if not quiet:
+            print(
+                f"ATLAS: índice atualizado ({stats['indexed_files']} arquivos, "
+                f"nada a fazer) em {elapsed:.3f}s"
+            )
+        return stats
+
     with transaction(conn):
         for rel in deleted:
             conn.execute("DELETE FROM files WHERE path=?", (rel,))
-            conn.execute("DELETE FROM file_fts WHERE rowid=(SELECT id FROM files WHERE path=?)", (rel,))
-        # The row is already gone for deleted paths; clean any orphan FTS rows.
+        # Clean FTS rows whose file row no longer exists (rows deleted above).
         conn.execute("DELETE FROM file_fts WHERE rowid NOT IN (SELECT id FROM files)")
 
-        # Touch/idempotent rewrites (same SHA-256) must refresh mtime, otherwise
-        # status/doctor keep reporting a stale file that requires no reparse.
+        # Same content, different metadata: refresh the fast-path columns so
+        # status/doctor do not report a stale file that needs no reparse.
         conn.executemany(
-            "UPDATE files SET mtime_ns=? WHERE path=?",
-            [(mtime_ns, rel) for rel, mtime_ns in unchanged_mtimes.items()],
+            "UPDATE files SET mtime_ns=?, ctime_ns=? WHERE path=?",
+            [(mtime_ns, ctime_ns, rel) for rel, (mtime_ns, ctime_ns) in touched.items()],
         )
 
         for rel, payload in parsed.items():
             path = files[rel]
             language = detect_language(path) or "text"
             text = payload["text"]
-            stat = path.stat()
             if rel in existing:
                 file_id = existing[rel]["id"]
                 conn.execute(
-                    "UPDATE files SET module=?,area=?,language=?,size=?,mtime_ns=?,sha256=?,line_count=?,indexed_at=?,is_external=? WHERE id=?",
+                    "UPDATE files SET module=?,area=?,language=?,size=?,mtime_ns=?,ctime_ns=?,sha256=?,line_count=?,indexed_at=?,is_external=? WHERE id=?",
                     (
-                        module_for(rel, language), area_for(rel), language, stat.st_size,
-                        mtimes[rel], hashes[rel], text.count("\n") + 1, now,
+                        module_for(rel, language), area_for(rel), language, sizes[rel],
+                        mtimes[rel], ctimes[rel], hashes[rel], text.count("\n") + 1, now,
                         1 if is_external(rel) else 0, file_id,
                     ),
                 )
@@ -810,11 +990,11 @@ def index_repository(root: Path, force: bool = False, quiet: bool = False) -> di
                 conn.execute("DELETE FROM relations WHERE source_file=?", (file_id,))
             else:
                 cur = conn.execute(
-                    "INSERT INTO files(path,module,area,language,size,mtime_ns,sha256,line_count,indexed_at,is_external)"
-                    " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO files(path,module,area,language,size,mtime_ns,ctime_ns,sha256,line_count,indexed_at,is_external)"
+                    " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                     (
-                        rel, module_for(rel, language), area_for(rel), language, stat.st_size,
-                        mtimes[rel], hashes[rel], text.count("\n") + 1, now,
+                        rel, module_for(rel, language), area_for(rel), language, sizes[rel],
+                        mtimes[rel], ctimes[rel], hashes[rel], text.count("\n") + 1, now,
                         1 if is_external(rel) else 0,
                     ),
                 )
@@ -836,78 +1016,16 @@ def index_repository(root: Path, force: bool = False, quiet: bool = False) -> di
                 (file_id, rel, module_for(rel, language), context),
             )
 
-        # CMake is parsed from disk on every update: it is small and defines the
-        # target/test graph that impacts queries depend on. Rebuild it atomically
-        # so targets/tests removed from CMake do not remain in the index.
-        conn.execute("DELETE FROM cmake_targets")
-        conn.execute("DELETE FROM tests")
-        conn.execute("DELETE FROM external_deps")
-        target_rows: dict[str, int] = {}
-        test_count = 0
-        external_rows: set[tuple[str, str]] = set()
-        for rel, path in files.items():
-            if path.name != "CMakeLists.txt":
-                continue
-            try:
-                cmake_text = path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            row = conn.execute("SELECT id FROM files WHERE path=?", (rel,)).fetchone()
-            file_id = row["id"] if row else None
-            graph = parse_cmake(cmake_text, str(path.parent.relative_to(root)))
-            for target_name, target in graph["targets"].items():
-                cur = conn.execute(
-                    "INSERT INTO cmake_targets(name,type,file_id,evidence) VALUES(?,?,?,?)",
-                    (target_name, target["type"], file_id, f"CMakeLists.txt:{rel}"),
-                )
-                target_id = cur.lastrowid
-                target_rows[target_name] = target_id
-                for source in target["sources"]:
-                    conn.execute(
-                        "INSERT INTO target_sources(target_id,path,kind,confidence) VALUES(?,?,?,?)",
-                        (target_id, source, "source", "confirmed"),
-                    )
-                for dep in target["deps"]:
-                    conn.execute(
-                        "INSERT INTO target_sources(target_id,path,kind,confidence) VALUES(?,?,?,?)",
-                        (target_id, dep, "dependency", "confirmed"),
-                    )
-            for test in graph["tests"]:
-                cur = conn.execute(
-                    "INSERT INTO tests(name,command,target,source_path,timeout,labels,origin) VALUES(?,?,?,?,?,?,?)",
-                    (
-                        test["name"], test["command"], test.get("target"),
-                        test.get("source_path"), test.get("timeout"), test.get("labels"),
-                        "cmake" + (":conditional" if test.get("conditional") else ""),
-                    ),
-                )
-                test_id = cur.lastrowid
-                test_count += 1
-                source = test.get("source_path")
-                if source:
-                    conn.execute(
-                        "INSERT INTO test_files(test_id,path,evidence) VALUES(?,?,?)",
-                        (test_id, source, "cmake test source"),
-                    )
-                if test.get("target") in graph["targets"]:
-                    for source in graph["targets"][test["target"]]["sources"]:
-                        conn.execute(
-                            "INSERT INTO test_files(test_id,path,evidence) VALUES(?,?,?)",
-                            (test_id, source, "target source"),
-                        )
-            for item in graph["external"]:
-                external_rows.add((item["name"], item["kind"]))
-
-        third_party = root / "third_party"
-        if third_party.is_dir():
-            for child in sorted(third_party.iterdir()):
-                if child.is_dir():
-                    external_rows.add((child.name, "vendored"))
-        for name, kind in sorted(external_rows):
-            conn.execute(
-                "INSERT OR IGNORE INTO external_deps(name,kind,evidence) VALUES(?,?,?)",
-                (name, kind, "CMake/third_party inventory"),
-            )
+        # CMake/tests graph: rebuilt only when CMakeLists.txt changed, on first
+        # index, or when the tables are empty. A pure source edit must not pay
+        # for re-parsing and re-inserting the whole build graph (audit B19).
+        if rebuild_graph:
+            target_count, test_count = _rebuild_graph(conn, root, files)
+        else:
+            target_count = conn.execute(
+                "SELECT COUNT(*) AS n FROM cmake_targets"
+            ).fetchone()["n"]
+            test_count = conn.execute("SELECT COUNT(*) AS n FROM tests").fetchone()["n"]
 
         # Newly added files can make an earlier unresolved include resolvable.
         for relation in conn.execute(
@@ -928,8 +1046,8 @@ def index_repository(root: Path, force: bool = False, quiet: bool = False) -> di
         set_meta(conn, "index_version", str(INDEX_VERSION))
         set_meta(conn, "updated_at", now)
         set_meta(conn, "file_count", str(len(files)))
-        set_meta(conn, "glossary_terms", str(len(glossary(root))))
-        set_meta(conn, "target_count", str(len(target_rows)))
+        set_meta(conn, "glossary_terms", str(len(glossary(root).get("terms", {}))))
+        set_meta(conn, "target_count", str(target_count))
         set_meta(conn, "test_count", str(test_count))
 
     conn.execute("PRAGMA optimize")

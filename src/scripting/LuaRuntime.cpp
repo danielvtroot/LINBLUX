@@ -885,7 +885,7 @@ struct LuaRuntime::Impl {
     static int Nearby(lua_State* L) {
         auto& self=Host(L);const auto center=ReadVector(L,1);const double radius=Number(L,2);
         Require(radius>=0&&radius<=1000000,"Raio de consulta fora do intervalo");lua_newtable(L);int index=0;
-        for(const auto* part:self.runtime->scene().parts())if(Vector3DistanceSqr(center,part->position())<=radius*radius){self.pushInstance(L,part,true);lua_rawseti(L,-2,++index);}
+        for(const auto* part:self.runtime->scene().worldParts())if(Vector3DistanceSqr(center,part->position())<=radius*radius){self.pushInstance(L,part,true);lua_rawseti(L,-2,++index);}
         return 1;
     }
     static int Gravity(lua_State* L){lua_pushnumber(L,Host(L).runtime->settings().gravity);return 1;}
@@ -1342,7 +1342,7 @@ struct LuaRuntime::Impl {
             return 0;
         }
         Require(h.kind==Kind::Instance,"readonly service property");auto& object=self.instance(L,1);
-        if(Eq(key,"Name")){const char* name=Text(L,3);const auto size=std::strlen(name);Require(*name && size<=128,"Name length must be 1..128");self.nativeBudget(0,size>object.name().size()?size-object.name().size():0);object.setName(name);return 0;}
+        if(Eq(key,"Name")){const char* name=Text(L,3);const auto size=std::strlen(name);Require(*name && size<=128,"Name length must be 1..128");self.nativeBudget(0,size>object.name().size()?size-object.name().size():0);std::string error;if(!object.trySetName(name,error))throw std::runtime_error(error);return 0;}
         if(Eq(key,"Parent")){auto& parent=self.instance(L,3);std::string error;const bool ok=self.runtime->mutableScene().reparent(&object,&parent,error);if(!ok)throw std::runtime_error(error);return 0;}
         if(h.modern&&IsScriptClass(object.instanceClass())&&Eq(key,"Enabled")){
             Require(lua_isboolean(L,3),"enabled requer booleano");static_cast<Script&>(object).enabled=lua_toboolean(L,3);

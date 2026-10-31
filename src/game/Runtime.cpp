@@ -770,7 +770,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     if((!camera_.scripted()&&settings_.cameraLock) || shiftLockActive() || camera_.firstPerson())yaw_=camera_.yaw();
     if(state_==RuntimeState::Playing)camera_.update(dt,renderCharacterRoot().position,velocity(),input,settings_,*this);
     std::vector<InstanceId> fallen;
-    for(auto* part:scene_->parts()) if(!part->anchored() && part->deletable() && part->position().y<scene_->workspace()->fallenPartsDestroyHeight())fallen.push_back(part->id());
+    for(auto* part:scene_->worldParts()) if(!part->anchored() && part->deletable() && part->position().y<scene_->workspace()->fallenPartsDestroyHeight())fallen.push_back(part->id());
     for(auto id:fallen)scene_->removeById(id);
     if(inventory_)try{inventory_->update(position(),camera_.yaw());}catch(const std::exception& e){scripts_.hostError(e.what());}
     try{progress_.tick(dt);}catch(const std::exception& e){scripts_.hostError(e.what());}
@@ -953,7 +953,7 @@ bool RuntimeSession::validate(std::string& error) const {
         if (body_ || physics_ || scene_) { error = "runtime resources survived Stop"; return false; }
         error.clear(); return true;
     }
-    if (!scene_ || !physics_ || !body_ || bodyCount() != scene_->parts().size()+1 ||
+    if (!scene_ || !physics_ || !body_ || bodyCount() != scene_->worldParts().size()+1 ||
         !Valid(characterRoot()) || !std::isfinite(health_) || health_<0 || health_>settings_.maxHealth) { error = "runtime: missing/invalid character, health or orphan body"; return false; }
     return scene_->validate(error) && physics_->validate(*scene_, error);
 }

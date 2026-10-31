@@ -5,6 +5,7 @@ Build first through ATLAS TURBO. Only installed resources enter the archive.
 from __future__ import annotations
 import argparse, hashlib, json, os, platform, re, shutil, subprocess, sys, tarfile, tempfile
 from pathlib import Path
+from urllib.parse import quote
 ROOT=Path(__file__).resolve().parent.parent
 sys.path.insert(0,str(ROOT/'tools/turbo'))
 from turbo_lib.runner import run_command
@@ -28,10 +29,40 @@ def main():
         # No video with undocumented redistribution rights enters a candidate.
         for video in prefix.rglob('*.mp4'):video.unlink()
         share=prefix/'share/linblux';licenses=share/'licenses';licenses.mkdir(parents=True,exist_ok=True)
+        # The source README has repository-relative links; use the installation README at the archive root.
+        (share/'README.md').unlink()
         docs=share/'docs';shutil.rmtree(docs);docs.mkdir()
-        for name in ['ARCHITECTURE.md','SCRIPTING_LUA.md','INVENTARIO.md','INTERACOES.md','ATTACHMENTS.md','ASSETS_E_LICENCAS.md','ALPHA_0_1_0.md']:
-            if (ROOT/'docs'/name).is_file():shutil.copy2(ROOT/'docs'/name,docs/name)
-        shutil.copy2(ROOT/'README.md',prefix/'README.md')
+        for name in ['ARCHITECTURE.md','SCRIPTING_LUA.md','INVENTARIO.md','ATTACHMENTS.md','ASSETS_E_LICENCAS.md','ALPHA_0_1_0.md']:
+            source=ROOT/'docs'/name
+            if source.is_file():
+                # This is an offline selection, not a copy of the repository.
+                # Links to unbundled guides resolve to the public documentation.
+                def public_link(match):
+                    target=match.group(1)
+                    if re.match(r'[a-zA-Z]+:',target) or target.startswith('#'):return match.group(0)
+                    path,separator,anchor=target.partition('#')
+                    relative=(source.parent/path).resolve().relative_to(ROOT).as_posix()
+                    return ']('+'https://github.com/danielvtroot/LINBLUX/blob/main/'+quote(relative,safe='/')+(separator+anchor if separator else '')+')'
+                (docs/name).write_text(re.sub(r'\]\(([^)]+)\)',public_link,source.read_text()))
+        (prefix/'README.md').write_text("""# LINBLUX Alpha 0.1.0 — candidato interno
+
+Este arquivo não é uma Release pública aprovada. Consulte ESTADO-DO-CANDIDATO.txt.
+
+Na pasta extraída, execute:
+
+```sh
+./bin/linblux
+./bin/linblux_player --project ./share/linblux/examples/rifledemo/world.loblox.json
+```
+
+Dependências do sistema e hashes constam em manifest.json. O pacote não é universal.
+A revisão de redistribuição FFmpeg/raylib ainda bloqueia a publicação binária.
+Fontes DejaVu/Liberation devem estar instaladas no sistema.
+
+[Notas da Alpha](share/linblux/docs/ALPHA_0_1_0.md) ·
+[Licenças](share/linblux/licenses/) ·
+[Código e documentação](https://github.com/danielvtroot/LINBLUX)
+""")
         dependencies={}
         for binary in ['linblux','linblux_player']:
             target=prefix/'bin'/binary

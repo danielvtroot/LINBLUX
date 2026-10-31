@@ -663,7 +663,7 @@ namespace skins {
 struct FaceDef {
     const char* name;
     Vector3 normal;      // local
-    Vector3 uAxis;       // local: direção do u da imagem
+    Vector3 uAxis;       // local: eixo geométrico do quad (não é o u da imagem)
     Vector3 vAxis;       // local: direção do v (para cima da imagem)
     float wExt;          // extensão do quad no eixo u
     float hExt;          // extensão do quad no eixo v
@@ -696,6 +696,14 @@ bool FindNumber(const Part& part, const char* key, double& out) {
     }
     return false;
 }
+// Modo de ajuste do decal declarado no arquivo: "fit"/"fill"/"stretch".
+// Ausente significa esticar, que é o comportamento dos arquivos antigos.
+int FitMode(const std::string* mode) {
+    if (mode == nullptr) return 0;
+    if (*mode == "fit") return 1;
+    if (*mode == "fill") return 2;
+    return 0;
+}
 Color Tint(const std::string* hex) {
     if (hex == nullptr || hex->size() < 6) return Color{255, 255, 255, 255};
     const auto channel = [&](int i) {
@@ -712,14 +720,40 @@ Color Tint(const std::string* hex) {
 void DrawFaceQuad(Vector3 position, Quaternion rotationQuat, Vector3 size, int face,
                   const Texture2D& tex, float alpha, Color tint, Vector2 repeatUv,
                   Vector2 offsetUv, float uvRotation, Vector3 lightDirection, float sunIntensity,
-                  float brightness, float outward = 0.02f, bool flipU = false) {
+                  float brightness, float outward = 0.02f, bool flipU = false, int fitMode = 0) {
     const Vector3 half = Vector3Scale(size, 0.5f);
     const FaceDef& def = kFaces[face];
+    // O u da imagem tem de crescer para a direita de quem olha a face por
+    // fora; essa direita é cross(-normal, vAxis). Metade dos eixos locais da
+    // caixa aponta para o lado oposto, e amarrar a UV a eles espelhava a
+    // imagem (texto do decal aparecia invertido em 5 das 6 faces). A reflexão
+    // é feita na UV, não nos vértices, para manter a ordem dos cantos e as
+    // extensões da face usadas pelo Texture (tiling).
+    const Vector3 viewRight =
+        Vector3CrossProduct(Vector3Negate(def.normal), def.vAxis);
+    const bool axisMirrored = Vector3DotProduct(def.uAxis, viewRight) < 0.0f;
     // Extensões reais no plano da face.
-    const float w = std::fabs(def.uAxis.x) > 0.5f ? half.x :
-                    std::fabs(def.uAxis.z) > 0.5f ? half.z : def.wExt;
-    const float h = std::fabs(def.vAxis.y) > 0.5f ? half.y :
-                    std::fabs(def.vAxis.z) > 0.5f ? half.z : def.hExt;
+    float w = std::fabs(def.uAxis.x) > 0.5f ? half.x :
+              std::fabs(def.uAxis.z) > 0.5f ? half.z : def.wExt;
+    float h = std::fabs(def.vAxis.y) > 0.5f ? half.y :
+              std::fabs(def.vAxis.z) > 0.5f ? half.z : def.hExt;
+    // Ajuste proporcional do decal. 0=esticar (comportamento histórico de
+    // todos os arquivos que não declaram nada), 1=ajustar (imagem inteira,
+    // sobra transparente), 2=preencher (cobre a face cortando o excesso).
+    // Nenhum dos três deforma a imagem.
+    float uvScaleU = 1.0f, uvScaleV = 1.0f;
+    if (fitMode != 0 && tex.width > 0 && tex.height > 0) {
+        const float imageAspect = float(tex.width) / float(tex.height);
+        const float faceAspect = h > 0.0f ? w / h : imageAspect;
+        if (fitMode == 1) {
+            if (imageAspect > faceAspect) h = w / imageAspect;
+            else w = h * imageAspect;
+        } else if (imageAspect > faceAspect) {
+            uvScaleU = faceAspect / imageAspect;
+        } else {
+            uvScaleV = imageAspect / faceAspect;
+        }
+    }
     // Centro local: face do box + offset para fora (anti z-fight).
     const float faceHalf = std::fabs(def.normal.x) > 0.5f ? half.x :
                            std::fabs(def.normal.y) > 0.5f ? half.y : half.z;
@@ -730,9 +764,15 @@ void DrawFaceQuad(Vector3 position, Quaternion rotationQuat, Vector3 size, int f
         // Rotaciona base uv (0..1) por quarter-turns em torno do centro.
         u = (u - 0.5f) * repeatUv.x + offsetUv.x;
         v = (v - 0.5f) * repeatUv.y + offsetUv.y;
+        // Preencher corta o excesso na própria UV, sem tirar o quad da face.
+        u *= uvScaleU; v *= uvScaleV;
         const float angle=uvRotation*DEG2RAD,c=std::cos(angle),s=std::sin(angle);
         const float previousU=u;u=previousU*c+v*s;v=-previousU*s+v*c;
-        return std::pair<float, float>{flipU ? .5f-u : u+.5f, v+.5f};
+        // flipU é o espelhamento explícito pedido pelo autor; axisMirrored é
+        // a correção de orientação da face. As duas se cancelam quando ambas
+        // estão ativas, então "sem flip" sempre significa leitura natural.
+        return std::pair<float, float>{
+            (flipU != axisMirrored) ? .5f-u : u+.5f, v+.5f};
     };
     // Cantos locais: bl, br, tr, tl ao longo de u/v.
     const Vector3 local[4] = {
@@ -779,10 +819,10 @@ void DrawFaceQuad(Vector3 position, Quaternion rotationQuat, Vector3 size, int f
 void DrawQuad(const Part& part, int face, const Texture2D& tex, float alpha,
               Color tint, Vector2 repeatUv, Vector2 offsetUv, int rotation,
               Vector3 lightDirection, float sunIntensity, float brightness,
-              float outward = 0.02f, bool flipU = false) {
+              float outward = 0.02f, bool flipU = false, int fitMode = 0) {
     DrawFaceQuad(part.position(), part.rotation(), part.size(), face, tex, alpha, tint,
                  repeatUv, offsetUv, rotation, lightDirection, sunIntensity, brightness,
-                 outward, flipU);
+                 outward, flipU, fitMode);
 }
 // Legacy R6 images use Front only; the previous six-face loop was the bug.
 // offset just enough to avoid z-fighting while staying glued to the animated
@@ -832,7 +872,8 @@ void DrawLayer(const Part& part, const char* imageKey, const char* faceKey,
              Tint(FindText(part, tintKey)), repeat, offset, (int)std::lround(rotation),
              lightDirection, sunIntensity, brightness,.02f,
              [&](){const auto it=part.attributes().find(std::string(imageKey)=="decal_image"?"decal_flip_u":"texture_flip_u");
-                 return it!=part.attributes().end()&&std::holds_alternative<bool>(it->second)&&std::get<bool>(it->second);}());
+                 return it!=part.attributes().end()&&std::holds_alternative<bool>(it->second)&&std::get<bool>(it->second);}(),
+             FitMode(std::string(imageKey)=="decal_image"?FindText(part,"decal_fit"):nullptr));
 }
 }  // namespace skins
 
@@ -859,7 +900,10 @@ void DrawPartSkins(const Part& part, const std::string& assetsDir,
         skins::DrawFaceQuad(part.position(),part.rotation(),part.size(),value.face,texture,1-value.transparency,value.tint,
             repeat,{value.offsetU,value.offsetV},value.rotation,lightDirection,sunIntensity,brightness,.021f,
             [&](){const auto it=surface.attributes().find("flip_u");
-                return it!=surface.attributes().end()&&std::holds_alternative<bool>(it->second)&&std::get<bool>(it->second);}());
+                return it!=surface.attributes().end()&&std::holds_alternative<bool>(it->second)&&std::get<bool>(it->second);}(),
+            [&](){const auto it=surface.attributes().find("fit");
+                return it!=surface.attributes().end()&&std::holds_alternative<std::string>(it->second)?
+                    skins::FitMode(&std::get<std::string>(it->second)):0;}());
     }
     rlDrawRenderBatchActive();
 }
@@ -1024,7 +1068,7 @@ void SceneRenderer::drawEditorGuides(const Scene& scene,Camera3D camera,const Ed
     Matrix guideProjection=projection;
     guideProjection.m14-=0.0001f;
     rlSetMatrixProjection(guideProjection);
-    for(const auto* p:scene.parts()) {
+    for(const auto* p:scene.worldParts()) {
         if(p->color().a==0)continue;
         if((options.edges||p->id()==hovered)&&!scene.selected(p->id())) {
             const Color color=p->id()==hovered?Color{240,230,225,230}:Color{42,46,54,165};
@@ -1143,7 +1187,7 @@ void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width
     const bool wantsShadow=shadowQuality_!=ShadowQuality::Off&&(quality_==RenderQuality::Medium||quality_==RenderQuality::High)&&lighting&&lighting->shadowsEnabled()&&lighting->sunIntensity()>0&&lighting->shadowStrength()>0;
     std::vector<Part*> opaque,transparent;
     std::vector<ShadowCaster> casters;
-    for(auto* part:scene.parts()) {
+    for(auto* part:scene.worldParts()) {
         if(!part||game::InventoryHidden(*part)||hasRigVisual(part->id()))continue;
         const auto* m=modernAvailable&&part->material3D()?&*part->material3D():nullptr;
         const auto alpha=m?m->baseColor.a:part->color().a;if(!alpha)continue;
@@ -1225,7 +1269,7 @@ void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width
 void SceneRenderer::drawCollisionShapes(const Scene& scene,const PhysicsWorld& physics,
                                         Camera3D camera,InstanceId selection) const {
     BeginMode3D(camera);rlDrawRenderBatchActive();rlDisableDepthTest();rlDisableDepthMask();
-    for(auto* part:scene.parts()) {
+    for(auto* part:scene.worldParts()) {
         CollisionGeometry geometry;if(!physics.collisionGeometry(part->id(),geometry))continue;
         float error=0;const auto visual=part->bounds().corners(),actual=geometry.box.corners();
         for(int i=0;i<8;++i)error=std::max(error,Vector3Distance(visual[i],actual[i]));
