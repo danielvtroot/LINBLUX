@@ -4,6 +4,8 @@ Registros de 25–27/10/2026, reunidos por assunto. São evidências das revisõ
 originais; não representam validação da versão atual. Consulte o
 [índice atual](../README.md) para os manuais e comandos de uso.
 
+Manuais atuais: [Studio](../GUIA_STUDIO.md), [Player](../PLAYER.md) e [Precisão](../EDITOR_PRECISAO.md).
+
 <a id="registro-30"></a>
 
 ## Registro 30
@@ -245,4 +247,3 @@ validação de pose é numérica, Player gráfico verifica integração existent
 FAST `20261027T211806Z-18220`:17/17, testes8,1s, build83,1s; cobertura
 desconhecida. IMPACT será executado junto da recuperação do backend de música.
 WIP de áudio preservado separado deste commit.
-

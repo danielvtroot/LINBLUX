@@ -4,6 +4,8 @@ Registros de 25–27/10/2026, reunidos por assunto. São evidências das revisõ
 originais; não representam validação da versão atual. Consulte o
 [índice atual](../README.md) para os manuais e comandos de uso.
 
+Manuais atuais: [Modelos](../MODELOS.md), [Attachments](../ATTACHMENTS.md), [Inventário](../INVENTARIO.md), [Áudio](../AUDIO_MUSICA.md) e [Imagens](../RECURSOS_DE_IMAGEM.md).
+
 <a id="registro-20"></a>
 
 ## Registro 20
@@ -646,4 +648,3 @@ regressão abrangente e revisão de licenças. Não há tag ou Release pública.
 
 Fechamento: rifledemo + rifledemo_player2/2 aprovados em18,310s, incluindo
 remoção do item com efeitos ativos, limpeza, guia/walk e roundtrip .lo.
-

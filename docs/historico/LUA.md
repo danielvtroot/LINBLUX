@@ -4,6 +4,8 @@ Registros de 25–27/10/2026, reunidos por assunto. São evidências das revisõ
 originais; não representam validação da versão atual. Consulte o
 [índice atual](../README.md) para os manuais e comandos de uso.
 
+Manuais atuais: [API Lua](../SCRIPTING_LUA.md), [persistência privada](../PERSISTENCIA_PRIVADA.md) e [UI Lua](../UI_LUA.md).
+
 <a id="registro-07"></a>
 
 ## Registro 07
@@ -285,7 +287,7 @@ o próximo retorno/yield encerra a tarefa. Intervalo não recupera pulsos atrasa
 Não há persistência arbitrária de closures. Scripts/configurações de autoria
 continuam no formato existente; armazenamento de progresso de jogo está pendente.
 
-Próximo passo: seguir a matriz da Fase 1 em CONCLUSAO_ENGINE.md. Antes de NPCs,
+Próximo passo: seguir a matriz da Fase 1 no [checkpoint geral original](https://github.com/danielvtroot/LINBLUX/blob/6377b543f9833c72070a5906210bcf9a68a51768/docs/relatorios/CONCLUSAO_ENGINE.md). Antes de NPCs,
 completar o contrato de transformações/componentes, câmera e persistência controlada,
 resolvendo explicitamente as dependências de áudio/UI das fases 3/6. Não chamar
 esta unidade de "Lua completo" nem pular os requisitos restantes.
@@ -526,4 +528,3 @@ final após confirmação remota. Dados privados externos continuam sem destino 
 backup configurado; o monitor de código permanece ativo.
 
 PUBLICADO: 4ce62e2b980bbb92ee7d9174ff56ec57a7bcf5f5; push e hash remoto main confirmados.
-
