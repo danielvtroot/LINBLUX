@@ -805,13 +805,13 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             const int preset=m.emissiveStrength>0?5:m.baseColor.a<255?4:m.metallic>.5f?3:m.finish==2?2:m.finish==1?1:0;
             const bool implicitGrid=!p.material3D()&&p.material()==PartMaterial::SmoothPlastic&&
                 p.instanceClass()!=InstanceClass::SpawnLocation&&p.shape()!=PartShape::Sphere;
-            const int surface=p.material3D()?m.surface:(implicitGrid?1:0);
+            const int surfaceMode=p.material3D()?m.surface:(implicitGrid?1:0);
             s+="<div class=\"property\" data-property-name=\"Material3D.Surface\"><label>Superfície padrão</label><select id=\"material3d-surface\" data-property=\"Material3D.Surface\" data-node=\""+id+"\">";
-            s+="<option value=\"grid\" "+(surface==1?"selected=\"selected\"":"")+">Quadriculado de construção</option>";
-            s+="<option value=\"smooth\" "+(surface==2?"selected=\"selected\"":"")+">Liso</option>";
-            s+="<option value=\"material\" "+(surface==0?"selected=\"selected\"":"")+">Material personalizado</option>";
+            s+=std::string("<option value=\"grid\" ")+(surfaceMode==1?"selected=\"selected\"":"")+">Quadriculado de construção</option>";
+            s+=std::string("<option value=\"smooth\" ")+(surfaceMode==2?"selected=\"selected\"":"")+">Liso</option>";
+            s+=std::string("<option value=\"material\" ")+(surfaceMode==0?"selected=\"selected\"":"")+">Material personalizado</option>";
             s+="</select></div>";
-            if(surface==1) {
+            if(surfaceMode==1) {
                 input("Material3D.GridScale",Num(m.gridScale),"Tamanho do quadrado (unidades)");
                 input("Material3D.GridIntensity",Num(m.gridIntensity),"Intensidade das linhas");
             }
