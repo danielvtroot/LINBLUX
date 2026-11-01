@@ -411,6 +411,19 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             else if(node->isPart()) {
                 auto& p=*static_cast<Part*>(node);e.endGizmoSession(true,"property");
                 if(name=="Anchored")p.setAnchored(c.value=="true");
+                else if(name=="Material3D.Surface") {
+                    auto m=p.material3D()?*p.material3D():LegacyMaterial3D(p.material(),p.color());
+                    if(c.value=="grid"||c.value=="smooth") {
+                        m.surface=c.value=="grid"?1:2;
+                        m.finish=0;m.metallic=0;m.roughness=.45f;m.normalScale=1;m.emissiveStrength=0;
+                        m.emissive={0,0,0,255};m.rotation=0;m.offset={0,0};m.studsPerTile={4,4};
+                        m.baseColorTexture.clear();m.normalTexture.clear();
+                        m.metallicRoughnessTexture.clear();m.occlusionTexture.clear();
+                        m.baseColor=p.color();
+                    } else if(c.value=="material")m.surface=0;
+                    else throw std::runtime_error("Superfície inválida");
+                    std::string error;if(!p.setMaterial3D(m,error))throw std::runtime_error(error);
+                }
                 else if(name=="Material3D.Preset") {
                     if(c.value=="legacy")p.clearMaterial3D();
                     else {const auto n=Number(c.value);if(n<0||n>5||std::floor(n)!=n)throw std::runtime_error("Preset inválido");
@@ -429,6 +442,7 @@ bool EditorActions::dispatch(const EditorCommand& c) {
                         else if(name=="Material3D.NormalScale")m.normalScale=n;else if(name=="Material3D.EmissiveStrength")m.emissiveStrength=n;
                         else if(name=="Material3D.TileU")m.studsPerTile.x=n;else if(name=="Material3D.TileV")m.studsPerTile.y=n;
                         else if(name=="Material3D.OffsetU")m.offset.x=n;else if(name=="Material3D.OffsetV")m.offset.y=n;
+                        else if(name=="Material3D.GridScale")m.gridScale=n;else if(name=="Material3D.GridIntensity")m.gridIntensity=n;
                         else if(name=="Material3D.Rotation")m.rotation=n;else if(name=="Material3D.Opacity"){if(n<0||n>1)throw std::runtime_error("Opacidade: 0–1");m.baseColor.a=unsigned(n*255);}
                         else throw std::runtime_error("Propriedade de material desconhecida");}
                     std::string error;if(!p.setMaterial3D(m,error))throw std::runtime_error(error);

@@ -889,6 +889,8 @@ void DrawConstructionGrid(const Part& part, const Texture2D& grid,
     const float intensity = std::clamp(material.gridIntensity, 0.0f, 1.0f);
     if (intensity <= 0.0f) return;
     const Color tint = part.material3D() ? material.baseColor : part.color();
+    const float alpha = intensity * (tint.a / 255.0f);
+    if (alpha <= 0.0f) return;
     const Vector3 size = part.size();
     const auto extent = [&](Vector3 axis) {
         return std::fabs(axis.x) * size.x + std::fabs(axis.y) * size.y +
@@ -898,7 +900,7 @@ void DrawConstructionGrid(const Part& part, const Texture2D& grid,
         const auto& def = skins::kFaces[face];
         const Vector2 repeat{extent(def.uAxis) / (4.0f * scale),
                              extent(def.vAxis) / (4.0f * scale)};
-        skins::DrawFaceQuad(part.position(), part.rotation(), size, face, grid, intensity,
+        skins::DrawFaceQuad(part.position(), part.rotation(), size, face, grid, alpha,
                             tint, repeat, {0.5f, 0.5f}, 0.0f, lightDirection,
                             sunIntensity, brightness, 0.01f);
     }
