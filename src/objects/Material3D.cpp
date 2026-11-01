@@ -41,6 +41,7 @@ nlohmann::json EncodeMaterial3D(const Material3D& m) {
         {"emissive",{m.emissive.r,m.emissive.g,m.emissive.b,m.emissive.a}},{"emissiveStrength",m.emissiveStrength},
         {"studsPerTile",{m.studsPerTile.x,m.studsPerTile.y}},{"offset",{m.offset.x,m.offset.y}},
         {"rotation",m.rotation},{"finish",m.finish},
+        {"surface",m.surface},{"gridScale",m.gridScale},{"gridIntensity",m.gridIntensity},
         {"baseColorTexture",game::NormalizeImageReference(m.baseColorTexture)},
         {"normalTexture",game::NormalizeImageReference(m.normalTexture)},
         {"metallicRoughnessTexture",game::NormalizeImageReference(m.metallicRoughnessTexture)},
@@ -56,6 +57,7 @@ Material3D DecodeMaterial3D(const nlohmann::json& j) {
     m.metallic=j.value("metallic",m.metallic);m.roughness=j.value("roughness",m.roughness);
     m.normalScale=j.value("normalScale",m.normalScale);m.emissiveStrength=j.value("emissiveStrength",m.emissiveStrength);
     m.finish=j.value("finish",0);m.rotation=j.value("rotation",0.f);
+    m.surface=j.value("surface",0);m.gridScale=j.value("gridScale",1.f);m.gridIntensity=j.value("gridIntensity",1.f);
     for(const auto& field:{std::pair<const char*,Vector2*>{"studsPerTile",&m.studsPerTile},{"offset",&m.offset}})
         if(j.contains(field.first)){const auto& v=j.at(field.first);if(!v.is_array()||v.size()!=2)throw std::runtime_error("UV requer dois números");*field.second={v[0].get<float>(),v[1].get<float>()};}
     m.baseColorTexture=j.value("baseColorTexture",std::string());m.normalTexture=j.value("normalTexture",std::string());

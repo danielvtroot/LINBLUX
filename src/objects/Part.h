@@ -115,6 +115,10 @@ public:
         material3D_=value;return true;
     }
     void clearMaterial3D() {material3D_.reset();}
+    // Untouched SmoothPlastic Parts/Baseplates use the measured construction
+    // grid. An explicit Material3D can opt in (surface=1) or out (surface=2),
+    // and any authored albedo texture always wins over the grid.
+    bool usesConstructionGrid() const;
 
     bool anchored() const { return anchored_; }
     void setAnchored(bool anchored);

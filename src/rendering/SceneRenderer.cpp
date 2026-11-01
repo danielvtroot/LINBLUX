@@ -877,6 +877,34 @@ void DrawLayer(const Part& part, const char* imageKey, const char* faceKey,
 }
 }  // namespace skins
 
+// CPU fallback for the construction surface. It samples the same tiling
+// texture as the modern shader, uses the real face extents for repeat counts
+// (never stretches the squares) and stays below explicit decals/textures.
+void DrawConstructionGrid(const Part& part, const Texture2D& grid,
+                          Vector3 lightDirection, float sunIntensity, float brightness) {
+    if (!grid.id || !part.usesConstructionGrid() || part.shape() != PartShape::Block) return;
+    const Material3D material = part.material3D() ? *part.material3D()
+                                                 : LegacyMaterial3D(part.material(), part.color());
+    const float scale = std::max(0.05f, material.gridScale);
+    const float intensity = std::clamp(material.gridIntensity, 0.0f, 1.0f);
+    if (intensity <= 0.0f) return;
+    const Color tint = part.material3D() ? material.baseColor : part.color();
+    const Vector3 size = part.size();
+    const auto extent = [&](Vector3 axis) {
+        return std::fabs(axis.x) * size.x + std::fabs(axis.y) * size.y +
+               std::fabs(axis.z) * size.z;
+    };
+    for (int face = 0; face < 6; ++face) {
+        const auto& def = skins::kFaces[face];
+        const Vector2 repeat{extent(def.uAxis) / (4.0f * scale),
+                             extent(def.vAxis) / (4.0f * scale)};
+        skins::DrawFaceQuad(part.position(), part.rotation(), size, face, grid, intensity,
+                            tint, repeat, {0.5f, 0.5f}, 0.0f, lightDirection,
+                            sunIntensity, brightness, 0.01f);
+    }
+    rlDrawRenderBatchActive();
+}
+
 void DrawPartSkins(const Part& part, const std::string& assetsDir,
                    Vector3 lightDirection, float sunIntensity, float brightness) {
     skins::DrawLayer(part, "decal_image", "decal_face", "decal_transparency",
@@ -1029,11 +1057,23 @@ Color SceneRenderer::MaterialColor(Color color, PartMaterial material) {
 
 void SceneRenderer::drawBaseplate(const Part& baseplate, Vector3 lightDirection,
                                   float sunIntensity, float brightness) {
-    // A Baseplate is a plain block. Editing grids are a separate viewport tool.
-    DrawShadedBox(baseplate.position(), baseplate.size(), baseplate.rotation(), MaterialColor(baseplate),
+    // A Baseplate is a plain block. Editing grids are a separate viewport tool;
+    // the construction surface belongs to the Part material itself.
+    const Color baseColor = baseplate.usesConstructionGrid() && baseplate.material3D()
+                                ? baseplate.material3D()->baseColor
+                                : MaterialColor(baseplate);
+    DrawShadedBox(baseplate.position(), baseplate.size(), baseplate.rotation(), baseColor,
                   lightDirection, sunIntensity, brightness,
                   MaterialGloss(baseplate.material()),
                   baseplate.material() == PartMaterial::Neon);
+    if (baseplate.usesConstructionGrid()) {
+        // The overlay must not write depth, otherwise the existing decal pass
+        // at the same face offset would be rejected.
+        rlDisableDepthMask();
+        DrawConstructionGrid(baseplate, modern_->constructionGridTexture(), lightDirection,
+                             sunIntensity, brightness);
+        rlEnableDepthMask();
+    }
 }
 
 void SceneRenderer::drawSelection(const Part& part) const {
@@ -1248,10 +1288,19 @@ void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width
                              MaterialGloss(part->material()),
                              part->material() == PartMaterial::Neon);
         } else {
+            const Color baseColor = part->usesConstructionGrid() && part->material3D()
+                                        ? part->material3D()->baseColor
+                                        : MaterialColor(*part);
             DrawShadedBox(part->position(), part->size(), part->rotation(),
-                          MaterialColor(*part), lightDirection, sunIntensity, brightness,
+                          baseColor, lightDirection, sunIntensity, brightness,
                           MaterialGloss(part->material()),
                           part->material() == PartMaterial::Neon);
+            if (part->usesConstructionGrid()) {
+                if (!translucent) rlDisableDepthMask();
+                DrawConstructionGrid(*part, modern_->constructionGridTexture(),
+                                     lightDirection, sunIntensity, brightness);
+                if (!translucent) rlEnableDepthMask();
+            }
         }
     };
     for(auto* part:opaque)drawPart(part,false);

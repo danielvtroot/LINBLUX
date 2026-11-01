@@ -35,7 +35,8 @@ uniform vec4 baseColor,mapFlags;
 uniform vec3 cameraPosition,sunDirection,sunColor,ambientColor,emissiveColor,objectSize,fogColor;
 uniform vec2 tile,uvOffset;
 uniform float metallic,roughness,normalScale,emissiveStrength,uvRotation,sunIntensity,brightness,fogDensity;
-uniform int quality,finish,spherical;
+uniform float gridIntensity;
+uniform int quality,finish,spherical,gridEnabled;
 const float PI=3.14159265;
 vec3 linear(vec3 c){return mix(pow((c+.055)/1.055,vec3(2.4)),c/12.92,lessThanEqual(c,vec3(.04045)));}
 vec3 srgb(vec3 c){return mix(1.055*pow(max(c,vec3(0)),vec3(1./2.4))-.055,12.92*c,lessThanEqual(c,vec3(.0031308)));}
@@ -75,6 +76,10 @@ void main(){
     vec2 uv=spherical!=0?meshUV*objectSize.x/tile:(ln.x>ln.y&&ln.x>ln.z?p.zy/tile:ln.y>ln.z?p.xz/tile:p.xy/tile);
     float c=cos(uvRotation),s=sin(uvRotation);uv=mat2(c,-s,s,c)*uv+uvOffset;
     vec4 texel=mapFlags.x>.5?texture(texture0,uv):vec4(1);
+    // The construction texture stores a white background and measured dark
+    // lines, so the author's Part colour is preserved while line strength can
+    // be adjusted without regenerating the texture.
+    if(gridEnabled==1)texel.rgb=mix(vec3(1),texel.rgb,clamp(gridIntensity,0.,1.));
     vec3 albedo=linear(baseColor.rgb)*linear(straight(texel));
     if(finish==1)albedo*=.84+.16*sin(uv.x*71.+sin(uv.y*91.))*sin(uv.y*83.);
     if(finish==2){float grain=.5+.5*sin(uv.x*33.+3.*sin(uv.y*2.));albedo*=mix(vec3(.36,.18,.065),vec3(1.,.63,.28),grain);}
@@ -156,11 +161,50 @@ bool ModernMaterials::initialize() {
 ModernMaterials::~ModernMaterials() {
     if(cube_.vaoId)UnloadMesh(cube_);if(sphere_.vaoId)UnloadMesh(sphere_);
     if(material_.maps)MemFree(material_.maps); // textures belong to ImageAssets
+    if(gridTexture_.id)UnloadTexture(gridTexture_);
     if(shader_.id)UnloadShader(shader_);
+}
+Texture2D ModernMaterials::constructionGridTexture() {
+    if(gridTextureAttempted_)return gridTexture_;
+    gridTextureAttempted_=true;
+    if(!IsWindowReady())return {};
+    // One tile represents 4 x 4 world units at the default gridScale. The
+    // small squares are one unit and the heavier division is every four.
+    // The image stores a white background so the Part colour survives; the
+    // shader/legacy overlay only darkens the measured lines.
+    constexpr int size=256,cell=64;
+    Image image=GenImageColor(size,size,Color{255,255,255,255});
+    const Color minor{230,230,230,255},major{204,204,204,255};
+    const auto line=[&](int position,int thickness,Color color,bool vertical) {
+        const int half=thickness/2;
+        for(int offset=-half;offset<=half;++offset) {
+            const int at=(position+offset+size)%size;
+            if(vertical)ImageDrawRectangle(&image,at,0,1,size,color);
+            else ImageDrawRectangle(&image,0,at,size,1,color);
+        }
+    };
+    for(int i=1;i<4;++i){line(i*cell,3,minor,true);line(i*cell,3,minor,false);}
+    // The major line sits on the tile seam. Its other half comes from the
+    // repeated neighbouring tile, so the seam is a single continuous line.
+    line(0,6,major,true);line(0,6,major,false);
+    gridTexture_=LoadTextureFromImage(image);
+    UnloadImage(image);
+    if(gridTexture_.id) {
+        GenTextureMipmaps(&gridTexture_);
+        SetTextureFilter(gridTexture_,TEXTURE_FILTER_TRILINEAR);
+        SetTextureWrap(gridTexture_,TEXTURE_WRAP_REPEAT);
+    }
+    return gridTexture_;
 }
 bool ModernMaterials::draw(const Part& part,Camera3D camera,const Lighting* light,RenderQuality quality,bool transparent) {
     if(!initialize())return false;
-    const auto m=part.material3D()?*part.material3D():LegacyMaterial3D(part.material(),part.color());
+    auto m=part.material3D()?*part.material3D():LegacyMaterial3D(part.material(),part.color());
+    const bool grid=part.usesConstructionGrid();
+    Texture2D gridTexture{};
+    if(grid) {
+        m.finish=0; // The measured grid replaces procedural wood/concrete.
+        gridTexture=constructionGridTexture();
+    }
     const auto f=[&](const char* name,float v){SetShaderValue(shader_,GetShaderLocation(shader_,name),&v,SHADER_UNIFORM_FLOAT);};
     const auto i=[&](const char* name,int v){SetShaderValue(shader_,GetShaderLocation(shader_,name),&v,SHADER_UNIFORM_INT);};
     const auto v3=[&](const char* name,Vector3 v){SetShaderValue(shader_,GetShaderLocation(shader_,name),&v.x,SHADER_UNIFORM_VEC3);};
@@ -179,14 +223,22 @@ bool ModernMaterials::draw(const Part& part,Camera3D camera,const Lighting* ligh
     v3("ambientColor",color(light?light->ambientColor():Color{150,150,160,255}));v3("emissiveColor",color(m.emissive));
     Vector3 size=part.size();if(part.shape()==PartShape::Sphere)size={part.sphereRadius()*2,part.sphereRadius()*2,part.sphereRadius()*2};
     v3("objectSize",size);i("spherical",part.shape()==PartShape::Sphere);i("quality",int(quality));i("finish",m.finish);
-    SetShaderValue(shader_,GetShaderLocation(shader_,"tile"),&m.studsPerTile.x,SHADER_UNIFORM_VEC2);
+    // The grid texture contains 4 x 4 small squares. gridScale is measured in
+    // world units per square, so a 20-unit Part shows 20 squares without
+    // stretching and a resize only changes the number of repeats.
+    const Vector2 tile=grid?Vector2{4.f*m.gridScale,4.f*m.gridScale}:m.studsPerTile;
+    SetShaderValue(shader_,GetShaderLocation(shader_,"tile"),&tile.x,SHADER_UNIFORM_VEC2);
     SetShaderValue(shader_,GetShaderLocation(shader_,"uvOffset"),&m.offset.x,SHADER_UNIFORM_VEC2);
+    f("gridIntensity",m.gridIntensity);i("gridEnabled",grid&&gridTexture.id?1:0);
     Vector4 flags{};
     const std::string* references[]={&m.baseColorTexture,&m.normalTexture,&m.metallicRoughnessTexture,&m.occlusionTexture};
     const int slots[]={MATERIAL_MAP_ALBEDO,MATERIAL_MAP_NORMAL,MATERIAL_MAP_METALNESS,MATERIAL_MAP_OCCLUSION};
     for(int k=0;k<4;++k) {
         Texture2D texture{};if(!references[k]->empty())texture=game::AssetTexture(game::ResolveImagePath(game::AssetsDir(),*references[k]));
         material_.maps[slots[k]].texture=texture;(&flags.x)[k]=texture.id?1.f:0.f;
+    }
+    if(grid&&gridTexture.id) {
+        material_.maps[MATERIAL_MAP_ALBEDO].texture=gridTexture;flags.x=1.f;
     }
     if(!material_.maps[MATERIAL_MAP_ALBEDO].texture.id)material_.maps[MATERIAL_MAP_ALBEDO].texture.id=rlGetTextureIdDefault();
     SetShaderValue(shader_,GetShaderLocation(shader_,"mapFlags"),&flags.x,SHADER_UNIFORM_VEC4);
