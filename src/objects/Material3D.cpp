@@ -8,7 +8,8 @@ bool Material3D::validate(std::string& error) const {
     const auto valid=[](float v,float lo,float hi){return std::isfinite(v)&&v>=lo&&v<=hi;};
     if(!valid(metallic,0,1)||!valid(roughness,0,1)||!valid(normalScale,0,4)||
        !valid(emissiveStrength,0,20)||!valid(studsPerTile.x,.01f,1e6f)||!valid(studsPerTile.y,.01f,1e6f)||
-       !valid(offset.x,-1e6f,1e6f)||!valid(offset.y,-1e6f,1e6f)||!valid(rotation,-36000,36000)||finish<0||finish>2) {
+       !valid(offset.x,-1e6f,1e6f)||!valid(offset.y,-1e6f,1e6f)||!valid(rotation,-36000,36000)||finish<0||finish>2||
+       surface<0||surface>2||!valid(gridScale,.05f,1000.f)||!valid(gridIntensity,0,1)) {
         error="Material 3D: valores fora dos limites";return false;
     }
     for(const auto* path:{&baseColorTexture,&normalTexture,&metallicRoughnessTexture,&occlusionTexture})
