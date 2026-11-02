@@ -519,10 +519,10 @@ linblux.items.register('coleta',m);local item=linblux.items.spawn('coleta');item
             clickVisible("prop-Material3D.GridIntensity");key("ctrl+a");event("type --clearmodifiers --delay 40 '0.5'");key("Return");frames(4);
             CHECK(gridPart->material3D()&&NearlyEqual(gridPart->material3D()->gridIntensity,.5f));
             capture("material3d-grid-controls");
-            clickVisible("material3d-surface");{auto b=ui.frontend()->elementBounds("material3d-surface");std::fprintf(stderr,"DEBUG surface bounds %.1f %.1f %.1f %.1f screen %d %d\n",b.x,b.y,b.width,b.height,GetScreenWidth(),GetScreenHeight());}capture("debug-surface-open");key("Down");capture("debug-surface-down");key("Return");frames(4);capture("debug-surface-return");
+            clickVisible("material3d-surface");frames(3);key("Down");key("Return");frames(4);
             CHECK(gridPart->material3D()&&gridPart->material3D()->surface==2);
             CHECK(!gridPart->usesConstructionGrid());
-            clickVisible("material3d-surface");key("Up");key("Return");frames(4);
+            clickVisible("material3d-surface");frames(3);key("Up");key("Return");frames(4);
             CHECK(gridPart->material3D()&&gridPart->material3D()->surface==1);
             CHECK(gridPart->usesConstructionGrid());
             CHECK(actions.dispatch({"property:Material3D.BaseColorTexture","assets/albedo.png",gridPart->id()}));

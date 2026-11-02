@@ -77,7 +77,9 @@ int main(){
     gridMaterial.surface=2;CHECK(plate->setMaterial3D(gridMaterial,error));
     auto smooth8=render(RenderQuality::Medium);
     CHECK(differences(grid8,smooth8)>1000);
-    const auto centers8=lineCenters(grid8,smooth8,200);
+    // Sample between horizontal grid lines: row 200 crosses the central major
+    // division, which would merge every vertical line into one dark region.
+    const auto centers8=lineCenters(grid8,smooth8,210);
     std::printf("Construction grid 8: %zu lines, spacing %.2f px\n",centers8.size(),medianSpacing(centers8));
     CHECK(centers8.size()>=6);CHECK(medianSpacing(centers8)>18&&medianSpacing(centers8)<22);
     ExportImage(grid8,(out/"grid-8-medium.png").c_str());ExportImage(smooth8,(out/"grid-8-smooth.png").c_str());
@@ -88,7 +90,7 @@ int main(){
     auto grid16=render(RenderQuality::Medium);
     gridMaterial.surface=2;CHECK(plate->setMaterial3D(gridMaterial,error));
     auto smooth16=render(RenderQuality::Medium);
-    const auto centers16=lineCenters(grid16,smooth16,200);
+    const auto centers16=lineCenters(grid16,smooth16,210);
     std::printf("Construction grid 16: %zu lines, spacing %.2f px\n",centers16.size(),medianSpacing(centers16));
     CHECK(centers16.size()>=12);CHECK(std::fabs(medianSpacing(centers16)-medianSpacing(centers8))<2.f);
     ExportImage(grid16,(out/"grid-16-medium.png").c_str());
@@ -109,7 +111,7 @@ int main(){
     auto gridScale2=render(RenderQuality::Medium);
     gridMaterial.surface=2;CHECK(plate->setMaterial3D(gridMaterial,error));
     auto smoothScale2=render(RenderQuality::Medium);
-    const auto centersScale2=lineCenters(gridScale2,smoothScale2,200);
+    const auto centersScale2=lineCenters(gridScale2,smoothScale2,210);
     std::printf("Construction grid scale 2: %zu lines, spacing %.2f px\n",centersScale2.size(),medianSpacing(centersScale2));
     CHECK(centersScale2.size()>=4);CHECK(medianSpacing(centersScale2)>38&&medianSpacing(centersScale2)<42);
     gridMaterial.surface=1;gridMaterial.gridScale=1;gridMaterial.gridIntensity=0;
