@@ -720,7 +720,8 @@ Color Tint(const std::string* hex) {
 void DrawFaceQuad(Vector3 position, Quaternion rotationQuat, Vector3 size, int face,
                   const Texture2D& tex, float alpha, Color tint, Vector2 repeatUv,
                   Vector2 offsetUv, float uvRotation, Vector3 lightDirection, float sunIntensity,
-                  float brightness, float outward = 0.02f, bool flipU = false, int fitMode = 0) {
+                  float brightness, float outward = 0.02f, bool flipU = false, int fitMode = 0,
+                  float gloss = 0.0f, bool unlit = false) {
     const Vector3 half = Vector3Scale(size, 0.5f);
     const FaceDef& def = kFaces[face];
     // O u da imagem tem de crescer para a direita de quem olha a face por
@@ -797,7 +798,8 @@ void DrawFaceQuad(Vector3 position, Quaternion rotationQuat, Vector3 size, int f
     const Vector3 worldCenter = Vector3Add(position,
                                           Vector3RotateByQuaternion(centerLocal, rotationQuat));
     const Color litTint = ApplyFog(
-        LitSurface(tint, worldNormal, worldCenter, lightDirection, sunIntensity, brightness, 0.0f, false),
+        LitSurface(tint, worldNormal, worldCenter, lightDirection, sunIntensity, brightness,
+                   gloss, unlit),
         worldCenter);
     // The blend mode is switched BEFORE the texture: switching it flushes
     // raylib's vertex batch, and the flush resets the batch entry that
@@ -902,7 +904,9 @@ void DrawConstructionGrid(const Part& part, const Texture2D& grid,
                              extent(def.vAxis) / (4.0f * scale)};
         skins::DrawFaceQuad(part.position(), part.rotation(), size, face, grid, alpha,
                             tint, repeat, {0.5f, 0.5f}, 0.0f, lightDirection,
-                            sunIntensity, brightness, 0.01f);
+                            sunIntensity, brightness, 0.01f, false, 0,
+                            MaterialGloss(part.material()),
+                            part.material() == PartMaterial::Neon);
     }
     rlDrawRenderBatchActive();
 }

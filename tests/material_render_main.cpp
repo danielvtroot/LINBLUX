@@ -7,6 +7,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <set>
+#include <algorithm>
+#include <cmath>
+#include <vector>
 using namespace loblox;
 namespace {int checks=0,failures=0;
 #define CHECK(x) do{++checks;if(!(x)){++failures;std::printf("FAIL %d: %s\n",__LINE__,#x);}}while(0)
