@@ -1573,6 +1573,7 @@ void TestMaterial3DCompatibility() {
         m.baseColorTexture="assets/albedo.png";m.normalTexture="assets/normal.png";
         m.metallicRoughnessTexture="assets/mr.png";m.occlusionTexture="assets/ao.png";
         m.studsPerTile={2,3};m.offset={.25f,.5f};m.rotation=30;
+        m.surface=preset==0?1:2;m.gridScale=2.5f;m.gridIntensity=.4f;
         CHECK(part->setMaterial3D(m,error));const auto encoded=projectio::toJson(scene);
         CHECK(nlohmann::json::parse(encoded)["version"]==7);
         Scene loaded;CHECK(projectio::fromJson(loaded,encoded,error));const auto* copy=loaded.findPart(part->id());
@@ -1588,9 +1589,56 @@ void TestMaterial3DCompatibility() {
     CHECK(game::ReplaceImageReferences(scene,"assets/normal.png","assets/replaced.png")==1);
     CHECK(part->material3D()->normalTexture=="assets/replaced.png");
     auto invalid=*part->material3D();invalid.normalScale=INFINITY;CHECK(!part->setMaterial3D(invalid,error));
+    invalid=*part->material3D();invalid.gridScale=0;CHECK(!part->setMaterial3D(invalid,error));
+    invalid=*part->material3D();invalid.gridIntensity=1.01f;CHECK(!part->setMaterial3D(invalid,error));
+    invalid=*part->material3D();invalid.surface=3;CHECK(!part->setMaterial3D(invalid,error));
     part->clearMaterial3D();auto cleared=nlohmann::json::parse(projectio::toJson(scene));auto expected=nlohmann::json::parse(legacy);
     cleared["nextId"]=expected["nextId"];CHECK(cleared==expected);
     Scene old;CHECK(projectio::fromJson(old,legacy,error));CHECK(!old.findPart(part->id())->material3D());
+    EndSection();
+}
+
+void TestConstructionGridRules() {
+    using namespace loblox;
+    Section("Superfície quadriculada padrão");
+    Scene scene;std::string error;
+    auto* baseplate=scene.createBaseplate();
+    CHECK(baseplate&&baseplate->usesConstructionGrid());
+    auto* block=scene.createPart(PartShape::Block,{0,2,0},{4,4,4},"Bloco");
+    CHECK(block&&block->usesConstructionGrid());
+    auto* sphere=scene.createPart(PartShape::Sphere,{0,2,0},{4,4,4},"Esfera");
+    CHECK(sphere&&!sphere->usesConstructionGrid());
+    auto* spawn=scene.createSpawnLocation();
+    CHECK(spawn&&!spawn->usesConstructionGrid());
+
+    // The implicit surface follows the legacy material, not just the shape.
+    block->setMaterial(PartMaterial::Wood);
+    CHECK(!block->usesConstructionGrid());
+    block->setMaterial(PartMaterial::SmoothPlastic);
+    CHECK(block->usesConstructionGrid());
+
+    // Explicit smooth/material surfaces opt out; explicit grid opts in.
+    auto m=LegacyMaterial3D(PartMaterial::SmoothPlastic,block->color());
+    m.surface=2;CHECK(block->setMaterial3D(m,error));CHECK(!block->usesConstructionGrid());
+    m.surface=1;m.gridScale=2;m.gridIntensity=.5f;
+    CHECK(block->setMaterial3D(m,error));CHECK(block->usesConstructionGrid());
+
+    // The grid settings survive a project round-trip.
+    const auto encoded=projectio::toJson(scene);
+    Scene loaded;CHECK(projectio::fromJson(loaded,encoded,error));
+    auto* copy=loaded.findPart(block->id());CHECK(copy&&copy->material3D());
+    if(copy&&copy->material3D()) {
+        CHECK(copy->material3D()->surface==1);
+        CHECK(NearlyEqual(copy->material3D()->gridScale,2));
+        CHECK(NearlyEqual(copy->material3D()->gridIntensity,.5f));
+        CHECK(copy->usesConstructionGrid());
+    }
+
+    // Any authored albedo texture wins over the construction grid.
+    m.baseColorTexture="assets/albedo.png";
+    CHECK(block->setMaterial3D(m,error));CHECK(!block->usesConstructionGrid());
+    m.baseColorTexture.clear();
+    block->clearMaterial3D();CHECK(block->usesConstructionGrid());
     EndSection();
 }
 
@@ -1673,6 +1721,7 @@ int main() {
     TestClearObjects();
     TestSphereBoundsCompatibility();
     TestMaterial3DCompatibility();
+    TestConstructionGridRules();
 
     std::printf("\n%d checagens, %d falhas\n", gChecks, gFailures);
     if (gFailures != 0) {

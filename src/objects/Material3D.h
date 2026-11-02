@@ -13,6 +13,12 @@ struct Material3D {
     Vector2 studsPerTile{4,4},offset{};
     float rotation=0;
     int finish=0; // 0 smooth, 1 concrete, 2 wood
+    // Construction surface. 0 keeps the material's own finish; 1 draws the
+    // measured grid; 2 explicitly keeps the surface smooth (opts out of the
+    // implicit grid used by untouched default Parts/Baseplates).
+    int surface=0;
+    float gridScale=1.0f;     // world units per small square
+    float gridIntensity=1.0f; // 0..1 line strength
     std::string baseColorTexture,normalTexture,metallicRoughnessTexture,occlusionTexture;
     bool validate(std::string& error) const;
 };

@@ -191,6 +191,15 @@ void Part::setMaterial(PartMaterial material) {
     material_ = material;
 }
 
+bool Part::usesConstructionGrid() const {
+    if (shape_ == PartShape::Sphere) return false;
+    if (instanceClass() == InstanceClass::SpawnLocation) return false;
+    if (material3D_) {
+        return material3D_->surface == 1 && material3D_->baseColorTexture.empty();
+    }
+    return material_ == PartMaterial::SmoothPlastic;
+}
+
 void Part::setAnchored(bool anchored) {
     if (anchored_ == anchored) {
         return;

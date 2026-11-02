@@ -15,10 +15,15 @@ public:
     bool wireSphere(Vector3 center,float radius,Quaternion rotation,Color color);
     bool ready() const {return ready_;}
     bool available() {return initialize();}
+    // Shared by the modern shader and the CPU legacy fallback so both paths
+    // show the same measured construction surface.
+    Texture2D constructionGridTexture();
 private:
     bool initialize();
     DirectionalShadow shadow_;
     bool attempted_=false,ready_=false;
+    bool gridTextureAttempted_=false;
+    Texture2D gridTexture_{};
     Shader shader_{};Mesh cube_{},sphere_{};Material material_{};
     std::vector<std::pair<Vector3,Vector3>> sphereGuides_;
 };
