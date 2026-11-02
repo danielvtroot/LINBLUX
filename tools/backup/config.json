@@ -15,7 +15,6 @@
     ".gitattributes",
     "CMakeLists.txt",
     "README.md",
-    "AGENTS.md",
     "CONTRIBUTING.md",
     "LICENSE"
   ],
@@ -57,7 +56,8 @@
     "backups/**",
     "**/linblux/progress/**",
     "cache/**",
-    "Testing/**"
+    "Testing/**",
+    "AGENTS.md"
   ],
   "max_file_bytes": 4194304,
   "max_total_bytes": 209715200,

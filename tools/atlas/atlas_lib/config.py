@@ -43,7 +43,6 @@ SOURCE_EXTENSIONS = {
 
 TEXT_NAMES = {
     "CMakeLists.txt": "cmake",
-    "AGENTS.md": "markdown",
     "README.md": "markdown",
     "CONTRIBUTING.md": "markdown",
     "LICENSE": "text",
@@ -240,8 +239,6 @@ def module_for(rel: str, language: str) -> str:
         return "packaging"
     if rel == "CMakeLists.txt" or language == "cmake":
         return "build"
-    if parts[0] in {".opencode"}:
-        return "agents"
     return "root"
 
 
@@ -260,8 +257,6 @@ def area_for(rel: str) -> str:
         return "script"
     if rel.startswith("packaging/"):
         return "package"
-    if rel.startswith(".opencode/"):
-        return "agent-config"
     return "config"
 
 

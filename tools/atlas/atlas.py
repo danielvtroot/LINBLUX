@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LINBLUX ATLAS entry point. Works without OpenCode, network or a server."""
+"""LINBLUX ATLAS entry point. Local command-line interface; no network or server required."""
 
 from __future__ import annotations
 

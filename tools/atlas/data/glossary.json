@@ -117,7 +117,7 @@
       "paths": [
         "tools/atlas",
         "docs/atlas",
-        "AGENTS.md"
+        "CONTRIBUTING.md"
       ]
     },
     "audio": {

@@ -74,8 +74,8 @@ python3 tools/atlas/atlas.py bench --iterations 5
   com pesos transparentes em `score_breakdown`.
 - **Impacto/validação:** BFS reverso limitado, testes mapeados, riscos e
   comandos de validação.
-- **Interfaces universais:** CLI, JSON, Markdown, `AGENTS.md`, skills e comandos
-  OpenCode. MCP local fica como extensão futura.
+- **Interfaces:** CLI, JSON e Markdown. Os procedimentos de manutenção estão
+  no [guia de contribuição](../../CONTRIBUTING.md).
 
 ## Fonte da verdade e cache
 
