@@ -261,11 +261,11 @@ def doctor(root: Path, strict: bool = False, policy=None) -> dict:
             "examples": missing_contracts,
             "fix": "adicione docs/atlas/module-contracts/<módulo>.md",
         })
-    if not (root / "AGENTS.md").is_file():
+    if not (root / "CONTRIBUTING.md").is_file():
         issues.append({
-            "severity": "baixa", "code": "agents-missing",
-            "message": "AGENTS.md ausente",
-            "fix": "restaure a orientação universal de agentes",
+            "severity": "baixa", "code": "contributing-missing",
+            "message": "CONTRIBUTING.md ausente",
+            "fix": "restaure o guia de contribuição e manutenção",
         })
     if not glossary(root):
         issues.append({
