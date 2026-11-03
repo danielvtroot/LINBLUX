@@ -208,11 +208,11 @@ void DrawIcon(ImDrawList* drawList, ImVec2 center, float size, Icon icon, ImU32 
             break;
         case Icon::Color:
             drawList->AddCircleFilled(ImVec2(center.x - half * 0.45f, center.y + half * 0.3f),
-                                      half * 0.55f, IM_COL32(235, 90, 80, 255), 12);
+                                      half * 0.55f, IM_COL32(220, 220, 220, 255), 12);
             drawList->AddCircleFilled(ImVec2(center.x + half * 0.45f, center.y + half * 0.3f),
-                                      half * 0.55f, IM_COL32(90, 200, 110, 255), 12);
+                                      half * 0.55f, IM_COL32(140, 140, 140, 255), 12);
             drawList->AddCircleFilled(ImVec2(center.x, center.y - half * 0.35f), half * 0.55f,
-                                      IM_COL32(90, 150, 235, 255), 12);
+                                      IM_COL32(80, 80, 80, 255), 12);
             break;
         case Icon::Material: {
             for (int layer = 0; layer < 3; ++layer) {
