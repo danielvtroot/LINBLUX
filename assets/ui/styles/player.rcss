@@ -120,7 +120,7 @@
 #pause .pause-tabs button { flex: 0 0 37px; min-height: 37px; height: 37px; width: 100%; justify-content: flex-start; padding: 6px 12px; font-size: 16px; border: 0px; border-left: 3px transparent; border-radius: 4px; }
 #pause .pause-tabs button.active { color: white; background-color: #FFFFFF26; border-left-color: #FFFFFF; }
 #pause #resume, #pause #leave { flex: 0 0 38px; height: 38px; font-size: 14px; }
-#pause #resume { background-color: #FFFFFF26; border: 2px #FFFFFF80; }
+#pause #resume { background-color: #FFFFFF26; border: 2px #FFFFFF; font-weight: bold; }
 #pause #resume:hover { background-color: #FFFFFF40; }
 #pause #leave { color: #B8B8B8; background-color: #FFFFFF12; }
 .pause-main { display: flex; flex-direction: column; flex: 1; width: 1px; min-width: 0; height: 100%; padding: 0 18px 14px; }
@@ -135,7 +135,7 @@
 #pause .session-logo, #pause .player-emblem { display: none; }
 #pause .control-row { padding: 10px 0; }
 #pause .control-row kbd { width: 115px; min-width: 115px; }
-#pause .primary { background-color: #FFFFFF26; border-color: #FFFFFF80; }
+#pause .primary { background-color: #FFFFFF26; border: 2px #FFFFFF; font-weight: bold; }
 /* Camera and audio share the same RmlUi range widget and visual language. */
 .slider-control { display: flex; align-items: center; }
 .slider-value { width: 56px; flex-shrink: 0; text-align: right; font-size: 15px; }
