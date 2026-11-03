@@ -120,6 +120,8 @@
 #pause .pause-tabs button { flex: 0 0 37px; min-height: 37px; height: 37px; width: 100%; justify-content: flex-start; padding: 6px 12px; font-size: 16px; border: 0px; border-left: 3px transparent; border-radius: 4px; }
 #pause .pause-tabs button.active { color: white; background-color: #FFFFFF26; border-left-color: #FFFFFF; }
 #pause #resume, #pause #leave { flex: 0 0 38px; height: 38px; font-size: 14px; }
+#pause #resume { color: #0B0B0B; background-color: #FFFFFF; border-color: #FFFFFF; }
+#pause #resume:hover { background-color: #E0E0E0; color: #0B0B0B; }
 #pause #leave { color: #B8B8B8; background-color: #FFFFFF12; }
 .pause-main { display: flex; flex-direction: column; flex: 1; width: 1px; min-width: 0; height: 100%; padding: 0 18px 14px; }
 .pause-heading { display: flex; flex: 0 0 64px; height: 64px; align-items: center; border-bottom: 1px #FFFFFF15; margin-bottom: 8px; }
