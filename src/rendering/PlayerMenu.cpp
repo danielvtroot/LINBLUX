@@ -10,7 +10,7 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
  if(progress_<=0)return false;
  const float s=std::clamp(height/720.f,.75f,1.5f),w=std::min(width-16.f,std::clamp(width*.55f,480*s,840.f)),side=170*s;
  const float t=progress_*progress_*(3-2*progress_),left=-w*(1-t);
- const Color white{242,238,242,255},muted{185,177,185,255},red{215,38,63,255},panel{23,23,28,247};
+ const Color white{242,238,242,255},muted{185,177,185,255},focus{255,255,255,230},panel{23,23,28,247};
  DrawRectangle(0,0,width,height,{0,0,0,(unsigned char)(90*t)});DrawRectangle(int(left),0,int(w),height,panel);
  DrawRectangle(int(left),0,int(side),height,{15,15,19,250});
  auto text=[&](const std::string& value,float x,float y,float size,Color color){DrawTextEx(font,value.c_str(),{x,y},size*s,s,color);};
@@ -19,8 +19,8 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
  if(paused){if(IsKeyPressed(KEY_TAB)||IsKeyPressed(KEY_DOWN))focus_=(focus_+1)%std::max(1,count_);if(IsKeyPressed(KEY_UP))focus_=(focus_+std::max(1,count_)-1)%std::max(1,count_);}
  auto button=[&](const std::string& label,Rectangle r,bool active=false){
   const int id=current++;const bool hover=paused&&CheckCollisionPointRec(mouse,r);
-  DrawRectangleRounded(r,.12f,6,active?Color{91,35,47,255}:hover?Color{60,48,56,255}:Color{32,31,37,255});
-  if(paused&&id==focus_)DrawRectangleRoundedLines(r,.12f,6,red);
+  DrawRectangleRounded(r,.12f,6,active?Color{60,60,65,255}:hover?Color{45,45,50,255}:Color{32,31,37,255});
+  if(paused&&id==focus_)DrawRectangleRoundedLines(r,.12f,6,focus);
   text(label,r.x+10*s,r.y+(r.height-17*s)/2,16,active?white:muted);
   return paused&&((hover&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT))||(id==focus_&&IsKeyPressed(KEY_ENTER)));
  };
@@ -34,7 +34,7 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
  std::string heading=title;while(!heading.empty()&&MeasureTextEx(font,heading.c_str(),17*s,s).x>available-42*s)heading.pop_back();
  text(heading,x,26*s,17,white);
  if(button("×",{left+w-48*s,18*s,32*s,32*s})){open_=false;runtime.resume();}
- DrawLine(int(x),int(66*s),int(left+w-18*s),int(66*s),{70,52,60,255});
+ DrawLine(int(x),int(66*s),int(left+w-18*s),int(66*s),{80,80,88,255});
  const Rectangle content{x-8*s,76*s,available+16*s,height-90*s};
  if(paused&&CheckCollisionPointRec(mouse,content))scroll_=std::clamp(scroll_-GetMouseWheelMove()*36*s,0.f,250*s);
  BeginScissorMode(int(content.x),int(content.y),int(content.width),int(content.height));
@@ -48,7 +48,7 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
   if(enabled&&paused&&draggingSlider_==id&&IsMouseButtonDown(MOUSE_BUTTON_LEFT))value=min+std::clamp((mouse.x-x)/available,0.f,1.f)*(max-min);
   if(enabled&&paused&&id==focus_){if(IsKeyPressed(KEY_HOME))value=min;if(IsKeyPressed(KEY_END))value=max;if(IsKeyPressed(KEY_LEFT))value=std::max(min,value-(max-min)/20);if(IsKeyPressed(KEY_RIGHT))value=std::min(max,value+(max-min)/20);}
   DrawRectangle(int(x),int(y+9*s),int(available),int(4*s),{65,56,64,255});
-  DrawRectangle(int(x),int(y+9*s),int(available*std::clamp((value-min)/std::max(.0001f,max-min),0.f,1.f)),int(4*s),red);
+  DrawRectangle(int(x),int(y+9*s),int(available*std::clamp((value-min)/std::max(.0001f,max-min),0.f,1.f)),int(4*s),focus);
   DrawCircleV({x+available*std::clamp((value-min)/std::max(.0001f,max-min),0.f,1.f),y+11*s},6*s,enabled?white:muted);y+=46*s;
  };
  auto& settings=runtime.settings();

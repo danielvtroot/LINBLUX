@@ -340,12 +340,12 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
             dl->AddImage(static_cast<ImTextureID>(texture.id),{cx-halfW,cy-halfH},{cx+halfW,cy+halfH});
         } else {
             dl->AddCircle({cx,cy},6,IM_COL32(240,235,239,255),20,1.5f);
-            dl->AddLine({cx-10,cy},{cx-4,cy},IM_COL32(235,65,82,255),2);
-            dl->AddLine({cx+4,cy},{cx+10,cy},IM_COL32(235,65,82,255),2);
+            dl->AddLine({cx-10,cy},{cx-4,cy},IM_COL32(220,220,220,255),2);
+            dl->AddLine({cx+4,cy},{cx+10,cy},IM_COL32(220,220,220,255),2);
         }
     }
     const float health=runtime_.health(),maximum=runtime_.settings().maxHealth;
-    const ImU32 color=IM_COL32(215,38,63,255);
+    const ImU32 color=IM_COL32(220,220,220,200);
     const auto& settings=runtime_.settings();
     if (!runtime_.playerCamera().avatarHidden() && (settings.healthDisplayType!=2 || settings.nameDisplayDistance>0)) {
         const auto head=runtime_.rig().evaluate(runtime_.pose(),runtime_.renderCharacterRoot())[game::Head];
@@ -1031,7 +1031,7 @@ void EditorUI::drawAnimationEditor() {
         ImGui::InvisibleButton("track", {width, 22});
         trackActive |= ImGui::IsItemActive();
         auto* dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(start, {start.x+width, start.y+22}, j == selectedJoint_ ? IM_COL32(55,85,110,255) : IM_COL32(40,45,52,255));
+        dl->AddRectFilled(start, {start.x+width, start.y+22}, j == selectedJoint_ ? IM_COL32(60,60,65,255) : IM_COL32(40,45,52,255));
         if (ImGui::IsItemActive() && ImGui::IsMouseDown(0)) {
             selectedJoint_ = j; selectedRigBody_ = rig->joints[j].child;
             previewPlaying_ = false; rigContext_ = RigContext::Animation;
@@ -1066,10 +1066,10 @@ void EditorUI::drawAnimationEditor() {
         }
         for (const auto& key : animationDraft_.tracks[j]) {
             const float x = start.x + key.time/animationDraft_.duration*width;
-            dl->AddQuadFilled({x,start.y+4}, {x+5,start.y+11}, {x,start.y+18}, {x-5,start.y+11}, IM_COL32(240,185,65,255));
+            dl->AddQuadFilled({x,start.y+4}, {x+5,start.y+11}, {x,start.y+18}, {x-5,start.y+11}, IM_COL32(200,200,200,200));
         }
         const float x = start.x+previewTime_/animationDraft_.duration*width;
-        dl->AddLine({x,start.y}, {x,start.y+22}, IM_COL32(100,200,255,255), 2);
+        dl->AddLine({x,start.y}, {x,start.y+22}, IM_COL32(200,200,200,220), 2);
         ImGui::PopID();
     }
     if (!trackActive) timelineDragJoint_ = -1;
