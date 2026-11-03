@@ -208,11 +208,11 @@ void DrawIcon(ImDrawList* drawList, ImVec2 center, float size, Icon icon, ImU32 
             break;
         case Icon::Color:
             drawList->AddCircleFilled(ImVec2(center.x - half * 0.45f, center.y + half * 0.3f),
-                                      half * 0.55f, IM_COL32(235, 90, 80, 255), 12);
+                                      half * 0.55f, color, 12);
             drawList->AddCircleFilled(ImVec2(center.x + half * 0.45f, center.y + half * 0.3f),
-                                      half * 0.55f, IM_COL32(90, 200, 110, 255), 12);
+                                      half * 0.55f, color, 12);
             drawList->AddCircleFilled(ImVec2(center.x, center.y - half * 0.35f), half * 0.55f,
-                                      IM_COL32(90, 150, 235, 255), 12);
+                                      color, 12);
             break;
         case Icon::Material: {
             for (int layer = 0; layer < 3; ++layer) {
@@ -896,7 +896,7 @@ void EditorUI::drawTransformReadout(const EditorInput& input, Vector2 imagePosit
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->AddRectFilled(min, max, IM_COL32(18, 22, 28, 236), 4.0f);
         drawList->AddRect(min, max,
-                          hovered ? IM_COL32(255, 195, 42, 255) : IM_COL32(108, 140, 178, 225),
+                          hovered ? IM_COL32(255,255,255,230) : IM_COL32(184,184,184,225),
                           4.0f);
         drawList->AddText(ImVec2(min.x + 10.0f, min.y + 6.0f), IM_COL32(232, 240, 248, 255),
                           label);
@@ -1935,7 +1935,7 @@ void EditorUI::drawViewport() {
         const char* hint=surfaceSnapEnabled_?"Arraste uma face para mover. Encaixe ativo.":"Arraste uma face para mover. Ctrl: encaixar.";
         const auto s=ImGui::CalcTextSize(hint);
         drawList->AddRectFilled({p.x-6,p.y-4},{p.x+s.x+6,p.y+s.y+4},IM_COL32(18,18,22,200),4);
-        drawList->AddText(p,IM_COL32(235,220,220,255),hint);
+        drawList->AddText(p,IM_COL32(200,200,205,255),hint);
     }
     if(gizmo_.dragging()&&selectedPart&&selectedPart->shape()==PartShape::Block) {
         const auto& pose=selectedPart->transform();
@@ -1947,9 +1947,9 @@ void EditorUI::drawViewport() {
             const auto message=std::string(SameTransform(pose,target)?"Geometria coincidente: ":"Sobreposição: ")+other->name();
             const ImVec2 p{imagePosition.x+12,imagePosition.y+(tool_==ToolMode::Move?36.f:12.f)};
             const auto s=ImGui::CalcTextSize(message.c_str());
-            drawList->AddRectFilled({p.x-6,p.y-4},{std::min(p.x+s.x+6,imagePosition.x+viewportRect.width-8),p.y+s.y+4},IM_COL32(40,18,20,225),4);
+            drawList->AddRectFilled({p.x-6,p.y-4},{std::min(p.x+s.x+6,imagePosition.x+viewportRect.width-8),p.y+s.y+4},IM_COL32(24,24,28,225),4);
             drawList->PushClipRect({imagePosition.x,imagePosition.y},{imagePosition.x+viewportRect.width,imagePosition.y+viewportRect.height},true);
-            drawList->AddText(p,IM_COL32(255,156,138,255),message.c_str());drawList->PopClipRect();break;
+            drawList->AddText(p,IM_COL32(255,255,255,255),message.c_str());drawList->PopClipRect();break;
         }
     }
 
@@ -1965,7 +1965,7 @@ void EditorUI::drawViewport() {
                                        selectionMin.y + selectionSize.y + 10.0f),
                                 IM_COL32(24, 29, 35, 220), 5.0f);
         drawList->AddText(ImVec2(selectionMin.x + 8.0f, selectionMin.y + 5.0f),
-                          IM_COL32(125, 190, 255, 255), selectionLabel);
+                          IM_COL32(255,255,255,255), selectionLabel);
     }
 
     if (!status_.empty() && ImGui::GetTime() < statusUntil_) {
@@ -1986,8 +1986,8 @@ void EditorUI::drawViewport() {
             ImVec2(statusPosition.x + textSize.x + 6.0f,
                    statusPosition.y + textSize.y + 4.0f),
             IM_COL32(16, 16, 19, 190), 3.0f);
-        const ImU32 color = statusIsError_ ? IM_COL32(255, 130, 120, 255)
-                                           : IM_COL32(150, 230, 160, 255);
+        const ImU32 color = statusIsError_ ? IM_COL32(255,255,255,255)
+                                           : IM_COL32(184,184,184,255);
         drawList->AddText(statusPosition, color, statusText);
     }
 
