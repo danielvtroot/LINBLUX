@@ -896,7 +896,7 @@ void EditorUI::drawTransformReadout(const EditorInput& input, Vector2 imagePosit
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->AddRectFilled(min, max, IM_COL32(18, 22, 28, 236), 4.0f);
         drawList->AddRect(min, max,
-                          hovered ? IM_COL32(255, 195, 42, 255) : IM_COL32(108, 140, 178, 225),
+                          hovered ? IM_COL32(255, 255, 255, 230) : IM_COL32(184, 184, 184, 200),
                           4.0f);
         drawList->AddText(ImVec2(min.x + 10.0f, min.y + 6.0f), IM_COL32(232, 240, 248, 255),
                           label);
@@ -1986,8 +1986,8 @@ void EditorUI::drawViewport() {
             ImVec2(statusPosition.x + textSize.x + 6.0f,
                    statusPosition.y + textSize.y + 4.0f),
             IM_COL32(16, 16, 19, 190), 3.0f);
-        const ImU32 color = statusIsError_ ? IM_COL32(255, 130, 120, 255)
-                                           : IM_COL32(150, 230, 160, 255);
+        const ImU32 color = statusIsError_ ? IM_COL32(255, 255, 255, 255)
+                                           : IM_COL32(200, 200, 200, 255);
         drawList->AddText(statusPosition, color, statusText);
     }
 
