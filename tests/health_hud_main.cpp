@@ -27,13 +27,26 @@ int main(){
    BeginDrawing();ClearBackground({75,85,95,255});DrawExperienceOverlay(runtime,GetScreenWidth(),GetScreenHeight());EndDrawing();
    auto image=LoadImageFromScreen();int n=countBright(image,reg[0],reg[2],reg[1],reg[3]);UnloadImage(image);return n;
   };
-  const int full=renderAndCount();fprintf(stderr,"HUD-DBG full bright=%d\n",full);check(full>20,"barra de vida não pintada (cheia)");
+  const int full=renderAndCount();fprintf(stderr,"HUD-DBG full bright=%d\n",full);
+  int red=0,brightAny=0,bx0=9999,by0=9999,bx1=-1,by1=-1;
   {
    BeginDrawing();ClearBackground({75,85,95,255});DrawExperienceOverlay(runtime,GetScreenWidth(),GetScreenHeight());EndDrawing();
-   auto image=LoadImageFromScreen();int red=0;
-   for(int y=0;y<image.height;++y)for(int x=0;x<image.width;++x){auto c=GetImageColor(image,x,y);if(c.r>150&&c.g<75&&c.b<100)red++;}
-   UnloadImage(image);check(red==0,"círculo vermelho antigo ainda presente");
+   auto image=LoadImageFromScreen();
+   for(int y=0;y<image.height;++y)for(int x=0;x<image.width;++x){auto c=GetImageColor(image,x,y);if(c.r>150&&c.g<75&&c.b<100)red++;if(c.r>200&&c.g>200&&c.b>200){brightAny++;bx0=std::min(bx0,x);by0=std::min(by0,y);bx1=std::max(bx1,x);by1=std::max(by1,y);}}
+   UnloadImage(image);
   }
+  fprintf(stderr,"HUD-DBG red=%d brightAny=%d brightBox=[%d,%d]-[%d,%d]\n",red,brightAny,bx0,by0,bx1,by1);
+  {
+   BeginDrawing();ClearBackground({75,85,95,255});DrawExperienceOverlay(runtime,GetScreenWidth(),GetScreenHeight());EndDrawing();
+   auto image=LoadImageFromScreen();
+   auto c1=GetImageColor(image,100,40);auto c2=GetImageColor(image,100,365);
+   fprintf(stderr,"HUD-DBG px@(100,40)=%d,%d,%d px@(100,365)=%d,%d,%d\n",c1.r,c1.g,c1.b,c2.r,c2.g,c2.b);
+   float fr=runtime.healthHud().sample(runtime.health(),runtime.settings().maxHealth,1.f/60);
+   fprintf(stderr,"HUD-DBG fraction=%.3f\n",fr);
+   UnloadImage(image);
+  }
+  check(full>20,"barra de vida não pintada (cheia)");
+  check(red==0,"círculo vermelho antigo ainda presente");
   check(runtime.takeDamage(60,error),"dano");float first=runtime.healthHud().sample(runtime.health(),100,.016f);check(first>.4f&&first<1,"interpolação de dano não ocorre");
   for(int i=0;i<90;++i)runtime.healthHud().sample(runtime.health(),100,1.f/60);
   const int damaged=renderAndCount();check(damaged>0&&damaged<full,"barra não encolhe com dano");
