@@ -123,9 +123,9 @@
 #pause #resume { color: #0B0B0B !important; background-color: #FFFFFF; border-color: #FFFFFF; }
 #pause #resume:hover { background-color: #E0E0E0; color: #0B0B0B !important; }
 #game-layer #pause #resume { color: #0B0B0B !important; }
-/* .resume-action: botão de destaque monocromático que não depende de herança de cor */
-.resume-action { background-color: #FFFFFF; border: 1px #FFFFFF; color: #111111; font-weight: bold; }
-.resume-action:hover { background-color: #E8E8E8; }
+/* .resume-action: botão de destaque monocromático — fundo escuro, borda branca forte */
+.resume-action { background-color: #2A2A2A; border: 2px #FFFFFF; color: #FFFFFF; font-weight: bold; }
+.resume-action:hover { background-color: #3A3A3A; border-color: #FFFFFF; }
 #pause #leave { color: #B8B8B8; background-color: #FFFFFF12; }
 .pause-main { display: flex; flex-direction: column; flex: 1; width: 1px; min-width: 0; height: 100%; padding: 0 18px 14px; }
 .pause-heading { display: flex; flex: 0 0 64px; height: 64px; align-items: center; border-bottom: 1px #FFFFFF15; margin-bottom: 8px; }
