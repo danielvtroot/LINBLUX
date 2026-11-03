@@ -19,6 +19,7 @@ int main(){
  if(!IsWindowReady())return 1;SetTargetFPS(60);int result=0;
  try{
   Scene scene;scene.buildDefaultScene();std::string error;game::RuntimeSession runtime;check(runtime.start(scene,error),error.c_str());
+  fprintf(stderr,"HUD-DBG state=%d health=%.0f maxHealth=%.0f visible=%d\n",(int)runtime.state(),runtime.health(),runtime.settings().maxHealth,runtime.healthHud().visible?1:0);
   // Barra de vida no topo-esquerda: x [20,250], y [35,45] (720p, scale=1).
   auto region=[&](float scale){return std::array<int,4>{int(20*scale),int(255*scale),int(33*scale),int(48*scale)};};
   float scale=1.f;auto reg=region(scale);
@@ -26,7 +27,7 @@ int main(){
    BeginDrawing();ClearBackground({75,85,95,255});DrawExperienceOverlay(runtime,GetScreenWidth(),GetScreenHeight());EndDrawing();
    auto image=LoadImageFromScreen();int n=countBright(image,reg[0],reg[2],reg[1],reg[3]);UnloadImage(image);return n;
   };
-  const int full=renderAndCount();check(full>20,"barra de vida não pintada (cheia)");
+  const int full=renderAndCount();fprintf(stderr,"HUD-DBG full bright=%d\n",full);check(full>20,"barra de vida não pintada (cheia)");
   {
    BeginDrawing();ClearBackground({75,85,95,255});DrawExperienceOverlay(runtime,GetScreenWidth(),GetScreenHeight());EndDrawing();
    auto image=LoadImageFromScreen();int red=0;
