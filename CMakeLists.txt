@@ -197,18 +197,18 @@ add_dependencies(linblux linblux_default_assets)
 install(DIRECTORY assets/defaults/ DESTINATION share/linblux/defaults COMPONENT Linblux)
 add_custom_target(linblux_builtin_assets ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/builtin
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/logo.png ${CMAKE_CURRENT_SOURCE_DIR}/assets/builtin/character-face.png ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/builtin)
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/linblux.png ${CMAKE_CURRENT_SOURCE_DIR}/assets/builtin/character-face.png ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/builtin)
 add_dependencies(linblux linblux_builtin_assets)
 add_custom_target(linblux_example_assets ALL COMMAND ${CMAKE_COMMAND} -E copy_directory
   ${CMAKE_CURRENT_SOURCE_DIR}/assets/examples/lua ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/examples/lua)
 add_dependencies(linblux linblux_example_assets)
 add_custom_target(linblux_media_assets ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/logo.png ${CMAKE_CURRENT_SOURCE_DIR}/midia/careditfullhd.mp4 ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia)
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/linblux.png ${CMAKE_CURRENT_SOURCE_DIR}/midia/careditfullhd.mp4 ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia)
 add_dependencies(linblux linblux_media_assets)
 # The development Home keeps its video; public installs require explicit rights.
 option(LINBLUX_INSTALL_BACKGROUND_VIDEO "Instalar vídeo com redistribuição autorizada" OFF)
-install(FILES midia/logo.png DESTINATION share/linblux/midia COMPONENT Linblux)
+install(FILES midia/linblux.png DESTINATION share/linblux/midia COMPONENT Linblux)
 if(LINBLUX_INSTALL_BACKGROUND_VIDEO)
   install(FILES midia/careditfullhd.mp4 DESTINATION share/linblux/midia COMPONENT Linblux)
 endif()
@@ -218,7 +218,7 @@ install(FILES README.md DESTINATION share/linblux COMPONENT Linblux)
 install(TARGETS linblux RUNTIME DESTINATION bin COMPONENT Linblux)
 install(DIRECTORY assets/ui/ DESTINATION share/linblux/ui COMPONENT Linblux)
 install(DIRECTORY assets/templates/ DESTINATION share/linblux/templates COMPONENT Linblux)
-install(FILES midia/logo.png assets/builtin/character-face.png DESTINATION share/linblux/builtin COMPONENT Linblux)
+install(FILES midia/linblux.png assets/builtin/character-face.png DESTINATION share/linblux/builtin COMPONENT Linblux)
 install(DIRECTORY docs/ DESTINATION share/linblux/docs COMPONENT Linblux FILES_MATCHING PATTERN "*.md")
 install(FILES third_party/stb/LICENSE DESTINATION share/linblux/licenses COMPONENT Linblux RENAME stb_image.txt)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -486,7 +486,7 @@ if(Python3_Interpreter_FOUND AND XVFB_RUN_EXECUTABLE AND XDOTOOL_EXECUTABLE)
 endif()
 install(FILES packaging/linblux.desktop packaging/linblux-player.desktop DESTINATION share/applications COMPONENT Linblux)
 install(FILES packaging/linblux-mime.xml DESTINATION share/mime/packages COMPONENT Linblux)
-install(FILES midia/logo.png DESTINATION share/pixmaps COMPONENT Linblux RENAME linblux.png)
+install(FILES midia/linblux.png DESTINATION share/pixmaps COMPONENT Linblux RENAME linblux.png)
 
 # ATLAS: testes locais da inteligência estrutural (Python stdlib, sem rede).
 find_package(Python3 COMPONENTS Interpreter QUIET)

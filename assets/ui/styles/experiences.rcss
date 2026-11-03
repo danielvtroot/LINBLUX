@@ -118,7 +118,7 @@
 /* ==========================================================================
    Home: launcher sobre fundo escuro discreto.
    ========================================================================== */
-#experience-home { background: transparent; }
+#experience-home { background: #0B0B0B; }
 .home-header { position: absolute; left: 32px; right: 32px; top: 14px; height: 56px; max-width: 1180px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
 .home-header .experience-brand { height: auto; margin: 0; padding: 0; }
 .home-header .experience-brand img { width: 36px; height: 36px; margin-right: 12px; }
