@@ -1,7 +1,7 @@
 /* Generated shared LINBLUX theme. */
 button:hover { background-color: #FFFFFF12; border-color: #FFFFFF; }
 button:active, button.active, select option:hover, select option:checked { background-color: #FFFFFF26; border-color: #FFFFFF; }
-button.primary, .experience-primary { background-color: #FFFFFF; border-color: #FFFFFF; color: #0B0B0B; }
+button.primary, .experience-primary { background-color: #FFFFFF; border-color: #FFFFFF; color: #0B0B0B !important; }
 button:focus, input:focus, textarea:focus, select:focus { border-color: #FFFFFF; }
 .image-option:hover { background-color: #FFFFFF12; border-color: #FFFFFF; }
 .image-option.selected, #advanced-tabs button.active { background-color: #FFFFFF26; border-color: #FFFFFF; }
