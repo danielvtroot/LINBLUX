@@ -48,5 +48,5 @@
   </div></div>
  </div>
  <div id="context-menu"/><div id="tooltip"/>
- <div id="dialog-overlay"><div id="dialog"><h2 id="dialog-title"/><p id="dialog-description" class="muted"/><input id="dialog-value"/><div id="appearance-controls"/><p id="dialog-error"/><div class="dialog-footer"><button id="dialog-cancel" data-action="cancel-dialog">Cancelar</button><button id="dialog-confirm" data-action="confirm-dialog" class="primary">Confirmar</button></div></div></div>
+ <div id="dialog-overlay"><div id="dialog"><h2 id="dialog-title"/><p id="dialog-description" class="muted"/><input id="dialog-value"/><div id="appearance-controls"/><p id="dialog-error"/><div class="dialog-footer"><button id="dialog-cancel" data-action="cancel-dialog">Cancelar</button><button id="dialog-confirm" data-action="confirm-dialog" class="primary" style="color: #0B0B0B;">Confirmar</button></div></div></div>
 </body></rml>
