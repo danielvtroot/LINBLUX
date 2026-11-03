@@ -74,9 +74,9 @@
 .pause-footer button { display: flex; flex: 1; align-items: center; justify-content: center; height: 58px; padding: 10px 7px; border: 1px #FFFFFF15; background-color: #FFFFFF1A; border-radius: 9px; font-size: 18px; font-weight: bold; margin-right: 10px; transition: background-color 0.12s; }
 .pause-footer button:last-child { margin-right: 0; }
 .pause-footer button img { width: 25px; height: 25px; margin-right: 12px; }
-.pause-footer button.primary { background-color: #FFFFFF; border-color: #FFFFFF; color: #0B0B0B; }
+.pause-footer button.primary { background-color: #FFFFFF; border-color: #FFFFFF; color: #0B0B0B; font-weight: bold; }
+.pause-footer button.primary:hover { background-color: #E0E0E0; color: #0B0B0B; }
 .pause-footer button:hover { background-color: #FFFFFF30; }
-.pause-footer button.primary:hover { background-color: #E0E0E0; }
 .pause-footer button:active { background-color: #FFFFFF45; }
 .pause-footer button:focus { border-color: #FFFFFF; }
 .footer-key { width: 29px; height: 29px; padding: 6px 0; margin-right: 12px; font-size: 10px; border: 1px #FFFFFF50; border-radius: 2px; }
