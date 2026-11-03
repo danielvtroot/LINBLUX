@@ -340,12 +340,12 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
             dl->AddImage(static_cast<ImTextureID>(texture.id),{cx-halfW,cy-halfH},{cx+halfW,cy+halfH});
         } else {
             dl->AddCircle({cx,cy},6,IM_COL32(240,235,239,255),20,1.5f);
-            dl->AddLine({cx-10,cy},{cx-4,cy},IM_COL32(240,235,239,255),2);
-            dl->AddLine({cx+4,cy},{cx+10,cy},IM_COL32(240,235,239,255),2);
+            dl->AddLine({cx-10,cy},{cx-4,cy},IM_COL32(235,65,82,255),2);
+            dl->AddLine({cx+4,cy},{cx+10,cy},IM_COL32(235,65,82,255),2);
         }
     }
     const float health=runtime_.health(),maximum=runtime_.settings().maxHealth;
-    const ImU32 color=IM_COL32(255,255,255,230);
+    const ImU32 color=IM_COL32(215,38,63,255);
     const auto& settings=runtime_.settings();
     if (!runtime_.playerCamera().avatarHidden() && (settings.healthDisplayType!=2 || settings.nameDisplayDistance>0)) {
         const auto head=runtime_.rig().evaluate(runtime_.pose(),runtime_.renderCharacterRoot())[game::Head];
@@ -1066,7 +1066,7 @@ void EditorUI::drawAnimationEditor() {
         }
         for (const auto& key : animationDraft_.tracks[j]) {
             const float x = start.x + key.time/animationDraft_.duration*width;
-            dl->AddQuadFilled({x,start.y+4}, {x+5,start.y+11}, {x,start.y+18}, {x-5,start.y+11}, IM_COL32(255,255,255,200));
+            dl->AddQuadFilled({x,start.y+4}, {x+5,start.y+11}, {x,start.y+18}, {x-5,start.y+11}, IM_COL32(240,185,65,255));
         }
         const float x = start.x+previewTime_/animationDraft_.duration*width;
         dl->AddLine({x,start.y}, {x,start.y+22}, IM_COL32(100,200,255,255), 2);
