@@ -9,6 +9,7 @@
 #include "raymath.h"
 #include "rlgl.h"
 #include "rendering/EditorCamera.h"
+#include "rendering/ExperienceOverlay.h"
 
 namespace loblox {
 namespace {
@@ -513,28 +514,38 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
     if(mode==ToolMode::Move&&!directFace)DrawSphere(part.position(),camera.worldUnitsPerPixel(part.position(),viewport.height)*5,{215,218,223,255});
     rlDrawRenderBatchActive();EndMode3D();rlDisableDepthTest();rlDisableDepthMask();
     if(dragging_&&showMeasurement){
+        Font uiFont = ExperienceOverlayFont();
+        const float spacing = 1.0f;
         const auto delta=Vector3Subtract(part.position(),startTransform_.position);
         const char* text=mode==ToolMode::Scale?TextFormat("%.2f  x  %.2f  x  %.2f",part.size().x,part.size().y,part.size().z):
             mode==ToolMode::Rotate?TextFormat("%.1f graus",appliedRotation_*RAD2DEG):TextFormat("%.3f unidades",Vector3Length(delta));
-        const float width=std::min(viewport.width-8,float(MeasureText(text,19)+26));
+        const char* label = mode==ToolMode::Scale?(centeredScale_?"Escala centrada":"Escala por face"):mode==ToolMode::Rotate?"Rotação":"Deslocamento";
+        const float labelSize = 11.0f;
+        const float valueSize = 18.0f;
+        const Vector2 valueMeasure = MeasureTextEx(uiFont, text, valueSize, spacing);
+        const float width=std::min(viewport.width-8, valueMeasure.x + 26.0f);
         const float x=std::clamp(readout.x+40,4.f,std::max(4.f,viewport.width-width-4));
         const float y=std::clamp(readout.y+36,4.f,std::max(4.f,viewport.height-54));
-        DrawRectangleRounded({x,y,width,48},.15f,4,{27,30,36,245});DrawRectangle(int(x),int(y+7),3,34,accent);
-        DrawText(mode==ToolMode::Scale?(centeredScale_?"Escala centrada":"Escala por face"):mode==ToolMode::Rotate?"Rotacao":"Deslocamento",int(x+12),int(y+5),12,{184,190,202,255});
-        DrawText(text,int(x+12),int(y+22),19,{244,245,248,255});
+        DrawRectangleRounded({x,y,width,48},.15f,4,{20,22,28,248});
+        DrawRectangle(int(x),int(y+7),3,34,accent);
+        DrawTextEx(uiFont, label, {x+12,y+5}, labelSize, spacing, {168,176,192,255});
+        DrawTextEx(uiFont, text,  {x+12,y+22}, valueSize, spacing, {240,242,248,255});
     }
     if(surfaceContact_.snapped) {
+        Font uiFont = ExperienceOverlayFont();
         Vector2 p,q;
         const Vector2 size{viewport.width,viewport.height};
         const auto end=Vector3Add(surfaceContact_.point,Vector3Scale(surfaceContact_.normal,
             camera.worldUnitsPerPixel(surfaceContact_.point,viewport.height)*24));
         if(camera.projectChecked(surfaceContact_.point,size,p)&&camera.projectChecked(end,size,q)) {
-            DrawCircleV(p,7,{16,18,22,230});DrawCircleLinesV(p,7,{242,70,78,255});
-            DrawLineEx(p,q,2,{242,70,78,255});
-            const float x=std::clamp(p.x+14,4.f,std::max(4.f,viewport.width-82));
+            DrawCircleV(p,7,{16,18,22,230});DrawCircleLinesV(p,7,{200,200,200,255});
+            DrawLineEx(p,q,2,{200,200,200,255});
+            const char* snap = "Encaixe";
+            const Vector2 sm = MeasureTextEx(uiFont, snap, 14.0f, 1.0f);
+            const float x=std::clamp(p.x+14,4.f,std::max(4.f,viewport.width-(sm.x+18)-4));
             const float y=std::clamp(p.y-27,4.f,std::max(4.f,viewport.height-26));
-            DrawRectangleRounded({x,y,78,23},.18f,4,{23,24,29,235});
-            DrawText("Encaixe",int(x+8),int(y+4),16,{255,225,225,255});
+            DrawRectangleRounded({x,y,sm.x+18,23},.18f,4,{20,22,28,240});
+            DrawTextEx(uiFont, snap, {x+8,y+4}, 14.0f, 1.0f, {230,232,240,255});
         }
     }
 
