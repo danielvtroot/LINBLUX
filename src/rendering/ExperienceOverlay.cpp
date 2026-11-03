@@ -12,19 +12,27 @@ void ClearExperienceOverlayResources(){if(overlayFont.texture.id){if(IsWindowRea
 void DrawHealthHud(const game::RuntimeSession& runtime,int width,int height,Font font){
     if(runtime.state()!=game::RuntimeState::Playing||!runtime.healthHud().visible)return;
     if(font.texture.id==GetFontDefault().texture.id)font=OverlayFont();
-    const float scale=std::clamp(height/720.f,.75f,1.5f),radius=34*scale;
-    const Vector2 center{width-52*scale,58*scale};
+    const float scale=std::clamp(height/720.f,.75f,1.5f);
     const float fraction=runtime.healthHud().sample(runtime.health(),runtime.settings().maxHealth,GetFrameTime());
-    DrawCircleV(center,radius+7*scale,{12,12,16,225});
-    DrawRing(center,radius-5*scale,radius,0,360,96,{62,57,63,255});
-    // raylib's ring starts at +X; -90 places zero at the top.
-    if(fraction>0)DrawRing(center,radius-5*scale,radius,-90,-90+360*fraction,96,{220,220,220,255});
+    // Barra compacta monocromática — área segura superior-direita
+    const float barW=180.f*scale,barH=8.f*scale,pad=10.f*scale;
+    const float px=width-barW-pad*2.f-60.f*scale,py=16.f*scale;
+    const float panelW=barW+pad*2.f+56.f*scale,panelH=barH+24.f*scale;
+    // Fundo preto translúcido
+    DrawRectangleRounded({px-pad,py-pad*.5f,panelW,panelH},.18f,6,{0,0,0,180});
+    // Rótulo VIDA
+    DrawTextEx(font,"VIDA",{px,py-1.f*scale},10.f*scale,scale,{220,220,220,200});
+    // Trilha
+    DrawRectangleRounded({px,py+12.f*scale,barW,barH},.5f,6,{255,255,255,40});
+    // Preenchimento
+    if(fraction>0.f){
+        const float fillW=std::max(barH,barW*fraction);
+        DrawRectangleRounded({px,py+12.f*scale,fillW,barH},.5f,6,{255,255,255,220});
+    }
+    // Valor numérico
     char value[32];std::snprintf(value,sizeof(value),"%.0f",runtime.health());
-    const float size=21*scale;const auto measured=MeasureTextEx(font,value,size,scale);
-    DrawTextEx(font,value,{center.x-measured.x/2,center.y-13*scale},size,scale,{246,242,245,255});
-    std::snprintf(value,sizeof(value),"/ %.0f",runtime.settings().maxHealth);
-    const auto sub=MeasureTextEx(font,value,10*scale,.5f*scale);
-    DrawTextEx(font,value,{center.x-sub.x/2,center.y+11*scale},10*scale,.5f*scale,{185,177,184,255});
+    const auto mv=MeasureTextEx(font,value,12.f*scale,scale);
+    DrawTextEx(font,value,{px+barW+8.f*scale,py+12.f*scale+(barH-mv.y)/2.f},12.f*scale,scale,{255,255,255,220});
 }
 
 void DrawExperienceOverlay(const game::RuntimeSession& runtime,int width,int height,Font font){
