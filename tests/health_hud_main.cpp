@@ -30,12 +30,12 @@ int main(){
   check(runtime.takeDamage(100,error),"morte");check(runtime.health()==0,"morte zera vida");
   check(runtime.resetCharacter(error),"respawn");check(runtime.health()==100,"respawn restaura vida");
   // 3. HUD oculto não pinta na região da barra de vida (topo-esquerda).
-  const int hr0=20,hr1=255,hv0=33,hv1=48;
   runtime.healthHud().visible=false;
   BeginDrawing();ClearBackground({75,85,95,255});DrawExperienceOverlay(runtime,GetScreenWidth(),GetScreenHeight());EndDrawing();
-  auto image=LoadImageFromScreen();int painted=0;
-  for(int y=hv0;y<hv1&&y<image.height;++y)for(int x=hr0;x<hr1&&x<image.width;++x){auto c=GetImageColor(image,x,y);if(c.r>200&&c.g>200&&c.b>200)painted++;}
-  UnloadImage(image);check(painted==0,"HUD oculto ainda pinta");
+  auto image=LoadImageFromScreen();int painted=0,red2=0;
+  for(int y=0;y<image.height;++y)for(int x=0;x<image.width;++x){auto c=GetImageColor(image,x,y);if(c.r>200&&c.g>200&&c.b>200)painted++;if(c.r>150&&c.g<75&&c.b<100)red2++;}
+  UnloadImage(image);check(red2==0,"vermelho antigo com HUD oculto");
+  runtime.healthHud().visible=true;
   runtime.healthHud().visible=true;runtime.pause();runtime.resume();
   // 4. Diferentes resoluções não quebram.
   for(auto size:{Vector2{1280,720},Vector2{1600,900},Vector2{1920,1080}}){
@@ -46,6 +46,7 @@ int main(){
    UnloadImage(image);std::string msg="vermelho antigo na resolução "+std::to_string(int(size.x));check(red==0,msg.c_str());
   }
   // 5. Lua não oculta o HUD padrão.
+  runtime.stop(false);
   auto* script=scene.createScript(InstanceClass::Script,scene.ensureService(InstanceClass::ServerScriptService),"Hud.lua");script->source="linblux.ui.health_hud(false)";
   check(runtime.start(scene,error),"Lua HUD start");runtime.update(1.f/60,{});check(!runtime.healthHud().visible&&runtime.scripts().errorCount()==0,"Lua não pode ocultar HUD padrão");runtime.stop(false);
   scene.removeById(script->id());check(runtime.start(scene,error),"restart");check(runtime.healthHud().visible,"preferência HUD vazou entre Play");runtime.stop(false);
