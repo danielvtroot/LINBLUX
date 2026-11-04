@@ -16,7 +16,7 @@ class MediaTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         for name in ('docs/prints', 'docs/videos'):
             (self.root / name).mkdir(parents=True)
-        self.doc = self.root / 'docs/MIDIA.md'
+        self.doc = self.root / 'README.md'
         self.doc.write_text('Manual\n' + media.START + '\nantigo\n' + media.END + '\nFinal\n')
 
     def test_idempotent_and_preserves_surrounding_text(self):

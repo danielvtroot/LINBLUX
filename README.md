@@ -15,13 +15,28 @@ A demonstração está publicada no YouTube:
 no canal [Abismroot](https://www.youtube.com/@Abismroot). Vídeos grandes são
 publicados em serviços externos, sem aumentar o tamanho do clone.
 
-A galeria abaixo é gerada a partir dos arquivos ppm de `docs/prints/` e
+A galeria abaixo é gerada a partir dos arquivos de `docs/prints/` e
 `docs/videos/`: execute `python3 tools/update_readme_media.py`. O script lê
 apenas metadados (tamanho/nome), não transcodifica e não adiciona arquivos ao
 Git.
 
 <!-- LINBLUX:MEDIA:START -->
-<!-- Conteúdo gerado por tools/update_readme_media.py -->
+
+### Capturas
+
+<a href="docs/prints/explorador-servicos-automaticos.png"><img src="docs/prints/explorador-servicos-automaticos.png" width="480" alt="Serviços de armazenamento organizados"/></a>
+<p>Serviços de armazenamento organizados</p>
+
+<a href="docs/prints/explorador-servicos.png"><img src="docs/prints/explorador-servicos.png" width="480" alt="Explorador e serviços"/></a>
+<p>Explorador e serviços</p>
+
+<a href="docs/prints/studio-construcao.png"><img src="docs/prints/studio-construcao.png" width="480" alt="LINBLUX Studio — Construção 3D"/></a>
+<p>LINBLUX Studio — Construção 3D</p>
+
+### Vídeos
+
+Nenhum vídeo público adicionado. As demonstrações disponíveis são as capturas acima.
+
 <!-- LINBLUX:MEDIA:END -->
 
 ## O que é o LINBLUX?
@@ -60,7 +75,7 @@ e podem mudar antes do próximo commit (ver §21 do manual).
 <a id="experimentar-no-linux"></a>
 
 **O pacote binário público ainda está bloqueado.** A revisão de redistribuição
-precisa ser concluída (a build atual declara `GPL version 2 ou posterior` ao
+precisa ser concluída (a build atual declara `GPL version 2 or later` ao
 ligar o FFmpeg e faltam avisos de componentes embutidos). Não há download
 aprovado, tag ou Release de binário anunciada neste README; veja o §21 do
 manual. O código-fonte pode ser compilado no Linux.
@@ -135,7 +150,7 @@ Manual: §16 (ATLAS) e §17 (TURBO e testes) do [LINBLUX.md](LINBLUX.md).
 | Estado | Escopo |
 | --- | --- |
 | Implementado | Edição local, Player, persistência, física, Lua, objetos e recursos descritos acima |
-| Experimental | Dual-vision por superfície, personagens/NPCs, materiais, UI Lua e integração entre ferramentas |
+| Experimental | Construção por superfície, personagens/NPCs, materiais, UI Lua e integração entre ferramentas |
 | Limitado | Rig de seis corpos, encaixe em caixas, áudio sem mixagem/atenuação 3D e compatibilidade Linux ainda restrita ao ambiente validado |
 | Futuro | Malhas arbitrárias, terreno, multiplayer, contas e publicação online |
 

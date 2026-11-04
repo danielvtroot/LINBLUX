@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Update only the media block in docs/MIDIA.md, using file metadata (stdlib)."""
+"""Update only the media block in README.md, using file metadata (stdlib)."""
 from pathlib import Path
 from urllib.parse import quote
 import html
@@ -58,28 +58,28 @@ def discover(root, directory, extensions, limit):
 
 
 def update(root=ROOT):
-    target = root / 'docs/MIDIA.md'
+    target = root / 'README.md'
     original = target.read_text(encoding='utf-8')
     if original.count(START) != 1 or original.count(END) != 1:
-        raise ValueError('MIDIA.md deve conter exatamente um par de marcadores de mídia.')
+        raise ValueError('README.md deve conter exatamente um par de marcadores de mídia.')
     before, rest = original.split(START)
     _, after = rest.split(END)
     images = discover(root, 'docs/prints', {'.png', '.jpg', '.jpeg', '.webp'}, IMAGE_LIMIT)
     videos = discover(root, 'docs/videos', {'.mp4', '.webm'}, VIDEO_LIMIT)
     lines = ['\n', '### Capturas', '']
     for path in images:
-        url = quote(path.relative_to(root / 'docs').as_posix(), safe='/')
+        url = quote(path.relative_to(root).as_posix(), safe='/')
         label = html.escape(title(path), quote=True)
         lines += [f'<a href="{url}"><img src="{url}" width="480" alt="{label}"/></a>', f'<p>{label}</p>', '']
     if not images:
         lines += ['Ainda não há capturas públicas em `docs/prints/`.', '']
     lines += ['### Vídeos', '']
     for path in videos:
-        url = quote(path.relative_to(root / 'docs').as_posix(), safe='/')
+        url = quote(path.relative_to(root).as_posix(), safe='/')
         label = html.escape(title(path), quote=True)
         cover = next((p for p in images if p.stem == path.stem), None)
         if cover:
-            cover_url = quote(cover.relative_to(root / 'docs').as_posix(), safe='/')
+            cover_url = quote(cover.relative_to(root).as_posix(), safe='/')
             lines += [f'<a href="{url}"><img src="{cover_url}" width="480" alt="Assistir: {label}"/></a>']
         lines += [f'<p><a href="{url}">Assistir: {label}</a> ({path.stat().st_size / 1024**2:.1f} MiB)</p>', '']
     if not videos:
