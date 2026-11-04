@@ -372,9 +372,9 @@ def impact(root: Path, conn: sqlite3.Connection, target: str, depth: int = 2, li
         risks.append("nenhum teste mapeado diretamente; procure testes de integração do módulo")
 
     contracts = []
-    contract = root / "docs/atlas/module-contracts" / f"{module}.md"
-    if contract.is_file():
-        contracts.append(contract.relative_to(root).as_posix())
+    manual = root / "LINBLUX.md"
+    if manual.is_file():
+        contracts.append(manual.relative_to(root).as_posix())
     return {
         "input": target,
         "resolved_file": path,

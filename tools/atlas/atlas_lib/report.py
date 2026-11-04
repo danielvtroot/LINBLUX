@@ -9,7 +9,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from .config import CONTRACT_MODULES, should_index
+from .config import should_index
 from .db import open_db, table_counts
 from .indexer import index_repository
 from .search import locate
@@ -60,10 +60,9 @@ def write_generated_docs(root: Path, policy=None) -> dict:
         lines.append(f"- `{row['name']}`{note}{source}")
     lines += ["", "## Dependências externas inventariadas", ""]
     lines += [f"- {row['name']} ({row['kind']})" for row in external]
-    lines += ["", "## Contratos manuais esperados", ""]
-    for module in CONTRACT_MODULES:
-        path = root / "docs/atlas/module-contracts" / f"{module}.md"
-        lines.append(f"- [{'x' if path.is_file() else ' '}] `{module}`")
+    lines += ["", "## Documentação esperada", ""]
+    for name in ("README.md", "LINBLUX.md"):
+        lines.append(f"- [{'x' if (root / name).is_file() else ' '}] `{name}`")
     path = out_dir / "inventory.md"
     content = "\n".join(lines) + "\n"
     changed = True

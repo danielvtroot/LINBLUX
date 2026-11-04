@@ -1,6 +1,6 @@
 [Unit]
 Description=LINBLUX automatic checkpoint backup (branch auto-backup)
-Documentation=file://@PROJECT@/docs/backup/README.md
+Documentation=file://@PROJECT@/LINBLUX.md
 After=network-online.target
 Wants=network-online.target
 

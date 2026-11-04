@@ -31,19 +31,12 @@ def main():
         share=prefix/'share/linblux';licenses=share/'licenses';licenses.mkdir(parents=True,exist_ok=True)
         # The source README has repository-relative links; use the installation README at the archive root.
         (share/'README.md').unlink()
-        docs=share/'docs';shutil.rmtree(docs);docs.mkdir()
-        for name in ['ARCHITECTURE.md','SCRIPTING_LUA.md','INVENTARIO.md','ATTACHMENTS.md','ASSETS_E_LICENCAS.md','ALPHA_0_1_0.md']:
-            source=ROOT/'docs'/name
-            if source.is_file():
-                # This is an offline selection, not a copy of the repository.
-                # Links to unbundled guides resolve to the public documentation.
-                def public_link(match):
-                    target=match.group(1)
-                    if re.match(r'[a-zA-Z]+:',target) or target.startswith('#'):return match.group(0)
-                    path,separator,anchor=target.partition('#')
-                    relative=(source.parent/path).resolve().relative_to(ROOT).as_posix()
-                    return ']('+'https://github.com/danielvtroot/LINBLUX/blob/main/'+quote(relative,safe='/')+(separator+anchor if separator else '')+')'
-                (docs/name).write_text(re.sub(r'\]\(([^)]+)\)',public_link,source.read_text()))
+        docs=share/'docs'
+        if docs.exists():shutil.rmtree(docs)
+        # All technical documentation is consolidated in LINBLUX.md; internal
+        # anchors keep the manual valid inside the archive.
+        docs.mkdir()
+        shutil.copy2(ROOT/'LINBLUX.md',docs/'LINBLUX.md')
         (prefix/'README.md').write_text("""# LINBLUX Alpha 0.1.0 — candidato interno
 
 Este arquivo não é uma Release pública aprovada. Consulte ESTADO-DO-CANDIDATO.txt.
@@ -59,7 +52,7 @@ Dependências do sistema e hashes constam em manifest.json. O pacote não é uni
 A revisão de redistribuição FFmpeg/raylib ainda bloqueia a publicação binária.
 Fontes DejaVu/Liberation devem estar instaladas no sistema.
 
-[Notas da Alpha](share/linblux/docs/ALPHA_0_1_0.md) ·
+[Manual técnico](share/linblux/docs/LINBLUX.md) ·
 [Licenças](share/linblux/licenses/) ·
 [Código e documentação](https://github.com/danielvtroot/LINBLUX)
 """)
