@@ -218,8 +218,8 @@ class AtlasCliTest(unittest.TestCase):
         report = self.json("doctor")["data"]
         severities = {issue["severity"] for issue in report["issues"]}
         self.assertNotIn("alta", severities)
-        # The fixture intentionally has no manual contracts yet.
-        self.assertIn("contracts-missing", {issue["code"] for issue in report["issues"]})
+        # The fixture intentionally has no consolidated documentation yet.
+        self.assertIn("docs-missing", {issue["code"] for issue in report["issues"]})
 
 
 class AtlasV2RegressionTest(unittest.TestCase):

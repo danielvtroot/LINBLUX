@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import io_mode
-from .config import CONTRACT_MODULES, INDEX_VERSION, cache_dir, db_path, glossary
+from .config import INDEX_VERSION, cache_dir, db_path, glossary
 from .db import (
     corrupt_or_missing_reason,
     get_meta,
@@ -249,23 +249,16 @@ def doctor(root: Path, strict: bool = False, policy=None) -> dict:
             "fix": "normal para sobrecargas/namespaces; confirme com atlas.py symbol",
         })
 
-    missing_contracts = [
-        module for module in CONTRACT_MODULES
-        if module in {row["module"] for row in conn.execute("SELECT DISTINCT module FROM files")}
-        and not (root / "docs/atlas/module-contracts" / f"{module}.md").is_file()
+    docs_missing = [
+        name for name in ("README.md", "LINBLUX.md")
+        if not (root / name).is_file()
     ]
-    if missing_contracts:
+    if docs_missing:
         issues.append({
-            "severity": "baixa", "code": "contracts-missing",
-            "message": f"{len(missing_contracts)} módulo(s) sem contrato manual",
-            "examples": missing_contracts,
-            "fix": "adicione docs/atlas/module-contracts/<módulo>.md",
-        })
-    if not (root / "CONTRIBUTING.md").is_file():
-        issues.append({
-            "severity": "baixa", "code": "contributing-missing",
-            "message": "CONTRIBUTING.md ausente",
-            "fix": "restaure o guia de contribuição e manutenção",
+            "severity": "baixa", "code": "docs-missing",
+            "message": f"{len(docs_missing)} arquivo(s) da documentação consolidada ausente(s)",
+            "examples": docs_missing,
+            "fix": "restaure README.md/LINBLUX.md — toda a documentação é mantida por eles",
         })
     if not glossary(root):
         issues.append({

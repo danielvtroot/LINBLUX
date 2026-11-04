@@ -15,7 +15,7 @@
     ".gitattributes",
     "CMakeLists.txt",
     "README.md",
-    "CONTRIBUTING.md",
+    "LINBLUX.md",
     "LICENSE"
   ],
   "exclude": [

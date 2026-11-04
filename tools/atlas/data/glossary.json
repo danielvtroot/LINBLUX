@@ -117,7 +117,7 @@
       "paths": [
         "tools/atlas",
         "docs/atlas",
-        "CONTRIBUTING.md"
+        "LINBLUX.md"
       ]
     },
     "audio": {
@@ -159,7 +159,7 @@
       ],
       "paths": [
         "CMakeLists.txt",
-        "docs/TESTING.md"
+        "LINBLUX.md"
       ]
     },
     "bullet": {
@@ -318,7 +318,7 @@
       ],
       "paths": [
         "CMakeLists.txt",
-        "docs/TESTING.md"
+        "LINBLUX.md"
       ]
     },
     "componente": {
@@ -902,8 +902,8 @@
         "ExperienceManager"
       ],
       "paths": [
-        "docs/ROADMAP.md",
-        "docs/ARCHITECTURE.md"
+        "LINBLUX.md",
+        "LINBLUX.md"
       ]
     },
     "mundo": {
@@ -1320,8 +1320,8 @@
         "ExperienceManager"
       ],
       "paths": [
-        "docs/ROADMAP.md",
-        "docs/ARCHITECTURE.md"
+        "LINBLUX.md",
+        "LINBLUX.md"
       ]
     },
     "servidor": {
@@ -1333,8 +1333,8 @@
         "ExperienceManager"
       ],
       "paths": [
-        "docs/ROADMAP.md",
-        "docs/ARCHITECTURE.md"
+        "LINBLUX.md",
+        "LINBLUX.md"
       ]
     },
     "silenciar": {

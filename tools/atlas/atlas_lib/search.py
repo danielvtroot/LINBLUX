@@ -6,7 +6,7 @@ import re
 import sqlite3
 from pathlib import Path
 
-from .config import CONTRACT_MODULES, STOPWORDS, glossary, normalize_text
+from .config import STOPWORDS, glossary, normalize_text
 
 MAX_LIMIT = 50
 
@@ -332,9 +332,10 @@ def _candidate_rows(conn: sqlite3.Connection, tokens: list[str], module: str | N
     return [dict(row) for row in conn.execute(sql, params)]
 
 
-def _module_contract(root: Path, module: str) -> str | None:
-    path = root / "docs/atlas/module-contracts" / f"{module}.md"
-    return path.relative_to(root).as_posix() if path.is_file() else None
+def _module_contract(root: Path, _module: str) -> str | None:
+    """Contracts de todos os módulos vivem no manual técnico do projeto."""
+    manual = root / "LINBLUX.md"
+    return manual.relative_to(root).as_posix() if manual.is_file() else None
 
 
 def _confidence(score: float, gap: float) -> str:

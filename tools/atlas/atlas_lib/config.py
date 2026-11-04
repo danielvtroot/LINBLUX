@@ -44,7 +44,7 @@ SOURCE_EXTENSIONS = {
 TEXT_NAMES = {
     "CMakeLists.txt": "cmake",
     "README.md": "markdown",
-    "CONTRIBUTING.md": "markdown",
+    "LINBLUX.md": "markdown",
     "LICENSE": "text",
 }
 
@@ -128,7 +128,7 @@ IGNORED_SUFFIXES = {
     ".key",
 }
 
-# Modules whose contracts are expected in docs/atlas/module-contracts.
+# Modules with structural contracts documented in LINBLUX.md (§2.2).
 CONTRACT_MODULES = (
     "app",
     "core",
