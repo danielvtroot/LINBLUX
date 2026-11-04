@@ -1,93 +1,91 @@
 <p align="center"><img src="midia/logo.png" width="112" alt="Logo LINBLUX"/></p>
 <h1 align="center">LINBLUX Studio</h1>
-<p align="center">Uma engine experimental de criação 3D para Linux.</p>
-<p align="center"><strong>Alpha 0.1.0 — projeto experimental de código aberto.</strong></p>
-<p align="center"><a href="docs/README.md">Documentação</a> · <a href="docs/MIDIA.md">Demonstração</a> · <a href="#compilar">Instalação por código-fonte</a> · <a href="CONTRIBUTING.md">Contribuição</a> · <a href="README.en.md">English</a></p>
+<p align="center">Engine experimental de criação 3D para Linux: um Studio para editar
+mundos e um Player para executá-los, com física, Lua e interface local.</p>
+<p align="center"><strong>Alpha 0.1.0 — projeto experimental de código aberto.</strong>
+Manual técnico completo: <a href="LINBLUX.md">LINBLUX.md</a></p>
+<p align="center"><a href="#experimentar-no-linux">Compilar e executar</a> ·
+<a href="#demonstração">Demonstração</a> · <a href="#estado-da-alpha">Estado da Alpha</a> ·
+<a href="#licença-e-créditos">Licença</a></p>
 
-<p align="center"><a href="docs/prints/studio-construcao.png"><img src="docs/prints/studio-construcao.png" width="880" alt="LINBLUX Studio: construção 3D de uma sala, Explorador com a hierarquia e painel de propriedades"/></a></p>
+## Assista à demonstração
 
-<p align="center">
-<a href="docs/prints/explorador-servicos.png"><img src="docs/prints/explorador-servicos.png" width="404" alt="Explorador e serviços: ServerStorage com Itens e um modelo de Espada selecionado"/></a>
-<a href="docs/prints/explorador-servicos-automaticos.png"><img src="docs/prints/explorador-servicos-automaticos.png" width="404" alt="Serviços de armazenamento organizados automaticamente no Explorador"/></a>
-</p>
-<p align="center"><sub><strong>LINBLUX Studio — Construção 3D</strong> · <strong>Explorador e serviços</strong> · <strong>Serviços de armazenamento organizados</strong></sub></p>
+A demonstração está publicada no YouTube:
+**[Assistir à demonstração LINBLUX](https://www.youtube.com/watch?v=jVck4UuYlWQ)**,
+no canal [Abismroot](https://www.youtube.com/@Abismroot). Vídeos grandes são
+publicados em serviços externos, sem aumentar o tamanho do clone.
 
-## Assista ao LINBLUX em funcionamento
+A galeria abaixo é gerada a partir dos arquivos de `docs/prints/` e
+`docs/videos/`: execute `python3 tools/update_readme_media.py`. O script lê
+apenas metadados (tamanho/nome), não transcodifica e não adiciona arquivos ao
+Git.
 
-A demonstração está publicada no YouTube: **[Assistir à demonstração LINBLUX](https://www.youtube.com/watch?v=jVck4UuYlWQ)**,
-no canal [Abismroot](https://www.youtube.com/@Abismroot).
+<!-- LINBLUX:MEDIA:START -->
+
+### Capturas
+
+<a href="docs/prints/explorador-servicos-automaticos.png"><img src="docs/prints/explorador-servicos-automaticos.png" width="480" alt="Serviços de armazenamento organizados"/></a>
+<p>Serviços de armazenamento organizados</p>
+
+<a href="docs/prints/explorador-servicos.png"><img src="docs/prints/explorador-servicos.png" width="480" alt="Explorador e serviços"/></a>
+<p>Explorador e serviços</p>
+
+<a href="docs/prints/studio-construcao.png"><img src="docs/prints/studio-construcao.png" width="480" alt="LINBLUX Studio — Construção 3D"/></a>
+<p>LINBLUX Studio — Construção 3D</p>
+
+### Vídeos
+
+Nenhum vídeo público adicionado. As demonstrações disponíveis são as capturas acima.
+
+<!-- LINBLUX:MEDIA:END -->
 
 ## O que é o LINBLUX?
 
-LINBLUX reúne um Studio para editar mundos e um Player para executá-los.
-Você monta cenas com Parts e Models, organiza objetos pela hierarquia, ajusta
-propriedades e programa comportamentos em Lua. Física, imagens, sons e personagens
-fazem parte dessa base local. Studio e Player são executáveis independentes.
+LINBLUX reúne um Studio para editar mundos e um Player para executá-los. Você
+monta cenas com Parts e Models, organiza objetos pela hierarquia, ajusta
+propriedades e programa comportamentos em Lua 5.4. Física com Bullet, imagens,
+sons e personagens fazem parte dessa base local. Studio e Player são
+executáveis independentes.
 
 É uma engine experimental em desenvolvimento. A Alpha serve para conhecer a
 implementação, criar experiências pequenas e ajudar a encontrar problemas.
 Ainda há limitações de edição, compatibilidade e distribuição; use cópias dos
 seus projetos ao experimentar.
 
-## Por que existe?
-
-A proposta é construir progressivamente uma plataforma de criação de experiências
-3D que possa ser compreendida, modificada e expandida. O protótipo nasceu em um
-ciclo curto de desenvolvimento, com hardware limitado e desafios de integração
-entre renderização, interface, física e scripting. O primeiro passo é oferecer
-uma base local concreta e evoluir a partir do que funciona.
-
 ## O que já existe
 
 | Área | Disponível na base Alpha |
 | --- | --- |
-| Studio | Cena 3D, Explorador com busca, propriedades, seleção e scripts |
-| Construção | Move e Scale pela face, Rotate, incrementos de Snap e encaixe por superfície |
+| Studio | Cena 3D, Explorador com busca, propriedades, seleção, gizmo e scripts |
+| Construção | Move e Scale pela face, rotação, incrementos de Snap e encaixe por superfície |
 | Objetos | Parts, Models, hierarquia, Attachments e serviços locais de armazenamento |
 | Execução | Player separado e Play/Stop sobre uma cópia da cena autoral |
 | Lua 5.4 | Objetos, eventos, física, NPCs, inventário, áudio e UI no escopo da API atual |
 | Recursos | PNG/JPEG, Decals, texturas com repetição, sons locais e música |
 | Experiências | Salvar/reabrir, biblioteca local e importação/exportação `.lo` |
 | Protótipos | Modelos em ServerStorage/Itens, fora da renderização e física; spawn pelo inventário |
-| Personagens | Rig atual de seis corpos, animações compatíveis e NPCs |
+| Personagens | Rig de seis corpos, animações compatíveis e NPCs |
 
-Os controles por face preservam o tamanho ao mover e mantêm a face oposta ao
-escalar. A grade visual foi removida para simplificar o Studio; Snap e precisão
-por incremento continuam disponíveis.
-
-## Demonstração
-
-[RifleDemo](assets/examples/rifledemo/README.md) é um exemplo local de Lua,
-itens, NPCs e interação no Player. Os resultados de validação do Player estão nas
-[notas da Alpha](docs/ALPHA_0_1_0.md); as capturas públicas do Studio ficam na
-[galeria de mídia](docs/MIDIA.md).
-
-A galeria é gerada a partir dos arquivos de `docs/prints/` e `docs/videos/`:
-execute `python3 tools/update_readme_media.py`. O script lê apenas metadados,
-não transcodifica e não adiciona arquivos ao Git. Vídeos grandes ficam em
-Releases ou em um serviço de vídeo, sem aumentar o clone.
+Snap e precisão por incremento continuam disponíveis; a superfície quadriculada
+de construção (grade visual) e o HUD de vida em barra estão em desenvolvimento
+e podem mudar antes do próximo commit (ver §21 do manual).
 
 ## Experimentar no Linux
 
-**O pacote binário público ainda está bloqueado.** A revisão de redistribuição
-das dependências precisa ser concluída. Consulte o [estado da Alpha e do
-candidato interno](docs/ALPHA_0_1_0.md); não há download binário aprovado anunciado
-neste README. O código-fonte pode ser compilado no Linux.
+<a id="experimentar-no-linux"></a>
 
-Depois de compilar, abra o Studio, crie uma experiência e use **F5** para executar.
-**Shift+F5** encerra a execução. No editor, botão direito + WASD move a câmera;
-Q/E desce/sobe e F enquadra a seleção. No Player, WASD move, espaço pula e Esc
-abre o menu sem interromper a simulação.
+**O pacote binário público ainda está bloqueado.** A revisão de redistribuição
+precisa ser concluída (a build atual declara `GPL version 2 or later` ao
+ligar o FFmpeg e faltam avisos de componentes embutidos). Não há download
+aprovado, tag ou Release de binário anunciada neste README; veja o §21 do
+manual. O código-fonte pode ser compilado no Linux.
 
 ### Compilar
 
-<a id="compilar"></a>
-
-O build oficial de desenvolvimento é `build-linblux/`. Requisitos e dependências
-por distribuição estão no [guia de build](docs/BUILD.md). A validação desta base
-usa Linux x86_64, C++17, raylib 6.2.0, Bullet 3.24 e Lua 5.4; isso não comprova
-suporte a todas as distribuições. A primeira configuração do RmlUi exige rede
-ou um checkout/cache da dependência.
+O build oficial de desenvolvimento é `build-linblux/`. Requisitos:
+Linux x86_64, C++17, raylib 6.2, Bullet 3.24, Lua 5.4 e CMake; a primeira
+configuração do RmlUi exige rede ou um checkout/cache da dependência. Isso não
+comprova suporte a todas as distribuições (detalhes no §4 do manual).
 
 ```sh
 git clone https://github.com/danielvtroot/LINBLUX.git
@@ -97,42 +95,47 @@ cmake --build build-linblux -j2
 ./build-linblux/linblux
 ```
 
-Para executar a demo diretamente:
+Depois de compilar, abra o Studio, crie uma experiência e use **F5** para
+executar; **Shift+F5** encerra e volta ao Studio. No editor, botão direito +
+WASD move a câmera, Q/E desce/sobe e F enquadra a seleção. No Player, WASD
+move, espaço pula e **Esc** abre o menu sem interromper a simulação.
+
+## Demonstração
+
+[RifleDemo](LINBLUX.md#54-exemplo-rifledemo) é um exemplo local completo de
+Lua, itens, NPCs e interação no Player:
 
 ```sh
 ./build-linblux/linblux_player --project assets/examples/rifledemo/world.loblox.json
 ```
 
-[Guia Studio](docs/GUIA_STUDIO.md) · [Guia Player](docs/PLAYER.md) ·
-[Experiências e `.lo`](docs/EXPERIENCES.md)
+No Studio, abra o mesmo `world.loblox.json` e clique Executar (F5). Teclas da
+demo: **E** (coletar, 0,6 s), **1** (equipar), **clique** (disparar),
+**R** (recarregar), **Delete** (soltar) e **Esc** (menu protegido). A API Lua
+usada está descrita em §10–§12 do manual.
 
 ## Arquitetura
 
 C++17 e CMake compõem a base. raylib/OpenGL desenha as cenas, Bullet simula a
-física e Lua 5.4 executa scripts. O Studio combina RmlUi nos painéis principais
-e ImGui em editores especializados. O Player não depende das interfaces do Studio.
+física 3D e Lua 5.4 executa scripts. O Studio combina RmlUi nos painéis
+principais e ImGui em editores especializados; o Player não depende das
+interfaces do Studio. `Scene` mantém objetos e IDs persistentes, `ProjectIO`
+salva cenas de forma transacional e `RuntimeSession` executa uma cópia da
+cena, separada da autoria. Detalhes e invariantes em §2 do manual.
 
-`Scene` mantém objetos e IDs persistentes; `ProjectIO` valida e salva cenas de
-forma transacional. `RuntimeSession` executa uma cópia da cena, separada da
-autoria. O gerenciador de experiências organiza manifestos e recursos locais.
-Veja os targets e limites de acoplamento em [Arquitetura](docs/ARCHITECTURE.md).
+## ATLAS e TURBO
 
-## LINBLUX ATLAS + TURBO
+Ferramentas locais de manutenção, sem serviço externo:
 
-O projeto inclui ferramentas locais de manutenção, acessíveis pelo terminal.
-
-**ATLAS** indexa a estrutura do repositório, localiza arquivos, símbolos e
-possíveis causas de defeitos, sugere hipóteses com evidências e ajuda a analisar
-impacto. Suas relações são textuais: auxiliam a investigação, sem provar a causa
-de um bug nem corrigi-lo automaticamente.
-
-**TURBO** identifica as verificações relevantes para uma alteração e as executa
-com timeout individual, orçamento global, encerramento dos processos e logs.
-Pode reduzir trabalho repetido; tempo e cobertura dependem das alterações e do
-ambiente. Aprovação parcial nunca equivale a validação completa.
-
-Tudo roda localmente, sem serviço externo. O modo **HDD-Safe** reduz gravações e
-reindexações em discos mecânicos; o modo HDD-Critical permite apenas consultas.
+- **ATLAS** indexa a estrutura do repositório, localiza arquivos, símbolos e
+  possíveis causas de defeitos, sugere hipóteses com evidências e ajuda a
+  analisar impacto. Suas relações são textuais: auxiliam a investigação, sem
+  provar a causa de um bug nem corrigi-lo automaticamente.
+- **TURBO** identifica as verificações relevantes para uma alteração e as
+  executa com timeout individual, orçamento global, encerramento de processos
+  e logs. Aprovação parcial nunca equivale a validação completa.
+- O modo **HDD-Safe** reduz gravações e reindexações em discos mecânicos; o
+  modo HDD-Critical permite apenas consultas.
 
 ```sh
 ATLAS_IO_MODE=hdd-safe python3 tools/atlas/atlas.py diagnose "problema" --brief
@@ -140,8 +143,7 @@ python3 tools/atlas/atlas.py tests-for src/editor/EditorUI.cpp
 python3 tools/turbo/turbo.py test --mode fast --changed --plan
 ```
 
-[Manual ATLAS](docs/atlas/README.md) · [Manual TURBO](docs/turbo/README.md) ·
-[Como testar](docs/TESTING.md)
+Manual: §16 (ATLAS) e §17 (TURBO e testes) do [LINBLUX.md](LINBLUX.md).
 
 ## Estado da Alpha
 
@@ -153,39 +155,39 @@ python3 tools/turbo/turbo.py test --mode fast --changed --plan
 | Futuro | Malhas arbitrárias, terreno, multiplayer, contas e publicação online |
 
 O código-fonte e a documentação estão publicados em `main`. A **distribuição
-binária pública permanece bloqueada** por pendências de redistribuição do FFmpeg
-vinculado e pela conclusão dos avisos dos componentes embutidos; não existe
-download aprovado nem pacote Linux universal. Não há tag ou Release de binário
-publicada.
-
-Áudio audível em hardware real e desempenho de GPU física exigem validação
-adicional. Scripts Lua podem usar as capacidades locais da API: execute somente
-experiências de origem confiável. Leia os [limites da Alpha](docs/ALPHA_0_1_0.md)
-e a [compatibilidade](docs/COMPATIBILIDADE.md) antes de distribuir um projeto.
+binária pública permanece bloqueada** por pendências de redistribuição do
+FFmpeg vinculado e pela conclusão dos avisos dos componentes embutidos. Áudio
+audível em hardware real e desempenho em GPU física exigem validação
+adicional. Scripts Lua podem usar as capacidades locais da API: execute
+somente experiências de origem confiável. Limitações conhecidas em §21 do
+manual.
 
 ## Próximos passos
 
-Consolidar o Studio e a engine, melhorar estabilidade, renderização e desempenho,
-tornar as ferramentas de construção 3D mais intuitivas, ampliar personagens,
-scripts Lua, terreno e importação de malhas. Depois, evoluir o empacotamento Linux
-e explorar experiências online — multiplayer, contas, descoberta e colaboração com
-servidor autoritativo. São objetivos futuros, sem datas prometidas, e nenhum
-desses recursos está disponível nesta Alpha.
-[Roadmap completo](docs/ROADMAP.md).
+Consolidar o Studio e a engine, melhorar estabilidade, renderização e
+desempenho, tornar as ferramentas de construção 3D mais intuitivas, ampliar
+personagens, Lua, terreno e importação de malhas. Depois, evoluir o
+empacotamento Linux e explorar experiências online — multiplayer, contas,
+descoberta e colaboração com servidor autoritativo. Nenhum desses recursos
+está disponível nesta Alpha (§22 do manual enumera o roadmap completo).
 
-## Documentação e colaboração
+## Contribuição e suporte
 
-O [índice de documentação](docs/README.md) reúne os guias de uso, API Lua,
-arquitetura e manutenção. Para relatar um bug, inclua versão/commit, distribuição,
-passos para reproduzir e uma experiência mínima sem dados privados.
-
-Leia [CONTRIBUTING](CONTRIBUTING.md), revise os testes afetados e envie mudanças
-pequenas. Problemas sensíveis seguem a [política de segurança](SECURITY.md).
-[Changelog](docs/CHANGELOG.md) · [Relatório do lançamento](docs/releases/ALPHA_0_1_0_LANCAMENTO.md)
+- **Bug report**: abra uma issue com versão/commit, distribuição Linux,
+  GPU/driver, passos para reproduzir e uma experiência mínima sem dados
+  privados.
+- **Segurança**: vulnerabilidades seguem o canal privado do GitHub —
+  veja §20.4 do manual antes de publicar qualquer detalhe.
+- **Colaboração**: leia as convenções e o fluxo de teste em §17–§18 do manual,
+  mantenha as mudanças pequenas e preserve dados e WIPs de outros autores.
+- Agente de IA? Regras obrigatórias em §19 (preservação de trabalho, proibições
+  destrutivas, HDD-Safe e validação honesta).
 
 ## Licença e créditos
 
-Código próprio sob [MIT](LICENSE). LINBLUX utiliza raylib, Bullet, Lua, RmlUi,
-Dear ImGui, rlImGui, stb e nlohmann/json; seus avisos e direitos permanecem
-preservados. FFmpeg é opcional e sua licença depende da build vinculada.
-[Recursos, créditos e obrigações de distribuição](docs/ASSETS_E_LICENCAS.md).
+Código próprio sob [MIT](LICENSE). LINBLUX utiliza raylib, Bullet, Lua 5.4,
+RmlUi, Dear ImGui, rlImGui, stb e nlohmann/json; seus avisos e direitos
+permanecem preservados. FFmpeg é opcional e sua licença depende da build
+vinculada (a build atual declara `GPL version 2 or later`). Ícones Lucide
+(ISC) são gerados por `tools/icons/generate_icons.py` para `assets/ui/icons/`.
+Créditos e obrigações de distribuição completos em §24 do manual.
