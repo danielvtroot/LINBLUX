@@ -318,13 +318,38 @@ void StudioRenderer::RenderGeometry(Rml::CompiledGeometryHandle geometry, Rml::V
     RenderInterface_GL3::RenderGeometry(geometry, translation, texture);
 }
 
+// Resolve the icons/ subdirectory relative to the UI asset root.
+// The directory is located at share/linblux/ui/icons/ in the build tree and
+// at assets/ui/icons/ in the source tree (used during development).
+static std::filesystem::path LucideIconPath(const std::string& iconFilename) {
+    // Build-tree path: <exe>/../share/linblux/ui/icons/<file>
+    const auto appDir = std::filesystem::path(GetApplicationDirectory());
+    for (const auto& candidate : {
+            appDir / "share/linblux/ui/icons" / iconFilename,
+            appDir.parent_path() / "share/linblux/ui/icons" / iconFilename,
+            // Source-tree fallback (development)
+            appDir.parent_path().parent_path() / "assets/ui/icons" / iconFilename,
+            std::filesystem::path("assets/ui/icons") / iconFilename,
+        }) {
+        if (std::filesystem::exists(candidate)) return candidate;
+    }
+    return {};
+}
+
 Rml::TextureHandle StudioRenderer::LoadTexture(Rml::Vector2i& dimensions, const Rml::String& source) {
     const bool full=source.rfind("experience-full:",0)==0;
     const int maxEdge=full?1920:kUiTextureMaxEdge;
     const auto name = std::filesystem::path(source).filename().string();
     Image image{};
     if (name.rfind("icon-", 0) == 0) {
-        image = IconImage(name.substr(5));
+        // Try loading a Lucide PNG first; fall back to procedural IconImage.
+        const auto lucidePath = LucideIconPath(name + ".png");
+        if (!lucidePath.empty()) {
+            image = LoadImage(lucidePath.string().c_str());
+        }
+        if (!image.data) {
+            image = IconImage(name.substr(5));
+        }
     } else {
         const std::string path = full?source.substr(16):name == "linblux-logo" ? game::BuiltinAssetPath("logo.png") : name=="loblox-lock"?game::BuiltinAssetPath("lock.png"):source;
         if (path.empty() || !SafeImageFile(path)) return 0;

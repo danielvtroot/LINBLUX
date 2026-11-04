@@ -1,7 +1,6 @@
-/* Player surfaces, independent of the Studio theme.
-   Reference geometry: circular brand + shared controls capsule; 4 equal tabs,
-   two-column settings rows; equal footer actions. No multiplayer placeholders. */
-#game-layer { position: absolute; overflow: hidden; font-size: 16px; color: #f2f3f5; }
+/* LINBLUX Player — composição independente do Studio, identidade monocromática.
+   Geometria e layout preservados; cores migradas para paleta branco/preto. */
+#game-layer { position: absolute; overflow: hidden; font-size: 16px; color: #F2F3F5; }
 #game-layer button, #game-layer input { tab-index: auto; focus: auto; }
 /* RML has no browser user-agent rules. Artwork/labels must focus their button,
    not become independent focus leaves (which breaks Tab and Enter). */
@@ -12,10 +11,10 @@
 #game-topbar img, #game-topbar .menu-button img { display: block; width: 26px; height: 26px; margin: 0 auto; }
 #game-topbar .logo-button img { width: 28px; height: auto; max-height: 28px; margin: auto; }
 #game-capsule { display: flex; padding: 0 5px; border-radius: 23px; background-color: #111318ed; }
-#game-topbar button:hover { background-color: #42454cd9; border-color: transparent; }
-#game-topbar button:active { background-color: #5d6269e0; }
-#game-topbar button.selected { background-color: #ffffff19; }
-#game-topbar button:focus { border-color: #c8d9f5; }
+#game-topbar button:hover { background-color: #FFFFFF15; border-color: transparent; }
+#game-topbar button:active { background-color: #FFFFFF26; }
+#game-topbar button.selected { background-color: #FFFFFF1A; }
+#game-topbar button:focus { border-color: #FFFFFF; }
 /* Health is rendered once in the shared gameplay texture. */
 #health { display: none; pointer-events: none; }
 /* The software cursor follows the captured virtual pointer supplied by C++.
@@ -23,75 +22,75 @@
 #mouse-lock-cursor { position: absolute; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: -14px 0 0 -14px; pointer-events: none; focus: none; }
 #mouse-lock-cursor img { display: block; width: auto; height: auto; max-width: 28px; max-height: 28px; margin: 0; focus: none; }
 #pause { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; z-index: 2; padding: 64px 0 14px; background-color: #080d142e; }
-.pause-panel { display: flex; flex-direction: column; width: 84%; height: 96%; max-width: 1440px; max-height: 800px; min-height: 0; padding: 0 22px 18px; border: 1px #ffffff10; border-radius: 12px; background-color: #101419df; }
-.pause-tabs { display: flex; flex: 0 0 68px; height: 68px; margin-bottom: 6px; border-bottom: 1px #b4bec23a; }
-.pause-tabs button { display: flex; flex: 1; justify-content: center; align-items: center; height: 68px; padding: 0 10px; font-size: 19px; color: #a5abb2; border: 0px; border-bottom: 3px transparent; border-radius: 0px; background-color: transparent; transition: color 0.12s, background-color 0.12s; }
-.pause-tabs button img { width: 27px; height: 27px; margin-right: 12px; image-color: #b0b6bf; }
-.pause-tabs button.active { background-color: transparent; border-color: #f0f3f7; color: #fff; }
+.pause-panel { display: flex; flex-direction: column; width: 84%; height: 96%; max-width: 1440px; max-height: 800px; min-height: 0; padding: 0 22px 18px; border: 1px #FFFFFF15; border-radius: 12px; background-color: #111318DF; }
+.pause-tabs { display: flex; flex: 0 0 68px; height: 68px; margin-bottom: 6px; border-bottom: 1px #FFFFFF1A; }
+.pause-tabs button { display: flex; flex: 1; justify-content: center; align-items: center; height: 68px; padding: 0 10px; font-size: 19px; color: #B8B8B8; border: 0px; border-bottom: 3px transparent; border-radius: 0px; background-color: transparent; transition: color 0.12s, background-color 0.12s; }
+.pause-tabs button img { width: 27px; height: 27px; margin-right: 12px; image-color: #B8B8B8; }
+.pause-tabs button.active { background-color: transparent; border-color: #FFFFFF; color: #fff; }
 .pause-tabs button.active img { image-color: #fff; }
-.pause-tabs button:hover { background-color: #ffffff0d; color: white; }
-.pause-tabs button:focus { background-color: #ffffff12; }
+.pause-tabs button:hover { background-color: #FFFFFF0D; color: white; }
+.pause-tabs button:focus { background-color: #FFFFFF12; }
 #pause-content { flex: 1; min-height: 0; width: 100%; padding: 6px 3px 4px; overflow: auto; font-size: 17px; }
 #pause-content h2 { font-size: 22px; }
-#pause-content .muted { color: #b8bec6; }
+#pause-content .muted { color: #B8B8B8; }
 .setting-row { display: flex; align-items: center; min-height: 84px; padding: 12px 12px; border-radius: 9px; }
-.setting-row:hover { background-color: #ffffff0b; }
+.setting-row:hover { background-color: #FFFFFF0B; }
 .setting-copy { width: 39%; padding-right: 22px; flex-shrink: 0; }
 .setting-copy span { display: block; font-size: 17px; }
-.setting-copy small { display: block; font-size: 12px; color: #b0b7be; margin-top: 7px; line-height: 1.35; }
+.setting-copy small { display: block; font-size: 12px; color: #B8B8B8; margin-top: 7px; line-height: 1.35; }
 .setting-control { display: flex; align-items: center; width: 61%; min-width: 0; }
 .cycle { justify-content: space-between; }
 .cycle button { width: 42px; height: 46px; padding: 7px; border: 1px transparent; border-radius: 7px; background-color: transparent; }
 .cycle button img { width: 28px; height: 30px; margin: 0; }
-.cycle button:hover { background-color: #ffffff15; }
-.cycle button:focus { border-color: #a5c7fa; }
+.cycle button:hover { background-color: #FFFFFF15; }
+.cycle button:focus { border-color: #FFFFFF; }
 .cycle .cycle-value, #camera-mode { flex: 1; text-align: center; width: auto; font-size: 17px; white-space: nowrap; }
 .cycle .cycle-value { height: 46px; }
 .slider-control input[type=range] { flex: 1; width: auto; min-width: 50px; height: 28px; margin-right: 14px; padding: 0; border: 0px; background-color: transparent; }
-.slider-control slidertrack { height: 5px; margin-top: 11px; border-radius: 3px; background-color: #aeb5bf6b; }
-.slider-control sliderbar { width: 16px; height: 21px; margin-top: 4px; border-radius: 6px; background-color: #f4f6f8; border: 1px #c7ced8; }
-.slider-control sliderprogress { height: 5px; border-radius: 3px; background-color: #e6eaf1; }
-.slider-control sliderbar:hover, .slider-control sliderbar:active { background-color: #aacaff; }
+.slider-control slidertrack { height: 5px; margin-top: 11px; border-radius: 3px; background-color: #FFFFFF20; }
+.slider-control sliderbar { width: 16px; height: 21px; margin-top: 4px; border-radius: 6px; background-color: #FFFFFF; border: 1px #FFFFFF; }
+.slider-control sliderprogress { height: 5px; border-radius: 3px; background-color: #FFFFFF; }
+.slider-control sliderbar:hover, .slider-control sliderbar:active { background-color: #E0E0E0; }
 .slider-control sliderarrowdec, .slider-control sliderarrowinc { width: 0; }
-.slider-control input.player-number { width: 78px; height: 36px; flex-shrink: 0; text-align: center; padding: 7px 2px; font-size: 15px; border-radius: 7px; border: 1px #a8b1be47; background-color: #30323899; }
-.slider-control input.player-number:focus { background-color: #384760; border-color: #a5c7fa; }
+.slider-control input.player-number { width: 78px; height: 36px; flex-shrink: 0; text-align: center; padding: 7px 2px; font-size: 15px; border-radius: 7px; border: 1px #FFFFFF30; background-color: #FFFFFF0E; }
+.slider-control input.player-number:focus { background-color: #FFFFFF1A; border-color: #FFFFFF; }
 #settings-page .session-note { margin: 12px; }
-.player-card { display: flex; align-items: center; padding: 18px 12px; margin: 0; border-radius: 0; border-bottom: 1px #ffffff20; background-color: transparent; }
-.player-emblem { width: 62px; height: 62px; flex: 0 0 62px; padding: 11px; border-radius: 12px; background-color: #ffffff12; margin-right: 18px; }
+.player-card { display: flex; align-items: center; padding: 18px 12px; margin: 0; border-radius: 0; border-bottom: 1px #FFFFFF20; background-color: transparent; }
+.player-emblem { width: 62px; height: 62px; flex: 0 0 62px; padding: 11px; border-radius: 12px; background-color: #FFFFFF12; margin-right: 18px; }
 .player-emblem img { width: 40px; height: 40px; }
 .player-identity { flex: 1; min-width: 0; }
-.player-eyebrow { font-size: 10px; letter-spacing: 1px; color: #b7c0cd; }
+.player-eyebrow { font-size: 10px; letter-spacing: 1px; color: #B8B8B8; }
 .player-card h2 { margin: 4px 0; }
-.session-indicator { font-size: 13px; color: #c0c7d0; }
+.session-indicator { font-size: 13px; color: #B8B8B8; }
 .session-logo { width: 44px; height: auto; max-height: 44px; margin-left: 12px; }
-.session-row { display: flex; justify-content: space-between; padding: 17px 12px; font-size: 17px; border-bottom: 1px #ffffff12; }
+.session-row { display: flex; justify-content: space-between; padding: 17px 12px; font-size: 17px; border-bottom: 1px #FFFFFF12; }
 .session-row b { display: block; width: 61%; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .session-actions { display: flex; width: 61%; margin: 0; }
-.session-actions button { flex: 1; margin-right: 7px; height: 42px; padding: 10px 4px; font-size: 13px; border: 1px #ffffff29; background-color: #ffffff0e; border-radius: 7px; }
+.session-actions button { flex: 1; margin-right: 7px; height: 42px; padding: 10px 4px; font-size: 13px; border: 1px #FFFFFF29; background-color: #FFFFFF0E; border-radius: 7px; }
 .session-actions button:last-child { margin-right: 0; }
-.key-hint { font-size: 10px; color: #aebdcc; margin-left: 6px; }
-.session-note { font-size: 12px; color: #adb6c1; line-height: 1.5; margin: 14px 12px; }
+.key-hint { font-size: 10px; color: #858585; margin-left: 6px; }
+.session-note { font-size: 12px; color: #B8B8B8; line-height: 1.5; margin: 14px 12px; }
 .pause-footer { display: flex; height: 70px; flex: 0 0 70px; padding-top: 12px; border: 0px; }
-.pause-footer button { display: flex; flex: 1; align-items: center; justify-content: center; height: 58px; padding: 10px 7px; border: 1px #ffffff10; background-color: #ffffff19; border-radius: 9px; font-size: 18px; font-weight: bold; margin-right: 10px; transition: background-color 0.12s; }
+.pause-footer button { display: flex; flex: 1; align-items: center; justify-content: center; height: 58px; padding: 10px 7px; border: 1px #FFFFFF15; background-color: #FFFFFF1A; border-radius: 9px; font-size: 18px; font-weight: bold; margin-right: 10px; transition: background-color 0.12s; }
 .pause-footer button:last-child { margin-right: 0; }
 .pause-footer button img { width: 25px; height: 25px; margin-right: 12px; }
-.pause-footer button.primary { background-color: #3155d2c9; border-color: #4266d85c; }
-.pause-footer button:hover { background-color: #ffffff32; }
-.pause-footer button.primary:hover { background-color: #4267e8e0; }
-.pause-footer button:active { background-color: #ffffff45; }
-.pause-footer button:focus { border-color: #b6cdff; }
-.footer-key { width: 29px; height: 29px; padding: 6px 0; margin-right: 12px; font-size: 10px; border: 1px #d5dce8; border-radius: 2px; }
-.control-row { display: flex; align-items: center; padding: 13px 12px; min-height: 54px; border-bottom: 1px #ffffff13; }
-#controls-page kbd { display: block; text-align: center; width: 138px; min-width: 138px; margin-right: 25px; padding: 7px; background-color: #ffffff0e; border: 1px #ffffff4a; border-radius: 5px; font-size: 13px; }
-#controls-page .control-row span { font-size: 15px; color: #e1e5eb; }
+.pause-footer button.primary { background-color: #FFFFFF; border-color: #FFFFFF; color: #0B0B0B; font-weight: bold; }
+.pause-footer button.primary:hover { background-color: #E0E0E0; color: #0B0B0B; }
+.pause-footer button:hover { background-color: #FFFFFF30; }
+.pause-footer button:active { background-color: #FFFFFF45; }
+.pause-footer button:focus { border-color: #FFFFFF; }
+.footer-key { width: 29px; height: 29px; padding: 6px 0; margin-right: 12px; font-size: 10px; border: 1px #FFFFFF50; border-radius: 2px; }
+.control-row { display: flex; align-items: center; padding: 13px 12px; min-height: 54px; border-bottom: 1px #FFFFFF13; }
+#controls-page kbd { display: block; text-align: center; width: 138px; min-width: 138px; margin-right: 25px; padding: 7px; background-color: #FFFFFF0E; border: 1px #FFFFFF40; border-radius: 5px; font-size: 13px; }
+#controls-page .control-row span { font-size: 15px; color: #FFFFFF; }
 #about-page { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100%; text-align: center; padding: 24px 15px; }
-#player-setting-error { color: #ffb1b7; font-size: 12px; margin: 0 12px; }
+#player-setting-error { color: #FFFFFF80; font-size: 12px; margin: 0 12px; }
 #about-page .about-logo { width: 80px; height: auto; max-height: 80px; margin: 0 auto 18px; }
 #about-page h1 { font-size: 28px; }
 #about-page p { font-size: 15px; }
 #pause-content scrollbarvertical { width: 7px; }
 #pause-content scrollbarvertical slidertrack { background-color: transparent; }
-#pause-content scrollbarvertical sliderbar { width: 2px; margin-left: 3px; background-color: #b6beca80; }
+#pause-content scrollbarvertical sliderbar { width: 2px; margin-left: 3px; background-color: #FFFFFF30; }
 .player-compact .pause-panel { width: 94%; padding: 0 13px 12px; border-radius: 10px; }
 .player-compact .pause-tabs, .player-compact .pause-tabs button { height: 51px; flex-basis: 51px; }
 .player-compact .pause-tabs button { font-size: 14px; padding: 0 3px; }
@@ -113,17 +112,19 @@
 
 /* LINBLUX side menu. Final rules override the earlier historical sizing. */
 #pause { padding: 0; display: block; background-color: #00000065; }
-#pause-panel.pause-panel { position: absolute; left: 0; top: 0; bottom: 0; width: 90%; max-width: 880px; height: 100%; max-height: none; padding: 0; border: 0px; border-right: 1px #ffffff20; border-radius: 0; display: flex; flex-direction: row; background-color: #151519f5; }
-.pause-sidebar { display: flex; flex-direction: column; width: 170px; flex: 0 0 170px; height: 100%; padding: 14px 10px; background-color: #101013b8; }
+#pause-panel.pause-panel { position: absolute; left: 0; top: 0; bottom: 0; width: 90%; max-width: 880px; height: 100%; max-height: none; padding: 0; border: 0px; border-right: 1px #FFFFFF20; border-radius: 0; display: flex; flex-direction: row; background-color: #151519F5; }
+.pause-sidebar { display: flex; flex-direction: column; width: 170px; flex: 0 0 170px; height: 100%; padding: 14px 10px; background-color: #0B0B0BBB; }
 .pause-brand { display: flex; align-items: center; height: 48px; margin-bottom: 12px; font-size: 17px; font-weight: bold; }
 .pause-brand img { width: 34px; height: auto; margin-right: 8px; }
 #pause .pause-tabs { display: flex; flex-direction: column; flex: 1; min-height: 0; height: auto; margin: 9px 0; border: 0px; overflow: auto; }
 #pause .pause-tabs button { flex: 0 0 37px; min-height: 37px; height: 37px; width: 100%; justify-content: flex-start; padding: 6px 12px; font-size: 16px; border: 0px; border-left: 3px transparent; border-radius: 4px; }
-#pause .pause-tabs button.active { color: white; background-color: #592631; border-left-color: #e34255; }
+#pause .pause-tabs button.active { color: white; background-color: #FFFFFF26; border-left-color: #FFFFFF; }
 #pause #resume, #pause #leave { flex: 0 0 38px; height: 38px; font-size: 14px; }
-#pause #leave { color: #f3a5ad; background-color: #331e24; }
+#pause #resume { background-color: #FFFFFF26; border: 2px #FFFFFF; font-weight: bold; }
+#pause #resume:hover { background-color: #FFFFFF40; }
+#pause #leave { color: #B8B8B8; background-color: #FFFFFF12; }
 .pause-main { display: flex; flex-direction: column; flex: 1; width: 1px; min-width: 0; height: 100%; padding: 0 18px 14px; }
-.pause-heading { display: flex; flex: 0 0 64px; height: 64px; align-items: center; border-bottom: 1px #ffffff15; margin-bottom: 8px; }
+.pause-heading { display: flex; flex: 0 0 64px; height: 64px; align-items: center; border-bottom: 1px #FFFFFF15; margin-bottom: 8px; }
 #pause-experience { flex: 1; overflow: hidden; font-size: 17px; }
 #pause-close { width: 36px; height: 36px; font-size: 24px; padding: 0; }
 #pause #pause-content { width: 100%; flex: 1; min-height: 0; overflow: auto; font-size: 15px; }
@@ -134,13 +135,13 @@
 #pause .session-logo, #pause .player-emblem { display: none; }
 #pause .control-row { padding: 10px 0; }
 #pause .control-row kbd { width: 115px; min-width: 115px; }
-#pause .primary { background-color: #ba2838; }
+#pause .primary { background-color: #FFFFFF26; border: 2px #FFFFFF; font-weight: bold; }
 /* Camera and audio share the same RmlUi range widget and visual language. */
 .slider-control { display: flex; align-items: center; }
 .slider-value { width: 56px; flex-shrink: 0; text-align: right; font-size: 15px; }
-.slider-control input:disabled sliderbar { background-color: #777c85; }
-.slider-control input:disabled sliderprogress { background-color: #696e77; }
-.slider-control input:focus sliderbar { border-color: #d7263f; }
+.slider-control input:disabled sliderbar { background-color: #FFFFFF30; }
+.slider-control input:disabled sliderprogress { background-color: #FFFFFF22; }
+.slider-control input:focus sliderbar { border-color: #FFFFFF; }
 .audio-grid .audio-card { width: 304px; flex-shrink: 0; min-height: 200px; padding: 14px; }
 .audio-card-header .audio-name { font-size: 14px; white-space: normal; }
 .audio-meta { font-size: 12px; white-space: normal; line-height: 1.4; }

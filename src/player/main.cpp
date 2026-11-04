@@ -51,7 +51,7 @@ int main(int argc,char** argv) {
         std::printf("LINBLUX Engine: %s; erros Lua: %zu\n",valid&&scriptErrors==0?"experiência validada":"validação falhou",scriptErrors);
         return valid&&scriptErrors==0?0:1;
     }
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_VSYNC_HINT);InitWindow(1280,720,"LINBLUX Player");
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_VSYNC_HINT|FLAG_MSAA_4X_HINT);InitWindow(1280,720,"LINBLUX Player");
     if(!IsWindowReady()){runtime.stop(false);std::fprintf(stderr,"Falha ao criar a janela gráfica do LINBLUX Player.\n");return 1;}
     SetExitKey(KEY_NULL);SetWindowMinSize(900,560);SetTargetFPS(60);
     Image icon=LoadImage(game::BuiltinAssetPath("logo.png").c_str());if(icon.data){SetWindowIcon(icon);UnloadImage(icon);}
