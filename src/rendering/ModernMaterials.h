@@ -24,7 +24,7 @@ private:
     bool attempted_=false,ready_=false;
     bool gridTextureAttempted_=false;
     Texture2D gridTexture_{};
-    Shader shader_{};Mesh cube_{},sphere_{};Material material_{};
+    Shader shader_{};Mesh cube_{},sphere_{},cylinder_{};Material material_{};
     std::vector<std::pair<Vector3,Vector3>> sphereGuides_;
 };
 }
