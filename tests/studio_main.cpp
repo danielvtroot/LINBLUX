@@ -24,6 +24,33 @@ using namespace loblox;
 namespace {
 int checks=0, failures=0;
 #define CHECK(x) do { ++checks; if (!(x)) { ++failures; std::printf("FAIL %d: %s\n",__LINE__,#x); } } while(false)
+void ModularCharacter() {
+    Scene author;author.buildDefaultScene();std::string error;
+    auto* model=author.createContainer(InstanceClass::Model,author.ensureService(InstanceClass::ServerStorage),"Avatar livre");
+    auto* root=author.createPart(PartShape::Sphere,{0,3,0});
+    auto* hand=author.createPart(PartShape::Block,{2,3,0});
+    CHECK(author.reparent(root,model,error));CHECK(author.reparent(hand,model,error));
+    CHECK(game::CharacterCore::setRole(*root,"Root",error));
+    CHECK(game::CharacterCore::setRole(*hand,"CustomHand",error));
+    CHECK(model->setAttribute("PlayerAvatar",true));
+    const auto id=model->id(),rootId=root->id();
+    Scene loaded;CHECK(projectio::fromJson(loaded,projectio::toJson(author),error));
+    CHECK(game::CharacterCore::validate(loaded,id,error));
+    CHECK(game::CharacterCore::role(*loaded.find(rootId))=="Root");
+    auto* script=loaded.createScript(InstanceClass::Script,loaded.ensureService(InstanceClass::ServerScriptService),"Character.lua");
+    script->source="assert(linblux.getCharacter("+std::to_string(id)+"))\nassert(linblux.getPart("+std::to_string(rootId)+"))\nlinblux.setCharacterModel("+std::to_string(id)+")";
+    const auto snapshot=projectio::toJson(loaded);
+    game::RuntimeSession runtime;CHECK(runtime.start(loaded,error));
+    CHECK(runtime.characterModel()!=0&&runtime.characterModel()!=id);
+    runtime.update(1.f/60,{});CHECK(runtime.scripts().errorCount()==0);
+    CHECK(game::CharacterCore::parts(runtime.scene(),runtime.characterModel()).size()==2);
+    CHECK(projectio::toJson(loaded)==snapshot);
+    const auto live=runtime.characterModel();
+    const auto liveRoots=game::CharacterCore::parts(runtime.scene(),live,"Root");
+    CHECK(liveRoots.size()==1);runtime.mutableScene().removeById(liveRoots.front());
+    runtime.update(1.f/60,{});CHECK(runtime.characterModel()==0);
+    runtime.stop(false);CHECK(projectio::toJson(loaded)==snapshot);
+}
 void HierarchyPresentation() {
     Scene scene;scene.buildDefaultScene();
     auto* folder=scene.createContainer(InstanceClass::Folder,nullptr,"Characters");
@@ -2025,6 +2052,6 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
-    HierarchyPresentation();SignificantFallPresentation();NpcHeadingRegression();StorageServices();RootServices();PartNamesLua();EditorSelectionAndNames();CursorConstruction();ConstructionPreviewWorkflow();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
+    ModularCharacter();HierarchyPresentation();SignificantFallPresentation();NpcHeadingRegression();StorageServices();RootServices();PartNamesLua();EditorSelectionAndNames();CursorConstruction();ConstructionPreviewWorkflow();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }
