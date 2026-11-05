@@ -342,8 +342,10 @@ void PhysicsWorld::updateShape(const Part& part, BodyEntry& entry) {
         static_cast<btSphereShape*>(entry.shape)->setUnscaledRadius(
             std::max(0.05f, part.sphereRadius()));
     } else if (part.shape() == PartShape::Cylinder) {
-        static_cast<btCylinderShape*>(entry.shape)->setCylinderShapeX(
-            std::max(0.05f, part.sphereRadius()), std::max(0.05f, 0.5f * part.size().y));
+        const auto half=static_cast<btCylinderShape*>(entry.shape)->getHalfExtentsWithMargin();
+        half.set(std::max(0.05f, part.sphereRadius()), std::max(0.05f, 0.5f * part.size().y), std::max(0.05f, part.sphereRadius()));
+        entry.shape->setMargin(0.0f);
+        static_cast<btCylinderShape*>(entry.shape)->setCylinderShapeX(half.getX(), half.getY(), half.getZ());
     } else {
         const Vector3 half = part.halfExtents();
         // Match btBoxShape's safe-margin policy after EVERY resize, not only
