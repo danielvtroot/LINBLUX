@@ -199,10 +199,10 @@ void DrawIcon(ImDrawList* drawList, ImVec2 center, float size, Icon icon, ImU32 
             break;
         case Icon::Cylinder:
             drawList->AddRectFilled(ImVec2(center.x - half * .62f, center.y - half * .62f),
-                                     ImGui::ImVec2(center.x + half * .62f, center.y + half * .62f), color, 1.0f);
-            drawList->AddEllipse(center,  ImGui::ImVec2(half * .62f, half * .26f), color, 0.0f, 24, 1.4f);
+                                     ImVec2(center.x + half * .62f, center.y + half * .62f), color, 1.0f);
+            drawList->AddEllipse(center,  ImVec2(half * .62f, half * .26f), color, 0.0f, 24, 1.4f);
             drawList->AddLine(ImVec2(center.x - half * .62f, center.y + half * .62f),
-                               ImGui::ImVec2(center.x + half * .62f, center.y + half * .62f), color, 1.4f);
+                               ImVec2(center.x + half * .62f, center.y + half * .62f), color, 1.4f);
             break;
         case Icon::Spawn:
             drawList->AddRectFilled(ImVec2(center.x - half, center.y + half * 0.2f),
