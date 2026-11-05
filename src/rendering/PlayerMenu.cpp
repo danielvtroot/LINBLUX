@@ -15,30 +15,43 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
  const Color white{242,238,242,255},muted{185,177,185,255},focus{255,255,255,230},panel{23,23,28,247};
  DrawRectangle(0,0,width,height,{0,0,0,(unsigned char)(90*t)});DrawRectangle(int(left),0,int(w),height,panel);
  DrawRectangle(int(left),0,int(side),height,{15,15,19,250});
- auto text=[&](const std::string& value,float x,float y,float size,Color color){DrawTextEx(font,value.c_str(),{x,y},size*s,s,color);};
- const auto mouse=GetMousePosition();int current=0;bool quit=false;
- if(!paused)draggingSlider_=-1;
- if(paused){if(ui::KeyPressed(KEY_TAB)||ui::KeyPressed(KEY_DOWN))focus_=(focus_+1)%std::max(1,count_);if(ui::KeyPressed(KEY_UP))focus_=(focus_+std::max(1,count_)-1)%std::max(1,count_);}
- auto button=[&](const std::string& label,Rectangle r,bool active=false){
-  const int id=current++;
-  return ui::Button(label.c_str(),r,font,s,paused,id==focus_,active);
- };
- if(brand)brand->draw({left+16*s,18*s,34*s,34*s},logo);
- else if(logo.id)DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{left+16*s,18*s,34*s,34*s},{0,0},0,WHITE);
- text("LINBLUX",left+58*s,26*s,17,white);
- if(button("Continuar",{left+10*s,76*s,side-20*s,36*s},true)){open_=false;runtime.resume();}
- const char* pages[]={"Jogador","Câmera","Controles","Áudio","Vídeo","Ajuda"};
- for(int i=0;i<6;++i)if(button(pages[i],{left+10*s,(126+42*i)*s,side-20*s,36*s},page_==i)){page_=i;scroll_=0;}
- if(button("Sair",{left+10*s,height-54*s,side-20*s,38*s}))quit=true;
- const float x=left+side+22*s,available=w-side-44*s;
- std::string heading=title;while(!heading.empty()&&MeasureTextEx(font,heading.c_str(),17*s,s).x>available-42*s)heading.pop_back();
- text(heading,x,26*s,17,white);
- if(button("×",{left+w-48*s,18*s,32*s,32*s})){open_=false;runtime.resume();}
- DrawLine(int(x),int(66*s),int(left+w-18*s),int(66*s),{80,80,88,255});
- const Rectangle content{x-8*s,76*s,available+16*s,height-90*s};
- if(paused&&CheckCollisionPointRec(mouse,content))scroll_=std::clamp(scroll_-GetMouseWheelMove()*36*s,0.f,250*s);
+auto text=[&](const std::string& value,float x,float y,float size,Color color){DrawTextEx(font,value.c_str(),{x,y},size*s,s,color);};
+    const auto mouse=GetMousePosition();int current=0;bool quit=false;
+    if(!paused)draggingSlider_=-1;
+    if(!paused&&!draggingMenu_)dragOffsetX_=dragOffsetY_=0;
+    if(paused){if(ui::KeyPressed(KEY_TAB)||ui::KeyPressed(KEY_DOWN))focus_=(focus_+1)%std::max(1,count_);if(ui::KeyPressed(KEY_UP))focus_=(focus_+std::max(1,count_)-1)%std::max(1,count_);}
+    auto button=[&](const std::string& label,Rectangle r,bool active=false){
+   const int id=current++;
+   return ui::Button(label.c_str(),r,font,s,paused,id==focus_,active);
+    };
+    // Topbar: only the 3D brand logo, draggable by the user. The old icon +
+    // "LINBLUX" label and the "Continuar" button are replaced by this single
+    // control, which keeps the click area and Esc behavior intact.
+    const float logoSide=44*s;
+    const Rectangle logoRect{left+14*s,18*s,logoSide,logoSide};
+    if(paused&&CheckCollisionPointRec(mouse,logoRect)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
+        draggingMenu_=true;dragOffsetX_=mouse.x-left;dragOffsetY_=mouse.y;
+    }
+    if(draggingMenu_){
+        if(IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
+            const float nx=mouse.x-dragOffsetX_,ny=mouse.y-dragOffsetY_;
+            left=std::clamp(nx,0.f,float(width)-w-4*s);
+        }else draggingMenu_=false;
+    }
+    if(brand)brand->draw(logoRect,logo);
+    else if(logo.id)DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{logoRect.x,logoRect.y,logoRect.width,logoRect.height},{0,0},0,WHITE);
+    const char* pages[]={"Jogador","Câmera","Controles","Áudio","Vídeo","Ajuda"};
+    for(int i=0;i<6;++i)if(button(pages[i],{left+10*s,(84+42*i)*s,side-20*s,36*s},page_==i)){page_=i;scroll_=0;}
+    if(button("Sair",{left+10*s,height-54*s,side-20*s,38*s}))quit=true;
+    const float x=left+side+22*s,available=w-side-44*s;
+    std::string heading=title;while(!heading.empty()&&MeasureTextEx(font,heading.c_str(),17*s,s).x>available-42*s)heading.pop_back();
+    text(heading,x,26*s,17,white);
+    if(button("×",{left+w-48*s,18*s,32*s,32*s})){open_=false;runtime.resume();}
+    DrawLine(int(x),int(48*s),int(left+w-18*s),int(48*s),{80,80,88,255});
+    const Rectangle content{x-8*s,60*s,available+16*s,height-74*s};
+    if(paused&&CheckCollisionPointRec(mouse,content))scroll_=std::clamp(scroll_-GetMouseWheelMove()*36*s,0.f,250*s);
  BeginScissorMode(int(content.x),int(content.y),int(content.width),int(content.height));
- float y=90*s-scroll_;
+ float y=84*s-scroll_;
  auto line=[&](const std::string& value){text(value,x,y,16,muted);y+=30*s;};
  auto action=[&](const std::string& label){const bool clicked=button(label,{x,y,available,36*s});y+=48*s;return clicked;};
  auto slider=[&](const char* label,float& value,float min,float max,bool enabled=true){

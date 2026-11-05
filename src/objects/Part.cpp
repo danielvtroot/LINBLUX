@@ -178,10 +178,6 @@ void Part::setSize(Vector3 size) {
     dirty_.shape = true;
 }
 
-float Part::sphereRadius() const {
-    if(shape_==PartShape::Sphere)return 0.5f*std::min(transform_.size.x,std::min(transform_.size.y,transform_.size.z));
-    return 0.5f*std::min(transform_.size.x,transform_.size.z);
-}
 
 void Part::setColor(Color color) {
     color_ = color;
