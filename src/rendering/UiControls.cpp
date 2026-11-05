@@ -42,7 +42,7 @@ bool Slider(Rectangle r,float& value,float minimum,float maximum,bool enabled,bo
     DrawRectangleRec(track,theme::border);
     // Keep the thumb distinguishable from the filled track at every volume.
     DrawRectangleRec({track.x,track.y,track.width*fraction,track.height},theme::secondary);
-    DrawCircleV({r.x+r.width*fraction,r.y+r.height/2},6*scale,enabled?theme::text:theme::disabled);
+    DrawCircleV({r.x+r.width*fraction,r.y+r.height/2},6*scale,theme::text);
     return before!=value;
 }
 void ProgressBar(Rectangle r,float fraction) {
