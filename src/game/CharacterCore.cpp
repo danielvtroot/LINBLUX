@@ -33,9 +33,19 @@ bool CharacterCore::move(Scene& scene,InstanceId id,RigidTransform target,std::s
     return scene.transformModel(id,frame,error);
 }
 InstanceId CharacterCore::spawn(Scene& scene,InstanceId source,RigidTransform target,std::string& error) {
-    if(!validate(scene,source,error)||!Valid(target))return 0;
+    if(!validate(scene,source,error))return 0;
+    if(!Valid(target)){error="Transformação inválida.";return 0;}
+    unsigned instances=0;
+    for(const auto& node:scene.objects()) {
+        const auto it=node->attributes().find("CharacterInstance");
+        if(it!=node->attributes().end())if(const auto* value=std::get_if<bool>(&it->second);value&&*value)++instances;
+    }
+    if(instances>=128){error="Limite de 128 personagens vivos atingido.";return 0;}
     auto* copy=scene.duplicateTree(*scene.find(source),scene.workspace());
     if(!copy){error="Não foi possível clonar o personagem.";return 0;}
+    if(!copy->setAttribute("CharacterInstance",true)||!copy->setAttribute("PlayerAvatar",false)) {
+        scene.removeById(copy->id());error="Limite de atributos do personagem atingido.";return 0;
+    }
     const auto root=parts(scene,copy->id(),"Root");const auto* part=scene.findPart(root.front());
     ModelFrame pivot;if(!scene.modelFrame(copy->id(),pivot,error)){scene.removeById(copy->id());return 0;}
     pivot.position=part->position();pivot.rotation=part->rotation();

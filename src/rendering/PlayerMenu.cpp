@@ -18,7 +18,7 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
  auto text=[&](const std::string& value,float x,float y,float size,Color color){DrawTextEx(font,value.c_str(),{x,y},size*s,s,color);};
  const auto mouse=GetMousePosition();int current=0;bool quit=false;
  if(!paused||!IsMouseButtonDown(MOUSE_BUTTON_LEFT))draggingSlider_=-1;
- if(paused){if(IsKeyPressed(KEY_TAB)||IsKeyPressed(KEY_DOWN))focus_=(focus_+1)%std::max(1,count_);if(IsKeyPressed(KEY_UP))focus_=(focus_+std::max(1,count_)-1)%std::max(1,count_);}
+ if(paused){if(ui::KeyPressed(KEY_TAB)||ui::KeyPressed(KEY_DOWN))focus_=(focus_+1)%std::max(1,count_);if(ui::KeyPressed(KEY_UP))focus_=(focus_+std::max(1,count_)-1)%std::max(1,count_);}
  auto button=[&](const std::string& label,Rectangle r,bool active=false){
   const int id=current++;
   return ui::Button(label.c_str(),r,font,s,paused,id==focus_,active);

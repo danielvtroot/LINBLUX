@@ -2,6 +2,7 @@
 #include "rendering/PlayerMenu.h"
 #include "rendering/BrandLogo3D.h"
 #include "ui/UiFont.h"
+#include "rendering/UiControls.h"
 #include "rendering/LuaUiRenderer.h"
 #include "experiences/ExperienceManager.h"
 #include "serialization/ProjectIO.h"
@@ -62,11 +63,8 @@ int main(int argc,char** argv) {
         SceneRenderer renderer;if(qualitySpecified)renderer.setQuality(quality);PlayerMenu menu;BrandLogo3D brand;const auto logo=game::AssetTexture(game::BuiltinAssetPath("logo.png"));int rendered=0;
         while(!WindowShouldClose()&&(!frames||rendered++<frames)) {
             const Rectangle menuButton{16,16,52,52};
-            // Drain queued key-down events so a short Esc press survives a
-            // slow rendering frame even when GLFW sees down+up in one poll.
-            bool menuKey=false;
-            for(int key=GetKeyPressed();key;key=GetKeyPressed())if(key==KEY_ESCAPE)menuKey=true;
-            if(menuKey||IsKeyPressed(KEY_ESCAPE)||(CheckCollisionPointRec(GetMousePosition(),menuButton)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))){menu.toggle();if(!menu.open())runtime.resume();EnableCursor();}
+            ui::BeginInputFrame();
+            if(ui::KeyPressed(KEY_ESCAPE)||(CheckCollisionPointRec(GetMousePosition(),menuButton)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))){menu.toggle();if(!menu.open())runtime.resume();EnableCursor();}
             const bool paused=menu.open(); // captura de entrada; simulação continua Playing
             game::PlayerInput input;
             if(!paused)input.script=game::CaptureScriptInput();

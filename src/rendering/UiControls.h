@@ -4,6 +4,8 @@
 namespace loblox::ui {
 // Native presentation adapter: shared tokens, geometry and input contracts.
 // No editor dependencies, allocations or offscreen buffers per control.
+void BeginInputFrame();
+bool KeyPressed(int key);
 enum class Surface { Base, Raised, Overlay, Interactive };
 void DrawSurface(Rectangle bounds, Surface surface, bool highlighted=false);
 bool Button(const char* label, Rectangle bounds, Font font, float scale,

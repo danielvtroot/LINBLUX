@@ -178,12 +178,28 @@ void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const Player
         const float desiredYaw = std::atan2(-velocity.x, -velocity.z);
         yaw_ += std::remainder(desiredYaw - yaw_, 2*PI) * Response(2, dt);
     }
-    const auto bodies = runtime.rig().evaluate(runtime.pose(), {root,runtime.characterRoot().rotation});
-    Vector3 desiredTarget = Compose(bodies[Head], {{0,.08f,0}}).position;
+    std::vector<RigidTransform> bodies;
+    std::vector<Vector3> sizes;
+    Vector3 desiredTarget=root;
     const bool mouseLocked=runtime.shiftLockActive();
-    if(mouseLocked) {
-        const auto neutral=runtime.rig().evaluate(Pose{},RigidTransform{});
-        desiredTarget=Vector3Add(root,{0,neutral[Head].position.y+.08f,0});
+    if(runtime.characterModel()) {
+        Vector3 heads{};unsigned headCount=0;
+        for(auto id:CharacterCore::parts(runtime.scene(),runtime.characterModel())) {
+            const auto* part=runtime.scene().findPart(id);
+            bodies.push_back({part->position(),part->rotation()});sizes.push_back(part->size());
+            if(CharacterCore::role(*part)=="Head"){heads=Vector3Add(heads,part->position());++headCount;}
+        }
+        if(headCount)desiredTarget=Vector3Scale(heads,1.f/headCount);
+        desiredTarget.y+=.08f;
+    }else {
+        const auto legacy=runtime.rig().evaluate(runtime.pose(),{root,runtime.characterRoot().rotation});
+        bodies.assign(legacy.begin(),legacy.end());
+        for(const auto& part:runtime.rig().bodies)sizes.push_back(part.size);
+        desiredTarget=Compose(bodies[Head],{{0,.08f,0}}).position;
+        if(mouseLocked) {
+            const auto neutral=runtime.rig().evaluate(Pose{},RigidTransform{});
+            desiredTarget=Vector3Add(root,{0,neutral[Head].position.y+.08f,0});
+        }
     }
     if(mouseLocked) {
         // Position was already interpolated between Bullet ticks. Following
@@ -206,10 +222,10 @@ void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const Player
                        std::cos(yaw_) * std::cos(pitch_)};
     if (!settings.allowFirstPerson && !firstPerson_) {
         float visualMinimum = settings.minZoom;
-        for (int i = 0; i < kBodyCount; ++i) {
+        for (std::size_t i = 0; i < bodies.size(); ++i) {
             const auto inverse = Inverse(bodies[i]);
             const auto local = Compose(inverse,{aimTarget}).position;
-            const auto half = Vector3Scale(runtime.rig().bodies[i].size,.5f);
+            const auto half = Vector3Scale(sizes[i],.5f);
             if (InsideBox(local,half)) visualMinimum = std::max(visualMinimum,
                 BoxExit(local,Vector3RotateByQuaternion(back,inverse.rotation),half)+.15f);
         }
@@ -223,9 +239,9 @@ void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const Player
     if (firstPerson_) distance_ = .05f;
     camera_.position = Vector3Add(aimTarget, Vector3Scale(back, distance_));
     avatarOccluded_ = false;
-    for (int i = 0; i < kBodyCount; ++i) {
+    for (std::size_t i = 0; i < bodies.size(); ++i) {
         const auto local = Compose(Inverse(bodies[i]),{camera_.position}).position;
-        if (InsideBox(local,Vector3Scale(runtime.rig().bodies[i].size,.5f),.08f)) avatarOccluded_ = true;
+        if (InsideBox(local,Vector3Scale(sizes[i],.5f),.08f)) avatarOccluded_ = true;
     }
     camera_.target = Vector3Subtract(camera_.position, back);
     camera_.up = {0, 1, 0}; camera_.fovy = settings.cameraFov; camera_.projection = CAMERA_PERSPECTIVE;
@@ -785,13 +801,13 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     // One facing owner in locked modes, at display frequency. A 144/240 Hz
     // camera must not wait for the next 60 Hz physics tick to turn the body.
     if((!camera_.scripted()&&settings_.cameraLock) || shiftLockActive() || camera_.firstPerson())yaw_=camera_.yaw();
-    if(state_==RuntimeState::Playing)camera_.update(dt,renderCharacterRoot().position,velocity(),input,settings_,*this);
     if(characterModel_) {
         std::string error;
         if(!CharacterCore::move(*scene_,characterModel_,renderCharacterRoot(),error)) {
             scene_->removeById(characterModel_);characterModel_=0;scripts_.hostError(error);
         }
     }
+    if(state_==RuntimeState::Playing)camera_.update(dt,renderCharacterRoot().position,velocity(),input,settings_,*this);
     std::vector<InstanceId> fallen;
     for(auto* part:scene_->worldParts()) if(!part->anchored() && part->deletable() && part->position().y<scene_->workspace()->fallenPartsDestroyHeight())fallen.push_back(part->id());
     for(auto id:fallen)scene_->removeById(id);
