@@ -611,7 +611,44 @@ void DrawShadedSphere(Vector3 center, float radius, Color color, Vector3 lightDi
     rlEnd();
 }
 
-
+constexpr int kCylSlices=16;
+// Cilindro facetado com sombreamento por quad, eixo Y. A malha e fechada
+// (topo e fundo como fans), comparable ao DrawShadedSphere em custo.
+void DrawShadedCylinder(Vector3 center, Vector3 size, Quaternion rotation, Color color,
+                       Vector3 lightDirection, float sunIntensity, float brightness,
+                       float gloss=0.0f, bool unlit=false) {
+    const float radius=std::max(0.05f,0.5f*std::min(size.x,size.z));
+    const float halfY=std::max(0.05f,0.5f*size.y);
+    const auto point=[&](float theta,float y){return Vector3Add(center,Vector3RotateByQuaternion(
+        {radius*std::cos(theta),y,radius*std::sin(theta)},rotation));};
+    const auto normal=[&](float theta,float y){
+        const Vector3 local={std::cos(theta),0.f,std::sin(theta)};
+        return Vector3Normalize(Vector3RotateByQuaternion(local,rotation));};
+    rlBegin(RL_TRIANGLES);
+    for(int slice=0;slice<kCylSlices;++slice) {
+        const float t0=float(slice)/kCylSlices*2*PI,t1=float(slice+1)/kCylSlices*2*PI;
+        const auto a=point(t0,halfY),b=point(t1,halfY),c=point(t1,-halfY),d=point(t0,-halfY);
+        const auto na=normal(t0,halfY),nb=normal(t1,halfY),nc=normal(t1,-halfY),nd=normal(t0,-halfY);
+        const auto tri=[&](Vector3 a,Vector3 b,Vector3 c,Vector3 n){
+            // Guarantee outward winding: the geometric normal must agree with
+            // the shading normal, otherwise the cylinder renders inside-out.
+            auto geo=Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a));
+            if(Vector3DotProduct(geo,n)<0)std::swap(b,c);
+            const Vector3 qc=Vector3Scale(Vector3Add(Vector3Add(a,b),c),1.f/3.f);
+            if(color.a<255&&Vector3DotProduct(n,Vector3Subtract(gSurfaceLight.camera,qc))<=0)return;
+            SetColor4(ApplyFog(LitSurface(color,n,qc,lightDirection,sunIntensity,brightness,gloss,unlit),qc));
+            Triangle(a,b,c);};
+        tri(a,b,d,nd);tri(a,d,c,nc); // corpo
+        // Topo: fan em t0..t1 em t0, invertido para o normal apontar para cima.
+        const auto topCenter=Vector3Add(center,Vector3RotateByQuaternion({0,halfY,0},rotation));
+        const auto topN=Vector3Normalize(Vector3RotateByQuaternion({0,1,0},rotation));
+        tri(topCenter,a,b,topN);tri(topCenter,b,c,topN);
+        const auto botCenter=Vector3Add(center,Vector3RotateByQuaternion({0,-halfY,0},rotation));
+        const auto botN=Vector3Normalize(Vector3RotateByQuaternion({0,-1,0},rotation));
+        tri(botCenter,d,c,botN);tri(botCenter,c,b,botN);
+    }
+    rlEnd();
+}
 
 // Superelipsoide (expoente ~4.5): silhueta de bloco com cantos suavizados.
 // Malha fechada, sem emendas, custo comparável à esfera facetada existente.
@@ -1294,6 +1331,11 @@ void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width
                              lightDirection, sunIntensity, brightness,
                              MaterialGloss(part->material()),
                              part->material() == PartMaterial::Neon);
+        } else if (part->shape() == PartShape::Cylinder) {
+            DrawShadedCylinder(part->position(), part->size(), part->rotation(),
+                               MaterialColor(*part), lightDirection, sunIntensity, brightness,
+                               MaterialGloss(part->material()),
+                               part->material() == PartMaterial::Neon);
         } else {
             const Color baseColor = part->usesConstructionGrid() && part->material3D()
                                         ? part->material3D()->baseColor
