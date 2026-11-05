@@ -73,6 +73,7 @@ public:
     bool playing() const;
     bool gameMenuOpen() const {return gameMenuOpen_||runtime_.state()==game::RuntimeState::Paused;}
     void toggleGameMenu();
+    void drawGameMenuOverlay(int width, int height);
     bool experienceOverlay() const;
     GameplayCursorState gameplayCursor() const;
 
@@ -129,7 +130,6 @@ private:
     void drawPauseMenu();
     void drawGameMenuOverlay(int width, int height);
     void startPlay();
-    void stopPlay();
     void setGameplayCapture(bool capture);
     void drawGameplayViewport(const EditorInput& input, InputContext context, Vector2 imagePosition);
     void insertR6();

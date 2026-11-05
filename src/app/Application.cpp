@@ -15,6 +15,7 @@
 #include "core/Diagnostics.h"
 #include "editor/EditorUI.h"
 #include "rendering/SceneRenderer.h"
+#include "rendering/UiControls.h"
 #include "serialization/ProjectIO.h"
 
 namespace loblox {
@@ -211,6 +212,7 @@ int Application::run() {
         rlImGuiEnd();
         if(ui_)ui_->renderModernFrontend();
         // Desenha o menu 3D do player (logo no canto + painel Esc) sobre o estúdio.
+        ui::BeginInputFrame();
         if (ui_) ui_->drawGameMenuOverlay(GetScreenWidth(), GetScreenHeight());
         EndDrawing();
         if(reportTiming) {frameTotal+=GetFrameTime();if(++frameSamples==60){std::fprintf(stderr,"Application frame ms (%s): %.2f\n",config_.modernUI?"rml":"legacy",frameTotal*1000/frameSamples);frameSamples=0;frameTotal=0;}}
