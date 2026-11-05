@@ -19,6 +19,8 @@
 #include "editor/ModelTransformSession.h"
 #include "game/Runtime.h"
 #include "rendering/SceneRenderer.h"
+#include "rendering/BrandLogo3D.h"
+#include "rendering/PlayerMenu.h"
 #include "raylib.h"
 
 namespace loblox {
