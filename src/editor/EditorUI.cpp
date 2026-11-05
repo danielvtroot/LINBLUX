@@ -1175,6 +1175,7 @@ void EditorUI::drawMainMenuBar() {
         if (ImGui::MenuItem(i18n::Label("Rotate"), "4")) setTool(ToolMode::Rotate, "menu");
         if (ImGui::MenuItem(i18n::Label("Insert Block"))) insertPart(PartShape::Block);
         if (ImGui::MenuItem(i18n::Label("Insert Sphere"))) insertPart(PartShape::Sphere);
+        if ( ImGui::MenuItem(i18n::Label("Insert Cylinder"))) insertPart(PartShape::Cylinder);
         if (ImGui::MenuItem(i18n::Label("Insert Spawn"))) insertSpawnLocation();
         if (ImGui::MenuItem(i18n::Label("Insert Folder"))) insertContainer(InstanceClass::Folder);
         if (ImGui::MenuItem(i18n::Label("Insert Model"))) insertContainer(InstanceClass::Model);
