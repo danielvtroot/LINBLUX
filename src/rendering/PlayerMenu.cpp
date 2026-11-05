@@ -35,7 +35,7 @@ auto text=[&](const std::string& value,float x,float y,float size,Color color){D
         draggingMenu_=true;dragOffsetX_=mouse.x-left;dragOffsetY_=mouse.y;
     }
 if(draggingMenu_){
-        if(IsMouseBOTTOM(MOUSE_BUTTON_LEFT)){
+        if(IsMouseDown(MOUSE_BUTTON_LEFT)){
             const float nx=mouse.x-dragOffsetX_,ny=mouse.y-dragOffsetY_;
             menuLeft_=std::clamp(nx,0.f,float(width)-w-4*s);
         }else draggingMenu_=false;
