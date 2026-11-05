@@ -196,7 +196,11 @@ int Application::run() {
         const float deltaSeconds = GetFrameTime();
 
         // Play owns a different Scene and Bullet world. Authoring freezes exactly.
-        if (!ui_ || (!ui_->playing()&&!ui_->experienceOverlay())) physics_.simulate(scene_, deltaSeconds);
+        const bool menuOpen = ui_ && ui_->gameMenuOpen();
+        if (!ui_ || (!ui_->playing()&&!ui_->experienceOverlay()&&!menuOpen)) physics_.simulate(scene_, deltaSeconds);
+
+        // Fecha/abre o menu 3D com Esc (igual ao Player).
+        if (ui_ && IsKeyPressed(KEY_ESCAPE)) ui_->toggleGameMenu();
 
         BeginDrawing();
         ClearBackground(Color{18, 18, 20, 255});
@@ -206,6 +210,8 @@ int Application::run() {
         }
         rlImGuiEnd();
         if(ui_)ui_->renderModernFrontend();
+        // Desenha o menu 3D do player (logo no canto + painel Esc) sobre o estúdio.
+        if (ui_) ui_->drawGameMenuOverlay(GetScreenWidth(), GetScreenHeight());
         EndDrawing();
         if(reportTiming) {frameTotal+=GetFrameTime();if(++frameSamples==60){std::fprintf(stderr,"Application frame ms (%s): %.2f\n",config_.modernUI?"rml":"legacy",frameTotal*1000/frameSamples);frameSamples=0;frameTotal=0;}}
     }

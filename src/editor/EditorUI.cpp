@@ -565,6 +565,14 @@ EditorUI::EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera,
     cameraMoveSpeed_ = camera_.moveSpeed();
     cameraLookSensitivity_ = camera_.lookSensitivity();
     camera_.reset();
+    const auto logoPath=game::BuiltinAssetPath("logo.png");
+    if(!logoPath.empty()) {
+        Image img=LoadImage(logoPath.c_str());
+        if(img.data) {
+            gameLogo_=LoadTextureFromImage(img);
+            UnloadImage(img);
+        }
+    }
     const char* trace = std::getenv("LOBLOX_TRACE_INPUT");
     traceInput_ = trace && std::strcmp(trace, "1") == 0;
 }

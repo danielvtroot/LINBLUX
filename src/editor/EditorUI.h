@@ -72,6 +72,7 @@ public:
     ToolMode tool() const { return tool_; }
     bool playing() const;
     bool gameMenuOpen() const {return gameMenuOpen_||runtime_.state()==game::RuntimeState::Paused;}
+    void toggleGameMenu();
     bool experienceOverlay() const;
     GameplayCursorState gameplayCursor() const;
 
@@ -126,6 +127,7 @@ private:
     void drawAnimationEditor();
     void drawGameSettings();
     void drawPauseMenu();
+    void drawGameMenuOverlay(int width, int height);
     void startPlay();
     void stopPlay();
     void setGameplayCapture(bool capture);
@@ -200,6 +202,9 @@ private:
     EditorGeometryView editorGeometry_{};
     std::unique_ptr<StudioFrontend> frontend_;
     game::RuntimeSession runtime_;
+    BrandLogo3D brand_;
+    PlayerMenu menu_;
+    Texture2D gameLogo_{};
     bool gameplayCapture_ = false;
     bool gameMenuOpen_ = false;
     bool gameplaySkipDelta_ = true;
