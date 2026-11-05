@@ -49,11 +49,11 @@ if(draggingMenu_){
     std::string heading=title;while(!heading.empty()&&MeasureTextEx(font,heading.c_str(),17*s,s).x>available-42*s)heading.pop_back();
     text(heading,x,26*s,17,white);
     if(button("×",{left+w-48*s,18*s,32*s,32*s})){open_=false;runtime.resume();}
-    DrawLine(int(x),int(48*s),int(left+w-18*s),int(48*s),{80,80,88,255});
-    const Rectangle content{x-8*s,60*s,available+16*s,height-74*s};
+DrawLine(int(x),int(66*s),int(left+w-18*s),int(66*s),{80,80,88,255});
+    const Rectangle content{x-8*s,76*s,available+16*s,height-90*s};
     if(paused&&CheckCollisionPointRec(mouse,content))scroll_=std::clamp(scroll_-GetMouseWheelMove()*36*s,0.f,250*s);
- BeginScissorMode(int(content.x),int(content.y),int(content.width),int(content.height));
- float y=84*s-scroll_;
+    BeginScissorMode(int(content.x),int(content.y),int(content.width),int(content.height));
+    float y=90*s-scroll_;
  auto line=[&](const std::string& value){text(value,x,y,16,muted);y+=30*s;};
  auto action=[&](const std::string& label){const bool clicked=button(label,{x,y,available,36*s});y+=48*s;return clicked;};
  auto slider=[&](const char* label,float& value,float min,float max,bool enabled=true){
