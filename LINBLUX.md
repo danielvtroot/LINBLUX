@@ -78,7 +78,7 @@ evoluindo por incrementos verificados em vez de promessas adiantadas.
 | `linblux_engine` | objetos, cena, física Bullet, Lua, rigs/animação, persistência, experiências — camada sem interface |
 | `linblux_editing` | gizmos, histórico, câmera do editor; sem posse da cena/física/Lua do runtime |
 | `linblux_renderer` | `SceneRenderer`, `ModernMaterials`, sombras direcionais, `SceneTarget`, `PlayerMenu`, `ExperienceOverlay`, `LuaUiRenderer` |
-| `linblux_presentation` | catálogo de localização (`src/ui/Localization.cpp`) |
+| `linblux_presentation` | localização e fonte nativa compartilhada (`src/ui/Localization.cpp`, `src/ui/UiFont.cpp`) |
 | `linblux_media` | `VideoBackground` do Início (FFmpeg opcional) |
 | `linblux_studio` | frontends, painéis e ações do editor (`linblux_editor` é alias) |
 | `linblux_imgui` | Dear ImGui + rlImGui vendados em `third_party/` |
