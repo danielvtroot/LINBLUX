@@ -370,6 +370,29 @@ struct LuaRuntime::Impl {
         else {value=Vector3RotateByQuaternion(Vector3Scale(value,frame.scale),frame.rotation);if(!Direction)value=Vector3Add(value,frame.position);}
         ModernVector(L,value);return 1;
     }
+    static InstanceId CharacterId(lua_State* L,int index) {
+        if(lua_isinteger(L,index)){const auto id=lua_tointeger(L,index);Require(id>0,"id inválido");return InstanceId(id);}
+        return Host(L).instance(L,index).id();
+    }
+    static int CharacterGet(lua_State* L) {
+        auto& self=Host(L);const auto id=CharacterId(L,1);std::string error;
+        if(!game::CharacterCore::validate(self.runtime->scene(),id,error)){lua_pushnil(L);return 1;}
+        self.pushInstance(L,self.runtime->scene().find(id),true);return 1;
+    }
+    static int CharacterPart(lua_State* L) {
+        auto& self=Host(L);self.pushInstance(L,self.runtime->scene().findPart(CharacterId(L,1)),true);return 1;
+    }
+    static int CharacterRole(lua_State* L) {
+        auto& self=Host(L);auto* part=self.runtime->mutableScene().findPart(CharacterId(L,1));Require(part,"Part removida");std::string error;
+        Require(game::CharacterCore::setRole(*part,Text(L,2),error),error.c_str());return 0;
+    }
+    static int CharacterSpawn(lua_State* L) {
+        auto& self=Host(L);std::string error;const auto id=game::CharacterCore::spawn(self.runtime->mutableScene(),CharacterId(L,1),{ReadVector(L,2)},error);
+        Require(id!=0,error.c_str());lua_pushinteger(L,id);return 1;
+    }
+    static int CharacterAssign(lua_State* L) {
+        std::string error;Require(Host(L).runtime->setCharacterModel(CharacterId(L,1),error),error.c_str());return 0;
+    }
     static int InteractionRegister(lua_State* L){
         auto& h=Host(L);auto& object=h.instance(L,1);game::InteractionOptions options;
         if(lua_gettop(L)>1){Require(lua_istable(L,2),"Interação requer tabela de opções");lua_pushnil(L);while(lua_next(L,2)){
@@ -1546,6 +1569,11 @@ struct LuaRuntime::Impl {
         self.push(L,Kind::Game);lua_setglobal(L,"game");self.pushInstance(L,self.runtime->scene().workspace());lua_setglobal(L,"workspace");
         lua_newtable(L);lua_pushinteger(L,1);lua_setfield(L,-2,"api_version");lua_pushcfunction(L,Safe<ModernVec>);lua_setfield(L,-2,"vec3");
         self.push(L,Kind::Player,0,true);lua_setfield(L,-2,"player");
+        for(const auto& entry:std::initializer_list<std::pair<const char*,lua_CFunction>>{
+            {"getCharacter",Safe<CharacterGet>},{"getPart",Safe<CharacterPart>},
+            {"setPartRole",Safe<CharacterRole>},{"spawnCharacter",Safe<CharacterSpawn>},
+            {"setCharacterModel",Safe<CharacterAssign>}}){lua_pushcfunction(L,entry.second);lua_setfield(L,-2,entry.first);}
+
         lua_newtable(L);lua_pushcfunction(L,Safe<CameraState>);lua_setfield(L,-2,"state");lua_pushcfunction(L,Safe<CameraConfigure>);lua_setfield(L,-2,"configure");lua_pushcfunction(L,Safe<CameraPose>);lua_setfield(L,-2,"set_pose");lua_pushcfunction(L,Safe<CameraRelease>);lua_setfield(L,-2,"release");lua_setfield(L,-2,"camera");
         lua_newtable(L);lua_pushcfunction(L,Safe<Animations>);lua_setfield(L,-2,"list");lua_setfield(L,-2,"animations");
         lua_newtable(L);lua_pushcfunction(L,Safe<ModernNew>);lua_setfield(L,-2,"create");lua_pushcfunction(L,Safe<ModernFind>);lua_setfield(L,-2,"find");lua_pushcfunction(L,Safe<GroupModel>);lua_setfield(L,-2,"group");self.pushInstance(L,self.runtime->scene().workspace(),true);lua_setfield(L,-2,"root");lua_setfield(L,-2,"scene");

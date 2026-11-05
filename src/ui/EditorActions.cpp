@@ -158,6 +158,16 @@ bool EditorActions::dispatch(const EditorCommand& c) {
             e.camera_.releaseCapture();e.setProjectPath(c.value);if(e.onSceneLoaded_)e.onSceneLoaded_();e.checkInvariants("rml_load");
         }
         else if(c.action=="rename") {if(c.value.empty()||c.value.size()>128)throw std::runtime_error("Name must contain 1..128 bytes");if(auto* node=e.scene_.find(c.instance)){std::string error;if(!node->trySetName(c.value,error))throw std::runtime_error(error);}else if(auto* rig=e.scene_.gameAssets().findRig(e.selectedRig_))rig->name=c.value;}
+        else if(c.action=="character-convert"||c.action=="character-player") {
+            auto* model=e.scene_.selection();if(!model||model->instanceClass()!=InstanceClass::Model)throw std::runtime_error("Selecione um Model.");
+            std::string error;const auto parts=game::CharacterCore::parts(e.scene_,model->id());
+            if(c.action=="character-convert"&&!parts.empty()&&game::CharacterCore::parts(e.scene_,model->id(),"Root").empty())
+                if(!game::CharacterCore::setRole(*e.scene_.find(parts.front()),"Root",error))throw std::runtime_error(error);
+            if(!game::CharacterCore::validate(e.scene_,model->id(),error))throw std::runtime_error(error);
+            if(c.action=="character-player")for(const auto& node:e.scene_.objects())
+                if(node->attributes().count("PlayerAvatar"))node->setAttribute("PlayerAvatar",false);
+            if(!model->setAttribute(c.action=="character-player"?"PlayerAvatar":"CharacterDefinition",true))throw std::runtime_error("Limite de atributos atingido.");
+        }
         else if(c.action=="reparent") {std::string error;if(!e.scene_.reparent(e.scene_.find(c.instance),e.scene_.find(std::stoull(c.value)),error))throw std::runtime_error(error);}
         else if(c.action=="snap") {e.endGizmoSession(true,"snap");e.cancelRigGizmo();e.snapEnabled_=c.value=="true";}
         else if(c.action=="move-planes") {

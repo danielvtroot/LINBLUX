@@ -277,6 +277,15 @@ bool RuntimeSession::start(const Scene& authoring, std::string& error,const Prog
         if (!respawn(error)) { stop(); return false; }
         state_ = RuntimeState::Playing;
         const bool spawnedDead=health_<=0;
+        InstanceId avatar=0;
+        for(const auto& node:scene_->objects()) {
+            const auto found=node->attributes().find("PlayerAvatar");
+            if(found!=node->attributes().end())if(const auto* enabled=std::get_if<bool>(&found->second);enabled&&*enabled) {
+                if(avatar){error="Selecione apenas um PlayerAvatar.";stop();return false;}
+                avatar=node->id();
+            }
+        }
+        if(avatar&&!setCharacterModel(avatar,error)){stop();return false;}
         npcs_.reset(); // controladores de NPC sao sempre recriados por Play
         inventory_=std::make_unique<Inventory>(*scene_,*physics_);inventory_->update(position(),camera_.yaw());inventory_->loadAuthored();
         interactions_=std::make_unique<InteractionSystem>(*scene_,*physics_);hotbarPage_=0;itemNotice_.clear();

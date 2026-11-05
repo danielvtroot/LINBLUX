@@ -893,6 +893,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             }
             ModelFrame frame;std::string error;
             if(ui.scene_.modelFrame(node->id(),frame,error)){
+                s+=Button("character-convert","Converter em personagem","rig")+Button("character-player","Usar como Player","rig");
                 group("Transformação do Modelo");const auto angles=EulerDegreesZYXFromQuat(frame.rotation);
                 for(int axis=0;axis<3;++axis){input("Model.Position."+std::to_string(axis),Num((&frame.position.x)[axis]),"Posição "+std::string(1,char('X'+axis)));
                     input("Model.Rotation."+std::to_string(axis),Num((&angles.x)[axis]),"Rotação "+std::string(1,char('X'+axis)));}
