@@ -30,7 +30,7 @@ bool Slider(Rectangle r,float& value,float minimum,float maximum,bool enabled,bo
     const float before=value,range=maximum-minimum;
     if(!enabled)dragging=false;
     const Rectangle hit{r.x-8*scale,r.y,r.width+16*scale,r.height};
-    if(enabled&&pointerAvailable&&CheckCollisionPointRec(GetMousePosition(),hit)&&
+    if(enabled&&pointerAvailable&&(dragging||CheckCollisionPointRec(GetMousePosition(),hit))&&
        IsMouseButtonDown(MOUSE_BUTTON_LEFT))dragging=true;
     if(enabled&&dragging)value=minimum+std::clamp((GetMousePosition().x-r.x)/r.width,0.f,1.f)*range;
     if(!IsMouseButtonDown(MOUSE_BUTTON_LEFT))dragging=false;
