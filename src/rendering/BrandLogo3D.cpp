@@ -22,12 +22,12 @@ bool BrandLogo3D::update(float dt,int physicalSize) {
     }
     if(!model_.meshCount)return false;
     // Supersample the small brand once, never one framebuffer per placement.
-    const int size=std::clamp(physicalSize*2,64,1024);
+    const int size=std::clamp(physicalSize*4,128,2048);
     if(target_.texture.width!=size) {
         if(target_.id)UnloadRenderTexture(target_);
         target_=LoadRenderTexture(size,size);
         if(!target_.id)return false;
-        SetTextureFilter(target_.texture,TEXTURE_FILTER_BILINEAR);
+        SetTextureFilter(target_.texture,TEXTURE_FILTER_TRILINEAR);
         elapsed_=1;
     }
     dt=std::clamp(dt,0.f,.1f);elapsed_+=dt;
