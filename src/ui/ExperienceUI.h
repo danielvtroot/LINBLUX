@@ -21,7 +21,7 @@ public:
     void frame();
     void drawBackground();
     bool videoRunning() const {return background_.running();}
-    uint64_t videoDecodedFrames() const {return background_.frames();}
+    uint64_t videoDecodedFrames() const {return background_.decodedFrames();}
     bool homeVisible() const {return home_&&!loading();}
     bool overlayActive() const;
     bool loading() const;
