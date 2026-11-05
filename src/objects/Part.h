@@ -99,10 +99,16 @@ public:
     Vector3 halfExtents() const { return HalfExtents(transform_.size); }
     OrientedBox bounds() const { const float r=sphereRadius();return {position(),rotation(),
         shape_==PartShape::Sphere?Vector3{r,r,r}:halfExtents()}; }
-    RayCollision intersect(Ray ray) const { return shape_==PartShape::Sphere?
-        GetRayCollisionSphere(ray,position(),sphereRadius()):bounds().intersect(ray); }
+    RayCollision intersect(Ray ray) const {
+        if(shape_==PartShape::Sphere)
+            return GetRayCollisionSphere(ray,position(),sphereRadius());
+        return bounds().intersect(ray);
+    }
     // A esfera usa o menor eixo como diametro (forma uniforme no Bullet).
-    float sphereRadius() const;
+    float sphereRadius() const {
+        if(shape_==PartShape::Sphere)return 0.5f*std::min(transform_.size.x,std::min(transform_.size.y,transform_.size.z));
+        return 0.5f*std::min(transform_.size.x,transform_.size.z);
+    }
 
     Color color() const { return color_; }
     void setColor(Color color);

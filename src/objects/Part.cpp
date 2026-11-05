@@ -7,7 +7,7 @@ namespace loblox {
 
 namespace {
 
-const char* const kShapeNames[] = {"Block", "Sphere"};
+const char* const kShapeNames[] = {"Block", "Sphere", "Cylinder"};
 
 const char* const kMaterialNames[] = {"SmoothPlastic", "Plastic", "Wood",
                                       "Metal",         "Concrete", "Neon"};
@@ -179,7 +179,8 @@ void Part::setSize(Vector3 size) {
 }
 
 float Part::sphereRadius() const {
-    return 0.5f * std::min(transform_.size.x, std::min(transform_.size.y, transform_.size.z));
+    if(shape_==PartShape::Sphere)return 0.5f*std::min(transform_.size.x,std::min(transform_.size.y,transform_.size.z));
+    return 0.5f*std::min(transform_.size.x,transform_.size.z);
 }
 
 void Part::setColor(Color color) {

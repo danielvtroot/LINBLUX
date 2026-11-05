@@ -22,6 +22,10 @@ float PartVolume(const Part& part) {
         const float radius = std::max(0.05f, part.sphereRadius());
         return (4.0f / 3.0f) * PI * radius * radius * radius;
     }
+    if (part.shape() == PartShape::Cylinder) {
+        const float radius = std::max(0.05f, part.sphereRadius());
+        return PI * radius * radius * std::max(0.05f, size.y);
+    }
     return size.x * size.y * size.z;
 }
 
@@ -105,6 +109,11 @@ void PhysicsWorld::clearBodies() {
 btCollisionShape* PhysicsWorld::createShape(const Part& part) const {
     if (part.shape() == PartShape::Sphere) {
         return new btSphereShape(std::max(0.05f, part.sphereRadius()));
+    }
+    if (part.shape() == PartShape::Cylinder) {
+        const float radius = std::max(0.05f, part.sphereRadius());
+        const float halfHeight = std::max(0.05f, 0.5f * part.size().y);
+        return new btCylinderShape(btVector3(radius, halfHeight, radius));
     }
     const Vector3 half = part.halfExtents();
     return new btBoxShape(btVector3(std::max(0.05f, half.x), std::max(0.05f, half.y),
@@ -323,7 +332,8 @@ void PhysicsWorld::updateShape(const Part& part, BodyEntry& entry) {
     // A resize invalidates cached contacts as well as the broadphase bounds.
     world_->getBroadphase()->getOverlappingPairCache()->cleanProxyFromPairs(
         entry.body->getBroadphaseHandle(),dispatcher_.get());
-    const int wanted=part.shape()==PartShape::Sphere?SPHERE_SHAPE_PROXYTYPE:BOX_SHAPE_PROXYTYPE;
+    const int wanted=part.shape()==PartShape::Sphere?SPHERE_SHAPE_PROXYTYPE:
+        part.shape()==PartShape::Cylinder?CYLINDER_SHAPE_PROXYTYPE:BOX_SHAPE_PROXYTYPE;
     if(entry.shape->getShapeType()!=wanted) {
         auto* previous=entry.shape;entry.shape=createShape(part);
         entry.body->setCollisionShape(entry.shape);delete previous;
@@ -331,6 +341,9 @@ void PhysicsWorld::updateShape(const Part& part, BodyEntry& entry) {
     if (part.shape() == PartShape::Sphere) {
         static_cast<btSphereShape*>(entry.shape)->setUnscaledRadius(
             std::max(0.05f, part.sphereRadius()));
+    } else if (part.shape() == PartShape::Cylinder) {
+        static_cast<btCylinderShape*>(entry.shape)->setCylinderShapeX(
+            std::max(0.05f, part.sphereRadius()), std::max(0.05f, 0.5f * part.size().y));
     } else {
         const Vector3 half = part.halfExtents();
         // Match btBoxShape's safe-margin policy after EVERY resize, not only
@@ -515,6 +528,9 @@ bool PhysicsWorld::collisionGeometry(InstanceId id,CollisionGeometry& out) const
         out.shape=PartShape::Block;out.box.half=FromBullet(static_cast<const btBoxShape*>(entry.shape)->getHalfExtentsWithMargin());
     }else if(entry.shape->getShapeType()==SPHERE_SHAPE_PROXYTYPE) {
         out.shape=PartShape::Sphere;const float r=static_cast<const btSphereShape*>(entry.shape)->getRadius();out.box.half={r,r,r};
+    }else if(entry.shape->getShapeType()==CYLINDER_SHAPE_PROXYTYPE) {
+        const auto& cyl=static_cast<const btCylinderShape*>(entry.shape)->getHalfExtents();
+        out.shape=PartShape::Cylinder;out.box.half={cyl.getX(),cyl.getY(),cyl.getZ()};
     }else return false;
     return true;
 }
