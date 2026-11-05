@@ -12,7 +12,7 @@ int main() {
         Image first=LoadImageFromTexture(texture);
         int ink=0,clear=0;
         if(first.data)for(int y=0;y<first.height;++y)for(int x=0;x<first.width;++x){auto c=GetImageColor(first,x,y);ink+=c.a>200;clear+=c.a==0;}
-        if(ink<20||clear<first.width*first.height/4)++failures;
+        if(ink<first.width*first.height/25||clear<first.width*first.height/4)++failures;
         if(first.data&&GetImageColor(first,0,0).a!=0)++failures;
         for(int i=0;i<30;++i)brand.update(1.f/30,52);
         Image rotated=LoadImageFromTexture(brand.texture());

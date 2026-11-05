@@ -35,7 +35,7 @@ bool BrandLogo3D::update(float dt,int physicalSize) {
     if(elapsed_<1.f/30.f)return true;
     elapsed_=0;
     // Rotate about the bounding centre, preserving the source proportions.
-    model_.transform=MatrixMultiply(MatrixTranslate(-center_.x,-center_.y,-center_.z),MatrixRotateY(angle_*DEG2RAD));
+    model_.transform=MatrixMultiply(MatrixMultiply(MatrixTranslate(-center_.x,-center_.y,-center_.z),MatrixRotateX(PI*.5f)),MatrixRotateY(angle_*DEG2RAD));
     Camera3D camera{{0,0,radius_*3},{0,0,0},{0,1,0},radius_*2.3f,CAMERA_ORTHOGRAPHIC};
     BeginTextureMode(target_);ClearBackground(BLANK);
     BeginMode3D(camera);DrawModel(model_,{0,0,0},1,WHITE);EndMode3D();
