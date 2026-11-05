@@ -363,6 +363,12 @@ if(XVFB_RUN_EXECUTABLE)
     add_test(NAME linblux_player_window_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
     set_tests_properties(linblux_player_window_ui PROPERTIES TIMEOUT 65 ENVIRONMENT "LINBLUX_PLAYER_MENU_ONLY=1;LINBLUX_MENU_WINDOW_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;player;editor;ui")
 
+    add_executable(linblux_brand_logo_tests tests/brand_logo_main.cpp)
+    target_link_libraries(linblux_brand_logo_tests PRIVATE linblux_renderer)
+    add_dependencies(linblux_brand_logo_tests linblux_brand_assets)
+    add_test(NAME linblux_brand_logo COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x720x24 -noreset" $<TARGET_FILE:linblux_brand_logo_tests>)
+    set_tests_properties(linblux_brand_logo PROPERTIES TIMEOUT 30 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;player;ui")
+
     add_executable(linblux_health_hud_tests tests/health_hud_main.cpp)
     target_link_libraries(linblux_health_hud_tests PRIVATE linblux_renderer)
     add_test(NAME linblux_health_hud COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_health_hud_tests>)
