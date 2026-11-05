@@ -32,15 +32,9 @@ auto text=[&](const std::string& value,float x,float y,float size,Color color){D
     if(paused&&CheckCollisionPointRec(mouse,logoRect)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
         draggingMenu_=true;dragOffsetX_=mouse.x-left;dragOffsetY_=mouse.y;
     }
-    if(draggingMenu_){
+if(draggingMenu_){
         if(IsMouse|M...){
             left=std::clamp(mouse.x-dragOffsetX_,0.f,float(width)-w-4*s);
-        }else draggingMenu_=false;
-    }
-if(draggingMenu_){
-        if(IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
-            const float nx=mouse.x-dragOffsetX_,ny=mouse.y-dragOffsetY_;
-            menuLeft_=std::clamp(nx,0.f,float(width)-w-4*s);
         }else draggingMenu_=false;
     }
     if(brand)brand->draw(logoRect,logo);
