@@ -11,7 +11,7 @@
 
 namespace loblox {
 
-enum class PartShape { Block, Sphere };
+enum class PartShape { Block, Sphere, Cylinder };
 
 enum class PartMaterial {
     SmoothPlastic,
