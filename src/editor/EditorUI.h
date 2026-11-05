@@ -19,8 +19,6 @@
 #include "editor/ModelTransformSession.h"
 #include "game/Runtime.h"
 #include "rendering/SceneRenderer.h"
-#include "rendering/BrandLogo3D.h"
-#include "rendering/PlayerMenu.h"
 #include "raylib.h"
 
 namespace loblox {
@@ -72,8 +70,6 @@ public:
     ToolMode tool() const { return tool_; }
     bool playing() const;
     bool gameMenuOpen() const {return gameMenuOpen_||runtime_.state()==game::RuntimeState::Paused;}
-    void toggleGameMenu();
-    void drawGameMenuOverlay(int width, int height);
     bool experienceOverlay() const;
     GameplayCursorState gameplayCursor() const;
 
@@ -202,9 +198,6 @@ private:
     EditorGeometryView editorGeometry_{};
     std::unique_ptr<StudioFrontend> frontend_;
     game::RuntimeSession runtime_;
-    BrandLogo3D brand_;
-    PlayerMenu menu_;
-    Texture2D gameLogo_{};
     bool gameplayCapture_ = false;
     bool gameMenuOpen_ = false;
     bool gameplaySkipDelta_ = true;

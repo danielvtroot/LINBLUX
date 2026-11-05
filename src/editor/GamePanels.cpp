@@ -2,7 +2,6 @@
 #include "rendering/LuaUiRenderer.h"
 #include "ui/Localization.h"
 #include "ui/ExperienceUI.h"
-#include "ui/UiFont.h"
 #include "editor/EditorUI.h"
 #include "ui/ExperienceUI.h"
 #include "editor/StudioTheme.h"
@@ -311,7 +310,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     BeginTextureMode(viewport_);
     RigRenderState character{&runtime_.rig(), runtime_.pose(), runtime_.renderCharacterRoot()};
     renderer_.drawScene(runtime_.scene(), runtime_.playerCamera().camera(), viewportWidth_, viewportHeight_,
-        kInvalidInstanceId, (runtime_.characterModel()||runtime_.playerCamera().avatarHidden()) ? nullptr : &character, false);
+        kInvalidInstanceId, runtime_.playerCamera().avatarHidden() ? nullptr : &character, false);
     DrawExperienceOverlay(runtime_,viewportWidth_,viewportHeight_);
     DrawLuaUi(runtime_,viewportWidth_,viewportHeight_);
     EndTextureMode();
@@ -505,37 +504,6 @@ void EditorUI::drawPauseMenu() {
     if(stop) stopPlay();
     else if(reset) { std::string error; if(!runtime_.resetCharacter(error)) setStatus(error,true); }
     else if(resume) { gameMenuOpen_=false; runtime_.resume();ImGui::SetWindowFocus(i18n::Label("Viewport")); }
-}
-
-void EditorUI::toggleGameMenu() {
-    if (gameMenuOpen_) {
-        gameMenuOpen_ = false;
-        runtime_.resume();
-    } else {
-        gameMenuOpen_ = true;
-        runtime_.pause();
-    }
-}
-
-void EditorUI::drawGameMenuOverlay(int width, int height) {
-    // Atualiza a animacao da logo 3D (roda sempre, mesmo com o menu fechado,
-    // para que a rotacao nao pare de repente quando o menu abre).
-    brand_.update(GetFrameTime(), std::max(1, std::min(width, height)));
-
-    // Se o menu esta aberto, desenha o PlayerMenu (logo 3D no canto + painel).
-    if (gameMenuOpen_ || runtime_.state() == game::RuntimeState::Paused) {
-        menu_.draw(runtime_, width, height, ui::SystemFont(), gameLogo_, "LINBLUX", &brand_);
-        return;
-    }
-
-    // Desenha o botao da logo no canto superior esquerdo (sempre visível).
-    const Rectangle menuButton{16, 16, 70, 70};
-    if (brand_.texture().id) {
-        brand_.draw(menuButton, gameLogo_);
-    } else if (gameLogo_.id) {
-        DrawTexturePro(gameLogo_, {0, 0, float(gameLogo_.width), float(gameLogo_.height)},
-                       {menuButton.x, menuButton.y, menuButton.width, menuButton.height}, {0, 0}, 0, WHITE);
-    }
 }
 
 void EditorUI::drawRigEditor() {
