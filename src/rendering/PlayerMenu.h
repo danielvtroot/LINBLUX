@@ -16,5 +16,7 @@ private:
     bool open_=false;
     float progress_=0,scroll_=0,lastAudibleVolume_=1.f;
     int page_=0,focus_=0,count_=1,draggingSlider_=-1;
+    bool draggingMenu_=false;
+    float dragOffsetX_=0,dragOffsetY_=0;
 };
 }
