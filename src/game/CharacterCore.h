@@ -6,6 +6,7 @@ namespace loblox::game {
 // attributes use Scene's existing transactional serialization.
 class CharacterCore {
 public:
+    static bool hidden(const Instance& part);
     static std::string role(const Instance& part);
     static bool setRole(Instance& part,const std::string& role,std::string& error);
     static bool validate(const Scene& scene,InstanceId model,std::string& error);

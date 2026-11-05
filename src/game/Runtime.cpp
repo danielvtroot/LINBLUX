@@ -808,6 +808,7 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
         }
     }
     if(state_==RuntimeState::Playing)camera_.update(dt,renderCharacterRoot().position,velocity(),input,settings_,*this);
+    if(auto* character=scene_->find(characterModel_))character->setAttribute("CharacterHidden",camera_.avatarHidden());
     std::vector<InstanceId> fallen;
     for(auto* part:scene_->worldParts()) if(!part->anchored() && part->deletable() && part->position().y<scene_->workspace()->fallenPartsDestroyHeight())fallen.push_back(part->id());
     for(auto id:fallen)scene_->removeById(id);

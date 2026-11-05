@@ -1,3 +1,4 @@
+#include "game/CharacterCore.h"
 #include "rendering/ExperienceOverlay.h"
 #include "game/Inventory.h"
 #include "rendering/SceneRenderer.h"
@@ -1115,7 +1116,7 @@ void SceneRenderer::drawEditorGuides(const Scene& scene,Camera3D camera,const Ed
     guideProjection.m14-=0.0001f;
     rlSetMatrixProjection(guideProjection);
     for(const auto* p:scene.worldParts()) {
-        if(p->color().a==0)continue;
+        if(p->color().a==0||game::CharacterCore::hidden(*p))continue;
         if((options.edges||p->id()==hovered)&&!scene.selected(p->id())) {
             const Color color=p->id()==hovered?Color{240,230,225,230}:Color{42,46,54,165};
             if(p->shape()==PartShape::Block)DrawRotatedBoxWires(p->position(),p->size(),p->rotation(),color);
@@ -1234,7 +1235,7 @@ void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width
     std::vector<Part*> opaque,transparent;
     std::vector<ShadowCaster> casters;
     for(auto* part:scene.worldParts()) {
-        if(!part||game::InventoryHidden(*part)||hasRigVisual(part->id()))continue;
+        if(!part||game::InventoryHidden(*part)||game::CharacterCore::hidden(*part)||hasRigVisual(part->id()))continue;
         const auto* m=modernAvailable&&part->material3D()?&*part->material3D():nullptr;
         const auto alpha=m?m->baseColor.a:part->color().a;if(!alpha)continue;
         const bool textured=m&&!m->baseColorTexture.empty();

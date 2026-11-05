@@ -1,5 +1,16 @@
 #include "game/CharacterCore.h"
 namespace loblox::game {
+bool CharacterCore::hidden(const Instance& part) {
+    for(const Instance* node=&part;node;node=node->parent()) {
+        const auto instance=node->attributes().find("CharacterInstance");
+        const auto hidden=node->attributes().find("CharacterHidden");
+        if(instance==node->attributes().end()||hidden==node->attributes().end())continue;
+        const auto* live=std::get_if<bool>(&instance->second);const auto* invisible=std::get_if<bool>(&hidden->second);
+        if(live&&*live&&invisible&&*invisible)return true;
+    }
+    return false;
+}
+
 std::string CharacterCore::role(const Instance& part) {
     const auto it=part.attributes().find("CharacterRole");
     if(it!=part.attributes().end())if(auto* value=std::get_if<std::string>(&it->second))return *value;
@@ -43,7 +54,7 @@ InstanceId CharacterCore::spawn(Scene& scene,InstanceId source,RigidTransform ta
     if(instances>=128){error="Limite de 128 personagens vivos atingido.";return 0;}
     auto* copy=scene.duplicateTree(*scene.find(source),scene.workspace());
     if(!copy){error="Não foi possível clonar o personagem.";return 0;}
-    if(!copy->setAttribute("CharacterInstance",true)||!copy->setAttribute("PlayerAvatar",false)) {
+    if(!copy->setAttribute("CharacterInstance",true)||!copy->setAttribute("PlayerAvatar",false)||!copy->setAttribute("CharacterHidden",false)) {
         scene.removeById(copy->id());error="Limite de atributos do personagem atingido.";return 0;
     }
     const auto root=parts(scene,copy->id(),"Root");const auto* part=scene.findPart(root.front());

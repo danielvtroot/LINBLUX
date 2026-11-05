@@ -71,8 +71,8 @@ try:
         click(x0+span*.5,track_y);key('Right');check_thumb(.55,'audio-keyboard-'+str(width))
         click(x0+span/2,214*scale);check_thumb(0,'audio-muted-'+str(width))
         click(x0+span/2,214*scale);check_thumb(.55,'audio-restored-'+str(width))
-        click(x0+span*.5,track_y);command('mousedown',1);time.sleep(.15)
-        command('mousemove','--window',window,int(x0+span+30),int(track_y+30));time.sleep(.2)
+        click(x0+span*.5,track_y);command('mousedown',1);time.sleep(.6)
+        command('mousemove','--window',window,int(x0+span+30),int(track_y+30));time.sleep(.6)
         command('mouseup',1);time.sleep(.2);check_thumb(1,'audio-drag-outside-'+str(width))
         key('Escape');closed=shot('closed-'+str(width));assert max(closed.getpixel((8,180)))>55,'Esc did not remove side panel'
     command('windowsize',window,1280,720);time.sleep(.4);key('Escape');click(50,312);click(360,108);time.sleep(.4)

@@ -50,6 +50,7 @@ void ModularCharacter() {
     CHECK(game::CharacterCore::setRole(*runtime.mutableScene().find(heads.front()),"Head",error));
     runtime.settings().cameraMode=game::CameraMode::FirstPerson;
     runtime.update(1.f/60,{});
+    CHECK(game::CharacterCore::hidden(*runtime.scene().find(heads.front())));
     const auto headPosition=runtime.scene().findPart(heads.front())->position();
     CHECK(Vector3Distance(runtime.playerCamera().pivot(),Vector3Add(headPosition,{0,.08f,0}))<.001f);
     const auto live=runtime.characterModel();
