@@ -984,11 +984,12 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(!split.empty()&&ImGui::IsMouseDown(0)){if(split=="left")left=mouse.x;else if(split=="right")right=w-mouse.x;else if(split=="properties")propertySplit=(mouse.y-144)/std::max(1.f,h-167.f);else bottom=h-23-mouse.y;}
         if(dragNode && ImGui::IsMouseDown(0) && Vector2Distance(mouse,dragStart)>7)dragging=true;
         if(dragging) {
-            auto* target=ancestor(hover,"data-node-row");const auto id=target?target->GetAttribute<InstanceId>("data-node-row",0):0;
-            if(id!=dragTarget){if(auto* old=el("node-"+std::to_string(dragTarget)))old->SetClass("drop-target",false);dragTarget=id;if(target)target->SetClass("drop-target",true);}
+            auto* target=ancestor(hover,"data-node-row");const auto candidate=target?target->GetAttribute<InstanceId>("data-node-row",0):0;
+            const auto id=ui.scene_.canParent(ui.scene_.find(dragNode),ui.scene_.find(candidate))?candidate:0;
+            if(id!=dragTarget){if(auto* old=el("node-"+std::to_string(dragTarget)))old->SetClass("drop-target",false);dragTarget=id;if(target&&id)target->SetClass("drop-target",true);}
         }
         if(ImGui::IsMouseReleased(0)) {
-            if(dragging) {if(auto* row=ancestor(hover,"data-node-row")){const auto target=row->GetAttribute<InstanceId>("data-node-row",0);if(target!=dragNode)actions.dispatch({"reparent",std::to_string(target),dragNode});}}
+            if(dragging) {if(auto* row=ancestor(hover,"data-node-row")){const auto target=row->GetAttribute<InstanceId>("data-node-row",0);if(ui.scene_.canParent(ui.scene_.find(dragNode),ui.scene_.find(target)))actions.dispatch({"reparent",std::to_string(target),dragNode});}}
             context->ProcessMouseButtonUp(0,mods);if(!split.empty())saveLayout();split.clear();dragNode=0;dragging=false;
             if(auto* target=el("node-"+std::to_string(dragTarget)))target->SetClass("drop-target",false);
             dragTarget=0;

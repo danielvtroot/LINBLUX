@@ -1,5 +1,6 @@
 #include "rendering/ExperienceOverlay.h"
 #include "game/Runtime.h"
+#include "rendering/UiControls.h"
 #include "game/ImageAssets.h"
 #include <algorithm>
 #include <cstdio>
@@ -22,13 +23,7 @@ void DrawHealthHud(const game::RuntimeSession& runtime,int width,int height,Font
     DrawRectangleRounded({px-pad,py-pad*.5f,panelW,panelH},.18f,6,{0,0,0,180});
     // Rótulo VIDA
     DrawTextEx(font,"VIDA",{px,py-1.f*scale},10.f*scale,scale,{220,220,220,200});
-    // Trilha
-    DrawRectangleRounded({px,py+12.f*scale,barW,barH},.5f,6,{255,255,255,40});
-    // Preenchimento
-    if(fraction>0.f){
-        const float fillW=std::max(barH,barW*fraction);
-        DrawRectangleRounded({px,py+12.f*scale,fillW,barH},.5f,6,{255,255,255,220});
-    }
+    ui::ProgressBar({px,py+12.f*scale,barW,barH},fraction);
     // Valor numérico
     char value[32];std::snprintf(value,sizeof(value),"%.0f",runtime.health());
     const auto mv=MeasureTextEx(font,value,12.f*scale,scale);

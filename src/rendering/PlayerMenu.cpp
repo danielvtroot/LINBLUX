@@ -1,6 +1,7 @@
 #include "rendering/PlayerMenu.h"
 #include "rendering/BrandLogo3D.h"
 #include "game/Runtime.h"
+#include "rendering/UiControls.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -19,11 +20,8 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
  if(!paused||!IsMouseButtonDown(MOUSE_BUTTON_LEFT))draggingSlider_=-1;
  if(paused){if(IsKeyPressed(KEY_TAB)||IsKeyPressed(KEY_DOWN))focus_=(focus_+1)%std::max(1,count_);if(IsKeyPressed(KEY_UP))focus_=(focus_+std::max(1,count_)-1)%std::max(1,count_);}
  auto button=[&](const std::string& label,Rectangle r,bool active=false){
-  const int id=current++;const bool hover=paused&&CheckCollisionPointRec(mouse,r);
-  DrawRectangleRounded(r,.12f,6,active?Color{60,60,65,255}:hover?Color{45,45,50,255}:Color{32,31,37,255});
-  if(paused&&id==focus_)DrawRectangleRoundedLines(r,.12f,6,focus);
-  text(label,r.x+10*s,r.y+(r.height-17*s)/2,16,active?white:muted);
-  return paused&&((hover&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT))||(id==focus_&&IsKeyPressed(KEY_ENTER)));
+  const int id=current++;
+  return ui::Button(label.c_str(),r,font,s,paused,id==focus_,active);
  };
  if(brand)brand->draw({left+16*s,18*s,34*s,34*s},logo);
  else if(logo.id)DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{left+16*s,18*s,34*s,34*s},{0,0},0,WHITE);
@@ -46,12 +44,11 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
  auto slider=[&](const char* label,float& value,float min,float max,bool enabled=true){
   char b[100];std::snprintf(b,sizeof(b),"%s: %.2f",label,value);line(b);
   const int id=current++;Rectangle track{x-8*s,y,available+16*s,22*s};const bool hover=enabled&&paused&&CheckCollisionPointRec(mouse,track)&&CheckCollisionPointRec(mouse,content);
-  if(hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){draggingSlider_=id;focus_=id;}
-  if(enabled&&paused&&draggingSlider_==id&&IsMouseButtonDown(MOUSE_BUTTON_LEFT))value=min+std::clamp((mouse.x-x)/available,0.f,1.f)*(max-min);
-  if(enabled&&paused&&id==focus_){if(IsKeyPressed(KEY_HOME))value=min;if(IsKeyPressed(KEY_END))value=max;if(IsKeyPressed(KEY_LEFT))value=std::max(min,value-(max-min)/20);if(IsKeyPressed(KEY_RIGHT))value=std::min(max,value+(max-min)/20);}
-  DrawRectangle(int(x),int(y+9*s),int(available),int(4*s),{65,56,64,255});
-  DrawRectangle(int(x),int(y+9*s),int(available*std::clamp((value-min)/std::max(.0001f,max-min),0.f,1.f)),int(4*s),focus);
-  DrawCircleV({x+available*std::clamp((value-min)/std::max(.0001f,max-min),0.f,1.f),y+11*s},6*s,enabled?white:muted);y+=46*s;
+  if(hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))focus_=id;
+  bool dragging=draggingSlider_==id;
+  ui::Slider({x,y,available,22*s},value,min,max,enabled&&paused,id==focus_,dragging,s);
+  if(dragging)draggingSlider_=id;else if(draggingSlider_==id)draggingSlider_=-1;
+  y+=46*s;
  };
  auto& settings=runtime.settings();
  if(page_==0){line(runtime.rig().name);line("Vida: "+std::to_string(int(runtime.health()))+" / "+std::to_string(int(settings.maxHealth)));if(action("Renascer personagem")){std::string error;runtime.resetCharacter(error);}}

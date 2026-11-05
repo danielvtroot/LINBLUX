@@ -1,0 +1,43 @@
+#include "rendering/UiControls.h"
+#include <algorithm>
+#include <cmath>
+namespace loblox::ui {
+void DrawSurface(Rectangle r,Surface surface,bool highlighted) {
+    const Color base=surface==Surface::Overlay?theme::overlay:surface==Surface::Raised?theme::raised:theme::panel;
+    DrawRectangleRounded(r,.12f,12,base);
+    if(highlighted)DrawRectangleRounded(r,.12f,12,theme::selected);
+}
+bool Button(const char* label,Rectangle r,Font font,float scale,bool enabled,bool focused,bool active) {
+    const bool hover=enabled&&CheckCollisionPointRec(GetMousePosition(),r);
+    DrawSurface(r,Surface::Interactive,active||hover);
+    if(enabled&&focused)DrawRectangleRoundedLines(r,.12f,12,theme::accent);
+    const float size=16*scale;
+    DrawTextEx(font,label,{r.x+10*scale,r.y+(r.height-size)/2},size,scale,enabled?theme::text:theme::disabled);
+    return enabled&&((hover&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT))||(focused&&IsKeyPressed(KEY_ENTER)));
+}
+bool Slider(Rectangle r,float& value,float minimum,float maximum,bool enabled,bool focused,bool& dragging,float scale) {
+    const float before=value,range=maximum-minimum;
+    if(!enabled||!IsMouseButtonDown(MOUSE_BUTTON_LEFT))dragging=false;
+    if(enabled&&CheckCollisionPointRec(GetMousePosition(),r)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))dragging=true;
+    if(enabled&&dragging)value=minimum+std::clamp((GetMousePosition().x-r.x)/r.width,0.f,1.f)*range;
+    if(enabled&&focused){if(IsKeyPressed(KEY_HOME))value=minimum;if(IsKeyPressed(KEY_END))value=maximum;
+        if(IsKeyPressed(KEY_LEFT))value-=range/20;if(IsKeyPressed(KEY_RIGHT))value+=range/20;}
+    value=std::clamp(value,minimum,maximum);
+    const float fraction=range>0?(value-minimum)/range:0;
+    const Rectangle track{r.x,r.y+r.height/2-2*scale,r.width,4*scale};
+    DrawRectangleRec(track,theme::border);
+    // Keep the thumb distinguishable from the filled track at every volume.
+    DrawRectangleRec({track.x,track.y,track.width*fraction,track.height},theme::secondary);
+    DrawCircleV({r.x+r.width*fraction,r.y+r.height/2},6*scale,enabled?theme::text:theme::disabled);
+    return before!=value;
+}
+void ProgressBar(Rectangle r,float fraction) {
+    DrawRectangleRounded(r,1,12,theme::border);
+    fraction=std::clamp(fraction,0.f,1.f);
+    if(fraction<=0)return;
+    // Scissor keeps a tiny positive value proportional, without a minimum
+    // visible fill that falsely reports health on an almost empty bar.
+    BeginScissorMode(int(r.x),int(r.y),int(std::ceil(r.width*fraction)),int(std::ceil(r.height)));
+    DrawRectangleRounded(r,1,12,theme::text);EndScissorMode();
+}
+}
