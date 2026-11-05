@@ -33,12 +33,12 @@ try:
         time.sleep(.1)
     assert window,'no Player window';command('windowfocus',window);command('windowmove',window,0,0);time.sleep(2)
     def key(value):
-        command('keydown',value);time.sleep(.25);command('keyup',value);time.sleep(.3)
-    def click(x,y):command('mousemove','--window',window,int(x),int(y));time.sleep(.15);command('mousedown',1);time.sleep(.3);command('mouseup',1);time.sleep(.2)
+        command('keydown',value);time.sleep(1);command('keyup',value);time.sleep(.8)
+    def click(x,y):command('mousemove','--window',window,int(x),int(y));time.sleep(.15);command('mousedown',1);time.sleep(1);command('mouseup',1);time.sleep(.8)
     def shot(name):
         path=root/(name+'.png');subprocess.run(['scrot','-o','-u',str(path)],check=True,timeout=5);return Image.open(path).convert('RGB')
     for width,height in [(1366,768),(1920,1080)]:
-        command('windowsize',window,width,height);time.sleep(1);key('Escape');image=shot('menu-'+str(width))
+        command('windowsize',window,width,height);command('windowfocus',window);time.sleep(1);click(42,42);image=shot('menu-'+str(width))
         first=image.getpixel((width-30,height-30));changed=False
         for attempt in range(6):
             time.sleep(.15);current=shot('menu-running-'+str(width)).getpixel((width-30,height-30))
