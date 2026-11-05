@@ -5,14 +5,14 @@
 namespace loblox {
 class Lighting;
 struct ShadowCaster {
-    Vector3 position{},size{};Quaternion rotation{0,0,0,1};bool sphere=false;
+    Vector3 position{},size{};Quaternion rotation{0,0,0,1};bool sphere=false,cylinder=false;
     const Part* part=nullptr;
 };
 class DirectionalShadow {
 public:
     ~DirectionalShadow();
     void update(const std::vector<ShadowCaster>& casters,Camera3D camera,const Lighting* lighting,
-                bool enabled,const Mesh& cube,const Mesh& sphere,float aspect,ShadowQuality quality);
+                bool enabled,const Mesh& cube,const Mesh& sphere,const Mesh& cylinder,float aspect,ShadowQuality quality);
     bool active() const {return active_;}
     unsigned texture() const {return depth_;}
     Matrix matrix() const {return matrix_;}

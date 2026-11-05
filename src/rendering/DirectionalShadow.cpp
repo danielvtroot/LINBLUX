@@ -103,7 +103,7 @@ CasterBounds bounds(const ShadowCaster& caster) {
 Planes boxPlanes(Vector3 a,Vector3 b){return {{{{1,0,0},-a.x},{{-1,0,0},b.x},{{0,1,0},-a.y},{{0,-1,0},b.y},{{0,0,1},-a.z},{{0,0,-1},b.z}}};}
 }
 void DirectionalShadow::update(const std::vector<ShadowCaster>& casters,Camera3D camera,const Lighting* light,
-    bool enabled,const Mesh& cube,const Mesh& sphere,float aspect,ShadowQuality quality) {
+    bool enabled,const Mesh& cube,const Mesh& sphere,const Mesh& cylinder,float aspect,ShadowQuality quality) {
     active_=false;quality_=quality;
     if(!enabled||!light||!light->shadowsEnabled()||light->sunIntensity()<=0||light->shadowStrength()<=0||quality==ShadowQuality::Off) {release();return;}
     if(casters.empty()||!initialize(quality==ShadowQuality::High?2048:1024))return;
@@ -149,9 +149,9 @@ void DirectionalShadow::update(const std::vector<ShadowCaster>& casters,Camera3D
         SetShaderValue(shader_,GetShaderLocation(shader_,"tile"),&m.studsPerTile.x,SHADER_UNIFORM_VEC2);
         SetShaderValue(shader_,GetShaderLocation(shader_,"uvOffset"),&m.offset.x,SHADER_UNIFORM_VEC2);
         const float angle=m.rotation*DEG2RAD;SetShaderValue(shader_,GetShaderLocation(shader_,"uvRotation"),&angle,SHADER_UNIFORM_FLOAT);
-        const auto size=c->sphere?Vector3Scale(c->size,.5f):c->size;
+        const auto size=c->cylinder?Vector3{c->size.x*.5f,c->size.y,c->size.z*.5f}:(c->sphere?Vector3Scale(c->size,.5f):c->size);
         const auto transform=MatrixMultiply(MatrixMultiply(MatrixScale(size.x,size.y,size.z),QuaternionToMatrix(c->rotation)),MatrixTranslate(c->position.x,c->position.y,c->position.z));
-        DrawMesh(c->sphere?sphere:cube,material_,transform);
+        DrawMesh(c->cylinder?cylinder:(c->sphere?sphere:cube),material_,transform);
     }
     state.restore();active_=true;
 }

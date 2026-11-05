@@ -1241,7 +1241,7 @@ void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width
         const bool textured=m&&!m->baseColorTexture.empty();
         (alpha<255||textured?transparent:opaque).push_back(part);
         if(alpha==255&&wantsShadow){const float d=part->sphereRadius()*2;
-            casters.push_back({part->position(),part->shape()==PartShape::Sphere?Vector3{d,d,d}:part->size(),part->rotation(),part->shape()==PartShape::Sphere,part});}
+            casters.push_back({part->position(),part->shape()==PartShape::Sphere?Vector3{d,d,d}:part->size(),part->rotation(),part->shape()==PartShape::Sphere,part->shape()==PartShape::Cylinder,part});}
     }
     std::vector<RigRenderState> rigStates;
     if(authoredRigs)for(const auto& asset:scene.gameAssets().rigs)
