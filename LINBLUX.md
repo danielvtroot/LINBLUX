@@ -770,6 +770,9 @@ entrada antes do runtime.
   usa os dois primeiros; HUD compartilhado de Studio/Player usa ProgressBar
   com preenchimento proporcional mesmo abaixo da largura das bordas.
   A biblioteca completa de componentes RmlUi ainda não foi migrada.
+  `ui/UiFont` é dona da fonte nativa compartilhada por HUD, Player e gizmos;
+  `linblux_editing` depende da apresentação, não do renderer de HUD.
+  Liberar com `ReleaseSystemFont` antes de fechar o contexto gráfico.
 - **Janela**: 1280×720, mínimo 900×560, V-SYNC, MSAA 4×, redimensionável,
   ícone builtin do logo; fontes DejaVu/Liberation do sistema.
 - **Controles**: WASD move, Espaço pula, Shift alterna shift lock, roda do
