@@ -45,6 +45,13 @@ void ModularCharacter() {
     runtime.update(1.f/60,{});CHECK(runtime.scripts().errorCount()==0);
     CHECK(game::CharacterCore::parts(runtime.scene(),runtime.characterModel()).size()==2);
     CHECK(projectio::toJson(loaded)==snapshot);
+    const auto heads=game::CharacterCore::parts(runtime.scene(),runtime.characterModel(),"CustomHand");
+    CHECK(heads.size()==1);
+    CHECK(game::CharacterCore::setRole(*runtime.mutableScene().find(heads.front()),"Head",error));
+    runtime.settings().cameraMode=game::CameraMode::FirstPerson;
+    runtime.update(1.f/60,{});
+    const auto headPosition=runtime.scene().findPart(heads.front())->position();
+    CHECK(Vector3Distance(runtime.playerCamera().pivot(),Vector3Add(headPosition,{0,.08f,0}))<.001f);
     const auto live=runtime.characterModel();
     const auto liveRoots=game::CharacterCore::parts(runtime.scene(),live,"Root");
     CHECK(liveRoots.size()==1);runtime.mutableScene().removeById(liveRoots.front());

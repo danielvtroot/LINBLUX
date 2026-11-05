@@ -17,7 +17,7 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
  DrawRectangle(int(left),0,int(side),height,{15,15,19,250});
  auto text=[&](const std::string& value,float x,float y,float size,Color color){DrawTextEx(font,value.c_str(),{x,y},size*s,s,color);};
  const auto mouse=GetMousePosition();int current=0;bool quit=false;
- if(!paused||!IsMouseButtonDown(MOUSE_BUTTON_LEFT))draggingSlider_=-1;
+ if(!paused)draggingSlider_=-1;
  if(paused){if(ui::KeyPressed(KEY_TAB)||ui::KeyPressed(KEY_DOWN))focus_=(focus_+1)%std::max(1,count_);if(ui::KeyPressed(KEY_UP))focus_=(focus_+std::max(1,count_)-1)%std::max(1,count_);}
  auto button=[&](const std::string& label,Rectangle r,bool active=false){
   const int id=current++;

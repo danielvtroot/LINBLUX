@@ -362,7 +362,13 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             return;
         }
         if(type=="dblclick") {
-            if(auto* row=ancestor(target,"data-node-row")) {const auto id=row->GetAttribute<InstanceId>("data-node-row",0);if(auto* node=ui.scene_.find(id);node&&IsScriptClass(node->instanceClass()))commands.push_back({"open-script","",id});}
+            if(auto* row=ancestor(target,"data-node-row")) {
+                const auto id=row->GetAttribute<InstanceId>("data-node-row",0);
+                if(auto* node=ui.scene_.find(id)) {
+                    if(IsScriptClass(node->instanceClass()))commands.push_back({"open-script","",id});
+                    else if(!ui.runtime_.active()){actions.dispatch({"select","",id});prompt("rename");}
+                }
+            }
             else if(ancestor(target,"data-rig"))showAdvanced("rig");
             return;
         }

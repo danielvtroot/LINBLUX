@@ -28,11 +28,12 @@ bool Button(const char* label,Rectangle r,Font font,float scale,bool enabled,boo
 }
 bool Slider(Rectangle r,float& value,float minimum,float maximum,bool enabled,bool focused,bool& dragging,float scale,bool pointerAvailable) {
     const float before=value,range=maximum-minimum;
-    if(!enabled||!IsMouseButtonDown(MOUSE_BUTTON_LEFT))dragging=false;
+    if(!enabled)dragging=false;
     const Rectangle hit{r.x-8*scale,r.y,r.width+16*scale,r.height};
     if(enabled&&pointerAvailable&&CheckCollisionPointRec(GetMousePosition(),hit)&&
        IsMouseButtonDown(MOUSE_BUTTON_LEFT))dragging=true;
     if(enabled&&dragging)value=minimum+std::clamp((GetMousePosition().x-r.x)/r.width,0.f,1.f)*range;
+    if(!IsMouseButtonDown(MOUSE_BUTTON_LEFT))dragging=false;
     if(enabled&&focused){if(KeyPressed(KEY_HOME))value=minimum;if(KeyPressed(KEY_END))value=maximum;
         if(KeyPressed(KEY_LEFT))value-=range/20;if(KeyPressed(KEY_RIGHT))value+=range/20;}
     value=std::clamp(value,minimum,maximum);
