@@ -9,7 +9,7 @@
 #include "raymath.h"
 #include "rlgl.h"
 #include "rendering/EditorCamera.h"
-#include "rendering/ExperienceOverlay.h"
+#include "ui/UiFont.h"
 
 namespace loblox {
 namespace {
@@ -514,7 +514,7 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
     if(mode==ToolMode::Move&&!directFace)DrawSphere(part.position(),camera.worldUnitsPerPixel(part.position(),viewport.height)*5,{215,218,223,255});
     rlDrawRenderBatchActive();EndMode3D();rlDisableDepthTest();rlDisableDepthMask();
     if(dragging_&&showMeasurement){
-        Font uiFont = ExperienceOverlayFont();
+        Font uiFont = ui::SystemFont();
         const float spacing = 1.0f;
         const auto delta=Vector3Subtract(part.position(),startTransform_.position);
         const char* text=mode==ToolMode::Scale?TextFormat("%.2f  x  %.2f  x  %.2f",part.size().x,part.size().y,part.size().z):
@@ -532,7 +532,7 @@ void Gizmo::drawOverlay(const Part& part, ToolMode mode, const EditorCamera& cam
         DrawTextEx(uiFont, text,  {x+12,y+22}, valueSize, spacing, {240,242,248,255});
     }
     if(surfaceContact_.snapped) {
-        Font uiFont = ExperienceOverlayFont();
+        Font uiFont = ui::SystemFont();
         Vector2 p,q;
         const Vector2 size{viewport.width,viewport.height};
         const auto end=Vector3Add(surfaceContact_.point,Vector3Scale(surfaceContact_.normal,

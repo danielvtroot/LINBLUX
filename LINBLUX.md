@@ -756,6 +756,20 @@ entrada antes do runtime.
 - **Menu** (`PlayerMenu`): lateral Continuar/Sair + páginas Jogador/Câmera/
   Controles/Áudio/Vídeo/Ajuda; volume master/mudo; **protegido contra
   alterações por scripts**. Simulação continua enquanto o menu está aberto.
+- **Marca 3D no Player standalone** (`BrandLogo3D`): carrega
+  `midia/3d/logo-3d.glb` uma vez, centraliza e orienta sua face XZ para a
+  câmera. As duas aparições compartilham cache a 30 Hz, rotação de 12°/s
+  e supersampling 2× limitado a 1024 px. Atualizar antes de `BeginDrawing`
+  apenas quando visível; destruir antes de `CloseWindow`. Controle de menu
+  sem caixa ou ícone adicional, com clique e Esc. PNG permanece como fallback
+  e ícone nativo. CMake copia/instala em `share/linblux/midia/3d`.
+  Home e header RmlUi ainda usam PNG; migração pendente.
+- **Controles nativos compartilhados** (`rendering/UiControls`): Button,
+  Slider e ProgressBar usam tokens de `ThemeColors.generated.h`, sem
+  dependência do editor e sem framebuffer por controle. Menu standalone
+  usa os dois primeiros; HUD compartilhado de Studio/Player usa ProgressBar
+  com preenchimento proporcional mesmo abaixo da largura das bordas.
+  A biblioteca completa de componentes RmlUi ainda não foi migrada.
 - **Janela**: 1280×720, mínimo 900×560, V-SYNC, MSAA 4×, redimensionável,
   ícone builtin do logo; fontes DejaVu/Liberation do sistema.
 - **Controles**: WASD move, Espaço pula, Shift alterna shift lock, roda do

@@ -1,18 +1,17 @@
 #include "rendering/ExperienceOverlay.h"
 #include "game/Runtime.h"
 #include "rendering/UiControls.h"
+#include "ui/UiFont.h"
 #include "game/ImageAssets.h"
 #include <algorithm>
 #include <cstdio>
 namespace loblox {
-namespace {Font overlayFont{};bool fontAttempted=false;
-Font OverlayFont(){if(!fontAttempted){fontAttempted=true;for(const char* file:{"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"})if(FileExists(file)){const auto loaded=LoadFontEx(file,32,nullptr,256);if(loaded.texture.id!=GetFontDefault().texture.id)overlayFont=loaded;if(overlayFont.texture.id)SetTextureFilter(overlayFont.texture,TEXTURE_FILTER_BILINEAR);break;}}return overlayFont.texture.id?overlayFont:GetFontDefault();}}
-Font ExperienceOverlayFont(){return OverlayFont();}
-void ClearExperienceOverlayResources(){if(overlayFont.texture.id){if(IsWindowReady())UnloadFont(overlayFont);else{UnloadFontData(overlayFont.glyphs,overlayFont.glyphCount);MemFree(overlayFont.recs);}}overlayFont={};fontAttempted=false;}
+Font ExperienceOverlayFont(){return ui::SystemFont();}
+void ClearExperienceOverlayResources(){ui::ReleaseSystemFont();}
 
 void DrawHealthHud(const game::RuntimeSession& runtime,int width,int height,Font font){
     if(runtime.state()!=game::RuntimeState::Playing||!runtime.healthHud().visible)return;
-    if(font.texture.id==GetFontDefault().texture.id)font=OverlayFont();
+    if(font.texture.id==GetFontDefault().texture.id)font=ui::SystemFont();
     const float scale=std::clamp(height/720.f,.75f,1.5f);
     const float fraction=runtime.healthHud().sample(runtime.health(),runtime.settings().maxHealth,GetFrameTime());
     // Barra compacta monocromática — área segura superior-direita
@@ -33,7 +32,7 @@ void DrawHealthHud(const game::RuntimeSession& runtime,int width,int height,Font
 void DrawExperienceOverlay(const game::RuntimeSession& runtime,int width,int height,Font font){
     if(runtime.state()!=game::RuntimeState::Playing)return;
     DrawHealthHud(runtime,width,height,font);
-    if(font.texture.id==GetFontDefault().texture.id)font=OverlayFont();
+    if(font.texture.id==GetFontDefault().texture.id)font=ui::SystemFont();
     const float scale=std::clamp(height/720.f,1.f,1.4f);const Color panel{15,15,19,225},focus{220,220,220,220},text{242,242,245,255},muted{185,185,195,255};
     auto label=[&](const std::string& value,float x,float y,float size,Color color){DrawTextEx(font,value.c_str(),{x,y},size*scale,scale,color);};
     auto fit=[&](std::string value,float available,float size){while(!value.empty()&&MeasureTextEx(font,(value+"...").c_str(),size*scale,scale).x>available){size_t i=value.size()-1;while(i&&(static_cast<unsigned char>(value[i])&0xc0)==0x80)--i;value.resize(i);}return value;};
