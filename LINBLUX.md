@@ -768,8 +768,9 @@ entrada antes do runtime.
   retorna o ID da cópia. A autoria permanece intacta.
   A câmera consulta a geometria real e usa a média das Parts com papel Head
   (Root como fallback). Há limite de 128 cópias vivas. A integração ainda
-  não substitui a cápsula legada, animação por juntas, NPC/Bot nem ocultação em
-  primeira pessoa. Não constitui aprovação do Character Core completo.
+  não substitui a cápsula legada, animação por juntas nem NPC/Bot.
+  Ocultação em primeira pessoa usa estado da cópia, preservando materiais
+  e cores das Parts. Não constitui aprovação do Character Core completo.
 - **Árvore do Explorador**: `editor/HierarchyModel` produz linhas por ID,
   filtra cada nó uma vez e calcula intervalos de seleção visível. Shift
   seleciona o intervalo; Ctrl+Shift acrescenta ao conjunto atual.

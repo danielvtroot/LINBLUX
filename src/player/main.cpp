@@ -64,6 +64,10 @@ int main(int argc,char** argv) {
         while(!WindowShouldClose()&&(!frames||rendered++<frames)) {
             const Rectangle menuButton{16,16,52,52};
             ui::BeginInputFrame();
+            if(std::getenv("LINBLUX_TRACE_PLAYER_INPUT")&&(ui::KeyPressed(KEY_ESCAPE)||IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||IsMouseButtonReleased(MOUSE_BUTTON_LEFT))) {
+                const auto pointer=GetMousePosition();
+                std::fprintf(stderr,"PLAYER_INPUT t=%.3f open=%d esc=%d press=%d release=%d mouse=%.1f,%.1f size=%d,%d\n",GetTime(),menu.open(),ui::KeyPressed(KEY_ESCAPE),IsMouseButtonPressed(MOUSE_BUTTON_LEFT),IsMouseButtonReleased(MOUSE_BUTTON_LEFT),pointer.x,pointer.y,GetScreenWidth(),GetScreenHeight());
+            }
             if(ui::KeyPressed(KEY_ESCAPE)||(CheckCollisionPointRec(GetMousePosition(),menuButton)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))){menu.toggle();if(!menu.open())runtime.resume();EnableCursor();}
             const bool paused=menu.open(); // captura de entrada; simulação continua Playing
             game::PlayerInput input;
