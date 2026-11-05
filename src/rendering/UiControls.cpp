@@ -15,11 +15,12 @@ bool Button(const char* label,Rectangle r,Font font,float scale,bool enabled,boo
     DrawTextEx(font,label,{r.x+10*scale,r.y+(r.height-size)/2},size,scale,enabled?theme::text:theme::disabled);
     return enabled&&((hover&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT))||(focused&&IsKeyPressed(KEY_ENTER)));
 }
-bool Slider(Rectangle r,float& value,float minimum,float maximum,bool enabled,bool focused,bool& dragging,float scale) {
+bool Slider(Rectangle r,float& value,float minimum,float maximum,bool enabled,bool focused,bool& dragging,float scale,bool pointerAvailable) {
     const float before=value,range=maximum-minimum;
     if(!enabled||!IsMouseButtonDown(MOUSE_BUTTON_LEFT))dragging=false;
     const Rectangle hit{r.x-8*scale,r.y,r.width+16*scale,r.height};
-    if(enabled&&CheckCollisionPointRec(GetMousePosition(),hit)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))dragging=true;
+    if(enabled&&pointerAvailable&&CheckCollisionPointRec(GetMousePosition(),hit)&&
+       (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||(focused&&IsMouseButtonDown(MOUSE_BUTTON_LEFT))))dragging=true;
     if(enabled&&dragging)value=minimum+std::clamp((GetMousePosition().x-r.x)/r.width,0.f,1.f)*range;
     if(enabled&&focused){if(IsKeyPressed(KEY_HOME))value=minimum;if(IsKeyPressed(KEY_END))value=maximum;
         if(IsKeyPressed(KEY_LEFT))value-=range/20;if(IsKeyPressed(KEY_RIGHT))value+=range/20;}
@@ -36,9 +37,8 @@ void ProgressBar(Rectangle r,float fraction) {
     DrawRectangleRounded(r,1,12,theme::border);
     fraction=std::clamp(fraction,0.f,1.f);
     if(fraction<=0)return;
-    // Scissor keeps a tiny positive value proportional, without a minimum
-    // visible fill that falsely reports health on an almost empty bar.
-    BeginScissorMode(int(r.x),int(r.y),int(std::ceil(r.width*fraction)),int(std::ceil(r.height)));
-    DrawRectangleRounded(r,1,12,theme::text);EndScissorMode();
+    // Preserve the actual proportion even below the usual capsule diameter.
+    // No clip-state mutation: also safe inside an existing panel scissor.
+    DrawRectangleRounded({r.x,r.y,r.width*fraction,r.height},1,12,theme::text);
 }
 }

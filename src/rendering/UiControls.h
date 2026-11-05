@@ -9,6 +9,6 @@ void DrawSurface(Rectangle bounds, Surface surface, bool highlighted=false);
 bool Button(const char* label, Rectangle bounds, Font font, float scale,
             bool enabled, bool focused, bool active=false);
 bool Slider(Rectangle bounds, float& value, float minimum, float maximum,
-            bool enabled, bool focused, bool& dragging, float scale);
+            bool enabled, bool focused, bool& dragging, float scale, bool pointerAvailable=true);
 void ProgressBar(Rectangle bounds, float fraction);
 }

@@ -46,7 +46,7 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
   const int id=current++;Rectangle track{x-8*s,y,available+16*s,22*s};const bool hover=enabled&&paused&&CheckCollisionPointRec(mouse,track)&&CheckCollisionPointRec(mouse,content);
   if(hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))focus_=id;
   bool dragging=draggingSlider_==id;
-  ui::Slider({x,y,available,22*s},value,min,max,enabled&&paused&&(dragging||CheckCollisionPointRec(mouse,content)),id==focus_,dragging,s);
+  ui::Slider({x,y,available,22*s},value,min,max,enabled&&paused,id==focus_,dragging,s,CheckCollisionPointRec(mouse,content));
   if(dragging)draggingSlider_=id;else if(draggingSlider_==id)draggingSlider_=-1;
   y+=46*s;
  };
