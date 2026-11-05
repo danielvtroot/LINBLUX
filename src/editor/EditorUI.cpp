@@ -107,6 +107,7 @@ enum class Icon {
     Rotate,
     Part,
     Sphere,
+    Cylinder,
     Spawn,
     Color,
     Material,
@@ -195,6 +196,13 @@ void DrawIcon(ImDrawList* drawList, ImVec2 center, float size, Icon icon, ImU32 
                                  0.0f, 24, 1.4f);
             drawList->AddLine(ImVec2(center.x - half * .68f, center.y),
                               ImVec2(center.x + half * .68f, center.y), color, 1.4f);
+            break;
+        case Icon::Cylinder:
+            drawList->AddRectFilled(ImVec2(center.x - half * .62f, center.y - half * .62f),
+                                     ImGui::ImVec2(center.x + half * .62f, center.y + half * .62f), color, 1.0f);
+            drawList->AddEllipse(center,  ImGui::ImVec2(half * .62f, half * .26f), color, 0.0f, 24, 1.4f);
+            drawList->AddLine(ImVec2(center.x - half * .62f, center.y + half * .62f),
+                               ImGui::ImVec2(center.x + half * .62f, center.y + half * .62f), color, 1.4f);
             break;
         case Icon::Spawn:
             drawList->AddRectFilled(ImVec2(center.x - half, center.y + half * 0.2f),
@@ -1315,6 +1323,7 @@ void EditorUI::drawToolbar() {
         if (IconButton("part", Icon::Part, "Part", false, "Criar um Block")) insertPart(PartShape::Block);
         ImGui::SameLine();
         if (IconButton("sphere", Icon::Sphere, "Sphere", false, "Criar uma Sphere")) insertPart(PartShape::Sphere);
+        ImGui::SameLine();        if (IconButton("cylinder", Icon::Cylinder, "Cylinder", false, "Criar um Cylinder")) insertPart(PartShape::Cylinder);
         ImGui::SameLine();
         if (IconButton("spawnloc", Icon::Spawn, "Spawn", false, "Criar SpawnLocation")) insertSpawnLocation();
         ToolbarSeparator();
@@ -1557,6 +1566,9 @@ void EditorUI::drawToolbox() {
     if (ContainsIgnoreCase("Sphere", search) &&
         IconButton("toolbox_sphere", Icon::Sphere, "Sphere", false,
                    "Insert an anchored sphere")) insertPart(PartShape::Sphere);
+    if (ContainsIgnoreCase("Cylinder", search) &&
+        IconButton("toolbox_cylinder", Icon::Cylinder, "Cylinder", false,
+                   "Insert an anchored cylinder")) insertPart(PartShape::Cylinder);
     if (ContainsIgnoreCase("SpawnLocation", search)) {
         if (ContainsIgnoreCase("Block", search) || ContainsIgnoreCase("Sphere", search))
             ImGui::SameLine();
@@ -2652,8 +2664,9 @@ void EditorUI::insertPart(PartShape shape) {
     const Vector3 focus = camera_.target();
     const Vector3 position{focus.x, std::max(6.0f, focus.y + 4.0f), focus.z};
     const Vector3 size = shape == PartShape::Sphere ? Vector3{3.0f, 3.0f, 3.0f}
-                                                    : Vector3{4.0f, 4.0f, 4.0f};
-    Part* part = scene_.createPart(shape, position, size,shape==PartShape::Sphere?"Esfera":"Peça");
+                        : shape == PartShape::Cylinder ? Vector3{3.0f, 4.0f, 3.0f}
+                        : Vector3{4.0f, 4.0f, 4.0f};
+    Part* part = scene_.createPart(shape, position, size,shape==PartShape::Sphere?"Esfera":shape==PartShape::Cylinder?"Cilindro":"Peça");
     if (part == nullptr) {
         setStatus("Falha ao criar a peca.", true);
         return;
