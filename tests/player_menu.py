@@ -33,12 +33,12 @@ try:
         time.sleep(.1)
     assert window,'no Player window';command('windowfocus',window);command('windowmove',window,0,0);time.sleep(2)
     def key(value):
-        command('keydown',value);time.sleep(1);command('keyup',value);time.sleep(.8)
-    def click(x,y):command('mousemove','--window',window,int(x),int(y));time.sleep(.15);command('mousedown',1);time.sleep(1);command('mouseup',1);time.sleep(.8)
+        command('keydown',value);time.sleep(.25);command('keyup',value);time.sleep(.3)
+    def click(x,y):command('mousemove','--window',window,int(x),int(y));time.sleep(.15);command('mousedown',1);time.sleep(.3);command('mouseup',1);time.sleep(.2)
     def shot(name):
         path=root/(name+'.png');subprocess.run(['scrot','-o','-u',str(path)],check=True,timeout=5);return Image.open(path).convert('RGB')
     for width,height in [(1366,768),(1920,1080)]:
-        command('windowsize',window,width,height);command('windowfocus',window);time.sleep(1);click(42,42);image=shot('menu-'+str(width))
+        command('windowsize',window,width,height);time.sleep(1);key('Escape');image=shot('menu-'+str(width))
         first=image.getpixel((width-30,height-30));changed=False
         for attempt in range(6):
             time.sleep(.15);current=shot('menu-running-'+str(width)).getpixel((width-30,height-30))
@@ -71,8 +71,8 @@ try:
         click(x0+span*.5,track_y);key('Right');check_thumb(.55,'audio-keyboard-'+str(width))
         click(x0+span/2,214*scale);check_thumb(0,'audio-muted-'+str(width))
         click(x0+span/2,214*scale);check_thumb(.55,'audio-restored-'+str(width))
-        click(x0+span*.5,track_y);command('mousedown',1);time.sleep(1)
-        command('mousemove','--window',window,int(x0+span+30),int(track_y+30));time.sleep(1)
+        click(x0+span*.5,track_y);command('mousedown',1);time.sleep(.15)
+        command('mousemove','--window',window,int(x0+span+30),int(track_y+30));time.sleep(.2)
         command('mouseup',1);time.sleep(.2);check_thumb(1,'audio-drag-outside-'+str(width))
         key('Escape');closed=shot('closed-'+str(width));assert max(closed.getpixel((8,180)))>55,'Esc did not remove side panel'
     command('windowsize',window,1280,720);time.sleep(.4);key('Escape');click(50,312);click(360,108);time.sleep(.4)
