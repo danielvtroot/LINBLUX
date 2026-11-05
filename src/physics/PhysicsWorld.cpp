@@ -342,10 +342,16 @@ void PhysicsWorld::updateShape(const Part& part, BodyEntry& entry) {
         static_cast<btSphereShape*>(entry.shape)->setUnscaledRadius(
             std::max(0.05f, part.sphereRadius()));
     } else if (part.shape() == PartShape::Cylinder) {
-        const auto half=static_cast<btCylinderShape*>(entry.shape)->getHalfExtentsWithMargin();
-        half.set(std::max(0.05f, part.sphereRadius()), std::max(0.05f, 0.5f * part.size().y), std::max(0.05f, part.sphereRadius()));
-        entry.shape->setMargin(0.0f);
-        static_cast<btCylinderShape*>(entry.shape)->setCylinderShapeX(half.getX(), half.getY(), half.getZ());
+        // btCylinderShape has no dimension setter, so a resize recreates the
+        // shape (same policy the type-change branch already uses).
+        const btVector3 desired(std::max(0.05f, part.sphereRadius()),
+                                std::max(0.05f, 0.5f * part.size().y),
+                                std::max(0.05f, part.sphereRadius()));
+        const auto current=static_cast<btCylinderShape*>(entry.shape)->getHalfExtentsWithMargin();
+        if((current-desired).length2()>1e-12f) {
+            auto* previous=entry.shape;entry.shape=createShape(part);
+            entry.body->setCollisionShape(entry.shape);delete previous;
+        }
     } else {
         const Vector3 half = part.halfExtents();
         // Match btBoxShape's safe-margin policy after EVERY resize, not only
@@ -526,13 +532,12 @@ bool PhysicsWorld::collisionGeometry(InstanceId id,CollisionGeometry& out) const
     out.box.center=FromBullet(entry.body->getWorldTransform().getOrigin());
     out.box.rotation=FromBullet(entry.body->getWorldTransform().getRotation());
     out.margin=entry.shape->getMargin();
-    if(entry.shape->getShapeType()==BOX_SHAPE_PROXYTYPE) {
+if(entry.shape->getShapeType()==BOX_SHAPE_PROXYTYPE) {
         out.shape=PartShape::Block;out.box.half=FromBullet(static_cast<const btBoxShape*>(entry.shape)->getHalfExtentsWithMargin());
     }else if(entry.shape->getShapeType()==SPHERE_SHAPE_PROXYTYPE) {
-        out.shape=PartShape::Sphere;const float r=static_cast<const btSphereShape*>(entry.shape)->getRadius();out.box.half={r,r,r};
+        out.shape=PartShape::Sphere;const float r=static_cast<const btSphereShape*>(entry.shape)->getRadius();out.box.half=Vector3{r,r,r};
     }else if(entry.shape->getShapeType()==CYLINDER_SHAPE_PROXYTYPE) {
-        const auto& cyl=static_cast<const btCylinderShape*>(entry.shape)->getHalfExtents();
-        out.shape=PartShape::Cylinder;out.box.half={cyl.getX(),cyl.getY(),cyl.getZ()};
+        out.shape=PartShape::Cylinder;out.box.half=FromBullet(static_cast<const btCylinderShape*>(entry.shape)->getHalfExtentsWithMargin());
     }else return false;
     return true;
 }

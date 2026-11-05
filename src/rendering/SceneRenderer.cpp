@@ -1278,7 +1278,14 @@ void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width
         const bool textured=m&&!m->baseColorTexture.empty();
         (alpha<255||textured?transparent:opaque).push_back(part);
         if(alpha==255&&wantsShadow){const float d=part->sphereRadius()*2;
-            casters.push_back({part->position(),part->shape()==PartShape::Sphere?Vector3{d,d,d}:part->size(),part->rotation(),part->shape()==PartShape::Sphere,part->shape()==PartShape::Cylinder,part});}
+            ShadowCaster caster{};
+            caster.position=part->position();
+            caster.size=part->shape()==PartShape::Sphere?Vector3{d,d,d}:part->size();
+            caster.rotation=part->rotation();
+            caster.sphere=part->shape()==PartShape::Sphere;
+            caster.cylinder=part->shape()==PartShape::Cylinder;
+            caster.part=part;
+            casters.push_back(caster);}
     }
     std::vector<RigRenderState> rigStates;
     if(authoredRigs)for(const auto& asset:scene.gameAssets().rigs)
@@ -1286,8 +1293,13 @@ void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width
     if(rig)rigStates.push_back(*rig);
     for(const auto& visual:npcVisuals)if(const auto* asset=scene.gameAssets().findRig(visual.rigId))rigStates.push_back({asset,visual.pose,visual.root});
     if(wantsShadow)for(const auto& state:rigStates)if(state.rig){const auto world=state.rig->evaluate(state.pose,state.root);
-        for(int i=0;i<game::kBodyCount;++i)if(state.rig->bodies[i].color.a==255)
-            casters.push_back({world[i].position,state.rig->bodies[i].size,world[i].rotation,false,nullptr});}
+        for(int i=0;i<game::kBodyCount;++i)if(state.rig->bodies[i].color.a==255){
+            ShadowCaster caster{};
+            caster.position=world[i].position;
+            caster.size=state.rig->bodies[i].size;
+            caster.rotation=world[i].rotation;
+            caster.part=nullptr;
+            casters.push_back(caster);}}
     modern_->prepareShadows(casters,camera,lighting,quality_,float(width)/std::max(1,height),shadowQuality_);
 
     ClearBackground(sky);

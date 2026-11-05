@@ -132,7 +132,7 @@ bool ModernMaterials::initialize() {
     shader_.locs[SHADER_LOC_MAP_METALNESS]=GetShaderLocation(shader_,"mrMap");
     shader_.locs[SHADER_LOC_MAP_HEIGHT]=GetShaderLocation(shader_,"shadowMap");
     shader_.locs[SHADER_LOC_MAP_OCCLUSION]=GetShaderLocation(shader_,"aoMap");
-    cube_=GenMeshCube(1,1,1);sphere_=GenMeshSphere(1,32,48);cylinder_=GenMeshCylinder(1,1,1,16);
+    cube_=GenMeshCube(1,1,1);sphere_=GenMeshSphere(1,32,48);cylinder_=GenMeshCylinder(1,1,16);
     // Sparse guides composed of the actual mesh edges, not long chords or
     // every triangle. Keep their subsegments to follow the smooth surface.
     std::set<std::array<int,6>> seen;
@@ -159,7 +159,7 @@ bool ModernMaterials::initialize() {
     ready_=cube_.vaoId&&sphere_.vaoId;return ready_;
 }
 ModernMaterials::~ModernMaterials() {
-    if(cube_.vaoId)UnloadMesh(cube_);if(sphere_.vaoId)UnloadMesh(sphere_);
+    if(cube_.vaoId)UnloadMesh(cube_);if(sphere_.vaoId)UnloadMesh(sphere_);if(cylinder_.vaoId)UnloadMesh(cylinder_);
     if(material_.maps)MemFree(material_.maps); // textures belong to ImageAssets
     if(gridTexture_.id)UnloadTexture(gridTexture_);
     if(shader_.id)UnloadShader(shader_);
