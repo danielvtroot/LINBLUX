@@ -2,7 +2,7 @@
 #include "game/ImageAssets.h"
 #include "experiences/ExperienceManager.h"
 #include "ui/NativeFileDialog.h"
-#include "media/AsciiBackground.h"
+#include "media/VideoBackground.h"
 #include <future>
 #include <optional>
 #include <string>
@@ -53,7 +53,7 @@ private:
     Rml::Context& context_;
     Rml::ElementDocument& document_;
     ui::NativeFileDialog chooser_;
-    media::AsciiBackground background_;
+    media::VideoBackground background_;
     std::string page_="home",renderedPage_,markup_,error_,savedWorld_,dialogPurpose_,confirm_,pendingPath_,helpText_,filter_,cardMenu_;
     size_t libraryPage_=0;
     std::vector<std::pair<std::string,std::string>> commands_;
