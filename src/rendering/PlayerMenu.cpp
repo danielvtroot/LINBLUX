@@ -37,7 +37,7 @@ auto text=[&](const std::string& value,float x,float y,float size,Color color){D
     if(brand)brand->draw(logoRect,logo);
     else if(logo.id)DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{logoRect.x,logoRect.y,logoRect.width,logoRect.height},{0,0},0,WHITE);
     const char* pages[]={"Jogador","Câmera","Controles","Áudio","Vídeo","Ajuda"};
-    for(int i=0;i<6;++i)if(button(pages[i],{left+10*s,(84+42*i)*s,side-20*s,36*s},page_==i)){page_=i;scroll_=0;}
+    for(int i=0;i<6;++i)if(button(pages[i],{left+10*s,(126+42*i)*s,side-20*s,36*s},page_==i)){page_=i;scroll_=0;}
     if(button("Sair",{left+10*s,height-54*s,side-20*s,38*s}))quit=true;
     const float x=left+side+22*s,available=w-side-44*s;
     std::string heading=title;while(!heading.empty()&&MeasureTextEx(font,heading.c_str(),17*s,s).x>available-42*s)heading.pop_back();
