@@ -11,16 +11,14 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
   progress_=std::clamp(progress_+(paused?1.f:-1.f)*std::clamp(GetFrameTime(),0.f,.25f)/.18f,0.f,1.f);
   if(progress_<=0)return false;
   const float s=std::clamp(height/720.f,.75f,1.5f),w=std::min(width-16.f,std::clamp(width*.55f,480*s,840.f)),side=170*s;
-  const float t=progress_*progress_*(3-2*progress_);
-  if(!paused)menuLeft_=-w*(1-t);
-  float left=menuLeft_;
+const float t=progress_*progress_*(3-2*progress_);
+  float left=-w*(1-t);
   const Color white{242,238,242,255},muted{185,177,185,255},focus{255,255,255,230},panel{23,23,28,247};
   DrawRectangle(0,0,width,height,{0,0,0,(unsigned char)(90*t)});DrawRectangle(int(left),0,int(w),height,panel);
   DrawRectangle(int(left),0,int(side),height,{15,15,19,250});
 auto text=[&](const std::string& value,float x,float y,float size,Color color){DrawTextEx(font,value.c_str(),{x,y},size*s,s,color);};
     const auto mouse=GetMousePosition();int current=0;bool quit=false;
-    if(!paused)draggingSlider_=-1;
-    if(!paused&&!draggingMenu_)dragOffsetX_=dragOffsetY_=0;
+    if(!paused)draggingSlider_=-1,draggingMenu_=false;
     if(paused){if(ui::KeyPressed(KEY_TAB)||ui::KeyPressed(KEY_DOWN))focus_=(focus_+1)%std::max(1,count_);if(ui::KeyPressed(KEY_UP))focus_=(focus_+std::max(1,count_)-1)%std::max(1,count_);}
     auto button=[&](const std::string& label,Rectangle r,bool active=false){
    const int id=current++;
@@ -33,6 +31,11 @@ auto text=[&](const std::string& value,float x,float y,float size,Color color){D
     const Rectangle logoRect{left+14*s,18*s,logoSide,logoSide};
     if(paused&&CheckCollisionPointRec(mouse,logoRect)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
         draggingMenu_=true;dragOffsetX_=mouse.x-left;dragOffsetY_=mouse.y;
+    }
+    if(draggingMenu_){
+        if(IsMouse|M...){
+            left=std::clamp(mouse.x-dragOffsetX_,0.f,float(width)-w-4*s);
+        }else draggingMenu_=false;
     }
 if(draggingMenu_){
         if(IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
