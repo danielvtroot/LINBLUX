@@ -7,14 +7,16 @@
 #include <cstdio>
 namespace loblox {
 bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font font,Texture2D logo,const std::string& title,const BrandLogo3D* brand){
- const bool paused=open_;
- progress_=std::clamp(progress_+(paused?1.f:-1.f)*std::clamp(GetFrameTime(),0.f,.25f)/.18f,0.f,1.f);
- if(progress_<=0)return false;
- const float s=std::clamp(height/720.f,.75f,1.5f),w=std::min(width-16.f,std::clamp(width*.55f,480*s,840.f)),side=170*s;
- const float t=progress_*progress_*(3-2*progress_),left=-w*(1-t);
- const Color white{242,238,242,255},muted{185,177,185,255},focus{255,255,255,230},panel{23,23,28,247};
- DrawRectangle(0,0,width,height,{0,0,0,(unsigned char)(90*t)});DrawRectangle(int(left),0,int(w),height,panel);
- DrawRectangle(int(left),0,int(side),height,{15,15,19,250});
+  const bool paused=open_;
+  progress_=std::clamp(progress_+(paused?1.f:-1.f)*std::clamp(GetFrameTime(),0.f,.25f)/.18f,0.f,1.f);
+  if(progress_<=0)return false;
+  const float s=std::clamp(height/720.f,.75f,1.5f),w=std::min(width-16.f,std::clamp(width*.55f,480*s,840.f)),side=170*s;
+  const float t=progress_*progress_*(3-2*progress_);
+  if(!paused)menuLeft_=-w*(1-t);
+  float left=menuLeft_;
+  const Color white{242,238,242,255},muted{185,177,185,255},focus{255,255,255,230},panel{23,23,28,247};
+  DrawRectangle(0,0,width,height,{0,0,0,(unsigned char)(90*t)});DrawRectangle(int(left),0,int(w),height,panel);
+  DrawRectangle(int(left),0,int(side),height,{15,15,19,250});
 auto text=[&](const std::string& value,float x,float y,float size,Color color){DrawTextEx(font,value.c_str(),{x,y},size*s,s,color);};
     const auto mouse=GetMousePosition();int current=0;bool quit=false;
     if(!paused)draggingSlider_=-1;
@@ -32,10 +34,10 @@ auto text=[&](const std::string& value,float x,float y,float size,Color color){D
     if(paused&&CheckCollisionPointRec(mouse,logoRect)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
         draggingMenu_=true;dragOffsetX_=mouse.x-left;dragOffsetY_=mouse.y;
     }
-    if(draggingMenu_){
-        if(IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
+if(draggingMenu_){
+        if(IsMouseBOTTOM(MOUSE_BUTTON_LEFT)){
             const float nx=mouse.x-dragOffsetX_,ny=mouse.y-dragOffsetY_;
-            left=std::clamp(nx,0.f,float(width)-w-4*s);
+            menuLeft_=std::clamp(nx,0.f,float(width)-w-4*s);
         }else draggingMenu_=false;
     }
     if(brand)brand->draw(logoRect,logo);
