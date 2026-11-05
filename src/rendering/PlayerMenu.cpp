@@ -8,7 +8,7 @@
 namespace loblox {
 bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font font,Texture2D logo,const std::string& title,const BrandLogo3D* brand){
   const bool paused=open_;
-  progress_=std::clamp(progress_+(paused?1.f:-1.f)*std::clamp(GetFrameTime(),0.f,.25f)/.30f,0.f,1.f);
+  progress_=std::clamp(progress_+(paused?1.f:-1.f)*std::clamp(GetFrameTime(),0.f,.25f)/.15f,0.f,1.f);
   if(progress_<=0)return false;
   const float s=std::clamp(height/720.f,.75f,1.5f),w=std::min(width-16.f,std::clamp(width*.55f,480*s,840.f)),side=170*s;
   const float t=progress_*progress_*(3-2*progress_);
