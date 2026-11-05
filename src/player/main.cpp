@@ -82,7 +82,7 @@ int main(int argc,char** argv) {
             brand.update(GetFrameTime(),int(52*GetWindowScaleDPI().x));
             BeginDrawing();ClearBackground(ui::theme::background);
             RigRenderState avatar{&runtime.rig(),runtime.pose(),runtime.renderCharacterRoot()};
-            renderer.drawScene(runtime.scene(),runtime.playerCamera().camera(),GetScreenWidth(),GetScreenHeight(),0,runtime.playerCamera().avatarHidden()?nullptr:&avatar,false);
+            renderer.drawScene(runtime.scene(),runtime.playerCamera().camera(),GetScreenWidth(),GetScreenHeight(),0,(runtime.characterModel()||runtime.playerCamera().avatarHidden())?nullptr:&avatar,false);
             DrawExperienceOverlay(runtime,GetScreenWidth(),GetScreenHeight(),font);
             DrawLuaUi(runtime,GetScreenWidth(),GetScreenHeight(),font);
             brand.draw(menuButton,logo);

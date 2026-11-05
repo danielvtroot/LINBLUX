@@ -10,6 +10,7 @@
 #include "game/Interaction.h"
 #include "game/Npc.h"
 #include "game/Rig.h"
+#include "game/CharacterCore.h"
 #include "game/ScriptInput.h"
 #include "game/ProgressStore.h"
 #include "game/Ui.h"
@@ -141,6 +142,9 @@ public:
     bool heal(float amount,std::string& error);
     bool resetCharacter(std::string& error);
     const Rig& rig() const { return rig_; }
+    InstanceId characterModel() const { return characterModel_; }
+    bool setCharacterModel(InstanceId source,std::string& error);
+
     RigidTransform characterRoot() const;
     // Physics remains authoritative; camera and avatar share this presentation
     // sample between fixed ticks. Rotation controlled by mouse is not delayed.
@@ -178,6 +182,7 @@ public:
     PlayerCamera& playerCamera() { return camera_; }
     const PlayerCamera& playerCamera() const { return camera_; }
 private:
+    InstanceId characterModel_=0;
     friend class NpcSystem; // controlador de NPC conduz corpos e navegacao
     void destroyCharacter();
     void step(float dt, Vector3 desired, bool jump);

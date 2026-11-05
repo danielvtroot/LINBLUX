@@ -5,6 +5,7 @@
 #include "ui/ImageSafety.h"
 #include "ui/RmlFrontendSupport.h"
 #include "editor/EditorUI.h"
+#include "editor/HierarchyModel.h"
 #include "rendering/EditorCamera.h"
 #include "scene/Scene.h"
 #include "objects/Lighting.h"
@@ -59,6 +60,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
     std::map<std::pair<std::string,std::string>,std::string> styles;
     std::vector<game::ImageAsset> images;double imageScan=-10;std::string imageQuery;
     std::vector<game::SoundAsset> audioFiles;double audioScan=-10;std::string audioQuery;
+    HierarchyModel hierarchy;InstanceId selectionAnchor=0;
     std::set<InstanceId> collapsed;InstanceId dragNode=0,dragTarget=0;Vector2 dragStart{};
     bool dragging=false,mouseOwned=false,escapeConsumed=false,dialogOpen=false,treeKeyboard=false,restoreFocus=false;
     bool initialized=false,syncing=false,keyboardOwned=false;float shownHealth=100,healthTrail=100;int w=0,h=0;
@@ -406,7 +408,17 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         if(auto* fold=ancestor(target,"data-fold")) {auto id=fold->GetAttribute<InstanceId>("data-fold",0);if(collapsed.erase(id)==0)collapsed.insert(id);treeHash=0;return;}
         if(auto* rig=ancestor(target,"data-rig")) {selectedRigDecal.clear();commands.push_back({"rig-select",attr(rig,"data-rig")});return;}
         auto* button=ancestor(target,"data-action");
-        if(!button) {if(auto* row=ancestor(target,"data-node-row"))commands.push_back({"select",ImGui::GetIO().KeyCtrl?"toggle":"",row->GetAttribute<InstanceId>("data-node-row",0)});return;}
+        if(!button) {
+            if(auto* row=ancestor(target,"data-node-row")) {
+                const auto id=row->GetAttribute<InstanceId>("data-node-row",0);const auto& io=ImGui::GetIO();
+                const auto range=io.KeyShift?hierarchy.range(selectionAnchor,id):std::vector<InstanceId>{};
+                if(!range.empty()) {
+                    if(!io.KeyCtrl)actions.dispatch({"select","",range.front()});
+                    for(auto selected:range)if(!ui.scene_.selected(selected))actions.dispatch({"select","toggle",selected});
+                }else {commands.push_back({"select",io.KeyCtrl?"toggle":"",id});selectionAnchor=id;}
+            }
+            return;
+        }
         if(button->GetTagName()=="input"||button->GetTagName()=="select")return;
         const auto action=attr(button,"data-action"),v=attr(button,"data-value");
         if(!dialogOpen)display("dialog-confirm",true);
@@ -710,9 +722,11 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             }
         }
         treeHash=hash;
-        std::string s;auto matches=[&](const Instance* node){std::string name=node->name()+" "+node->className(),q=search;std::transform(name.begin(),name.end(),name.begin(),::tolower);std::transform(q.begin(),q.end(),q.begin(),::tolower);return q.empty()||name.find(q)!=std::string::npos;};
-        std::function<bool(const Instance*)> relevant=[&](const Instance* n){if(matches(n))return true;for(auto* c:n->children())if(relevant(c))return true;return false;};
-        std::function<void(const Instance*,int)> row=[&](const Instance* node,int depth){if(!search.empty()&&!relevant(node))return;
+        hierarchy.rebuild(ui.scene_,collapsed,search);
+        std::string s;
+        for(const auto& entry:hierarchy.rows()) {
+            const auto* node=ui.scene_.find(entry.id);if(!node)continue;
+            const auto depth=entry.depth;
             const auto id=std::to_string(node->id());const auto type=node->instanceClass();
             const auto marker=node->attributes().find("_linblux_item_prototype");
             const bool item=type==InstanceClass::Model&&marker!=node->attributes().end()&&std::get_if<bool>(&marker->second)&&std::get<bool>(marker->second);
@@ -721,10 +735,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
             if(!node->children().empty())s+="<button id=\"fold-"+id+"\" class=\"fold\" data-fold=\""+id+"\"><img src=\"icon-chevron-"+(collapsed.count(node->id())?"right":"down")+"\"/></button>";
             else s+="<span class=\"leaf\"/>";
             s+="<img src=\"icon-"+icon+"\"/><span class=\"node-name\">"+Escape(node->name())+"</span></div>";
-            if(!collapsed.count(node->id())||!search.empty())for(auto* c:node->children())row(c,depth+1);
-        };
-        for(auto type:{InstanceClass::Workspace,InstanceClass::Lighting,InstanceClass::ServerScriptService,InstanceClass::ServerStorage,InstanceClass::ReplicatedStorage})
-            if(auto* service=ui.scene_.service(type))row(service,0);
+        }
         for(const auto& rig:ui.scene_.gameAssets().rigs) {
             const auto rid=Escape(rig.id);const bool active=ui.selectedRig_==rig.id;
             s+="<div id=\"rig-"+rid+"\" class=\"tree-row"+std::string(active&&ui.selectedRigBody_<0?" selected":"")+"\" data-rig=\""+rid+"\"><span class=\"leaf\"/><img src=\"icon-rig\"/><span class=\"node-name\">"+Escape(rig.name)+"</span></div>";
@@ -1444,7 +1455,7 @@ void StudioFrontend::enableExperiences(experiences::ExperienceManager& manager,b
     p.experiences=std::make_unique<ExperienceUI>(p.ui,manager,*p.context,*p.document);p.experiences->initialize(home);
 }
 void StudioFrontend::resetDocumentView() {
-    auto& p=*impl_;p.advanced.clear();p.search.clear();p.propertySearch.clear();p.collapsed.clear();p.treeHash=0;
+    auto& p=*impl_;p.advanced.clear();p.search.clear();p.propertySearch.clear();p.collapsed.clear();p.selectionAnchor=0;p.treeHash=0;
     p.treeMarkup.clear();p.propertyMarkup.clear();p.documentMarkup.clear();p.selectedRigDecal.clear();p.selectedDecalRig.clear();
     p.dragNode=p.dragTarget=0;p.dragging=false;p.contextOpen=false;p.split.clear();p.context->GetRootElement()->Focus();p.commands.clear();p.treeKeyboard=false;
     invalidateImageLibrary();Rml::ReleaseTextures(p.renderer.get());

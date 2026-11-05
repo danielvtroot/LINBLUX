@@ -83,6 +83,7 @@ target_link_libraries(linblux_imgui PUBLIC ${RAYLIB_LIBRARIES} OpenGL::GL)
 add_library(linblux_engine STATIC
   src/experiences/ExperienceManager.cpp
   src/scripting/LuaRuntime.cpp
+  src/game/CharacterCore.cpp
   src/game/Rig.cpp
   src/game/GameAssetsIO.cpp
   src/game/ImageAssets.cpp

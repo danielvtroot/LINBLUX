@@ -230,6 +230,13 @@ void PlayerCamera::update(float dt, Vector3 root, Vector3 velocity, const Player
     camera_.target = Vector3Subtract(camera_.position, back);
     camera_.up = {0, 1, 0}; camera_.fovy = settings.cameraFov; camera_.projection = CAMERA_PERSPECTIVE;
 }
+bool RuntimeSession::setCharacterModel(InstanceId source,std::string& error) {
+    if(!scene_){error="Runtime inativo.";return false;}
+    const auto next=CharacterCore::spawn(*scene_,source,renderCharacterRoot(),error);
+    if(!next)return false;
+    if(characterModel_)scene_->removeById(characterModel_);
+    characterModel_=next;return true;
+}
 RuntimeSession::RuntimeSession() = default;
 RuntimeSession::~RuntimeSession() { stop(); }
 bool RuntimeSession::start(const Scene& authoring, std::string& error,const ProgressOptions& progress) {
@@ -300,6 +307,7 @@ void RuntimeSession::stop(bool saveProgress) {
     state_ = RuntimeState::StoppingPlay;
     if (!activeAnimation_.empty()) Event("animation", "stop", correlation_, {{"clip", activeAnimation_}});
     activeAnimation_.clear();
+    characterModel_=0;
     scripts_.stop();ui_.clear();npcs_.reset();music_.stop(audio_);audio_.stopAll();activeContacts_.clear();scriptInput_={};previousScriptInput_={};
     itemActions_.clear();
     if(saveProgress)try{progress_.flush();}catch(const std::exception& e){scripts_.hostError(e.what());}
@@ -769,6 +777,12 @@ void RuntimeSession::update(float dt, const PlayerInput& input) {
     // camera must not wait for the next 60 Hz physics tick to turn the body.
     if((!camera_.scripted()&&settings_.cameraLock) || shiftLockActive() || camera_.firstPerson())yaw_=camera_.yaw();
     if(state_==RuntimeState::Playing)camera_.update(dt,renderCharacterRoot().position,velocity(),input,settings_,*this);
+    if(characterModel_) {
+        std::string error;
+        if(!CharacterCore::move(*scene_,characterModel_,renderCharacterRoot(),error)) {
+            scene_->removeById(characterModel_);characterModel_=0;scripts_.hostError(error);
+        }
+    }
     std::vector<InstanceId> fallen;
     for(auto* part:scene_->worldParts()) if(!part->anchored() && part->deletable() && part->position().y<scene_->workspace()->fallenPartsDestroyHeight())fallen.push_back(part->id());
     for(auto id:fallen)scene_->removeById(id);
