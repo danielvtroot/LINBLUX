@@ -1,5 +1,6 @@
 #include "rendering/ExperienceOverlay.h"
 #include "rendering/PlayerMenu.h"
+#include "rendering/BrandLogo3D.h"
 #include "rendering/LuaUiRenderer.h"
 #include "experiences/ExperienceManager.h"
 #include "serialization/ProjectIO.h"
@@ -58,9 +59,9 @@ int main(int argc,char** argv) {
     Font font=GetFontDefault();bool customFont=false;
     for(const char* path:{"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"})if(FileExists(path)){font=LoadFontEx(path,24,nullptr,256);customFont=font.texture.id!=0;break;}
     {
-        SceneRenderer renderer;if(qualitySpecified)renderer.setQuality(quality);PlayerMenu menu;const auto logo=game::AssetTexture(game::BuiltinAssetPath("logo.png"));int rendered=0;
+        SceneRenderer renderer;if(qualitySpecified)renderer.setQuality(quality);PlayerMenu menu;BrandLogo3D brand;const auto logo=game::AssetTexture(game::BuiltinAssetPath("logo.png"));int rendered=0;
         while(!WindowShouldClose()&&(!frames||rendered++<frames)) {
-            const Rectangle menuButton{16,16,104,52};
+            const Rectangle menuButton{16,16,52,52};
             if(IsKeyPressed(KEY_ESCAPE)||(CheckCollisionPointRec(GetMousePosition(),menuButton)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))){menu.toggle();if(!menu.open())runtime.resume();EnableCursor();}
             const bool paused=menu.open(); // captura de entrada; simulação continua Playing
             game::PlayerInput input;
@@ -74,15 +75,14 @@ int main(int argc,char** argv) {
                 else runtime.uiPointer(pointer,float(GetScreenWidth()),float(GetScreenHeight()));
             }
             runtime.update(GetFrameTime(),input);
+            brand.update(GetFrameTime(),int(52*GetWindowScaleDPI().x));
             BeginDrawing();ClearBackground(ui::theme::background);
             RigRenderState avatar{&runtime.rig(),runtime.pose(),runtime.renderCharacterRoot()};
             renderer.drawScene(runtime.scene(),runtime.playerCamera().camera(),GetScreenWidth(),GetScreenHeight(),0,runtime.playerCamera().avatarHidden()?nullptr:&avatar,false);
             DrawExperienceOverlay(runtime,GetScreenWidth(),GetScreenHeight(),font);
             DrawLuaUi(runtime,GetScreenWidth(),GetScreenHeight(),font);
-            DrawRectangleRounded(menuButton,.16f,6,ui::theme::panel);
-            if(logo.id)DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{24,24,36,36},{0,0},0,WHITE);
-            for(int i=0;i<3;++i)DrawRectangle(78,31+8*i,22,2,ui::theme::text);
-            const bool quit=menu.draw(runtime,GetScreenWidth(),GetScreenHeight(),font,logo,experienceTitle);
+            brand.draw(menuButton,logo);
+            const bool quit=menu.draw(runtime,GetScreenWidth(),GetScreenHeight(),font,logo,experienceTitle,&brand);
             EndDrawing();
             if(quit)break;
         }

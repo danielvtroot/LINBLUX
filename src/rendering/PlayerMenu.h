@@ -5,9 +5,10 @@ namespace loblox::game {class RuntimeSession;}
 namespace loblox {
 // Standalone Player presentation. The Studio uses the same settings/actions
 // through its RmlUi adapter; neither is part of script-created game UI.
+class BrandLogo3D;
 class PlayerMenu {
 public:
-    bool draw(game::RuntimeSession& runtime,int width,int height,Font font,Texture2D logo,const std::string& title);
+    bool draw(game::RuntimeSession& runtime,int width,int height,Font font,Texture2D logo,const std::string& title, const BrandLogo3D* brand=nullptr);
     float progress()const{return progress_;}
     bool open()const{return open_;}
     void toggle(){open_=!open_;}

@@ -140,7 +140,7 @@ add_library(linblux_editing STATIC
 target_link_libraries(linblux_editing PUBLIC linblux_engine)
 add_library(linblux_core INTERFACE) # transitional test/embedding facade
  target_link_libraries(linblux_core INTERFACE linblux_engine linblux_editing)
-add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp src/rendering/ModernMaterials.cpp src/rendering/DirectionalShadow.cpp src/rendering/SceneTarget.cpp src/rendering/PlayerMenu.cpp src/rendering/ExperienceOverlay.cpp src/rendering/LuaUiRenderer.cpp)
+add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp src/rendering/ModernMaterials.cpp src/rendering/DirectionalShadow.cpp src/rendering/SceneTarget.cpp src/rendering/PlayerMenu.cpp src/rendering/BrandLogo3D.cpp src/rendering/ExperienceOverlay.cpp src/rendering/LuaUiRenderer.cpp)
 target_link_libraries(linblux_renderer PUBLIC linblux_engine)
 add_library(linblux_presentation STATIC src/ui/Localization.cpp)
 target_link_libraries(linblux_presentation PUBLIC linblux_engine)
@@ -199,12 +199,18 @@ add_custom_target(linblux_builtin_assets ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/builtin
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/logo.png ${CMAKE_CURRENT_SOURCE_DIR}/assets/builtin/character-face.png ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/builtin)
 add_dependencies(linblux linblux_builtin_assets)
+add_custom_target(linblux_brand_assets ALL
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia/3d
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/3d/logo-3d.glb ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia/3d)
+add_dependencies(linblux linblux_brand_assets)
+add_dependencies(linblux_player linblux_brand_assets linblux_builtin_assets)
+install(FILES midia/3d/logo-3d.glb DESTINATION share/linblux/midia/3d COMPONENT Linblux)
 add_custom_target(linblux_example_assets ALL COMMAND ${CMAKE_COMMAND} -E copy_directory
   ${CMAKE_CURRENT_SOURCE_DIR}/assets/examples/lua ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/examples/lua)
 add_dependencies(linblux linblux_example_assets)
 add_custom_target(linblux_media_assets ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/logo.png ${CMAKE_CURRENT_SOURCE_DIR}/midia/careditfullhd.mp4 ${CMAKE_CURRENT_SOURCE_DIR}/midia/hd.mp4 ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia)
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/logo.png ${CMAKE_CURRENT_SOURCE_DIR}/midia/hd.mp4 ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia)
 add_dependencies(linblux linblux_media_assets)
 # The development Home keeps its video; public installs require explicit rights.
 option(LINBLUX_INSTALL_BACKGROUND_VIDEO "Instalar vídeo com redistribuição autorizada" OFF)

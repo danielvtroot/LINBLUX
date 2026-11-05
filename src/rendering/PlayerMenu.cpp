@@ -1,10 +1,11 @@
 #include "rendering/PlayerMenu.h"
+#include "rendering/BrandLogo3D.h"
 #include "game/Runtime.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 namespace loblox {
-bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font font,Texture2D logo,const std::string& title){
+bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font font,Texture2D logo,const std::string& title,const BrandLogo3D* brand){
  const bool paused=open_;
  progress_=std::clamp(progress_+(paused?1.f:-1.f)*std::clamp(GetFrameTime(),0.f,.25f)/.18f,0.f,1.f);
  if(progress_<=0)return false;
@@ -24,7 +25,8 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
   text(label,r.x+10*s,r.y+(r.height-17*s)/2,16,active?white:muted);
   return paused&&((hover&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT))||(id==focus_&&IsKeyPressed(KEY_ENTER)));
  };
- if(logo.id)DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{left+16*s,18*s,34*s,34*s},{0,0},0,WHITE);
+ if(brand)brand->draw({left+16*s,18*s,34*s,34*s},logo);
+ else if(logo.id)DrawTexturePro(logo,{0,0,float(logo.width),float(logo.height)},{left+16*s,18*s,34*s,34*s},{0,0},0,WHITE);
  text("LINBLUX",left+58*s,26*s,17,white);
  if(button("Continuar",{left+10*s,76*s,side-20*s,36*s},true)){open_=false;runtime.resume();}
  const char* pages[]={"Jogador","Câmera","Controles","Áudio","Vídeo","Ajuda"};
