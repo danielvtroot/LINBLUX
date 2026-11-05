@@ -1,5 +1,6 @@
 #include "ui/ExperienceUI.h"
 #include "ui/Localization.h"
+#include "ui/Components.h"
 #include "ui/EditorActions.h"
 #include "ui/StudioFrontend.h"
 #include "editor/EditorUI.h"
@@ -22,8 +23,8 @@ namespace fs=std::filesystem;
 namespace {
 std::string esc(const std::string& s){std::string out;for(char c:s)out+=c=='&'?"&amp;":c=='<'?"&lt;":c=='>'?"&gt;":c=='\"'?"&quot;":std::string(1,c);return out;}
 std::string button(const std::string& action,const std::string& label,const std::string& value={},const std::string& id={},bool primary=false,const std::string& classes={}) {
-    const std::string kind=(primary?"experience-primary ":"")+classes;
-    return "<button "+(id.empty()?"":"id=\""+id+"\" ")+"data-experience=\""+action+"\" data-value=\""+esc(value)+"\" class=\""+kind+"\">"+esc(i18n::Text(label))+"</button>";
+    ui::ButtonSpec spec{id,action,i18n::Text(label),value,"",(primary?"experience-primary ":"")+classes};
+    spec.domain=ui::CommandDomain::Experience;return ui::ButtonMarkup(spec);
 }
 void show(Rml::ElementDocument& doc,const char* id,bool visible,const char* layout="block") {if(auto* e=doc.GetElementById(id))e->SetProperty("display",visible?layout:"none");}
 void text(Rml::ElementDocument& doc,const char* id,const std::string& value) {if(auto* e=doc.GetElementById(id);e&&e->GetInnerRML()!=esc(i18n::Text(value)))e->SetInnerRML(esc(i18n::Text(value)));}

@@ -2,6 +2,7 @@
 #include "ui/EditorActions.h"
 #include "ui/ExperienceUI.h"
 #include "ui/Localization.h"
+#include "ui/Components.h"
 #include "ui/ImageSafety.h"
 #include "ui/RmlFrontendSupport.h"
 #include "editor/EditorUI.h"
@@ -38,7 +39,7 @@ std::string Escape(const std::string& s) {std::string out;for(char c:s)out+=c=='
 std::string Num(float v) {return numfmt::Text(v, 4);}
 std::string Hex(Color c) {char s[8];std::snprintf(s,sizeof(s),"#%02x%02x%02x",c.r,c.g,c.b);return s;}
 std::string Button(const std::string& action,const std::string& label,const std::string& icon="",const std::string& value="",const std::string& scope="cmd") {
-    return "<button id=\""+scope+"-"+action+"-"+Escape(value)+"\" data-action=\""+action+"\" data-value=\""+Escape(value)+"\">"+(icon.empty()?"":"<img src=\"icon-"+icon+"\"/>")+Escape(i18n::Text(label))+"</button>";
+    return ui::ButtonMarkup({scope+"-"+action+"-"+value,action,i18n::Text(label),value,icon});
 }
 bool Within(Vector2 p,Rectangle r){return r.width>0 && CheckCollisionPointRec(p,r);}
 std::filesystem::path LayoutPath() {
@@ -1117,9 +1118,7 @@ if(c.action=="r6")showAdvanced("rig");
         auto find=[&](const std::string& id)->const game::SoundAsset*{return assets.findSound(id);};
         auto displayName=[&](const std::string& id){const auto* sound=find(id);return sound?sound->name:std::string();};
         auto button=[&](const std::string& id,const std::string& action,const std::string& label,const std::string& icon,const std::string& value){
-            std::string markup="<button id=\""+Escape(id)+"\" data-action=\""+Escape(action)+"\" data-value=\""+Escape(value)+"\">";
-            if(!icon.empty())markup+="<img src=\"icon-"+Escape(icon)+"\"/>";
-            return markup+Escape(i18n::Text(label))+"</button>";
+            return ui::ButtonMarkup({id,action,i18n::Text(label),value,icon});
         };
         auto matches=[&](const game::SoundAsset& sound){return audioQuery.empty()||lower(sound.name+" "+sound.id+" "+sound.filename+" "+sound.kind).find(lower(audioQuery))!=std::string::npos;};
         auto knownReference=[&](const std::string& reference){const auto canonical=game::NormalizeImageReference(reference);for(const auto& sound:assets.sounds)if(game::NormalizeImageReference(sound.reference)==canonical)return true;return false;};
