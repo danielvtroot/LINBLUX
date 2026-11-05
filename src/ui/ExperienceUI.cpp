@@ -377,7 +377,7 @@ void ExperienceUI::frame() {
         if(opacity<=0){load_=LoadState::None;releaseLoadingImages();editor_.finishPlayStart();}
     }
     if(home_&&dirty_)try{buildPage();}catch(const std::exception& e){error_=e.what();}
-    if(homeVisible()){if(!background_.running())background_.start(game::BuiltinAssetPath("midia/careditfullhd.mp4"));}
+    if(homeVisible()){if(!background_.running())background_.start(game::BuiltinAssetPath("ascii.txt"));}
     else if(background_.running())background_.stop();
     show(document_,"experience-home",home_);show(document_,"experience-root",true);
     show(document_,"experience-file-shade",fileMenu_&&!home_);show(document_,"experience-loading",loading());
