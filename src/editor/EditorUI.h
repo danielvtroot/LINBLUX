@@ -128,8 +128,8 @@ private:
     void drawAnimationEditor();
     void drawGameSettings();
     void drawPauseMenu();
-    void drawGameMenuOverlay(int width, int height);
     void startPlay();
+    void stopPlay();
     void setGameplayCapture(bool capture);
     void drawGameplayViewport(const EditorInput& input, InputContext context, Vector2 imagePosition);
     void insertR6();
