@@ -756,6 +756,22 @@ entrada antes do runtime.
 - **Menu** (`PlayerMenu`): lateral Continuar/Sair + páginas Jogador/Câmera/
   Controles/Áudio/Vídeo/Ajuda; volume master/mudo; **protegido contra
   alterações por scripts**. Simulação continua enquanto o menu está aberto.
+- **Personagens por Model (integração inicial)**: `game/CharacterCore` valida
+  Models com 1–512 Parts e exatamente uma Part com atributo textual
+  `CharacterRole=Root`. Papéis personalizados e repetidos nas demais peças
+  usam os mesmos IDs persistentes da Scene. Propriedades do Model oferecem
+  Converter em personagem e Usar como Player; `PlayerAvatar=true` persiste
+  a escolha. Runtime clona o Model, ancora as peças visuais e usa a cápsula
+  existente do Player para movimento. Remover Root invalida a cópia e volta
+  ao avatar legado. Lua aceita IDs ou referências em `getCharacter`,
+  `getPart`, `setPartRole`, `setCharacterModel`; `spawnCharacter(model,vec3)`
+  retorna o ID da cópia. A autoria permanece intacta.
+  Esta integração ainda não substitui câmera/colisão dimensionadas pelo rig
+  legado, animação por juntas, controladores de NPC/Bot nem ocultação em
+  primeira pessoa. Não constitui aprovação do Character Core completo.
+- **Árvore do Explorador**: `editor/HierarchyModel` produz linhas por ID,
+  filtra cada nó uma vez e calcula intervalos de seleção visível. Shift
+  seleciona o intervalo; Ctrl+Shift acrescenta ao conjunto atual.
 - **Marca 3D no Player standalone** (`BrandLogo3D`): carrega
   `midia/3d/logo-3d.glb` uma vez, centraliza e orienta sua face XZ para a
   câmera. As duas aparições compartilham cache a 30 Hz, rotação de 12°/s
