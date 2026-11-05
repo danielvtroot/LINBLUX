@@ -404,7 +404,7 @@ bool ParseObject(const json& value, std::size_t index, ParsedObject& out,
     const json* shapeField = FindField(value, "shape", error);
     if (shapeField == nullptr || !shapeField->is_string() ||
         !PartShapeFromName(shapeField->get<std::string>(), out.shape)) {
-        error = prefix + "'shape' invalido (Block ou Sphere)";
+        error = prefix + "'shape' invalido (Block, Sphere ou Cylinder)";
         return false;
     }
     const json* position = FindField(value, "position", error);
