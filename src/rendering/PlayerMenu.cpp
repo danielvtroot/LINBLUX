@@ -24,7 +24,7 @@ auto text=[&](const std::string& value,float x,float y,float size,Color color){D
    const int id=current++;
    return ui::Button(label.c_str(),r,font,s,paused,id==focus_,active);
     };
-    const float logoSide=44*s;
+    const float logoSide=60*s;
     const Rectangle logoRect{left+14*s,18*s,logoSide,logoSide};
     if(paused&&CheckCollisionPointRec(mouse,logoRect)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
         draggingMenu_=true;dragOffsetX_=mouse.x-left;dragOffsetY_=mouse.y;
