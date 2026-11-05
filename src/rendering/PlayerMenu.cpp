@@ -33,8 +33,7 @@ auto text=[&](const std::string& value,float x,float y,float size,Color color){D
         draggingMenu_=true;dragOffsetX_=mouse.x-left;dragOffsetY_=mouse.y;
     }
 if(draggingMenu_){
-        if(IsMouse|M...){
-            left=std::clamp(mouse.x-dragOffsetX_,0.f,float(width)-w-4*s);
+        if(IsMouse|M...){e.x-dragOffsetX_,0.f,float(width)-w-4*s);
         }else draggingMenu_=false;
     }
     if(brand)brand->draw(logoRect,logo);
