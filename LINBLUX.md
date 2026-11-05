@@ -787,6 +787,9 @@ entrada antes do runtime.
   dependência do editor e sem framebuffer por controle. Menu standalone
   usa os dois primeiros; HUD compartilhado de Studio/Player usa ProgressBar
   com preenchimento proporcional mesmo abaixo da largura das bordas.
+  `ui/Components` centraliza os botões RmlUi de Studio, Home e áudio:
+  texto, ícone, tooltip, disabled, escaping e domínio de comando. RmlUi
+  continua responsável por ativação e foco; handlers existentes são mantidos.
   A biblioteca completa de componentes RmlUi ainda não foi migrada.
   `ui/UiFont` é dona da fonte nativa compartilhada por HUD, Player e gizmos;
   `linblux_editing` depende da apresentação, não do renderer de HUD.

@@ -17,6 +17,7 @@
 #include "editor/ModelTransformSession.h"
 #include "editor/GizmoLayout.h"
 #include "editor/HierarchyModel.h"
+#include "ui/Components.h"
 #include "rendering/EditorCamera.h"
 #include "editor/TransformMetrics.h"
 
@@ -2060,6 +2061,9 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
+    const auto control=ui::ButtonMarkup({"id", "select", "A < B", "\"value", "part"});
+    CHECK(control.find("A &lt; B")!=std::string::npos);
+    CHECK(control.find("data-value=\"&quot;value\"")!=std::string::npos);
     ModularCharacter();HierarchyPresentation();SignificantFallPresentation();NpcHeadingRegression();StorageServices();RootServices();PartNamesLua();EditorSelectionAndNames();CursorConstruction();ConstructionPreviewWorkflow();SurfaceSnapping();Hierarchy();InteractionControls();InventoryLifecycle();AttachmentJoints();Attachments();ModelGizmoSession();ModelTransforms();BodyConfiguration();Scripts();LinbluxScripts();LinbluxExamples();LinbluxPhysics();LinbluxFixedContacts();LinbluxNpc();NpcExamples();NpcAnimation();NpcAnimatedExamples();LinbluxProgress();LinbluxTransformValidation();LinbluxCameraControl();LinbluxTaskCancellation();LinbluxInput();LinbluxPlayer();LuaFinalizerSafety();DynamicScriptLifecycle();AnimationIds();HealthAndVoid();PartChildScripts();IndependentFall();JumpTiming();ObbyLanding();ConsecutivePlatforms();AnimationDeletion();NativeCloneBudget();TransformTools();
     std::printf("Studio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);return failures?1:0;
 }
