@@ -68,11 +68,6 @@ def capture(binary, root, stage):
     summary = []
     for name in ('grey-room','material-gallery','editor-snap'):
         project = root/'fixtures'/(name+'.json')
-        # Reject invalid fixtures before opening Studio (which correctly falls
-        # back to its default scene on a failed load).
-        validator=Path(__file__).resolve().parent.parent/'build-linblux/linblux_player'
-        subprocess.run([str(validator),'--validate',str(project)],check=True,timeout=15,
-                       env=dict(os.environ,XDG_STATE_HOME=str(output/'validation-state')))
         original = project.read_bytes()
         isolated = output/name
         isolated.mkdir(exist_ok=True)

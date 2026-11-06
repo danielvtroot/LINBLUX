@@ -11,7 +11,7 @@ done
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 input_binary="$(realpath "${1:-./build/loblox_editor_input_tests}")"
 editor_binary="$(realpath "${2:-./build/loblox}")"
-sway_test_dir="$(mktemp -d /tmp/loblox-sway-XXXXXX)"
+sway_test_dir="$(mktemp -d)"
 mkdir -m 700 "$sway_test_dir/runtime"
 export XDG_RUNTIME_DIR="$sway_test_dir/runtime"
 export WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1

@@ -1,4 +1,5 @@
 /build*/
+/tests/atlas/fixture/build/
 /Testing/
 /cache/
 /.cache/

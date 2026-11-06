@@ -8,7 +8,6 @@
 #include "ui/StudioFrontend.h"
 #include "ui/EditorActions.h"
 #include "rendering/SceneRenderer.h"
-#include "rendering/PlayerMenu.h"
 #include "rendering/EditorCamera.h"
 #include "serialization/ProjectIO.h"
 #include "game/ImageAssets.h"
@@ -17,6 +16,7 @@
 #include "imgui_internal.h"
 #include "rlImGui.h"
 #include <filesystem>
+#include <vector>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -67,7 +67,13 @@ bool SameProjectValue(const nlohmann::json& a,const nlohmann::json& b) {
 }
 int main() {
     setvbuf(stdout,nullptr,_IONBF,0);
-    char pattern[]="/tmp/loblox-rml-ui-XXXXXX";const char* directory=mkdtemp(pattern);if(!directory)return 1;
+    const char* tmpBase = std::getenv("TMPDIR");
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-rml-ui-XXXXXX";
+    std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
+    tmpBuffer.push_back('\0');
+    char* tmpDir = mkdtemp(tmpBuffer.data());
+    const char* directory = tmpDir;
+    if(!directory)return 1;
     setenv("XDG_CONFIG_HOME",directory,1);diag::configure(std::string(directory)+"/events.jsonl");
     setenv("XDG_STATE_HOME",(std::string(directory)+"/state").c_str(),1);
     std::filesystem::current_path(directory);
@@ -80,7 +86,7 @@ int main() {
         auto* part=scene.createPart(PartShape::Block,{14,3,0},{4,6,1},"Wall");part->setAnchored(true);scene.select(part);
         PhysicsWorld physics;physics.attach(scene);EditorCamera camera;SceneRenderer renderer;AppConfig config;
         // Audio tests exercise UI/backend, not shadow quality; keep software GL cheap.
-        if(std::getenv("LINBLUX_PLAYER_AUDIO_ONLY")||std::getenv("LINBLUX_AUDIO_PANEL_ONLY")||std::getenv("LINBLUX_NATIVE_AUDIO_ONLY")||std::getenv("LINBLUX_EXPLORER_ONLY"))renderer.setQuality(RenderQuality::Low);
+        if(std::getenv("LINBLUX_STUDIO_PLAY_AUDIO_ONLY")||std::getenv("LINBLUX_AUDIO_PANEL_ONLY")||std::getenv("LINBLUX_EXPLORER_ONLY"))renderer.setQuality(RenderQuality::Low);
         config.defaultProjectPath=std::string(directory)+"/map.json";
         if(std::getenv("LINBLUX_VISIBLE_ONLY")) {
             if(const char* path=std::getenv("LINBLUX_VISIBLE_PROJECT")) {std::string error;CHECK(projectio::load(scene,path,error));}
@@ -99,7 +105,7 @@ int main() {
         const auto untouched=projectio::toJson(scene);
         std::function<void()> observeFrame;
         auto frames=[&](int count=2){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(BLACK);rlImGuiBegin();ui.draw();rlImGuiEnd();ui.renderModernFrontend();EndDrawing();if(observeFrame)observeFrame();}};
-        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames((std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")||(std::getenv("LINBLUX_PLAYER_MENU_ONLY")&&!std::getenv("LINBLUX_PLAYER_AUDIO_ONLY")))?1:2);};
+        auto event=[&](std::string args){CHECK(std::system(("xdotool "+args).c_str())==0);frames((std::getenv("LINBLUX_BODY_PROPERTIES_ONLY")||(std::getenv("LINBLUX_STUDIO_PLAY_MENU_ONLY")&&!std::getenv("LINBLUX_STUDIO_PLAY_AUDIO_ONLY")))?1:2);};
         auto key=[&](const std::string& name){event("keydown "+name);event("keyup "+name);};
         auto clickAt=[&](Vector2 p){event("mousemove "+std::to_string(int(p.x))+" "+std::to_string(int(p.y)));event("mousedown 1");event("mouseup 1");};
         auto click=[&](const std::string& id){
@@ -110,7 +116,7 @@ int main() {
             if(b.width<=0||b.height<=0)std::fprintf(stderr,"MISSING element: %s\n",id.c_str());
             CHECK(b.width>0&&b.height>0);if(b.width<=0||b.height<=0)return;
             clickAt({b.x+b.width/2,b.y+b.height/2});
-            if(std::getenv("LINBLUX_PLAYER_MENU_ONLY"))frames(2);
+            if(std::getenv("LINBLUX_STUDIO_PLAY_MENU_ONLY"))frames(2);
         };
         auto capture=[&](const std::string& name){frames();TakeScreenshot((std::string(directory)+"/"+name+".png").c_str());};
         // Painéis longos rolam; a automação rola até o controle antes de clicar.
@@ -250,41 +256,30 @@ int main() {
             std::printf("Explorer UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
             rlImGuiShutdown();CloseWindow();return failures?1:0;
         }
-        if(std::getenv("LINBLUX_NATIVE_AUDIO_ONLY")) {
-            if(const char* config=std::getenv("LINBLUX_TEST_AUDIO_CONFIG"))setenv("ALSA_CONFIG_PATH",config,1);
-            unsetenv("PULSE_SERVER");InitAudioDevice();CHECK(IsAudioDeviceReady());
-            if(!IsAudioDeviceReady()){rlImGuiShutdown();CloseWindow();return 1;}
-            click("play");auto& runtime=EditorUITestAccess::runtime(ui);
-            PlayerMenu menu;menu.toggle();
-            auto nativeFrames=[&](int count=3){for(int i=0;i<count;++i){BeginDrawing();ClearBackground(Color{90,110,130,255});menu.draw(runtime,GetScreenWidth(),GetScreenHeight(),GetFontDefault(),{},"Áudio");EndDrawing();}};
-            auto nativeEvent=[&](const std::string& args){CHECK(std::system(("xdotool "+args).c_str())==0);nativeFrames();};
-            auto nativeClick=[&](float x,float y){nativeEvent("mousemove "+std::to_string(int(x))+" "+std::to_string(int(y)));nativeEvent("mousedown 1");nativeEvent("mouseup 1");};
-            for(int width:{1366,1920}) {
-                resizeWindow(width,width==1366?768:1080);nativeFrames(16);
-                const float scale=GetScreenHeight()/720.f;
-                nativeClick(70*scale,270*scale);
-                const float panel=std::min(width-16.f,std::clamp(width*.55f,480*scale,840.f));
-                const float left=192*scale,span=panel-214*scale,y=131*scale;
-                for(float level:{0.f,.25f,.5f,.75f,1.f}) {
-                    nativeClick(left+span*level,y);std::printf("Native %d volume %.2f -> %.3f\n",width,level,GetMasterVolume());CHECK(std::fabs(GetMasterVolume()-level)<.01f);
-                }
-                nativeClick(left+span*.5f,y);
-                nativeEvent("keydown Right");nativeEvent("keyup Right");CHECK(std::fabs(GetMasterVolume()-.55f)<.01f);
-                nativeEvent("keydown Left");nativeEvent("keyup Left");CHECK(std::fabs(GetMasterVolume()-.5f)<.01f);
-                nativeClick(left+span/2,214*scale);CHECK(GetMasterVolume()==0);
-                nativeClick(left+span/2,214*scale);CHECK(std::fabs(GetMasterVolume()-.5f)<.01f);
-                nativeClick(left+span*.5f,y);nativeEvent("mousedown 1");
-                nativeEvent("mousemove "+std::to_string(int(left+span+30))+" "+std::to_string(int(y+30)));
-                CHECK(GetMasterVolume()>.99f);nativeEvent("mouseup 1");nativeClick(left+span*.5f,y);
-                TakeScreenshot((std::string(directory)+"/native-audio-"+std::to_string(width)+".png").c_str());
+        if(std::getenv("LINBLUX_NATIVE_PLAY_ONLY")) {
+            for(auto size:{Vector2{1280,720},Vector2{1920,1080}}) {
+                resizeWindow(int(size.x),int(size.y));click("play");frames(8);
+                auto& rt=EditorUITestAccess::runtime(ui);
+                const auto vp=ui.frontend()->viewport();
+                CHECK(rt.state()==game::RuntimeState::Playing);
+                clickAt({vp.x+48,vp.y+48});frames(12);CHECK(ui.gameMenuOpen());
+                CHECK(rt.state()==game::RuntimeState::Playing);
+                CHECK(ui.frontend()->elementBounds("pause-panel").height==0);
+                capture("native-play-menu-"+std::to_string(int(size.x)));
+                key("Escape");frames(12);CHECK(!ui.gameMenuOpen());
+                capture("native-play-"+std::to_string(int(size.x)));
+                key("Escape");frames(12);CHECK(ui.gameMenuOpen());
+                const float s=std::clamp(vp.height/720.f,.75f,1.5f);
+                const float w=std::min(vp.width-16.f,std::clamp(vp.width*.55f,480*s,840.f));
+                clickAt({vp.x+w-32*s,vp.y+34*s});frames(12);CHECK(!ui.gameMenuOpen());
+                key("Escape");frames(12);CHECK(ui.gameMenuOpen());
+                clickAt({vp.x+70*s,vp.y+vp.height-35*s});frames(4);CHECK(!ui.playing());
+                CHECK(SameProjectValue(projectio::toJson(scene),untouched));
             }
-            EditorActions(ui).dispatch({"stop",""});CloseAudioDevice();nativeFrames();
-            CHECK(!IsAudioDeviceReady());nativeClick(400,195);CHECK(!IsAudioDeviceReady());
-            TakeScreenshot((std::string(directory)+"/native-audio-unavailable.png").c_str());
-            std::printf("Native audio: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            std::printf("Native Studio Play: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
             rlImGuiShutdown();CloseWindow();return failures?1:0;
         }
-        if(std::getenv("LINBLUX_PLAYER_MENU_ONLY")) {
+        if(std::getenv("LINBLUX_STUDIO_PLAY_MENU_ONLY")) {
             if(const char* audioConfig=std::getenv("LINBLUX_TEST_AUDIO_CONFIG")){setenv("ALSA_CONFIG_PATH",audioConfig,1);const char* pulse=getenv("PULSE_SERVER");if(pulse&&std::string(pulse)=="disabled")unsetenv("PULSE_SERVER");}
             if(!IsAudioDeviceReady())InitAudioDevice();
             const bool audioReady=IsAudioDeviceReady();
@@ -295,7 +290,7 @@ linblux.scene.root:set_attribute('menu_npc',npc.id)
 linblux.events.on('update',function() linblux.scene.root:set_attribute('menu_clock',linblux.time.now()) end)
 )";
             const bool windowOnly=std::getenv("LINBLUX_MENU_WINDOW_ONLY")!=nullptr;
-            const bool audioOnly=std::getenv("LINBLUX_PLAYER_AUDIO_ONLY")!=nullptr;
+            const bool audioOnly=std::getenv("LINBLUX_STUDIO_PLAY_AUDIO_ONLY")!=nullptr;
             const auto sizes=audioOnly?std::vector<Vector2>{std::getenv("LINBLUX_AUDIO_HD")?Vector2{1920,1080}:Vector2{1366,768}}:windowOnly?std::vector<Vector2>{{1366,768}}:std::vector<Vector2>{{1280,720},{1920,1080}};
             for(auto size:sizes){
                 resizeWindow(int(size.x),int(size.y));click("play");frames(audioOnly?2:6);auto& rt=EditorUITestAccess::runtime(ui);
