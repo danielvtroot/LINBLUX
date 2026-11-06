@@ -75,8 +75,12 @@ int checks = 0, failures = 0;
 int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0); // preserve results before a possible driver LSan exit
     CHECK(SceneRenderer::MaterialColor(WHITE,PartMaterial::Metal).b == 255);
-    char temporary[] = "/tmp/loblox-game-ui-XXXXXX";
-    const char* directory = mkdtemp(temporary); if (!directory) return 1;
+    const char* tmpBase = std::getenv("TMPDIR");
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
+    tmpBuffer.push_back('\0');
+    char* tmpDir = mkdtemp(tmpBuffer.data());
+    const char* directory = tmpDir; if (!directory) return 1;
     diag::configure(std::string(directory)+"/game.jsonl");
     SetTraceLogLevel(LOG_WARNING); InitWindow(1280, 800, "LINBLUX game regression");
     if (!IsWindowReady()) return 1;

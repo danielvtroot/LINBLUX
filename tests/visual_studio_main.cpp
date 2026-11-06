@@ -38,8 +38,13 @@ using namespace loblox;
 int checks=0,failures=0;
 #define CHECK(x) do { ++checks; if(!(x)){++failures;std::fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);} } while(0)
 int main() {
-    char temp[]="/tmp/loblox-visual-studio-XXXXXX";
-    const char* directory=mkdtemp(temp);if(!directory)return 1;
+    const char* tmpBase = std::getenv("TMPDIR");
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
+    tmpBuffer.push_back('\0');
+    char* tmpDir = mkdtemp(tmpBuffer.data());
+    const char* directory = tmpDir;
+    if (!directory) return 1;
     diag::configure(std::string(directory)+"/events.jsonl");
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);SetTraceLogLevel(LOG_WARNING);
     InitWindow(1366,768,"LINBLUX visual acceptance");SetWindowPosition(0,0);SetExitKey(KEY_NULL);SetTargetFPS(60);

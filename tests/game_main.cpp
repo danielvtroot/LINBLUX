@@ -794,8 +794,12 @@ void MouseLockTests() {
 }
 
 int main(int argc, char** argv) {
-    char temporary[] = "/tmp/loblox-game-headless-XXXXXX";
-    if (const char* path = mkdtemp(temporary)) loblox::diag::configure(std::string(path)+"/game.jsonl");
+    const char* tmpBase = std::getenv("TMPDIR");
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
+    tmpBuffer.push_back('\0');
+    char* tmpDir = mkdtemp(tmpBuffer.data());
+    if (const char* path = tmpDir) loblox::diag::configure(std::string(path)+"/game.jsonl");
     if (argc == 3 && std::string(argv[1]) == "--write-fixture") {
         Scene scene; scene.buildDefaultScene();
         auto& rig = scene.gameAssets().createR6();

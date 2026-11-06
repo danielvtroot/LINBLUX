@@ -55,8 +55,12 @@ bool Equivalent(const nlohmann::json& a, const nlohmann::json& b) {
 }
 
 int main() {
-    char temporary[] = "/tmp/loblox-input-XXXXXX";
-    const char* directory = mkdtemp(temporary);
+    const char* tmpBase = std::getenv("TMPDIR");
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
+    tmpBuffer.push_back('\0');
+    char* tmpDir = mkdtemp(tmpBuffer.data());
+    const char* directory = tmpDir;
     if (!directory) return 1;
     diag::configure(std::string(directory) + "/input.jsonl");
     setenv("LOBLOX_TRACE_INPUT", "1", 1);

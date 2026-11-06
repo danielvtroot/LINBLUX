@@ -64,7 +64,13 @@ Hue Classify(Color c) {
 }  // namespace
 
 int main() {
-    char temp[]="/tmp/loblox-decal-render-XXXXXX";const char* dir=mkdtemp(temp);if(!dir)return 1;
+    const char* tmpBase = std::getenv("TMPDIR");
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
+    tmpBuffer.push_back('\0');
+    char* tmpDir = mkdtemp(tmpBuffer.data());
+    const char* dir = tmpDir;
+    if(!dir)return 1;
     SetTraceLogLevel(LOG_WARNING);InitWindow(256,256,"LINBLUX decal regression");
     int failures=0,checks=0;
     {

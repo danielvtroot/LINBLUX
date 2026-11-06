@@ -51,8 +51,12 @@ int CountFaceInk(const Image& image, Vector2 center) {
 }  // namespace
 
 int main() {
-    char temp[] = "/tmp/loblox-rig-image-XXXXXX";
-    const char* directory = mkdtemp(temp);
+    const char* tmpBase = std::getenv("TMPDIR");
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
+    tmpBuffer.push_back('\0');
+    char* tmpDir = mkdtemp(tmpBuffer.data());
+    const char* directory = tmpDir;
     if (!directory) return 1;
     std::filesystem::current_path(directory);
     std::filesystem::create_directories("assets");

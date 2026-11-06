@@ -48,7 +48,13 @@ int checks=0,failures=0;
 #define CHECK(x) do {++checks;if(!(x)){++failures;std::fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);}} while(0)
 int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
-    char temp[]="/tmp/loblox-rig-input-XXXXXX";const char* dir=mkdtemp(temp);if(!dir)return 1;
+    const char* tmpBase = std::getenv("TMPDIR");
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
+    tmpBuffer.push_back('\0');
+    char* tmpDir = mkdtemp(tmpBuffer.data());
+    const char* dir = tmpDir;
+    if(!dir)return 1;
     std::filesystem::current_path(dir);
     diag::configure(std::string(dir)+"/events.jsonl");
     SetTraceLogLevel(LOG_WARNING);InitWindow(1366,768,"LINBLUX rig regression");SetWindowPosition(0,0);

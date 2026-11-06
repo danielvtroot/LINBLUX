@@ -66,7 +66,13 @@ bool SameProjectValue(const nlohmann::json& a,const nlohmann::json& b) {
 }
 int main() {
     setvbuf(stdout,nullptr,_IONBF,0);
-    char pattern[]="/tmp/loblox-rml-ui-XXXXXX";const char* directory=mkdtemp(pattern);if(!directory)return 1;
+    const char* tmpBase = std::getenv("TMPDIR");
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
+    tmpBuffer.push_back('\0');
+    char* tmpDir = mkdtemp(tmpBuffer.data());
+    const char* directory = tmpDir;
+    if(!directory)return 1;
     setenv("XDG_CONFIG_HOME",directory,1);diag::configure(std::string(directory)+"/events.jsonl");
     setenv("XDG_STATE_HOME",(std::string(directory)+"/state").c_str(),1);
     std::filesystem::current_path(directory);

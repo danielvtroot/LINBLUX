@@ -2059,7 +2059,12 @@ void TransformTools() {
 }
 int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
-    char temporary[]="/tmp/loblox-studio-XXXXXX";const char* directory=mkdtemp(temporary);
+    const char* tmpBase = std::getenv("TMPDIR");
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
+    tmpBuffer.push_back('\0');
+    char* tmpDir = mkdtemp(tmpBuffer.data());
+    const char* directory = tmpDir;
     if(!directory)return 1;diag::configure(std::string(directory)+"/studio.jsonl");
     const auto control=ui::ButtonMarkup({"id", "select", "A < B", "\"value", "part"});
     CHECK(control.find("A &lt; B")!=std::string::npos);

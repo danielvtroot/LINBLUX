@@ -24,7 +24,12 @@ int checks=0,failures=0;
 #define CHECK(x) do { ++checks; if (!(x)) { ++failures; std::printf("FAIL %d: %s\n",__LINE__,#x); } } while(false)
 int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
-    char temporary[]="/tmp/loblox-studio-ui-XXXXXX"; const char* directory=mkdtemp(temporary); if(!directory)return 1;
+    const char* tmpBase = std::getenv("TMPDIR");
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
+    tmpBuffer.push_back('\0');
+    char* tmpDir = mkdtemp(tmpBuffer.data());
+    const char* directory = tmpDir; if(!directory)return 1;
     diag::configure(std::string(directory)+"/studio.jsonl");
     SetTraceLogLevel(LOG_WARNING); InitWindow(1280,800,"LINBLUX studio regression");
     if(!IsWindowReady())return 1; SetExitKey(KEY_NULL); SetTargetFPS(60); rlImGuiSetup(true);
