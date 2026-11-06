@@ -1873,5 +1873,3 @@ void EditorUI::focusSelection() {
 }
 
 }  // namespace loblox
-
-
