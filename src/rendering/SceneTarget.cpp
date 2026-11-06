@@ -1,4 +1,5 @@
 #include "rendering/SceneTarget.h"
+#include "core/Diagnostics.h"
 #include <cstdlib>
 #include <initializer_list>
 namespace loblox {
@@ -106,7 +107,14 @@ bool SceneTarget::tryAllocate(int width,int height,int samples) {
     glGetRenderbufferParameteriv(GL_RENDERBUFFER,GL_RENDERBUFFER_SAMPLES,&granted);
     const bool valid=granted>1&&glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;
     glBindRenderbuffer(GL_RENDERBUFFER,old);
-    if(valid){samples_=granted;return true;}
+    if(valid){
+        samples_=granted;
+        // Salvo apenas na (re)criacao do alvo: prova viva do modo efetivo.
+        diag::Event event;event.subsystem="graphics";event.name="scene_target";event.result="msaa";
+        event.context={{"samples",granted},{"requested",samples},{"width",width},{"height",height}};
+        diag::log(event);
+        return true;
+    }
     if(multisample_)glDeleteFramebuffers(1,&multisample_);multisample_=0;
     if(color_)glDeleteRenderbuffers(1,&color_);color_=0;
     if(depth_)glDeleteRenderbuffers(1,&depth_);depth_=0;
