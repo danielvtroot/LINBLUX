@@ -52,15 +52,17 @@ const LinbluxLogo& LoadLinbluxLogo() {
     return logo;
 }
 EditorUI::EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera, SceneRenderer& renderer, const AppConfig& config)
-    : scene_(scene), physics_(physics), camera_(camera), renderer_(renderer), config_(config) {
+    : scene_(scene), physics_(physics), camera_(camera), renderer_(renderer), config_(config),
+      gizmo_(), transform_(gizmo_, physics_), history_(), modelTransform_(scene_, physics_, transform_, history_) {
 }
 
 EditorUI::~EditorUI() {
 }
 
-void EditorUI::enableModernFrontend(std::string& error) {
+bool EditorUI::enableModernFrontend(std::string& error) {
     frontend_ = std::make_unique<StudioFrontend>(*this);
     error.clear();
+    return true;
 }
 
 void EditorUI::renderModernFrontend() {
