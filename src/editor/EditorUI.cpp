@@ -36,11 +36,9 @@
 #include "serialization/ProjectIO.h"
 #include "serialization/SceneLua.h"
 
-namespace loblox {
-
 #include "editor/EditorUIInternal.h"
 
-namespace loblox {
+namespace loblx {
 
 // Marca do projeto: carregada uma unica vez, a partir da raiz (caminhos
 // relativos; sem caminho absoluto da maquina). Falha permanece !ok e a UI
