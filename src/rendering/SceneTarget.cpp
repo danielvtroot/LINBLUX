@@ -1,5 +1,6 @@
 #include "rendering/SceneTarget.h"
 #include <cstdlib>
+#include <initializer_list>
 namespace loblox {
 namespace {
 const char* kFxaaVertexShader = R"(#version 330

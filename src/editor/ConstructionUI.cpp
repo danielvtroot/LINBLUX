@@ -3,6 +3,7 @@
 #include "physics/PhysicsWorld.h"
 #include "imgui.h"
 #include "rlgl.h"
+#include "ui/UiFont.h"
 namespace loblox {
 void EditorUI::beginSurfacePlacement(){
     endGizmoSession(true,"surface_placement");cancelRigGizmo();clearTransformReadout();
@@ -46,8 +47,10 @@ void EditorUI::drawSurfacePlacement(Rectangle view){
     if(contact.snapped)label="Encaixe válido · clique para confirmar · ESC cancela";
     else if(contact.blocked){const auto* blocker=scene_.find(contact.blocker);label="Sobreposição: "+(blocker?blocker->name():std::string("outra peça"))+" · escolha outra posição";}
     else if(contact.reason)label=contact.reason;
-    const float width=std::min(view.width-24,float(MeasureText(label.c_str(),18)+20));
-    DrawRectangleRounded({12,12,width,34},.15f,4,{24,27,33,240});DrawText(label.c_str(),22,20,18,{color.r,color.g,color.b,255});
+    // A legenda usava a fonte padrao de 10px ampliada para 18px.
+    const int labelSize=ui::FontPixels(18.f);const Font labelFont=ui::Text(float(labelSize));
+    const float width=std::min(view.width-24,float(MeasureTextEx(labelFont,label.c_str(),float(labelSize),1.f).x+20));
+    DrawRectangleRounded({12,12,width,34},.15f,4,{24,27,33,240});DrawTextEx(labelFont,label.c_str(),{22,20},float(labelSize),1.f,{color.r,color.g,color.b,255});
 }
 void EditorUI::assemblyAction(const std::string& action){
     if(action!="side"&&action!="above"&&action!="repeat"){setStatus("Ação de montagem inválida.",true);return;}
