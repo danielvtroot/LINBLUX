@@ -413,9 +413,9 @@ void EditorUI::drawPauseMenu() {
         ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
     ImGui::Begin(i18n::Label("Play paused"),nullptr,flags);
-    const auto& logo=LoadLinbluxLogo();
-    if(logo.ok) {
-        ImGui::Image(static_cast<ImTextureID>(logo.id),{34.f*logo.width/logo.height,34});
+    const auto brand=playerBrand_.texture();
+    if(brand.id) {
+        ImGui::Image(static_cast<ImTextureID>(brand.id),{34,34},ImVec2{0,1},ImVec2{1,0});
         ImGui::SameLine(0,10);
     }
     ImGui::BeginGroup();
@@ -484,7 +484,7 @@ void EditorUI::drawPauseMenu() {
             "Toggle Shift Lock when enabled","Pause / resume","Stop and return to Studio"};
         for(int i=0;i<7;++i) { ImGui::TextUnformatted(keys[i]);ImGui::SameLine(120);ImGui::TextWrapped(i18n::Label("%s"),i18n::Label(help[i])); }
     } else {
-        if(logo.ok) ImGui::Image(static_cast<ImTextureID>(logo.id),{80.f*logo.width/logo.height,80});
+        if(brand.id) ImGui::Image(static_cast<ImTextureID>(brand.id),{80,80},ImVec2{0,1},ImVec2{1,0});
         ImGui::TextUnformatted(i18n::Label("LINBLUX Studio"));
         ImGui::TextWrapped(i18n::Label("An open-source editor and local game engine."));
         ImGui::Spacing();ImGui::TextDisabled(i18n::Label("C++17 / Lua 5.4 / Bullet / raylib"));

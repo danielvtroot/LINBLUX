@@ -734,9 +734,10 @@ entrada antes do runtime.
   canto superior-direito (em desenvolvimento), hotbar inferior com slots
   ocupados, prompt de interação com progresso e avisos de item; desenhado
   apenas em jogo. Scripts complementam a UI (§10.9) sem tocar no HUD nativo.
-- **Menu** (`PlayerMenu`): lateral Continuar/Sair + páginas Jogador/Câmera/
-  Controles/Áudio/Vídeo/Ajuda; volume master/mudo; **protegido contra
-  alterações por scripts**. Simulação continua enquanto o menu está aberto.
+- **Menu do Play** (`StudioFrontend`): lateral Continuar/Sair + páginas
+  Jogador/Câmera/Controles/Áudio/Vídeo/Ajuda; volume master/mudo;
+  **protegido contra alterações por scripts**. Simulação continua enquanto o
+  menu está aberto.
 - **Personagens por Model (integração inicial)**: `game/CharacterCore` valida
   Models com 1–512 Parts e exatamente uma Part com atributo textual
   `CharacterRole=Root`. Papéis personalizados e repetidos nas demais peças

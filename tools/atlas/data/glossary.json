@@ -127,7 +127,7 @@
         "ui"
       ],
       "symbols": [
-        "PlayerMenu",
+        "StudioFrontend",
         "Audio"
       ],
       "paths": [
@@ -886,7 +886,7 @@
         "rendering"
       ],
       "symbols": [
-        "PlayerMenu"
+        "StudioFrontend"
       ],
       "paths": [
         "src/rendering"
@@ -1342,7 +1342,7 @@
         "rendering"
       ],
       "symbols": [
-        "PlayerMenu"
+        "StudioFrontend"
       ],
       "paths": [
         "src/rendering"
@@ -1366,7 +1366,7 @@
         "ui"
       ],
       "symbols": [
-        "PlayerMenu"
+        "StudioFrontend"
       ],
       "paths": [
         "src/rendering"
@@ -1572,7 +1572,7 @@
         "rendering"
       ],
       "symbols": [
-        "PlayerMenu"
+        "StudioFrontend"
       ],
       "paths": [
         "src/rendering"

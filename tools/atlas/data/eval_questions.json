@@ -99,9 +99,9 @@
     "id": "audio-slider-empty",
     "query": "o slider de audio do menu ESC aparece vazio",
     "expect_modules": ["rendering", "ui"],
-    "expect_files": ["src/rendering/PlayerMenu.cpp", "src/rendering/PlayerMenu.h"],
-    "expect_symbols": ["PlayerMenu"],
-    "notes": "Menu do jogador (ESC) e sliders de audio."
+    "expect_files": ["src/ui/StudioFrontend.cpp", "src/ui/StudioFrontend.h"],
+    "expect_symbols": ["StudioFrontend"],
+    "notes": "Menu do Play integrado (ESC) e sliders de audio."
   },
   {
     "id": "gizmo-old-handles",
