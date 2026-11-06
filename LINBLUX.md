@@ -776,7 +776,7 @@ entrada antes do runtime.
   sem caixa ou ícone adicional, com clique e Esc. PNG permanece como fallback
   e ícone nativo. CMake copia/instala em `share/linblux/midia/3d`.
   Home e header RmlUi ainda usam PNG; migração pendente.
-- **Controles nativos compartilhados** (`rendering/UiControls`): Button,
+- **Controles nativos compartilhados** (`ui/UiControls`): Button,
   Slider e ProgressBar usam tokens de `ThemeColors.generated.h`, sem
   dependência do editor e sem framebuffer por controle. O menu integrado
   usa os dois primeiros; o HUD do Play usa ProgressBar

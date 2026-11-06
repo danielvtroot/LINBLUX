@@ -1,6 +1,6 @@
 #include "rendering/ExperienceOverlay.h"
 #include "game/Runtime.h"
-#include "rendering/UiControls.h"
+#include "ui/UiControls.h"
 #include "ui/UiFont.h"
 #include "game/ImageAssets.h"
 #include <algorithm>

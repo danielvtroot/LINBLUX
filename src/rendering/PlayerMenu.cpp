@@ -1,7 +1,7 @@
 #include "rendering/PlayerMenu.h"
 #include "rendering/BrandLogo3D.h"
 #include "game/Runtime.h"
-#include "rendering/UiControls.h"
+#include "ui/UiControls.h"
 #include "ui/UiFont.h"
 #include <algorithm>
 #include <cmath>
