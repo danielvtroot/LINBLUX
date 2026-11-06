@@ -3,6 +3,7 @@
 #include "game/ImageAssets.h"
 #include "game/Runtime.h"
 #include "rendering/ExperienceOverlay.h"
+#include "ui/UiFont.h"
 
 #include <algorithm>
 #include <cmath>
@@ -44,23 +45,27 @@ void DrawLuaUi(const game::RuntimeSession& runtime, int width, int height, Font 
         if (rect.width <= 0 || rect.height <= 0) continue;
         const Color color = WithOpacity(element->color, element->opacity);
         const Color background = WithOpacity(element->background, element->opacity);
-        const float font_size = element->fontSize * scale;
+        // O glifo vem do atlas rasterizado no tamanho desenhado: o UI de script
+        // era ampliado de um unico atlas 32px.
+        const float font_size = float(ui::FontPixels(element->fontSize * scale));
+        const Font sized = ui::Text(font_size);
+        const Font face = sized.texture.id == GetFontDefault().texture.id ? font : sized;
         const float spacing = std::max(1.f, scale);
         switch (element->kind) {
             case game::UiKind::Panel:
                 DrawRectangleRounded(rect, .08f, 6, background);
                 break;
             case game::UiKind::Label: {
-                const auto text = Fit(font, element->text, rect.width, font_size, spacing);
-                DrawTextEx(font, text.c_str(), {rect.x, rect.y + (rect.height - font_size) * .5f},
+                const auto text = Fit(face, element->text, rect.width, font_size, spacing);
+                DrawTextEx(face, text.c_str(), {rect.x, rect.y + (rect.height - font_size) * .5f},
                            font_size, spacing, color);
                 break;
             }
             case game::UiKind::Button: {
                 DrawRectangleRounded(rect, .22f, 6, background);
-                const auto text = Fit(font, element->text, rect.width - 12 * scale, font_size, spacing);
-                const Vector2 size = MeasureTextEx(font, text.c_str(), font_size, spacing);
-                DrawTextEx(font, text.c_str(),
+                const auto text = Fit(face, element->text, rect.width - 12 * scale, font_size, spacing);
+                const Vector2 size = MeasureTextEx(face, text.c_str(), font_size, spacing);
+                DrawTextEx(face, text.c_str(),
                            {rect.x + (rect.width - size.x) * .5f, rect.y + (rect.height - size.y) * .5f},
                            font_size, spacing, color);
                 break;
@@ -85,9 +90,9 @@ void DrawLuaUi(const game::RuntimeSession& runtime, int width, int height, Font 
                     DrawRectangleRounded(fill, .5f, 8, color);
                 }
                 if (!element->text.empty()) {
-                    const auto text = Fit(font, element->text, rect.width - 8 * scale, font_size, spacing);
-                    const Vector2 size = MeasureTextEx(font, text.c_str(), font_size, spacing);
-                    DrawTextEx(font, text.c_str(),
+                    const auto text = Fit(face, element->text, rect.width - 8 * scale, font_size, spacing);
+                    const Vector2 size = MeasureTextEx(face, text.c_str(), font_size, spacing);
+                    DrawTextEx(face, text.c_str(),
                                {rect.x + (rect.width - size.x) * .5f, rect.y + (rect.height - size.y) * .5f},
                                font_size, spacing, WithOpacity(WHITE, element->opacity));
                 }

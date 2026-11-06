@@ -1,4 +1,5 @@
 #include "rendering/UiControls.h"
+#include "ui/UiFont.h"
 #include <algorithm>
 #include <cmath>
 #include <array>
@@ -22,8 +23,10 @@ bool Button(const char* label,Rectangle r,Font font,float scale,bool enabled,boo
     const bool hover=enabled&&CheckCollisionPointRec(GetMousePosition(),r);
     DrawSurface(r,Surface::Interactive,active||hover);
     if(enabled&&focused)DrawRectangleRoundedLines(r,.12f,12,theme::accent);
-    const float size=16*scale;
-    DrawTextEx(font,label,{r.x+10*scale,r.y+(r.height-size)/2},size,scale,enabled?theme::text:theme::disabled);
+    const int size=ui::FontPixels(16*scale);
+    const auto sized=ui::Text(float(size));
+    const Font face=sized.texture.id==GetFontDefault().texture.id?font:sized;
+    DrawTextEx(face,label,{r.x+10*scale,r.y+(r.height-size)/2.f},float(size),scale,enabled?theme::text:theme::disabled);
     return enabled&&((hover&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT))||(focused&&KeyPressed(KEY_ENTER)));
 }
 bool Slider(Rectangle r,float& value,float minimum,float maximum,bool enabled,bool focused,bool& dragging,float scale,bool pointerAvailable) {

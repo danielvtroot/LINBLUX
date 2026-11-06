@@ -2,6 +2,7 @@
 #include "rendering/BrandLogo3D.h"
 #include "game/Runtime.h"
 #include "rendering/UiControls.h"
+#include "ui/UiFont.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -16,7 +17,12 @@ bool PlayerMenu::draw(game::RuntimeSession& runtime,int width,int height,Font fo
   const Color white{242,238,242,255},muted{185,177,185,255},focus{255,255,255,230},panel{23,23,28,247};
   DrawRectangle(0,0,width,height,{0,0,0,(unsigned char)(90*t)});DrawRectangle(int(left),0,int(w),height,panel);
   DrawRectangle(int(left),0,int(side),height,{15,15,19,250});
-auto text=[&](const std::string& value,float x,float y,float size,Color color){DrawTextEx(font,value.c_str(),{x,y},size*s,s,color);};
+// Cada rótulo pega o atlas do próprio tamanho: o menu inteiro era ampliado
+// de um atlas 32px e saía borrado.
+auto face=[&](float size){const float px=float(ui::FontPixels(size*s));const auto sized=ui::Text(px);
+  return std::pair<Font,float>{sized.texture.id==GetFontDefault().texture.id?font:sized,px};};
+auto text=[&](const std::string& value,float x,float y,float size,Color color){
+  const auto [drawn,px]=face(size);DrawTextEx(drawn,value.c_str(),{x,y},px,s,color);};
     const auto mouse=GetMousePosition();int current=0;bool quit=false;
     if(!paused)draggingSlider_=-1,draggingMenu_=false;
     if(paused){if(ui::KeyPressed(KEY_TAB)||ui::KeyPressed(KEY_DOWN))focus_=(focus_+1)%std::max(1,count_);if(ui::KeyPressed(KEY_UP))focus_=(focus_+std::max(1,count_)-1)%std::max(1,count_);}
@@ -40,7 +46,8 @@ auto text=[&](const std::string& value,float x,float y,float size,Color color){D
     for(int i=0;i<6;++i)if(button(pages[i],{left+10*s,(126+42*i)*s,side-20*s,36*s},page_==i)){page_=i;scroll_=0;}
     if(button("Sair",{left+10*s,height-54*s,side-20*s,38*s}))quit=true;
     const float x=left+side+22*s,available=w-side-44*s;
-    std::string heading=title;while(!heading.empty()&&MeasureTextEx(font,heading.c_str(),17*s,s).x>available-42*s)heading.pop_back();
+    const auto [headingFont,headingSize]=face(17);
+    std::string heading=title;while(!heading.empty()&&MeasureTextEx(headingFont,heading.c_str(),headingSize,s).x>available-42*s)heading.pop_back();
     text(heading,x,26*s,17,white);
     if(button("×",{left+w-48*s,18*s,32*s,32*s})){open_=false;runtime.resume();}
 DrawLine(int(x),int(66*s),int(left+w-18*s),int(66*s),{80,80,88,255});
