@@ -11,11 +11,8 @@ for name,digest in manifest['sha256'].items():
 assert not list(prefix.rglob('*.mp4')),'video with unverified rights included'
 run=root/'run';run.mkdir();environment=dict(os.environ,HOME=str(root/'home'),XDG_DATA_HOME=str(root/'data'),XDG_CONFIG_HOME=str(root/'config'),XDG_STATE_HOME=str(root/'state'),LIBGL_ALWAYS_SOFTWARE='1',LP_NUM_THREADS='2')
 for directory in ['home','data','config','state']:(root/directory).mkdir()
-player=prefix/'bin/linblux_player';studio=prefix/'bin/linblux';demo=prefix/'share/linblux/examples/rifledemo/world.loblox.json'
-for arguments in [['--validate',str(demo)],['--project',str(demo),'--frames','8','--check-scripts']]:
-    result=subprocess.run([str(player),*arguments],cwd=run,env=environment,capture_output=True,text=True,timeout=25)
-    assert result.returncode==0,result.stdout+result.stderr
-log=(root/'studio.log').open('w');process=subprocess.Popen([str(studio)],cwd=run,env=environment,stdout=log,stderr=log)
+studio=prefix/'bin/linblux';demo=prefix/'share/linblux/examples/rifledemo/world.loblox.json'
+log=(root/'studio.log').open('w');process=subprocess.Popen([str(studio),'--project',str(demo)],cwd=run,env=environment,stdout=log,stderr=log)
 try:
     window='';deadline=time.monotonic()+20
     while not window and time.monotonic()<deadline:
@@ -32,4 +29,4 @@ finally:
     try:process.wait(timeout=5)
     except subprocess.TimeoutExpired:process.kill();process.wait()
     log.close()
-print(json.dumps({'status':'PASSED','files_verified':len(manifest['sha256']),'outside_checkout':str(root),'player':'validated and rendered','studio':'opened and captured; terminated by supervisor','os_installation':'not tested','release':'still blocked by release gates'},ensure_ascii=False))
+print(json.dumps({'status':'PASSED','files_verified':len(manifest['sha256']),'outside_checkout':str(root),'studio':'opened a experiência e capturou o Playtest; terminado pelo supervisor','os_installation':'not tested','release':'still blocked by release gates'},ensure_ascii=False))

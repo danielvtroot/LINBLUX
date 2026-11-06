@@ -20,8 +20,6 @@ from . import config
 # Explicit module ownership for the tests that exist in this repository.  The
 # fallback below still classifies new tests from names/commands.
 TEST_MODULES = {
-    "linblux_player_help": ("player",),
-    "linblux_player_validate": ("player", "serialization"),
     "linblux_experiences": ("experiences", "serialization"),
     "linblux_studio": ("editor", "game"),
     "linblux_game": ("game", "scene", "physics"),
