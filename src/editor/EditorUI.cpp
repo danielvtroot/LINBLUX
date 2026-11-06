@@ -140,6 +140,20 @@ void EditorUI::recordTransformEdit(InstanceId id, const Transform& before, const
 }
 
 void EditorUI::resizeViewport(int width, int height) {
+    if (width <= 0 || height <= 0) return;
+    if (viewportReady_ && viewportWidth_ == width && viewportHeight_ == height) return;
+    if (viewportReady_) { UnloadRenderTexture(viewport_); viewportReady_ = false; }
+    viewport_ = LoadRenderTexture(width, height);
+    viewportReady_ = viewport_.id != 0;
+    viewportWidth_ = width;
+    viewportHeight_ = height;
+}
+
+void EditorUI::unloadViewport() {
+    if (viewportReady_) { UnloadRenderTexture(viewport_); viewportReady_ = false; }
+    viewport_ = {};
+    viewportWidth_ = 0;
+    viewportHeight_ = 0;
 }
 
 void EditorUI::buildDockLayout() {
