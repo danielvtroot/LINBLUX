@@ -6,12 +6,19 @@
 #include <algorithm>
 #include <cstdio>
 namespace loblox {
+namespace {
+// Cada tamanho usa o atlas rasterizado nesse tamanho; o parametro Font continua
+// valendo como reserva quando nao ha TTF no sistema.
+Font Face(Font fallback,float size){
+    const Font face=ui::Text(size);
+    return face.texture.id==GetFontDefault().texture.id?fallback:face;
+}
+}
 Font ExperienceOverlayFont(){return ui::SystemFont();}
 void ClearExperienceOverlayResources(){ui::ReleaseSystemFont();}
 
 void DrawHealthHud(const game::RuntimeSession& runtime,int width,int height,Font font){
     if(runtime.state()!=game::RuntimeState::Playing||!runtime.healthHud().visible)return;
-    if(font.texture.id==GetFontDefault().texture.id)font=ui::SystemFont();
     const float scale=std::clamp(height/720.f,.75f,1.5f);
     const float fraction=runtime.healthHud().sample(runtime.health(),runtime.settings().maxHealth,GetFrameTime());
     // Barra compacta monocromática — área segura superior-direita
@@ -20,22 +27,27 @@ void DrawHealthHud(const game::RuntimeSession& runtime,int width,int height,Font
     const float panelW=barW+pad*2.f+56.f*scale,panelH=barH+24.f*scale;
     // Fundo preto translúcido
     DrawRectangleRounded({px-pad,py-pad*.5f,panelW,panelH},.18f,6,{0,0,0,180});
-    // Rótulo VIDA
-    DrawTextEx(font,"VIDA",{px,py-1.f*scale},10.f*scale,scale,{220,220,220,200});
+    // Rótulo VIDA e valor em tamanho de corpo: 10/12px ampliados de um atlas
+    // 32px eram o texto borrado do HUD.
+    const int labelPx=ui::FontPixels(13.f*scale),valuePx=ui::FontPixels(16.f*scale);
+    DrawTextEx(Face(font,13.f*scale),"VIDA",{px,py-1.f*scale},float(labelPx),scale,{220,220,220,200});
     ui::ProgressBar({px,py+12.f*scale,barW,barH},fraction);
     // Valor numérico
     char value[32];std::snprintf(value,sizeof(value),"%.0f",runtime.health());
-    const auto mv=MeasureTextEx(font,value,12.f*scale,scale);
-    DrawTextEx(font,value,{px+barW+8.f*scale,py+12.f*scale+(barH-mv.y)/2.f},12.f*scale,scale,{255,255,255,220});
+    const auto face=Face(font,16.f*scale);
+    const auto mv=MeasureTextEx(face,value,float(valuePx),scale);
+    DrawTextEx(face,value,{px+barW+8.f*scale,py+12.f*scale+(barH-mv.y)/2.f},float(valuePx),scale,{255,255,255,220});
 }
 
 void DrawExperienceOverlay(const game::RuntimeSession& runtime,int width,int height,Font font){
     if(runtime.state()!=game::RuntimeState::Playing)return;
     DrawHealthHud(runtime,width,height,font);
-    if(font.texture.id==GetFontDefault().texture.id)font=ui::SystemFont();
     const float scale=std::clamp(height/720.f,1.f,1.4f);const Color panel{15,15,19,225},focus{220,220,220,220},text{242,242,245,255},muted{185,185,195,255};
-    auto label=[&](const std::string& value,float x,float y,float size,Color color){DrawTextEx(font,value.c_str(),{x,y},size*scale,scale,color);};
-    auto fit=[&](std::string value,float available,float size){while(!value.empty()&&MeasureTextEx(font,(value+"...").c_str(),size*scale,scale).x>available){size_t i=value.size()-1;while(i&&(static_cast<unsigned char>(value[i])&0xc0)==0x80)--i;value.resize(i);}return value;};
+    auto label=[&](const std::string& value,float x,float y,float size,Color color){
+        DrawTextEx(Face(font,size*scale),value.c_str(),{x,y},float(ui::FontPixels(size*scale)),scale,color);};
+    auto fit=[&](std::string value,float available,float size){
+        const auto face=Face(font,size*scale);const float px=float(ui::FontPixels(size*scale));
+        while(!value.empty()&&MeasureTextEx(face,(value+"...").c_str(),px,scale).x>available){size_t i=value.size()-1;while(i&&(static_cast<unsigned char>(value[i])&0xc0)==0x80)--i;value.resize(i);}return value;};
     std::vector<InstanceId> slots;for(auto id:runtime.inventory().list())if(runtime.inventory().info(id).equipable)slots.push_back(id);
     const unsigned first=runtime.hotbarPage()*9,visible=first<slots.size()?unsigned(std::min<size_t>(9,slots.size()-first)):0;
     if(visible){const float slot=std::min(104.f*scale,(width-32.f)/visible-6*scale),gap=6*scale,total=visible*slot+(visible-1)*gap;
