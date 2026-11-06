@@ -1258,63 +1258,12 @@ if(c.action=="r6")showAdvanced("rig");
         html("advanced-content",s,advancedMarkup);
     }
     void syncGame() {
-        // Official Player presentation now comes from the original native module.
+        // The recovered Player module owns all gameplay presentation.
         display("pause",false);display("health",false);display("game-topbar",false);
-        display("mouse-lock-cursor",false);
-        return;
-        const bool active=ui.runtime_.active(),paused=ui.gameMenuOpen();
-        // A fresh pause opens on the session page; a tab chosen during the
-        // same pause remains selected until play resumes.
-        if(paused&&!pauseWasOpen) {
-            page="game";
-            el("pause-content")->SetScrollTop(0);
-        }
-        menuProgress=std::clamp(menuProgress+(paused?1.f:-1.f)*std::clamp(GetFrameTime(),0.f,.25f)/.18f,0.f,1.f);
-        const float eased=menuProgress*menuProgress*(3-2*menuProgress);
-        const float menuScale=std::clamp(view.height/720.f,.75f,1.5f);
-        const float panelWidth=std::min(view.width-16.f,std::clamp(view.width*.55f,480*menuScale,840.f));
-        style("pause-panel","width",Num(panelWidth)+"px");
-        style("pause-panel","left",Num(-panelWidth*(1-eased))+"px");
-        style("pause","pointer-events",paused?"auto":"none");
-        pauseWasOpen=paused;
-        display("pause",active&&(paused||menuProgress>0),"block");display("health",false);display("game-topbar",active&&!paused&&menuProgress==0,"flex");
         const auto cursor=ui.gameplayCursor();
-        display("mouse-lock-cursor",active&&cursor.visual==GameCursorVisual::MouseLock);
+        display("mouse-lock-cursor",ui.runtime_.active()&&cursor.visual==GameCursorVisual::MouseLock);
         style("mouse-lock-cursor","left",Num(cursor.position.x-view.x)+"px");
         style("mouse-lock-cursor","top",Num(cursor.position.y-view.y)+"px");
-        for(const auto* name:{"game","settings","controls","audio","video","about"}) {display(std::string(name)+"-page",page==name);el(std::string("page-")+name)->SetClass("active",page==name);}
-        if(!active)return;
-        const float health=ui.runtime_.health(),maximum=std::max(1.f,ui.runtime_.settings().maxHealth);
-        char s[64];std::snprintf(s,sizeof(s),"%.0f / %.0f",health,maximum);text("pause-health",s);
-        text("pause-experience",ui.experienceUi_?ui.experienceUi_->documentTitle():std::filesystem::path(ui.projectPath_).stem().string());
-        if(IsAudioDeviceReady()) {
-            el("master-volume")->RemoveAttribute("disabled");
-            masterVolume=GetMasterVolume();
-            if(masterVolume>0)lastAudibleVolume=masterVolume;
-            el("master-mute")->RemoveAttribute("disabled");
-            text("master-mute",masterVolume>0?"Silenciar":"Restaurar som");
-            text("audio-device-status","");
-            text("master-volume-label",std::to_string(int(masterVolume*100))+"%");
-        } else {
-            el("master-volume")->SetAttribute("disabled","");
-            text("master-volume-label","—");
-            el("master-mute")->SetAttribute("disabled","");
-            text("audio-device-status","Dispositivo de áudio indisponível nesta sessão.");
-        }
-        auto* volume=dynamic_cast<Rml::ElementFormControl*>(el("master-volume"));
-        if(volume&&formOwner(context->GetFocusElement())!=volume) {const auto value=Num(masterVolume);if(volume->GetValue()!=value)volume->SetValue(value);}
-        text("player-name",ui.runtime_.rig().name);text("map-name",std::filesystem::path(ui.projectPath_).filename().string());
-        text("session-state",ui.runtime_.state()==game::RuntimeState::Paused?"Simulação pausada explicitamente":"Simulação em andamento");
-        if(paused) {
-            auto set=[&](const char* id,const std::string& v){if(auto* f=dynamic_cast<Rml::ElementFormControl*>(el(id));f&&context->GetFocusElement()!=f&&f->GetValue()!=v)f->SetValue(v);};
-            const auto& p=ui.runtime_.settings();text("camera-mode",p.cameraMode==game::CameraMode::Classic?"Livre":p.cameraMode==game::CameraMode::Follow?"Acompanhar":"Primeira pessoa");
-            set("sensitivity",Num(p.sensitivity));set("camera-distance",Num(p.cameraDistance));
-            set("sensitivity-slider",Num(1+(p.sensitivity-.0001f)/.0299f*99));
-            el("distance-slider")->SetAttribute("min",Num(p.minZoom));el("distance-slider")->SetAttribute("max",Num(p.maxZoom));
-            set("distance-slider",Num(p.cameraDistance));
-            text("shift-lock",p.enableShiftLock?"Ativado":"Desativado");text("first-person",p.allowFirstPerson?"Ativado":"Desativado");
-            text("fullscreen-value",ui.gameFullscreen_?"Ativado":"Desativado");
-        }
     }
 };
 

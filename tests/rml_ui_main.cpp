@@ -249,6 +249,29 @@ int main() {
             std::printf("Explorer UI: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
             rlImGuiShutdown();CloseWindow();return failures?1:0;
         }
+        if(std::getenv("LINBLUX_NATIVE_PLAY_ONLY")) {
+            for(auto size:{Vector2{1280,720},Vector2{1920,1080}}) {
+                resizeWindow(int(size.x),int(size.y));click("play");frames(8);
+                auto& rt=EditorUITestAccess::runtime(ui);
+                const auto vp=ui.frontend()->viewport();
+                CHECK(rt.state()==game::RuntimeState::Playing);
+                clickAt({vp.x+48,vp.y+48});frames(12);CHECK(ui.gameMenuOpen());
+                CHECK(rt.state()==game::RuntimeState::Playing);
+                CHECK(ui.frontend()->elementBounds("pause-panel").height==0);
+                capture("native-play-menu-"+std::to_string(int(size.x)));
+                key("Escape");frames(12);CHECK(!ui.gameMenuOpen());
+                capture("native-play-"+std::to_string(int(size.x)));
+                key("Escape");frames(12);CHECK(ui.gameMenuOpen());
+                const float s=std::clamp(vp.height/720.f,.75f,1.5f);
+                const float w=std::min(vp.width-16.f,std::clamp(vp.width*.55f,480*s,840.f));
+                clickAt({vp.x+w-32*s,vp.y+34*s});frames(12);CHECK(!ui.gameMenuOpen());
+                key("Escape");frames(12);CHECK(ui.gameMenuOpen());
+                clickAt({vp.x+70*s,vp.y+vp.height-35*s});frames(4);CHECK(!ui.playing());
+                CHECK(SameProjectValue(projectio::toJson(scene),untouched));
+            }
+            std::printf("Native Studio Play: %d checks, %d failures; artifacts: %s\n",checks,failures,directory);
+            rlImGuiShutdown();CloseWindow();return failures?1:0;
+        }
         if(std::getenv("LINBLUX_STUDIO_PLAY_MENU_ONLY")) {
             if(const char* audioConfig=std::getenv("LINBLUX_TEST_AUDIO_CONFIG")){setenv("ALSA_CONFIG_PATH",audioConfig,1);const char* pulse=getenv("PULSE_SERVER");if(pulse&&std::string(pulse)=="disabled")unsetenv("PULSE_SERVER");}
             if(!IsAudioDeviceReady())InitAudioDevice();

@@ -1,6 +1,7 @@
 #include "rendering/ExperienceOverlay.h"
 #include "rendering/LuaUiRenderer.h"
 #include "ui/Localization.h"
+#include "ui/UiFont.h"
 #include "ui/ExperienceUI.h"
 #include "editor/EditorUI.h"
 #include "ui/ExperienceUI.h"
@@ -169,7 +170,7 @@ void EditorUI::stopPlay() {
     exitGameDisplayModes();
     setGameplayCapture(false);
     if (!runtime_.active()) return;
-    runtime_.stop(); pausePage_ = 0; gameMenuOpen_=false; camera_.releaseCapture();
+    runtime_.stop(); pausePage_ = 0; gameMenuOpen_=false; playerMenu_=PlayerMenu{}; camera_.releaseCapture();
     setStatus("Play finalizado. Alterações da sessão foram descartadas.");
     checkInvariants("runtime_stop");
 }
@@ -327,6 +328,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     gameMenuOpen_=playerMenu_.open();
     EndTextureMode();
     if(leave){stopPlay();return;}
+    if(playerMenu_.takeFullscreenRequest())toggleGameFullscreen();
     if(runtime_.state()==game::RuntimeState::Playing&&runtime_.healthHud().visible) {
         const float scale=std::clamp(viewportHeight_/720.f,.75f,1.5f);
         healthHud_={image.x+viewportWidth_-93*scale,image.y+17*scale,82*scale,82*scale};

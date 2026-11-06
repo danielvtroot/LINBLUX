@@ -141,7 +141,7 @@ add_library(linblux_editing STATIC
 target_link_libraries(linblux_editing PUBLIC linblux_engine)
 add_library(linblux_core INTERFACE) # transitional test/embedding facade
  target_link_libraries(linblux_core INTERFACE linblux_engine linblux_editing)
-add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp src/rendering/ModernMaterials.cpp src/rendering/DirectionalShadow.cpp src/rendering/SceneTarget.cpp src/rendering/BrandLogo3D.cpp src/rendering/UiControls.cpp src/rendering/ExperienceOverlay.cpp src/rendering/LuaUiRenderer.cpp)
+add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp src/rendering/ModernMaterials.cpp src/rendering/DirectionalShadow.cpp src/rendering/SceneTarget.cpp src/rendering/PlayerMenu.cpp src/rendering/BrandLogo3D.cpp src/rendering/UiControls.cpp src/rendering/ExperienceOverlay.cpp src/rendering/LuaUiRenderer.cpp)
 target_link_libraries(linblux_renderer PUBLIC linblux_engine)
 add_library(linblux_presentation STATIC src/ui/Localization.cpp src/ui/UiFont.cpp src/ui/Components.cpp)
 target_link_libraries(linblux_presentation PUBLIC linblux_engine)
@@ -341,7 +341,7 @@ if(XVFB_RUN_EXECUTABLE)
     set_tests_properties(linblux_visual_studio PROPERTIES TIMEOUT 180 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
 
     add_test(NAME linblux_studio_play_menu_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
-    set_tests_properties(linblux_studio_play_menu_ui PROPERTIES TIMEOUT 75 ENVIRONMENT "LINBLUX_STUDIO_PLAY_MENU_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;studio;play;ui")
+    set_tests_properties(linblux_studio_play_menu_ui PROPERTIES TIMEOUT 120 ENVIRONMENT "LINBLUX_NATIVE_PLAY_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;studio;play;ui")
     add_test(NAME linblux_studio_play_audio_slider_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
     set_tests_properties(linblux_studio_play_audio_slider_ui PROPERTIES TIMEOUT 60 ENVIRONMENT "LINBLUX_STUDIO_PLAY_MENU_ONLY=1;LINBLUX_STUDIO_PLAY_AUDIO_ONLY=1;LINBLUX_TEST_AUDIO_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/audio/null.conf;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;studio;play;ui;audio")
     add_test(NAME linblux_studio_play_audio_slider_hd_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)

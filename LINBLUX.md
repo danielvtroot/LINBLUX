@@ -734,13 +734,18 @@ entrada antes do runtime.
   canto superior-direito (em desenvolvimento), hotbar inferior com slots
   ocupados, prompt de interação com progresso e avisos de item; desenhado
   apenas em jogo. Scripts complementam a UI (§10.9) sem tocar no HUD nativo.
-- **Menu do Play** (`StudioFrontend`): lateral Continuar/Sair + páginas
+- **Menu do Play** (`PlayerMenu`): apresentação original recuperada do checkpoint
+  `216cee5` da branch `auto-backup`, integrada ao viewport do Studio; páginas
   Jogador/Câmera/Controles/Áudio/Vídeo/Ajuda; volume master/mudo;
   **protegido contra alterações por scripts**. Simulação continua enquanto o
   menu está aberto.
   A abertura usa somente a logo GLB com área clicável transparente; a cápsula
   de controles antiga foi removida. `BrandLogo3D` atualiza a textura a cada
   quadro apresentado, com supersampling e filtragem bilinear.
+  O menu nativo usa coordenadas locais do viewport; Sair encerra o playtest,
+  tela cheia passa pelo controlador do Studio e Esc apenas captura/libera a
+  entrada. O executável standalone não foi reintroduzido. A camada RmlUi não
+  apresenta mais seu menu Esc sobre o menu original.
 - **Personagens por Model (integração inicial)**: `game/CharacterCore` valida
   Models com 1–512 Parts e exatamente uma Part com atributo textual
   `CharacterRole=Root`. Papéis personalizados e repetidos nas demais peças

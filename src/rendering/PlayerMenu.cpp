@@ -78,7 +78,7 @@ if(page_==3){if(IsAudioDeviceReady()){
       char label[16];std::snprintf(label,sizeof(label),"%d%%",pct);line(label);
       if(action(volume>0?"Mudo (silenciar tudo)":"Ativar som")){if(volume>0)lastAudibleVolume_=volume;SetMasterVolume(volume>0?0.f:lastAudibleVolume_);}
   }else {float unavailable=0;slider("Volume geral",unavailable,0,1,false);line("Áudio indisponível nesta sessão.");}}
-if(page_==4){if(action(IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE)?"Sair da tela cheia":"Entrar em tela cheia"))ToggleBorderlessWindowed();line("Ajuste a resolução pela janela.");}
+if(page_==4){if(action(IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE)?"Sair da tela cheia":"Entrar em tela cheia"))fullscreenRequested_=true;line("Ajuste a resolução pela janela.");}
 if(page_==5){line("LINBLUX Player · Alpha em desenvolvimento");line("Experiências locais com Lua e Bullet.");line("Use Esc para retornar ao jogo.");line("Menu protegido: scripts não o removem.");}
 EndScissorMode();count_=std::max(1,current);focus_=std::clamp(focus_,0,count_-1);return quit;
 }
