@@ -83,6 +83,7 @@ target_link_libraries(linblux_imgui PUBLIC ${RAYLIB_LIBRARIES} OpenGL::GL)
 add_library(linblux_engine STATIC
   src/experiences/ExperienceManager.cpp
   src/scripting/LuaRuntime.cpp
+  src/game/CharacterCore.cpp
   src/game/Rig.cpp
   src/game/GameAssetsIO.cpp
   src/game/ImageAssets.cpp
@@ -140,10 +141,12 @@ add_library(linblux_editing STATIC
 target_link_libraries(linblux_editing PUBLIC linblux_engine)
 add_library(linblux_core INTERFACE) # transitional test/embedding facade
  target_link_libraries(linblux_core INTERFACE linblux_engine linblux_editing)
-add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp src/rendering/ModernMaterials.cpp src/rendering/DirectionalShadow.cpp src/rendering/SceneTarget.cpp src/rendering/PlayerMenu.cpp src/rendering/ExperienceOverlay.cpp src/rendering/LuaUiRenderer.cpp)
+add_library(linblux_renderer STATIC src/rendering/SceneRenderer.cpp src/rendering/ModernMaterials.cpp src/rendering/DirectionalShadow.cpp src/rendering/SceneTarget.cpp src/rendering/PlayerMenu.cpp src/rendering/BrandLogo3D.cpp src/rendering/ExperienceOverlay.cpp src/rendering/LuaUiRenderer.cpp)
 target_link_libraries(linblux_renderer PUBLIC linblux_engine)
-add_library(linblux_presentation STATIC src/ui/Localization.cpp)
+add_library(linblux_presentation STATIC src/ui/Localization.cpp src/ui/UiFont.cpp src/ui/Components.cpp src/ui/UiControls.cpp)
 target_link_libraries(linblux_presentation PUBLIC linblux_engine)
+target_link_libraries(linblux_editing PUBLIC linblux_presentation)
+target_link_libraries(linblux_renderer PUBLIC linblux_presentation)
 
 option(LINBLUX_ENABLE_VIDEO "Video de fundo com FFmpeg" ON)
 pkg_check_modules(FFMPEG IMPORTED_TARGET libavformat libavcodec libavutil libswscale)
@@ -179,10 +182,6 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 add_library(linblux_editor ALIAS linblux_studio)
 
-add_executable(linblux_player src/player/main.cpp)
-target_link_libraries(linblux_player PRIVATE linblux_engine linblux_renderer linblux_presentation)
-install(TARGETS linblux_player RUNTIME DESTINATION bin COMPONENT Linblux)
-
 add_executable(linblux src/main.cpp src/app/Application.cpp)
 target_link_libraries(linblux PRIVATE linblux_editor)
 add_custom_target(linblux_ui_assets ALL COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -199,18 +198,23 @@ add_custom_target(linblux_builtin_assets ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/builtin
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/logo.png ${CMAKE_CURRENT_SOURCE_DIR}/assets/builtin/character-face.png ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/builtin)
 add_dependencies(linblux linblux_builtin_assets)
+add_custom_target(linblux_brand_assets ALL
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia/3d
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/3d/logo-3d.glb ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia/3d)
+add_dependencies(linblux linblux_brand_assets)
+install(FILES midia/3d/logo-3d.glb DESTINATION share/linblux/midia/3d COMPONENT Linblux)
 add_custom_target(linblux_example_assets ALL COMMAND ${CMAKE_COMMAND} -E copy_directory
   ${CMAKE_CURRENT_SOURCE_DIR}/assets/examples/lua ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/examples/lua)
 add_dependencies(linblux linblux_example_assets)
 add_custom_target(linblux_media_assets ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/logo.png ${CMAKE_CURRENT_SOURCE_DIR}/midia/careditfullhd.mp4 ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia)
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/midia/logo.png ${CMAKE_CURRENT_SOURCE_DIR}/midia/hd.mp4 ${CMAKE_CURRENT_BINARY_DIR}/share/linblux/midia)
 add_dependencies(linblux linblux_media_assets)
 # The development Home keeps its video; public installs require explicit rights.
 option(LINBLUX_INSTALL_BACKGROUND_VIDEO "Instalar vídeo com redistribuição autorizada" OFF)
 install(FILES midia/logo.png DESTINATION share/linblux/midia COMPONENT Linblux)
 if(LINBLUX_INSTALL_BACKGROUND_VIDEO)
-  install(FILES midia/careditfullhd.mp4 DESTINATION share/linblux/midia COMPONENT Linblux)
+  install(FILES midia/careditfullhd.mp4 midia/hd.mp4 DESTINATION share/linblux/midia COMPONENT Linblux)
 endif()
 install(DIRECTORY assets/examples/rifledemo DESTINATION share/linblux/examples COMPONENT Linblux)
 install(DIRECTORY assets/examples/lua DESTINATION share/linblux/examples COMPONENT Linblux)
@@ -225,15 +229,13 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 enable_testing()
-add_test(NAME linblux_player_help COMMAND linblux_player --help)
-add_test(NAME linblux_player_validate COMMAND linblux_player --validate ${CMAKE_CURRENT_SOURCE_DIR}/assets/defaults/factory/world.loblox.json)
 add_executable(linblux_experience_tests tests/experiences_main.cpp)
 target_link_libraries(linblux_experience_tests PRIVATE linblux_core)
 add_test(NAME linblux_experiences COMMAND linblux_experience_tests)
-add_executable(linblux_studio_tests tests/studio_main.cpp)
+add_executable(linblux_studio_tests tests/editor/studio_main.cpp)
 target_link_libraries(linblux_studio_tests PRIVATE linblux_core)
 add_test(NAME linblux_studio COMMAND linblux_studio_tests)
-add_executable(linblux_game_tests tests/game_main.cpp)
+add_executable(linblux_game_tests tests/game/game_main.cpp)
 target_link_libraries(linblux_game_tests PRIVATE linblux_core)
 add_test(NAME linblux_game COMMAND linblux_game_tests)
 add_executable(linblux_image_assets_tests tests/image_assets_main.cpp)
@@ -279,7 +281,7 @@ if(XVFB_RUN_EXECUTABLE)
   target_link_libraries(linblux_decal_render_tests PRIVATE linblux_editor)
   add_test(NAME linblux_decal_render COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 256x256x24" $<TARGET_FILE:linblux_decal_render_tests>)
   set_tests_properties(linblux_decal_render PROPERTIES TIMEOUT 45 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
-  add_executable(linblux_rig_image_tests tests/rig_image_main.cpp)
+  add_executable(linblux_rig_image_tests tests/editor/rig_image_main.cpp)
   target_link_libraries(linblux_rig_image_tests PRIVATE linblux_editor)
   add_test(NAME linblux_rig_image COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 512x512x24" $<TARGET_FILE:linblux_rig_image_tests>)
   set_tests_properties(linblux_rig_image PROPERTIES TIMEOUT 60 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
@@ -329,7 +331,7 @@ if(XVFB_RUN_EXECUTABLE)
     set_tests_properties(linblux_script_input_ui PROPERTIES TIMEOUT 45 ENVIRONMENT "LINBLUX_SCRIPT_INPUT_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
     add_test(NAME linblux_manipulation_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
     set_tests_properties(linblux_manipulation_ui PROPERTIES TIMEOUT 240 ENVIRONMENT "LOBLOX_MANIPULATION_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
-    add_executable(linblux_rig_input_tests tests/rig_input_main.cpp)
+    add_executable(linblux_rig_input_tests tests/editor/rig_input_main.cpp)
     target_link_libraries(linblux_rig_input_tests PRIVATE linblux_editor)
     add_test(NAME linblux_rig_input COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1366x768x24 -noreset" $<TARGET_FILE:linblux_rig_input_tests>)
     set_tests_properties(linblux_rig_input PROPERTIES TIMEOUT 180 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
@@ -338,24 +340,22 @@ if(XVFB_RUN_EXECUTABLE)
     add_test(NAME linblux_visual_studio COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_visual_studio_tests>)
     set_tests_properties(linblux_visual_studio PROPERTIES TIMEOUT 180 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
 
-    # Script-built UI: the same raylib renderer the Studio Play texture and the
-    # Player use, verified by framebuffer pixels at two window sizes.
-    add_test(NAME linblux_rifledemo_player COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" python3 ${CMAKE_CURRENT_SOURCE_DIR}/tests/rifledemo_player.py $<TARGET_FILE:linblux_player>)
-    set_tests_properties(linblux_rifledemo_player PROPERTIES TIMEOUT 60 LABELS "graphics;integration;player;inventory;combat;scripting")
-    add_test(NAME linblux_player_menu COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" python3 ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_menu.py $<TARGET_FILE:linblux_player>)
-    set_tests_properties(linblux_player_menu PROPERTIES TIMEOUT 55 LABELS "graphics;integration;player;ui")
-    add_test(NAME linblux_player_menu_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
-    set_tests_properties(linblux_player_menu_ui PROPERTIES TIMEOUT 75 ENVIRONMENT "LINBLUX_PLAYER_MENU_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;player;ui")
-    add_test(NAME linblux_player_audio_slider_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
-    set_tests_properties(linblux_player_audio_slider_ui PROPERTIES TIMEOUT 60 ENVIRONMENT "LINBLUX_PLAYER_MENU_ONLY=1;LINBLUX_PLAYER_AUDIO_ONLY=1;LINBLUX_TEST_AUDIO_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/audio/null.conf;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;player;ui;audio")
-    add_test(NAME linblux_player_audio_slider_hd_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
-    set_tests_properties(linblux_player_audio_slider_hd_ui PROPERTIES TIMEOUT 60 ENVIRONMENT "LINBLUX_PLAYER_MENU_ONLY=1;LINBLUX_PLAYER_AUDIO_ONLY=1;LINBLUX_AUDIO_HD=1;LINBLUX_TEST_AUDIO_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/audio/null.conf;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;player;ui;audio")
+    add_test(NAME linblux_studio_play_menu_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
+    set_tests_properties(linblux_studio_play_menu_ui PROPERTIES TIMEOUT 120 ENVIRONMENT "LINBLUX_NATIVE_PLAY_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;studio;play;ui")
+    add_test(NAME linblux_studio_play_audio_slider_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
+    set_tests_properties(linblux_studio_play_audio_slider_ui PROPERTIES TIMEOUT 60 ENVIRONMENT "LINBLUX_STUDIO_PLAY_MENU_ONLY=1;LINBLUX_STUDIO_PLAY_AUDIO_ONLY=1;LINBLUX_TEST_AUDIO_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/audio/null.conf;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;studio;play;ui;audio")
+    add_test(NAME linblux_studio_play_audio_slider_hd_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
+    set_tests_properties(linblux_studio_play_audio_slider_hd_ui PROPERTIES TIMEOUT 60 ENVIRONMENT "LINBLUX_STUDIO_PLAY_MENU_ONLY=1;LINBLUX_STUDIO_PLAY_AUDIO_ONLY=1;LINBLUX_AUDIO_HD=1;LINBLUX_TEST_AUDIO_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/audio/null.conf;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;studio;play;ui;audio")
     add_test(NAME linblux_audio_panel_hd_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
     set_tests_properties(linblux_audio_panel_hd_ui PROPERTIES TIMEOUT 60 ENVIRONMENT "LINBLUX_AUDIO_PANEL_ONLY=1;LINBLUX_AUDIO_HD=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;editor;audio;ui")
-    add_test(NAME linblux_native_audio_slider_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
-    set_tests_properties(linblux_native_audio_slider_ui PROPERTIES TIMEOUT 60 ENVIRONMENT "LINBLUX_NATIVE_AUDIO_ONLY=1;LINBLUX_TEST_AUDIO_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/audio/null.conf;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;player;ui;audio")
-    add_test(NAME linblux_player_window_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
-    set_tests_properties(linblux_player_window_ui PROPERTIES TIMEOUT 65 ENVIRONMENT "LINBLUX_PLAYER_MENU_ONLY=1;LINBLUX_MENU_WINDOW_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;player;editor;ui")
+    add_test(NAME linblux_studio_play_window_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24 -noreset" $<TARGET_FILE:linblux_rml_ui_tests>)
+    set_tests_properties(linblux_studio_play_window_ui PROPERTIES TIMEOUT 65 ENVIRONMENT "LINBLUX_STUDIO_PLAY_MENU_ONLY=1;LINBLUX_MENU_WINDOW_ONLY=1;LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;studio;play;ui")
+
+    add_executable(linblux_brand_logo_tests tests/brand_logo_main.cpp)
+    target_link_libraries(linblux_brand_logo_tests PRIVATE linblux_renderer)
+    add_dependencies(linblux_brand_logo_tests linblux_brand_assets)
+    add_test(NAME linblux_brand_logo COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x720x24 -noreset" $<TARGET_FILE:linblux_brand_logo_tests>)
+    set_tests_properties(linblux_brand_logo PROPERTIES TIMEOUT 30 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2" LABELS "graphics;integration;player;ui")
 
     add_executable(linblux_health_hud_tests tests/health_hud_main.cpp)
     target_link_libraries(linblux_health_hud_tests PRIVATE linblux_renderer)
@@ -387,17 +387,17 @@ if(XVFB_RUN_EXECUTABLE)
               ${CMAKE_CURRENT_BINARY_DIR}/graphics-quality-1080 1920x1080)
     set_tests_properties(linblux_graphics_quality_1080 PROPERTIES TIMEOUT 240 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
 
-    add_executable(linblux_studio_ui_tests tests/studio_ui_main.cpp tests/x11_focus.cpp)
+    add_executable(linblux_studio_ui_tests tests/editor/studio_ui_main.cpp tests/x11_focus.cpp)
     target_link_libraries(linblux_studio_ui_tests PRIVATE linblux_editor X11::X11)
     add_test(NAME linblux_studio_ui COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset" $<TARGET_FILE:linblux_studio_ui_tests>)
     set_tests_properties(linblux_studio_ui PROPERTIES TIMEOUT 180 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
-    add_executable(linblux_game_ui_tests tests/game_ui_main.cpp tests/x11_focus.cpp)
+    add_executable(linblux_game_ui_tests tests/game/game_ui_main.cpp tests/x11_focus.cpp)
     target_link_libraries(linblux_game_ui_tests PRIVATE linblux_editor X11::X11)
     add_test(NAME linblux_game_ui
       COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset"
               $<TARGET_FILE:linblux_game_ui_tests>)
     set_tests_properties(linblux_game_ui PROPERTIES TIMEOUT 240 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
-    add_executable(linblux_editor_input_tests tests/editor_input_main.cpp tests/x11_focus.cpp)
+    add_executable(linblux_editor_input_tests tests/editor/editor_input_main.cpp tests/x11_focus.cpp)
     target_link_libraries(linblux_editor_input_tests PRIVATE linblux_editor X11::X11)
     add_test(NAME linblux_editor_input
       COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset"
@@ -465,8 +465,6 @@ install(FILES third_party/imgui/LICENSE.txt DESTINATION share/linblux/licenses C
 install(FILES third_party/rlimgui/LICENSE DESTINATION share/linblux/licenses COMPONENT Linblux RENAME rlImGui-zlib.txt)
 install(FILES third_party/nlohmann/LICENSE.MIT DESTINATION share/linblux/licenses COMPONENT Linblux RENAME nlohmann-json-MIT.txt)
 install(FILES ${rmlui_SOURCE_DIR}/LICENSE.txt DESTINATION share/linblux/licenses COMPONENT Linblux RENAME RmlUi-MIT.txt)
-set_tests_properties(linblux_player_validate PROPERTIES ENVIRONMENT
-  "XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/test-data/player;XDG_STATE_HOME=${CMAKE_CURRENT_BINARY_DIR}/test-state/player")
 if(Python3_Interpreter_FOUND AND XVFB_RUN_EXECUTABLE AND XDOTOOL_EXECUTABLE)
   execute_process(COMMAND ${Python3_EXECUTABLE} -c "import PIL" RESULT_VARIABLE LINBLUX_PIL_RESULT OUTPUT_QUIET ERROR_QUIET)
   if(LINBLUX_PIL_RESULT EQUAL 0)
@@ -474,32 +472,17 @@ if(Python3_Interpreter_FOUND AND XVFB_RUN_EXECUTABLE AND XDOTOOL_EXECUTABLE)
       ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/engine_default_restart.py
       $<TARGET_FILE:linblux> $<TARGET_FILE:linblux_engine_default_tests>)
     set_tests_properties(linblux_engine_default_restart PROPERTIES TIMEOUT 150 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
-    add_test(NAME linblux_lua_ui_player
-      COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1920x1080x24"
-              ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/lua_ui_player.py
-              $<TARGET_FILE:linblux_player>)
-    set_tests_properties(linblux_lua_ui_player PROPERTIES TIMEOUT 120 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
   else()
     message(WARNING "Teste de reinicializacao do Mundo Padrao requer python3-pil")
   endif()
 endif()
-install(FILES packaging/linblux.desktop packaging/linblux-player.desktop DESTINATION share/applications COMPONENT Linblux)
+install(FILES packaging/linblux.desktop DESTINATION share/applications COMPONENT Linblux)
 install(FILES packaging/linblux-mime.xml DESTINATION share/mime/packages COMPONENT Linblux)
 install(FILES midia/logo.png DESTINATION share/pixmaps COMPONENT Linblux RENAME linblux.png)
 
 # ATLAS: testes locais da inteligência estrutural (Python stdlib, sem rede).
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
-  add_test(NAME linblux_lua_player_validation
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/lua_player_validation.py
-            --player $<TARGET_FILE:linblux_player>)
-  set_tests_properties(linblux_lua_player_validation PROPERTIES TIMEOUT 30 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-  if(XVFB_RUN_EXECUTABLE)
-    add_test(NAME linblux_progress_player_ui
-      COMMAND ${XVFB_RUN_EXECUTABLE} -a -s "-screen 0 1280x800x24 -noreset"
-              ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/progress_player_ui.py --player $<TARGET_FILE:linblux_player>)
-    set_tests_properties(linblux_progress_player_ui PROPERTIES TIMEOUT 45 ENVIRONMENT "LIBGL_ALWAYS_SOFTWARE=1;LP_NUM_THREADS=2")
-  endif()
   add_test(NAME linblux_backup
     COMMAND ${Python3_EXECUTABLE} -m unittest discover
             -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/backup -p "test_*.py" -v)
@@ -539,8 +522,6 @@ function(linblux_turbo_graphics test labels)
   endif()
 endfunction()
 
-linblux_turbo_headless(linblux_player_help "smoke;headless;player")
-linblux_turbo_headless(linblux_player_validate "smoke;headless;player;serialization")
 linblux_turbo_headless(linblux_experiences "unit;headless;experiences;serialization")
 linblux_turbo_headless(linblux_studio "unit;headless;editor;game")
 linblux_turbo_headless(linblux_game "unit;headless;game;scene;physics")
@@ -564,7 +545,6 @@ linblux_turbo_graphics(linblux_rml_ui "graphics;integration;ui;editor;slow")
 linblux_turbo_graphics(linblux_rig_decals_ui "graphics;integration;editor;rendering;rig;slow")
 linblux_turbo_graphics(linblux_mouse_lock "graphics;integration;editor;ui;game;slow")
 linblux_turbo_graphics(linblux_lua_ui_render "graphics;integration;ui;scripting;rendering")
-linblux_turbo_graphics(linblux_lua_ui_player "graphics;integration;ui;scripting;player")
 linblux_turbo_graphics(linblux_script_input_ui "graphics;integration;editor;ui;game;scripting")
 linblux_turbo_graphics(linblux_models_ui "graphics;integration;editor;ui;scene;scripting")
 linblux_turbo_graphics(linblux_body_properties_ui "graphics;integration;editor;ui;physics;scripting")
