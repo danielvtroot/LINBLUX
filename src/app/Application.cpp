@@ -14,6 +14,7 @@
 
 #include "core/Diagnostics.h"
 #include "editor/EditorUI.h"
+#include "rendering/GraphicsGL.h"
 #include "rendering/SceneRenderer.h"
 #include "serialization/ProjectIO.h"
 
