@@ -237,8 +237,8 @@ Opções e notas reais:
 Empacotamento (candidato interno, exige build Release):
 
 ```sh
-python3 tools/package_linux.py --build-dir build-linblux
-python3 tools/check_linux_package.py \
+python3 tools/packaging/package_linux.py --build-dir build-linblux
+python3 tools/packaging/check_linux_package.py \
   .turbo/dist/linblux-alpha-0.1.0-candidate-REVISAO-linux-x86_64.tar.gz
 ```
 
