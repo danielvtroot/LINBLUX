@@ -61,7 +61,10 @@ EditorUI::~EditorUI() {
 
 bool EditorUI::enableModernFrontend(std::string& error) {
     frontend_ = std::make_unique<StudioFrontend>(*this);
-    error.clear();
+    if (!frontend_->initialize(error)) {
+        frontend_.reset();
+        return false;
+    }
     return true;
 }
 
