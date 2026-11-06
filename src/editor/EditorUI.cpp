@@ -51,51 +51,6 @@ const LinbluxLogo& LoadLinbluxLogo() {
     logo.height=static_cast<float>(texture.height);logo.ok=texture.id!=0;
     return logo;
 }
-
-    }
-    if (route.globalKeys && input.save) {
-        saveCurrentProject();
-    }
-    if (route.globalKeys && input.open) {
-        endGizmoSession(true, "open_dialog");
-        requestOpenPopup_ = true;
-        std::snprintf(pathBuffer_, sizeof(pathBuffer_), "%s", projectPath_.c_str());
-    }
-}
-
-bool EditorUI::saveProjectAt(const std::string& path, std::string& error) {
-    endGizmoSession(false, "save");
-    cancelRigGizmo(false);
-    if (!commitScriptDrafts(error)) return false;
-    if (animationDirty_ && !animationSource_.empty()) {
-        auto* clip = scene_.gameAssets().findAnimation(animationSource_);
-        if (!clip) { error = "Animation asset no longer exists"; return false; }
-        if (!animationDraft_.validate(error)) { error = "Animacao nao salva: " + error; return false; }
-        *clip = animationDraft_;
-    }
-    if(experienceUi_&&experienceUi_->handlesSave()) {
-        if(!experienceUi_->save(error))return false;
-    } else if (!projectio::save(scene_, path, error)) return false;
-    animationDirty_ = false;
-    for (auto& pair:scriptDrafts_) {
-        pair.second.dirty=false;
-        pair.second.baseline=pair.second.text;
-    }
-    if(experienceUi_)experienceUi_->documentOpened();
-    return true;
-}
-
-bool EditorUI::saveCurrentProject() {
-    std::string error;
-    if (saveProjectAt(projectPath_, error)) {
-        setStatus(experienceUi_&&experienceUi_->editingEngineDefault()?"Rascunho salvo. Use Salvar como padrão da engine para publicar as alterações.":"Projeto salvo em " + projectPath_);
-        return true;
-    } else {
-        setStatus("Falha ao salvar '" + projectPath_ + "': " + error, true);
-        return false;
-    }
-}
-
 void EditorUI::draw() {
     // Runtime preparation owns its fields on a worker until the future is
     // joined. Home/loading has exclusive input and never reads that runtime.
@@ -1826,4 +1781,5 @@ void EditorUI::focusSelection() {
 }
 
 }  // namespace loblox
+
 
