@@ -51,6 +51,97 @@ const LinbluxLogo& LoadLinbluxLogo() {
     logo.height=static_cast<float>(texture.height);logo.ok=texture.id!=0;
     return logo;
 }
+EditorUI::EditorUI(Scene& scene, PhysicsWorld& physics, EditorCamera& camera, SceneRenderer& renderer, const AppConfig& config)
+    : scene_(scene), physics_(physics), camera_(camera), renderer_(renderer), config_(config) {
+}
+
+EditorUI::~EditorUI() {
+}
+
+void EditorUI::enableModernFrontend(std::string& error) {
+    frontend_ = std::make_unique<StudioFrontend>(*this);
+    error.clear();
+}
+
+void EditorUI::renderModernFrontend() {
+    if (frontend_) { frontend_->render(); }
+}
+
+void EditorUI::setOnSceneLoaded(std::function<void()> callback) {
+    onSceneLoaded_ = std::move(callback);
+}
+
+void EditorUI::setStatus(std::string message, bool error) {
+    status_ = std::move(message);
+    statusIsError_ = error;
+}
+
+void EditorUI::setProjectPath(std::string path) {
+    projectPath_ = std::move(path);
+}
+
+void EditorUI::endGizmoSession(bool restoreTransform, const char* reason) {
+    gizmo_.cancel(nullptr, restoreTransform);
+}
+
+void EditorUI::handleShortcuts(const EditorInput& input, const InputRoute& route) {
+}
+
+bool EditorUI::saveCurrentProject() {
+    std::string error;
+    const bool saved = saveProjectAt(projectPath_, error);
+    setStatus(error.empty() ? std::string("ok") : error, !error.empty());
+    return saved;
+}
+
+bool EditorUI::saveProjectAt(const std::string& path, std::string& error) {
+    (void)path;
+    error = "saveProjectAt not implemented during organization";
+    return false;
+}
+
+void EditorUI::setTool(ToolMode tool, const char* source) {
+    tool_ = tool;
+}
+
+void EditorUI::checkInvariants(const char* operation) {
+}
+
+void EditorUI::clearTransformReadout() {
+    readout_.visible = false;
+    readout_.editing = false;
+    readout_.focusPending = false;
+    readout_.partId = kInvalidInstanceId;
+}
+
+void EditorUI::updateTransformReadout(Part* part) {
+    if (part && readout_.partId != part->id()) {
+        readout_.visible = false;
+        readout_.partId = part->id();
+        readout_.focusPending = true;
+    }
+}
+
+void EditorUI::applyReadoutValue(float value) {
+}
+
+void EditorUI::beginTransformReadout(Part* part, ToolMode mode) {
+}
+
+void EditorUI::drawTransformReadout(const EditorInput& input, Vector2 imagePosition) {
+}
+
+void EditorUI::recordTransformEdit(InstanceId id, const Transform& before, const Transform& after) {
+    history_.record(id, before, after);
+}
+
+void EditorUI::resizeViewport(int width, int height) {
+}
+
+void EditorUI::buildDockLayout() {
+    layoutBuilt_ = true;
+}
+
 void EditorUI::draw() {
     // Runtime preparation owns its fields on a worker until the future is
     // joined. Home/loading has exclusive input and never reads that runtime.
