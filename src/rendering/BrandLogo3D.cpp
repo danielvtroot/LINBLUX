@@ -27,12 +27,13 @@ bool BrandLogo3D::update(float dt,int physicalSize) {
         if(target_.id)UnloadRenderTexture(target_);
         target_=LoadRenderTexture(size,size);
         if(!target_.id)return false;
-        SetTextureFilter(target_.texture,TEXTURE_FILTER_TRILINEAR);
+        SetTextureFilter(target_.texture,TEXTURE_FILTER_BILINEAR);
         elapsed_=1;
     }
     dt=std::clamp(dt,0.f,.1f);elapsed_+=dt;
     angle_=std::fmod(angle_+dt*60.f,360.f);
-    if(elapsed_<1.f/60.f)return true;
+    // Draw each presented frame: dropping frames here causes visible judder
+    // when the Studio frame interval straddles the 60 Hz threshold.
     elapsed_=0;
     // Rotate about the bounding centre, preserving the source proportions.
     model_.transform=MatrixMultiply(MatrixMultiply(MatrixTranslate(-center_.x,-center_.y,-center_.z),MatrixRotateX(PI*.5f)),MatrixRotateY(angle_*DEG2RAD));
