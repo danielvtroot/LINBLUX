@@ -76,7 +76,6 @@
 - `linblux_imgui` (static)
 - `linblux_manipulation_tests` (executable)
 - `linblux_media` (static)
-- `linblux_player` (executable)
 - `linblux_presentation` (static)
 - `linblux_renderer` (static)
 - `linblux_rig_image_tests` (executable)
@@ -114,8 +113,6 @@
 - `linblux_manipulation` — `tests/manipulation_main.cpp`
 - `linblux_manipulation_ui` (condicional) — `tests/x11_focus.cpp`
 - `linblux_mouse_lock` (condicional) — `tests/x11_focus.cpp`
-- `linblux_player_help` — `src/player/main.cpp`
-- `linblux_player_validate` — `src/player/main.cpp`
 - `linblux_rig_decals_ui` (condicional) — `tests/x11_focus.cpp`
 - `linblux_rig_image` (condicional) — `tests/rig_image_main.cpp`
 - `linblux_rig_input` (condicional) — `tests/rig_input_main.cpp`
