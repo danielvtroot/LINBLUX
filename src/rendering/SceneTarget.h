@@ -10,11 +10,15 @@ public:
     bool begin(int width,int height,Antialiasing requested,RenderQuality quality);
     void finish();
     Antialiasing actual() const {return actual_;}
+    // Amostras realmente concedidas pelo driver (0 = alvo sem MSAA).
+    int samples() const {return samples_;}
 private:
     void release();
-    bool allocate(int width,int height,bool multisample);
+    bool allocate(int width,int height,int samples);
+    bool tryAllocate(int width,int height,int samples);
     RenderTexture2D resolved_{};
     unsigned multisample_=0,color_=0,depth_=0;
+    int samples_=0;
     Shader fxaa_{};
     bool shaderTried_=false,msaaUnavailable_=false;
     Antialiasing actual_=Antialiasing::None;
