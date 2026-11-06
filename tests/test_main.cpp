@@ -1078,7 +1078,7 @@ void TestLuaDeclarativeSceneRoundTrip() {
     CHECK(loaded.findPart(source.parts()[1]->id())->instanceClass() == InstanceClass::SpawnLocation);
 
     const std::size_t count = loaded.parts().size();
-    const std::string malicious = text + "os.execute(\\\"touch /tmp/loblox_lua_must_not_run\\\")\n";
+    const std::string malicious = text + "os.execute(\\\"touch  + std::filesystem::temp_directory_path().string() + "/linblux_lua_must_not_run\\\")\n";
     CHECK(!scenelua::fromLua(loaded, malicious, error));
     CHECK(loaded.parts().size() == count);
     std::string unknownClass = "return { format = \"loblox-scene\", version = 1, objects = { { id = 9, class = \"Script\", name = \"x\", parent = 1 } } }";
@@ -1144,7 +1144,7 @@ void TestProjectRoundTrip() {
     scene.lighting()->setShadowsEnabled(false);scene.lighting()->setShadowDistance(120);scene.lighting()->setShadowStrength(.65f);
     scene.lighting()->setBrightness(0.8f);
 
-    const std::string path = "/tmp/loblox_test_project.json";
+    const std::string path = std::filesystem::temp_directory_path().string() + "/linblux_test_project.json";
     std::error_code ignored;
     std::filesystem::remove(path, ignored);
     std::filesystem::remove(path + ".tmp", ignored);

@@ -383,7 +383,8 @@ const IconCase kIconCases[] = {
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string out = "/tmp/loblox-graphics-quality";
+    const char* tmpBase = std::getenv("TMPDIR");
+    std::string out = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-graphics-quality";
     if (argc > 1) out = argv[1];
     // Optional HUD viewport, e.g. `... /tmp/out 1920x1080`. The interface
     // fixture keeps its own 1366x768 layout; only the gameplay HUD is replayed

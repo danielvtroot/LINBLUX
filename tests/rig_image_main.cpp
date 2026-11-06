@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include "core/Diagnostics.h"
 #include "game/GameAssetsIO.h"
