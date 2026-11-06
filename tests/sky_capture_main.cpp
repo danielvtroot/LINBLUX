@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <string>
 #include <cmath>
-#include <vector>#include <vector>
+#include <vector>
 #include "raylib.h"
 #include "rendering/SceneRenderer.h"
 #include "objects/Lighting.h"

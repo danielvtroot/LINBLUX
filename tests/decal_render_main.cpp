@@ -9,7 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
-#include <vector>#include <vector>
+#include <vector>
 
 // Two independent regressions live here:
 //  1. the production Decal null-optional-key crash + default opacity;
