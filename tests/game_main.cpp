@@ -795,7 +795,7 @@ void MouseLockTests() {
 
 int main(int argc, char** argv) {
     const char* tmpBase = std::getenv("TMPDIR");
-    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-game-headless-XXXXXX";
     std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
     tmpBuffer.push_back('\0');
     char* tmpDir = mkdtemp(tmpBuffer.data());

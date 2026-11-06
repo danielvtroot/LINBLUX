@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <string>
 #include <cmath>
+#include <vector>#include <vector>
 #include "raylib.h"
 #include "rendering/SceneRenderer.h"
 #include "objects/Lighting.h"
@@ -13,7 +14,7 @@ int failures=0,checks=0;
 #define CHECK(x) do{++checks;if(!(x)){++failures;std::fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);}}while(0)
 int main() {
     const char* tmpBase = std::getenv("TMPDIR");
-    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-sky-capture-XXXXXX";
     std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
     tmpBuffer.push_back('\0');
     char* tmpDir = mkdtemp(tmpBuffer.data());

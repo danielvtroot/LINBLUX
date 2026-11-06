@@ -56,7 +56,7 @@ bool Equivalent(const nlohmann::json& a, const nlohmann::json& b) {
 
 int main() {
     const char* tmpBase = std::getenv("TMPDIR");
-    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-input-XXXXXX";
     std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
     tmpBuffer.push_back('\0');
     char* tmpDir = mkdtemp(tmpBuffer.data());

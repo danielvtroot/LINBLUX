@@ -5,6 +5,7 @@
 #include <string>
 #include <cmath>
 #include <filesystem>
+#include <vector>
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "rlImGui.h"
@@ -39,7 +40,7 @@ int checks=0,failures=0;
 #define CHECK(x) do { ++checks; if(!(x)){++failures;std::fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);} } while(0)
 int main() {
     const char* tmpBase = std::getenv("TMPDIR");
-    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-visual-studio-XXXXXX";
     std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
     tmpBuffer.push_back('\0');
     char* tmpDir = mkdtemp(tmpBuffer.data());

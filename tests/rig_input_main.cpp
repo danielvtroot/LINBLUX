@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <string>
 #include <filesystem>
+#include <vector>#include <vector>
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "rlImGui.h"
@@ -49,7 +50,7 @@ int checks=0,failures=0;
 int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0);
     const char* tmpBase = std::getenv("TMPDIR");
-    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-rig-input-XXXXXX";
     std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
     tmpBuffer.push_back('\0');
     char* tmpDir = mkdtemp(tmpBuffer.data());

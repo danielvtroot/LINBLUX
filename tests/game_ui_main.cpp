@@ -76,7 +76,7 @@ int main() {
     std::setvbuf(stdout,nullptr,_IOLBF,0); // preserve results before a possible driver LSan exit
     CHECK(SceneRenderer::MaterialColor(WHITE,PartMaterial::Metal).b == 255);
     const char* tmpBase = std::getenv("TMPDIR");
-    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-%s-XXXXXX";
+    std::string tmpTemplate = (tmpBase ? std::string(tmpBase) : std::string("/tmp")) + "/linblux-game-ui-XXXXXX";
     std::vector<char> tmpBuffer(tmpTemplate.begin(), tmpTemplate.end());
     tmpBuffer.push_back('\0');
     char* tmpDir = mkdtemp(tmpBuffer.data());
