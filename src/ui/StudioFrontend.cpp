@@ -1018,7 +1018,7 @@ struct StudioFrontend::Impl final:Rml::EventListener {
         keyboardOwned=keyboardOwned||editing()||dialogOpen;
         // Player buttons participate in RmlUi's native Tab/Enter navigation.
         // Only the paused context receives these events; gameplay gets none.
-        const bool playerPaused=ui.gameMenuOpen();
+        const bool playerPaused=false; // Native PlayerMenu owns Play keyboard navigation.
         if(playerPaused) {
             if(ImGui::IsKeyPressed(ImGuiKey_Tab,false)) {
                 // Trap navigation in the pause subtree instead of reaching
@@ -1258,6 +1258,10 @@ if(c.action=="r6")showAdvanced("rig");
         html("advanced-content",s,advancedMarkup);
     }
     void syncGame() {
+        // Official Player presentation now comes from the original native module.
+        display("pause",false);display("health",false);display("game-topbar",false);
+        display("mouse-lock-cursor",false);
+        return;
         const bool active=ui.runtime_.active(),paused=ui.gameMenuOpen();
         // A fresh pause opens on the session page; a tab chosen during the
         // same pause remains selected until play resumes.

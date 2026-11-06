@@ -252,8 +252,8 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     gameViewportW_=static_cast<float>(viewportWidth_);gameViewportH_=static_cast<float>(viewportHeight_);
     // This is also the hit box exposed by the modern RmlUi game top bar.
     // Keep the one invisible accessible button and draw the brand beneath it.
-    const Rectangle menuButton{image.x+16,image.y+16,46,46};
-    const bool menuHovered=!frontend_ && context.hovered && !gameplayCapture_ && CheckCollisionPointRec(raw.mouse,menuButton);
+    const Rectangle menuButton{image.x+16,image.y+16,70,70};
+    const bool menuHovered=!gameMenuOpen() && context.hovered && !gameplayCapture_ && CheckCollisionPointRec(raw.mouse,menuButton);
     EditorInput gameInput=raw;
     if(menuHovered && raw.leftPressed)gameInput.escape=true; // HUD action enters the same Pause/Resume router
     if(menuHovered)context.hovered=false;
@@ -310,27 +310,28 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     gameViewportW_ = static_cast<float>(viewportWidth_);
     gameViewportH_ = static_cast<float>(viewportHeight_);
     playerBrand_.update(GetFrameTime(),
-                        static_cast<int>(46*GetWindowScaleDPI().x));
+                        static_cast<int>(80*GetWindowScaleDPI().x));
     BeginTextureMode(viewport_);
     RigRenderState character{&runtime_.rig(), runtime_.pose(), runtime_.renderCharacterRoot()};
     renderer_.drawScene(runtime_.scene(), runtime_.playerCamera().camera(), viewportWidth_, viewportHeight_,
         kInvalidInstanceId, runtime_.playerCamera().avatarHidden() ? nullptr : &character, false);
     DrawExperienceOverlay(runtime_,viewportWidth_,viewportHeight_);
     DrawLuaUi(runtime_,viewportWidth_,viewportHeight_);
+    playerBrand_.draw({16,16,70,70});
+    playerMenu_.setOpen(gameMenuOpen());
+    // The recovered Player draws and hit-tests in viewport-local pixels.
+    SetMouseOffset(-int(image.x),-int(image.y));
+    const bool leave=playerMenu_.draw(runtime_,viewportWidth_,viewportHeight_,
+        ui::SystemFont(),{},std::filesystem::path(projectPath_).stem().string(),&playerBrand_);
+    SetMouseOffset(0,0);
+    gameMenuOpen_=playerMenu_.open();
     EndTextureMode();
+    if(leave){stopPlay();return;}
     if(runtime_.state()==game::RuntimeState::Playing&&runtime_.healthHud().visible) {
         const float scale=std::clamp(viewportHeight_/720.f,.75f,1.5f);
         healthHud_={image.x+viewportWidth_-93*scale,image.y+17*scale,82*scale,82*scale};
     }
     auto* dl = ImGui::GetWindowDrawList();
-    const auto brand=playerBrand_.texture();
-    if(brand.id) {
-        // RenderTexture is upside down to ImGui. The RmlUi top-bar control is
-        // transparent and supplies keyboard/mouse accessibility over this.
-        dl->AddImage(static_cast<ImTextureID>(brand.id),
-                     {menuButton.x,menuButton.y},{menuButton.x+46,menuButton.y+46},
-                     {0,1},{1,0});
-    }
     if(frontend_)return; // RmlUi owns menu, pause panel and interaction.
     if(menuHovered)dl->AddCircle({menuButton.x+23,menuButton.y+23},25,IM_COL32(255,255,255,55),24,1.0f);
     if(menuHovered)ImGui::SetTooltip(i18n::Label("Game menu (Esc)"));

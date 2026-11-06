@@ -20,6 +20,7 @@
 #include "game/Runtime.h"
 #include "rendering/SceneRenderer.h"
 #include "rendering/BrandLogo3D.h"
+#include "rendering/PlayerMenu.h"
 #include "raylib.h"
 
 namespace loblox {
@@ -205,6 +206,7 @@ private:
     // shared by modern RmlUi Play and the legacy ImGui fallback; the Studio
     // must never fall back to the standalone player's PNG-only control.
     BrandLogo3D playerBrand_;
+    PlayerMenu playerMenu_;
     bool gameplaySkipDelta_ = true;
     bool gameplayRestoreNoCursorChange_ = false, gameplayRestoreDrawCursor_ = false;
     Vector2 gameplayRestoreCursor_{};

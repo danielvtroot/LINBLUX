@@ -1118,7 +1118,7 @@ void EditorUI::draw() {
     if (showOutput_) drawOutput();
     drawDialogs();
     drawViewport(); // UI actions and popup requests are known before routing.
-    drawPauseMenu(); // current-frame gameplay rect; Paused already owns input
+    // PlayerMenu is rendered by drawGameplayViewport for both frontends.
 }
 
 bool EditorUI::playing() const {return (experienceUi_&&experienceUi_->loading())||runtime_.active();}
