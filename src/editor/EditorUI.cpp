@@ -83,6 +83,7 @@ void EditorUI::setProjectPath(std::string path) {
 }
 
 void EditorUI::endGizmoSession(bool restoreTransform, const char* reason) {
+    if (transform_.active()) { transform_.cancel(nullptr, restoreTransform, reason); return; }
     gizmo_.cancel(nullptr, restoreTransform);
 }
 
