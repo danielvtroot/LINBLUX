@@ -59,7 +59,7 @@ seus projetos ao experimentar.
 | Studio | Cena 3D, Explorador com busca, propriedades, seleção, gizmo e scripts |
 | Construção | Move e Scale pela face, rotação, incrementos de Snap e encaixe por superfície |
 | Objetos | Parts, Models, hierarquia, Attachments e serviços locais de armazenamento |
-| Execução | Player separado e Play/Stop sobre uma cópia da cena autoral |
+| Execução | Play/Stop integrado ao Studio, sobre uma cópia da cena autoral |
 | Lua 5.4 | Objetos, eventos, física, NPCs, inventário, áudio e UI no escopo da API atual |
 | Recursos | PNG/JPEG, Decals, texturas com repetição, sons locais e música |
 | Experiências | Salvar/reabrir, biblioteca local e importação/exportação `.lo` |

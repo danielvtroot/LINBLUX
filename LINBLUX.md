@@ -45,7 +45,11 @@ Este manual é a fonte central de documentação do projeto. Convenções:
 
 ## 1. Visão geral
 
-LINBLUX reúne autoria e execução no Studio:
+LINBLUX reúne autoria e execução no Studio. Existe um único executável de
+produto: `linblux`. Neste manual, “Player” significa o modo Play integrado
+ao Studio, não um aplicativo separado. `PlayerMenu`, `RuntimeSession`, HUD
+e `BrandLogo3D` são módulos internos; devem ser preservados e evoluídos
+nesse contexto. Não criar outro executável de Player sem solicitação explícita.
 
 | Executável | Papel |
 | --- | --- |
@@ -764,18 +768,18 @@ entrada antes do runtime.
 - **Árvore do Explorador**: `editor/HierarchyModel` produz linhas por ID,
   filtra cada nó uma vez e calcula intervalos de seleção visível. Shift
   seleciona o intervalo; Ctrl+Shift acrescenta ao conjunto atual.
-- **Marca 3D no Player standalone** (`BrandLogo3D`): carrega
+- **Marca 3D no Play integrado** (`BrandLogo3D`): carrega
   `midia/3d/logo-3d.glb` uma vez, centraliza e orienta sua face XZ para a
-  câmera. As duas aparições compartilham cache a 30 Hz, rotação de 12°/s
-  e supersampling 2× limitado a 1024 px. Atualizar antes de `BeginDrawing`
+  câmera. As aparições compartilham a textura atualizada por quadro,
+  rotação de 60°/s e supersampling 4× limitado a 2048 px. Atualizar antes do passe de gameplay
   apenas quando visível; destruir antes de `CloseWindow`. Controle de menu
   sem caixa ou ícone adicional, com clique e Esc. PNG permanece como fallback
   e ícone nativo. CMake copia/instala em `share/linblux/midia/3d`.
   Home e header RmlUi ainda usam PNG; migração pendente.
 - **Controles nativos compartilhados** (`rendering/UiControls`): Button,
   Slider e ProgressBar usam tokens de `ThemeColors.generated.h`, sem
-  dependência do editor e sem framebuffer por controle. Menu standalone
-  usa os dois primeiros; HUD compartilhado de Studio/Player usa ProgressBar
+  dependência do editor e sem framebuffer por controle. O menu integrado
+  usa os dois primeiros; o HUD do Play usa ProgressBar
   com preenchimento proporcional mesmo abaixo da largura das bordas.
   `ui/Components` centraliza os botões RmlUi de Studio, Home e áudio:
   texto, ícone, tooltip, disabled, escaping e domínio de comando. RmlUi
@@ -1020,18 +1024,18 @@ ctest --test-dir build-linblux -N
 ctest --test-dir build-linblux -R '^linblux_(game|tests|defaults|engine_default_lifecycle)$' --output-on-failure
 ```
 
-Inventário de testes (67 registrados no CMake atualmente; `-N` lista tudo):
+Inventário de testes (`ctest -N` lista os testes registrados neste build):
 
 - **Headless** (direto permitido): `experiences`, `tests`, `game`, `studio`,
   `manipulation`, `spawn`, `defaults`, `engine_default_lifecycle`,
   `engine_default_paths`, `item_actions`, `mouse_lock`, `startup_no_display`,
-  `lua_player_validation`, `video`...
+  `video`...
 - **Gráficos/Xvfb** (**sempre via TURBO**): `decal_render`, `rig_image`,
   `gizmo_visual`, `experience_ui`, `rml_ui`, `lua_ui_render`,
   `rig_input`, `visual_studio`, `sky_capture`, `graphics_quality`,
   `studio_ui`, `game_ui`, `editor_input`, `experience_startup`,
   `editor_restart`, `home_video`, `engine_default_restart`,
-  `progress_player_ui`, `player_menu`, `player_menu_ui`, `rifledemo_player`
+  `studio_play_menu_ui`, `studio_play_audio_slider_ui`, `studio_play_window_ui`
   e demais capturas supervisionadas.
 - **Suítes de ferramentas**: `linblux_atlas`, `linblux_backup`,
   `linblux_turbo` (`tests/atlas`, `tests/backup`, `tests/turbo`, em
@@ -1094,6 +1098,12 @@ estão neste manual. Agentes de qualquer ferramenta devem honrar:
   interface, logo, materiais e renderização são trabalho do autor — nunca
   descartar. Não alterar código-fonte, projetos pessoais, mídias, scripts Lua
   ou recursos da engine "para adaptar documentação".
+- **Studio e Play são um produto só**: o único executável de produto é
+  `linblux`. Player é o runtime/Play integrado. `rendering/PlayerMenu` é o
+  menu original interno, não um executável independente. Não remover esses
+  módulos ao limpar referências antigas, nem recriar um aplicativo separado
+  sem pedido explícito. Cópias em `.turbo/recovery/` são recuperação histórica,
+  não fontes ativas do build.
 - **Proibições destrutivas**: `git reset --hard`, `git clean`, `git restore .`,
   `git checkout .`, `git push --force`, `rm -rf`, limpeza recursiva em
   `build-linblux/`, `.git/`, `third_party/`, exclusão por extensão, apagar
