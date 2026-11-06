@@ -314,7 +314,9 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
                         static_cast<int>(80*GetWindowScaleDPI().x));
     BeginTextureMode(viewport_);
     RigRenderState character{&runtime_.rig(), runtime_.pose(), runtime_.renderCharacterRoot()};
-    renderer_.drawScene(runtime_.scene(), runtime_.playerCamera().camera(), viewportWidth_, viewportHeight_,
+    // Cena + HUD/scripts/menus no mesmo alvo MSAA: um unico resolve e o
+    // texto de interface nao passa pelo FXAA de fallback.
+    renderer_.beginScenePass(runtime_.scene(), runtime_.playerCamera().camera(), viewportWidth_, viewportHeight_,
         kInvalidInstanceId, runtime_.playerCamera().avatarHidden() ? nullptr : &character, false);
     DrawExperienceOverlay(runtime_,viewportWidth_,viewportHeight_);
     DrawLuaUi(runtime_,viewportWidth_,viewportHeight_);
@@ -326,6 +328,7 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
         ui::SystemFont(),{},std::filesystem::path(projectPath_).stem().string(),&playerBrand_);
     SetMouseOffset(0,0);
     gameMenuOpen_=playerMenu_.open();
+    renderer_.endScenePass();
     EndTextureMode();
     if(leave){stopPlay();return;}
     if(playerMenu_.takeFullscreenRequest())toggleGameFullscreen();

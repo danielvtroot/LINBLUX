@@ -1054,6 +1054,7 @@ SceneRenderer::SceneRenderer() {
 }
 bool SceneRenderer::shadowsActive() const {return modern_->shadowActive();}
 Antialiasing SceneRenderer::actualAntialiasing() const {return target_->actual();}
+int SceneRenderer::actualSamples() const {return target_->samples();}
 bool SceneRenderer::modernReady() const {return modern_->ready();}
 
 SceneRenderer::~SceneRenderer() {
@@ -1238,9 +1239,24 @@ void SceneRenderer::drawRig(const RigRenderState& state, Vector3 light, float in
 }
 
 void SceneRenderer::drawScene(const Scene& scene,Camera3D camera,int width,int height,InstanceId selectedId,const RigRenderState* rig,bool authoredRigs) {
-    const bool resolve=target_->begin(width,height,antialiasing_,quality_);
+    beginScenePass(scene,camera,width,height,selectedId,rig,authoredRigs);
+    endScenePass();
+}
+
+bool SceneRenderer::beginScenePass(const Scene& scene,Camera3D camera,int width,int height,InstanceId selectedId,const RigRenderState* rig,bool authoredRigs) {
+    // Um passe anterior nao resolvido deixaria o alvo MSAA preso; fecha antes.
+    if(scenePassOpen_)endScenePass();
+    scenePassResolved_=target_->begin(width,height,antialiasing_,quality_);
     drawScenePass(scene,camera,width,height,selectedId,rig,authoredRigs);
-    if(resolve)target_->finish();
+    scenePassOpen_=true;
+    return scenePassResolved_;
+}
+
+void SceneRenderer::endScenePass() {
+    if(!scenePassOpen_)return;
+    scenePassOpen_=false;
+    if(scenePassResolved_)target_->finish();
+    scenePassResolved_=false;
 }
 
 void SceneRenderer::drawScenePass(const Scene& scene, Camera3D camera, int width,

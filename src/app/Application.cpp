@@ -30,8 +30,22 @@ bool Application::initialize() {
     if (config_.vsync) {
         flags |= FLAG_VSYNC_HINT;
     }
+    // Serrilhado das bordas desenhadas no backbuffer (chips do gizmo, paineis
+    // de selecao e o HUD fora do viewport). O hint so vale antes de InitWindow;
+    // os alvos offscreen da cena tem MSAA proprio.
+    flags |= FLAG_MSAA_4X_HINT;
     SetConfigFlags(flags);
     InitWindow(config_.windowWidth, config_.windowHeight, "LINBLUX Studio");
+    if (IsWindowReady()) {
+        GLint backbufferSamples = 0;
+        glGetIntegerv(GL_SAMPLES, &backbufferSamples);
+        diag::Event samplesEvent;
+        samplesEvent.subsystem = "graphics";
+        samplesEvent.name = "window_msaa";
+        samplesEvent.result = backbufferSamples > 1 ? "msaa" : "none";
+        samplesEvent.context = {{"samples", std::to_string(backbufferSamples)}};
+        diag::log(samplesEvent);
+    }
     // Áudio 2D do Play. Sem dispositivo (host sem servidor de som) o runtime
     // continua funcionando: AudioSystem só abre streams quando o host responde.
     if (IsWindowReady()) InitAudioDevice();

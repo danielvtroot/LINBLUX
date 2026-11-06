@@ -6,6 +6,11 @@ void SceneRenderer::drawScene(const Scene& scene, const EditorCamera& camera, in
     drawScene(scene, camera.camera(), width, height, selectedId, rig);
 }
 
+bool SceneRenderer::beginScenePass(const Scene& scene, const EditorCamera& camera, int width,
+                                  int height, InstanceId selectedId, const RigRenderState* rig) {
+    return beginScenePass(scene, camera.camera(), width, height, selectedId, rig);
+}
+
 void SceneRenderer::drawCollisionShapes(const Scene& scene,const PhysicsWorld& physics,const EditorCamera& camera,InstanceId selection) const {
     drawCollisionShapes(scene,physics,camera.camera(),selection);
 }

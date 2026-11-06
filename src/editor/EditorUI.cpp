@@ -1903,9 +1903,11 @@ void EditorUI::drawViewport() {
     if (auto* rig = scene_.gameAssets().findRig(selectedRig_)) {
         rigState = {rig, previewPose_, rig->root, selectedRigBody_<0?-2:selectedRigBody_, showJointPivots_&&selectedRigBody_>=0};
     }
-    renderer_.drawScene(scene_, camera_, viewportWidth_, viewportHeight_,
-                        selection != nullptr ? selection->id() : kInvalidInstanceId,
-                        rigState.rig ? &rigState : nullptr);
+    // Cena e sobreposicoes no mesmo alvo: o resolve do MSAA acontece uma so
+    // vez, com o depth da cena disponivel para guias/gizmo.
+    renderer_.beginScenePass(scene_, camera_, viewportWidth_, viewportHeight_,
+                             selection != nullptr ? selection->id() : kInvalidInstanceId,
+                             rigState.rig ? &rigState : nullptr);
     InstanceId hover=0;
     if(hovered&&!transform_.active()&&!rigConsumed&&route.owner==InputOwner::Viewport) {
         const auto ray=camera_.rayFromScreen({input.mouse.x-viewportRect.x,input.mouse.y-viewportRect.y},
@@ -1926,6 +1928,7 @@ void EditorUI::drawViewport() {
     }
     if(!placement_.active()&&selection&&selection->instanceClass()==InstanceClass::Model&&modelTransform_.proxy()&&tool_!=ToolMode::Select)
         gizmo_.drawOverlay(*modelTransform_.proxy(),tool_,camera_,viewportRect,!readout_.editing);
+    renderer_.endScenePass();
     EndTextureMode();
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();

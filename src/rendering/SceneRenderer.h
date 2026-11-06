@@ -47,12 +47,26 @@ public:
     void setAntialiasing(Antialiasing value) {antialiasing_=value;}
     Antialiasing antialiasing() const {return antialiasing_;}
     Antialiasing actualAntialiasing() const;
+    // Amostras efetivas do alvo da cena (0 quando o AA esta desligado).
+    int actualSamples() const;
 
     void drawScene(const Scene& scene, const EditorCamera& camera, int width, int height,
                    InstanceId selectedId, const RigRenderState* rig = nullptr);
     void drawScene(const Scene& scene, Camera3D camera, int width, int height,
                    InstanceId selectedId, const RigRenderState* rig = nullptr,
                    bool authoredRigs = true);
+
+    // Passe adiado: desenha a cena no alvo offscreen e MANTEM o alvo aberto
+    // para as sobreposicoes (guias, gizmo, HUD) entrarem no mesmo alvo MSAA.
+    // Assim o depth e compartilhado de verdade e existe um unico resolve.
+    // Retorna false quando o AA esta desligado: nesse caso as sobreposicoes
+    // devem ser desenhadas no framebuffer corrente, como antes.
+    bool beginScenePass(const Scene& scene, const EditorCamera& camera, int width, int height,
+                        InstanceId selectedId, const RigRenderState* rig = nullptr);
+    bool beginScenePass(const Scene& scene, Camera3D camera, int width, int height,
+                        InstanceId selectedId, const RigRenderState* rig = nullptr,
+                        bool authoredRigs = true);
+    void endScenePass();
 
     // Cor final da Part considerando o material escolhido.
     static Color MaterialColor(const Part& part);
@@ -71,6 +85,7 @@ private:
     ShadowQuality shadowQuality_=ShadowQuality::Auto;
     Antialiasing antialiasing_=Antialiasing::Auto;
     std::unique_ptr<SceneTarget> target_;
+    bool scenePassOpen_=false,scenePassResolved_=false;
     RenderQuality quality_=RenderQuality::Medium;
     std::unique_ptr<ModernMaterials> modern_;
     void drawBaseplate(const Part& baseplate, Vector3 lightDirection, float sunIntensity,
