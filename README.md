@@ -102,12 +102,8 @@ move, espaço pula e **Esc** abre o menu sem interromper a simulação.
 
 ## Demonstração
 
-[RifleDemo](LINBLUX.md#54-exemplo-rifledemo) é um exemplo local completo de
+[RifleDemo](LINBLUX.md#53-exemplo-rifledemo) é um exemplo local completo de
 Lua, itens, NPCs e interação no Player:
-
-```sh
-./build-linblux/linblux_player --project assets/examples/rifledemo/world.loblox.json
-```
 
 No Studio, abra o mesmo `world.loblox.json` e clique Executar (F5). Teclas da
 demo: **E** (coletar, 0,6 s), **1** (equipar), **clique** (disparar),

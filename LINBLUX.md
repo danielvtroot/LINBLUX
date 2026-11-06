@@ -45,12 +45,11 @@ Este manual é a fonte central de documentação do projeto. Convenções:
 
 ## 1. Visão geral
 
-LINBLUX reúne autoria e execução em dois executáveis independentes:
+LINBLUX reúne autoria e execução no Studio:
 
 | Executável | Papel |
 | --- | --- |
-| `build-linblux/linblux` | Studio: Início, biblioteca de experiências, editor 3D |
-| `build-linblux/linblux_player` | Player: execução de experiências, sem vínculo com a UI do Studio |
+| `build-linblux/linblux` | Studio: Início, biblioteca, editor 3D e Play integrado |
 
 A base técnica: C++17, CMake, raylib/OpenGL, Bullet Physics, Lua 5.4, RmlUi,
 Dear ImGui, stb e nlohmann/json. A interface oficial é em **pt-BR**.
@@ -77,18 +76,18 @@ evoluindo por incrementos verificados em vez de promessas adiantadas.
 | --- | --- |
 | `linblux_engine` | objetos, cena, física Bullet, Lua, rigs/animação, persistência, experiências — camada sem interface |
 | `linblux_editing` | gizmos, histórico, câmera do editor; sem posse da cena/física/Lua do runtime |
-| `linblux_renderer` | `SceneRenderer`, `ModernMaterials`, sombras direcionais, `SceneTarget`, `PlayerMenu`, `ExperienceOverlay`, `LuaUiRenderer` |
+| `linblux_renderer` | `SceneRenderer`, `ModernMaterials`, sombras direcionais, `SceneTarget`, `BrandLogo3D`, `ExperienceOverlay`, `LuaUiRenderer` |
 | `linblux_presentation` | localização e fonte nativa compartilhada (`src/ui/Localization.cpp`, `src/ui/UiFont.cpp`) |
 | `linblux_media` | `VideoBackground` do Início (FFmpeg opcional) |
 | `linblux_studio` | frontends, painéis e ações do editor (`linblux_editor` é alias) |
 | `linblux_imgui` | Dear ImGui + rlImGui vendados em `third_party/` |
 | `linblux_rml_gl3` | backend GL3 do RmlUi, desenhado em layer framebuffer próprio |
 | `linblux_core` | fachada INTERFACE transitória de compatibilidade de testes/embutidos |
-| `linblux` / `linblux_player` | executáveis de Studio / Player |
+| `linblux` | executável do Studio, incluindo o Play integrado |
 
-O Player **não linka** o Studio: sem ImGui, sem RmlUi e sem símbolos do editor
-(`src/player/main.cpp`). O namespace C++ legado `loblox` e identificadores de
-formato antigos são preservados por compatibilidade (§14.3).
+O Play é apresentado pelo Studio, reutilizando o runtime isolado e os mesmos
+recursos de UI. O namespace C++ legado `loblox` e identificadores de formato
+antigos são preservados por compatibilidade (§14.3).
 
 ### 2.2 Invariantes estruturais (contratos por módulo)
 
@@ -111,8 +110,8 @@ formato antigos são preservados por compatibilidade (§14.3).
 - `LuaRuntime`: sandbox de contenção (não de segurança), cotas de memória/
   instruções/tarefas, API `linblux` v1 (§10); execução antes da sincronização
   do Bullet, nunca dentro do passo físico.
-- `linblux_player`: executável somente leitura; importa `.lo` para cópia local;
-  sem link com Studio/ImGui/RmlUi.
+- O Play não altera a cena autoral: a execução permanece no `RuntimeSession`
+  isolado e retorna ao Studio por Shift+F5.
 - Renderização é cliente da `Scene`; nada de UI dentro do render. `FrameState`
   restaura o estado GL após os passes.
 - `Media` decodifica vídeo fora da thread principal e nunca derruba o Studio;
@@ -218,7 +217,6 @@ cd LINBLUX
 cmake -S . -B build-linblux -DCMAKE_BUILD_TYPE=Release
 cmake --build build-linblux -j2
 ./build-linblux/linblux
-./build-linblux/linblux_player --project assets/examples/rifledemo/world.loblox.json
 ```
 
 Opções e notas reais:
@@ -246,8 +244,8 @@ gerado. O empacotador exige
 `CMAKE_BUILD_TYPE:STRING=Release`, remove qualquer `*.mp4`, instala os avisos
 de licença e não copia experiências pessoais, caches nem mídia sem direitos
 documentados. `check_linux_package.py` extrai, confere SHA-256 do manifesto,
-garante ausência de MP4, roda `--validate`/`--frames 8 --check-scripts` no
-Player e abre janela do Studio com xdotool em ambiente isolado.
+garante ausência de MP4 e abre uma experiência no Studio com xdotool em
+ambiente isolado.
 
 ## 5. Execução
 
@@ -264,33 +262,16 @@ Sem argumentos, abre o **Início** com a biblioteca local. Falha de
 carregamento preserva a cena padrão (load transacional). No frontend RmlUi o
 Início inicia sem objetos de cena carregados até uma experiência ser aberta.
 
-### 5.2 Player
-
-`build-linblux/linblux_player [opções]`:
-
-- `--project CAMINHO` — pasta de experiência (`experience.json`), `.lo`
-  (importado para cópia local com nova identidade) ou JSON avulso. Obrigatório.
-- `--validate CAMINHO` — roda ~2 s sem janela e imprime
-  `experiência validada` / `validação falhou` + contagem de erros Lua.
-- `--check-scripts` — o término reporta erro se houve falha de script.
-- `--frames N` — limita o número de quadros (1..100000), para smoke tests.
-- `--quality legacy|low|medium|high` — qualidade de renderização da partida.
-- `--help` — uso. Opção inválida → exit 2.
-
-Exit codes de referência: `2` argumento inválido, `1` falha (inclusive erros
-Lua com `--check-scripts`), `0` sucesso.
-
-### 5.3 Do Studio para o Player
+### 5.2 Play integrado
 
 F5 executa a experiência atual no runtime; **Esc abre o menu sem interromper a
 simulação**; Shift+F5 volta ao Studio. No editor, botão direito + WASD move a
 câmera, Q/E desce/sobe e F enquadra a seleção. No Player, WASD move, espaço
 pula e botão direito orbita a câmera; itens ver §12.
 
-### 5.4 Exemplo RifleDemo (`assets/examples/rifledemo`)
+### 5.3 Exemplo RifleDemo (`assets/examples/rifledemo`)
 
-Demonstração jogável: abra `world.loblox.json` no Studio e clique Executar, ou
-`./build-linblux/linblux_player --project assets/examples/rifledemo/world.loblox.json`.
+Demonstração jogável: abra `world.loblox.json` no Studio e clique Executar.
 
 - **Jogar**: aproxime-se do item do chão, segure **E** (0,6 s) para coletar,
   pressione **1** para equipar, **clique** dispara, **R** recarrega e
@@ -1032,13 +1013,12 @@ ctest --test-dir build-linblux -R '^linblux_(game|tests|defaults|engine_default_
 
 Inventário de testes (67 registrados no CMake atualmente; `-N` lista tudo):
 
-- **Headless** (direto permitido): `linblux_player_help`,
-  `linblux_player_validate`, `experiences`, `tests`, `game`, `studio`,
+- **Headless** (direto permitido): `experiences`, `tests`, `game`, `studio`,
   `manipulation`, `spawn`, `defaults`, `engine_default_lifecycle`,
   `engine_default_paths`, `item_actions`, `mouse_lock`, `startup_no_display`,
   `lua_player_validation`, `video`...
 - **Gráficos/Xvfb** (**sempre via TURBO**): `decal_render`, `rig_image`,
-  `gizmo_visual`, `experience_ui`, `rml_ui`, `lua_ui_render`, `lua_ui_player`,
+  `gizmo_visual`, `experience_ui`, `rml_ui`, `lua_ui_render`,
   `rig_input`, `visual_studio`, `sky_capture`, `graphics_quality`,
   `studio_ui`, `game_ui`, `editor_input`, `experience_startup`,
   `editor_restart`, `home_video`, `engine_default_restart`,
