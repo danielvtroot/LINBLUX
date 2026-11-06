@@ -738,6 +738,9 @@ entrada antes do runtime.
   Jogador/Câmera/Controles/Áudio/Vídeo/Ajuda; volume master/mudo;
   **protegido contra alterações por scripts**. Simulação continua enquanto o
   menu está aberto.
+  A abertura usa somente a logo GLB com área clicável transparente; a cápsula
+  de controles antiga foi removida. `BrandLogo3D` atualiza a textura a cada
+  quadro apresentado, com supersampling e filtragem bilinear.
 - **Personagens por Model (integração inicial)**: `game/CharacterCore` valida
   Models com 1–512 Parts e exatamente uma Part com atributo textual
   `CharacterRole=Root`. Papéis personalizados e repetidos nas demais peças

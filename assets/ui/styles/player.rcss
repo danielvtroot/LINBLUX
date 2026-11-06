@@ -7,16 +7,16 @@
 #game-layer button * { focus: none; }
 #game-topbar { position: absolute; display: flex; top: 16px; left: 16px; align-items: center; z-index: 3; }
 #game-topbar button { width: 46px; height: 46px; flex-shrink: 0; margin: 0; padding: 10px; border: 1px transparent; border-radius: 23px; background-color: transparent; transition: background-color 0.12s; }
-#game-topbar .logo-button { padding: 0; margin-right: 9px; background-color: transparent; }
+#game-topbar .logo-button { padding: 0; margin: 0; background-color: transparent; }
 #game-topbar img, #game-topbar .menu-button img { display: block; width: 26px; height: 26px; margin: 0 auto; }
 /* BrandLogo3D is rendered in the shared Play viewport beneath this accessible
    transparent control. The PNG remains available only as the native icon. */
 #game-topbar .logo-button img { display: none; }
-#game-capsule { display: flex; padding: 0 5px; border-radius: 23px; background-color: #111318ed; }
 #game-topbar button:hover { background-color: #FFFFFF15; border-color: transparent; }
 #game-topbar button:active { background-color: #FFFFFF26; }
 #game-topbar button.selected { background-color: #FFFFFF1A; }
 #game-topbar button:focus { border-color: #FFFFFF; }
+#game-topbar .logo-button:hover, #game-topbar .logo-button:active { background-color: transparent; }
 /* Health is rendered once in the shared gameplay texture. */
 #health { display: none; pointer-events: none; }
 /* The software cursor follows the captured virtual pointer supplied by C++.
