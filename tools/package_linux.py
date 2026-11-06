@@ -45,7 +45,6 @@ Na pasta extraída, execute:
 
 ```sh
 ./bin/linblux
-./bin/linblux_player --project ./share/linblux/examples/rifledemo/world.loblox.json
 ```
 
 Dependências do sistema e hashes constam em manifest.json. O pacote não é universal.
@@ -57,7 +56,7 @@ Fontes DejaVu/Liberation devem estar instaladas no sistema.
 [Código e documentação](https://github.com/danielvtroot/LINBLUX)
 """)
         dependencies={}
-        for binary in ['linblux','linblux_player']:
+        for binary in ['linblux']:
             target=prefix/'bin'/binary
             output=subprocess.check_output(['ldd',str(target)],text=True,timeout=10)
             if 'not found' in output:raise RuntimeError('Dependências ausentes: '+output)
