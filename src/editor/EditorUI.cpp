@@ -98,9 +98,7 @@ bool EditorUI::saveCurrentProject() {
 }
 
 bool EditorUI::saveProjectAt(const std::string& path, std::string& error) {
-    (void)path;
-    error = "saveProjectAt not implemented during organization";
-    return false;
+    return projectio::save(scene_, path, error);
 }
 
 void EditorUI::setTool(ToolMode tool, const char* source) {
