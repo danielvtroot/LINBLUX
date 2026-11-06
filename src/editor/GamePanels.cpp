@@ -250,7 +250,9 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     if(resized)gameplaySkipDelta_=true;
     gameViewportX_=image.x;gameViewportY_=image.y;
     gameViewportW_=static_cast<float>(viewportWidth_);gameViewportH_=static_cast<float>(viewportHeight_);
-    const Rectangle menuButton{image.x+12,image.y+12,78,38};
+    // This is also the hit box exposed by the modern RmlUi game top bar.
+    // Keep the one invisible accessible button and draw the brand beneath it.
+    const Rectangle menuButton{image.x+16,image.y+16,46,46};
     const bool menuHovered=!frontend_ && context.hovered && !gameplayCapture_ && CheckCollisionPointRec(raw.mouse,menuButton);
     EditorInput gameInput=raw;
     if(menuHovered && raw.leftPressed)gameInput.escape=true; // HUD action enters the same Pause/Resume router
@@ -307,6 +309,8 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
     gameViewportY_ = image.y;
     gameViewportW_ = static_cast<float>(viewportWidth_);
     gameViewportH_ = static_cast<float>(viewportHeight_);
+    playerBrand_.update(GetFrameTime(),
+                        static_cast<int>(46*GetWindowScaleDPI().x));
     BeginTextureMode(viewport_);
     RigRenderState character{&runtime_.rig(), runtime_.pose(), runtime_.renderCharacterRoot()};
     renderer_.drawScene(runtime_.scene(), runtime_.playerCamera().camera(), viewportWidth_, viewportHeight_,
@@ -318,17 +322,17 @@ void EditorUI::drawGameplayViewport(const EditorInput& raw, InputContext context
         const float scale=std::clamp(viewportHeight_/720.f,.75f,1.5f);
         healthHud_={image.x+viewportWidth_-93*scale,image.y+17*scale,82*scale,82*scale};
     }
-    if(frontend_)return; // RML owns gameplay presentation; no duplicate HUD/menu.
     auto* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled({menuButton.x,menuButton.y},{menuButton.x+menuButton.width,menuButton.y+menuButton.height},
-        menuHovered?IM_COL32(54,68,88,245):IM_COL32(20,25,33,235),8);
-    const LinbluxLogo& brand = LoadLinbluxLogo();
-    if (brand.ok) {
+    const auto brand=playerBrand_.texture();
+    if(brand.id) {
+        // RenderTexture is upside down to ImGui. The RmlUi top-bar control is
+        // transparent and supplies keyboard/mouse accessibility over this.
         dl->AddImage(static_cast<ImTextureID>(brand.id),
-                     {menuButton.x+5,menuButton.y+4},{menuButton.x+5+30.f*brand.width/brand.height,menuButton.y+34});
+                     {menuButton.x,menuButton.y},{menuButton.x+46,menuButton.y+46},
+                     {0,1},{1,0});
     }
-    for(int i=0;i<3;++i)dl->AddLine({menuButton.x+47,menuButton.y+12+i*7.f},
-        {menuButton.x+65,menuButton.y+12+i*7.f},IM_COL32(238,243,250,255),2);
+    if(frontend_)return; // RmlUi owns menu, pause panel and interaction.
+    if(menuHovered)dl->AddCircle({menuButton.x+23,menuButton.y+23},25,IM_COL32(255,255,255,55),24,1.0f);
     if(menuHovered)ImGui::SetTooltip(i18n::Label("Game menu (Esc)"));
     // Software cursor for the captured virtual pointer, never a world marker.
     if (gameplayCursor().visual==GameCursorVisual::MouseLock) {

@@ -19,6 +19,7 @@
 #include "editor/ModelTransformSession.h"
 #include "game/Runtime.h"
 #include "rendering/SceneRenderer.h"
+#include "rendering/BrandLogo3D.h"
 #include "raylib.h"
 
 namespace loblox {
@@ -200,6 +201,10 @@ private:
     game::RuntimeSession runtime_;
     bool gameplayCapture_ = false;
     bool gameMenuOpen_ = false;
+    // The Play viewport owns the official animated mark. It is deliberately
+    // shared by modern RmlUi Play and the legacy ImGui fallback; the Studio
+    // must never fall back to the standalone player's PNG-only control.
+    BrandLogo3D playerBrand_;
     bool gameplaySkipDelta_ = true;
     bool gameplayRestoreNoCursorChange_ = false, gameplayRestoreDrawCursor_ = false;
     Vector2 gameplayRestoreCursor_{};
